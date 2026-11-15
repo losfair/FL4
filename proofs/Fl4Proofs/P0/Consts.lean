@@ -111,11 +111,32 @@ open fl4_core
 @[step] theorem layout.irq.TIMER.spec : layout.irq.TIMER ⦃ v => v = 125#u64 ⦄ := by
   unfold layout.irq.TIMER; step*
 
+@[step] theorem ept.CORES.spec : ept.CORES ⦃ v => v = 4080#u64 ⦄ := by
+  unfold ept.CORES; step*
+
 @[step] theorem vspace.P_PRESENT.spec : vspace.P_PRESENT ⦃ v => v = 1#u64 ⦄ := by
   unfold vspace.P_PRESENT; step*
 
 @[step] theorem vspace.P_PS.spec : vspace.P_PS ⦃ v => v = 128#u64 ⦄ := by
   unfold vspace.P_PS; step*
+
+@[step] theorem layout.tcb.VCPU.spec : layout.tcb.VCPU ⦃ v => v = 3664#u64 ⦄ := by
+  unfold layout.tcb.VCPU; simp only [layout.tcb.NAME_LEN]; step*
+
+@[step] theorem vcpu.svm.CR2.spec : vcpu.svm.CR2 ⦃ v => v = 1600#u64 ⦄ := by
+  unfold vcpu.svm.CR2; simp only [vcpu.svm.SAVE]; step*
+
+@[step] theorem vcpu.svm.RIP.spec : vcpu.svm.RIP ⦃ v => v = 1400#u64 ⦄ := by
+  unfold vcpu.svm.RIP; simp only [vcpu.svm.SAVE]; step*
+
+@[step] theorem vcpu.svm.RFLAGS.spec : vcpu.svm.RFLAGS ⦃ v => v = 1392#u64 ⦄ := by
+  unfold vcpu.svm.RFLAGS; simp only [vcpu.svm.SAVE]; step*
+
+@[step] theorem vcpu.svm.CR3.spec : vcpu.svm.CR3 ⦃ v => v = 1360#u64 ⦄ := by
+  unfold vcpu.svm.CR3; simp only [vcpu.svm.SAVE]; step*
+
+@[step] theorem layout.tcb.IN_QUEUES.spec : layout.tcb.IN_QUEUES ⦃ v => v = 3592#u64 ⦄ := by
+  unfold layout.tcb.IN_QUEUES; simp only [layout.tcb.F]; step*
 
 @[step] theorem layout.tcb.TIMER_RIGHT.spec : layout.tcb.TIMER_RIGHT ⦃ v => v = 3552#u64 ⦄ := by
   unfold layout.tcb.TIMER_RIGHT; simp only [layout.tcb.F]; step*
@@ -146,9 +167,6 @@ open fl4_core
 
 @[step] theorem layout.tcb.SCHED_NEXT.spec : layout.tcb.SCHED_NEXT ⦃ v => v = 3480#u64 ⦄ := by
   unfold layout.tcb.SCHED_NEXT; simp only [layout.tcb.F]; step*
-
-@[step] theorem layout.tcb.IN_QUEUES.spec : layout.tcb.IN_QUEUES ⦃ v => v = 3592#u64 ⦄ := by
-  unfold layout.tcb.IN_QUEUES; simp only [layout.tcb.F]; step*
 
 @[step] theorem layout.tcb.BLOCK_OBJ.spec : layout.tcb.BLOCK_OBJ ⦃ v => v = 3336#u64 ⦄ := by
   unfold layout.tcb.BLOCK_OBJ; simp only [layout.tcb.F]; step*
@@ -213,6 +231,9 @@ open fl4_core
 @[step] theorem msg.BUF_RECV_DEPTH.spec : msg.BUF_RECV_DEPTH ⦃ v => v = 127#u64 ⦄ := by
   unfold msg.BUF_RECV_DEPTH; step*
 
+@[step] theorem ept.LIMIT.spec : ept.LIMIT ⦃ v => v = 140737488355328#u64 ⦄ := by
+  unfold ept.LIMIT; step*
+
 @[step] theorem regs.FLAGS_MASK.spec : regs.FLAGS_MASK ⦃ v => v = 4095#u64 ⦄ := by
   unfold regs.FLAGS_MASK; step*
 
@@ -234,14 +255,53 @@ open fl4_core
 @[step] theorem layout.tcb.TIMER_BADGE.spec : layout.tcb.TIMER_BADGE ⦃ v => v = 3536#u64 ⦄ := by
   unfold layout.tcb.TIMER_BADGE; simp only [layout.tcb.F]; step*
 
-@[step] theorem layout.tcb.END.spec : layout.tcb.END ⦃ v => v = 3664#u64 ⦄ := by
-  unfold layout.tcb.END; simp only [layout.tcb.NAME_LEN]; step*
+@[step] theorem layout.tcb.END.spec : layout.tcb.END ⦃ v => v = 3672#u64 ⦄ := by
+  unfold layout.tcb.END; step*
 
 @[step] theorem layout.node.RELEASE_TAIL.spec : layout.node.RELEASE_TAIL ⦃ v => v = 72#u64 ⦄ := by
   unfold layout.node.RELEASE_TAIL; simp only [layout.node.RELEASE_HEAD]; step*
 
 @[step] theorem layout.ks.SIZE.spec : layout.ks.SIZE ⦃ v => v = 304384#u64 ⦄ := by
   unfold layout.ks.SIZE; simp only [layout.WORD, layout.ks.NUM_ASID_POOLS]; step*
+
+@[step] theorem vcpu.svm.END.spec : vcpu.svm.END ⦃ v => v = 1768#u64 ⦄ := by
+  unfold vcpu.svm.END; simp only [vcpu.svm.SAVE]; step*
+
+@[step] theorem vcpu.svm.G_PAT.spec : vcpu.svm.G_PAT ⦃ v => v = 1640#u64 ⦄ := by
+  unfold vcpu.svm.G_PAT; simp only [vcpu.svm.SAVE]; step*
+
+@[step] theorem vcpu.svm.DR6.spec : vcpu.svm.DR6 ⦃ v => v = 1384#u64 ⦄ := by
+  unfold vcpu.svm.DR6; simp only [vcpu.svm.SAVE]; step*
+
+@[step] theorem vcpu.svm.DR7.spec : vcpu.svm.DR7 ⦃ v => v = 1376#u64 ⦄ := by
+  unfold vcpu.svm.DR7; simp only [vcpu.svm.SAVE]; step*
+
+@[step] theorem vcpu.svm.CR0.spec : vcpu.svm.CR0 ⦃ v => v = 1368#u64 ⦄ := by
+  unfold vcpu.svm.CR0; simp only [vcpu.svm.SAVE]; step*
+
+@[step] theorem vcpu.svm.EFER.spec : vcpu.svm.EFER ⦃ v => v = 1232#u64 ⦄ := by
+  unfold vcpu.svm.EFER; simp only [vcpu.svm.SAVE]; step*
+
+@[step] theorem vcpu.EXIT_FORCED.spec : vcpu.EXIT_FORCED ⦃ v => v = 3932676#u64 ⦄ := by
+  unfold vcpu.EXIT_FORCED; step*
+
+@[step] theorem vcpu.SECONDARY_ALLOWED.spec : vcpu.SECONDARY_ALLOWED ⦃ v => v = 71918#u64 ⦄ := by
+  unfold vcpu.SECONDARY_ALLOWED; step*
+
+@[step] theorem vcpu.PRIMARY_FORCED.spec : vcpu.PRIMARY_FORCED ⦃ v => v = 2996308992#u64 ⦄ := by
+  unfold vcpu.PRIMARY_FORCED; step*
+
+@[step] theorem vcpu.PIN_ALLOWED.spec : vcpu.PIN_ALLOWED ⦃ v => v = 41#u64 ⦄ := by
+  unfold vcpu.PIN_ALLOWED; step*
+
+@[step] theorem vcpu.EXCEPTIONS.spec : vcpu.EXCEPTIONS ⦃ v => v = 393218#u64 ⦄ := by
+  unfold vcpu.EXCEPTIONS; step*
+
+@[step] theorem vcpu.CR0_OWNED.spec : vcpu.CR0_OWNED ⦃ v => v = 2147155904#u64 ⦄ := by
+  unfold vcpu.CR0_OWNED; step*
+
+@[step] theorem vcpu.CR4_ALLOWED.spec : vcpu.CR4_ALLOWED ⦃ v => v = 3612671#u64 ⦄ := by
+  unfold vcpu.CR4_ALLOWED; step*
 
 @[step] theorem sporadic.min_budget_us.spec : sporadic.min_budget_us ⦃ v => v = 20#u64 ⦄ := by
   unfold sporadic.min_budget_us; step*
@@ -269,6 +329,72 @@ open fl4_core
 
 @[step] theorem vspace.P_XD.spec : vspace.P_XD ⦃ v => v = 9223372036854775808#u64 ⦄ := by
   unfold vspace.P_XD; step*
+
+@[step] theorem vcpu.svm.KERNEL_GS_BASE.spec : vcpu.svm.KERNEL_GS_BASE ⦃ v => v = 1568#u64 ⦄ := by
+  unfold vcpu.svm.KERNEL_GS_BASE; simp only [vcpu.svm.SAVE]; step*
+
+@[step] theorem vcpu.svm.SFMASK.spec : vcpu.svm.SFMASK ⦃ v => v = 1560#u64 ⦄ := by
+  unfold vcpu.svm.SFMASK; simp only [vcpu.svm.SAVE]; step*
+
+@[step] theorem vcpu.svm.CSTAR.spec : vcpu.svm.CSTAR ⦃ v => v = 1552#u64 ⦄ := by
+  unfold vcpu.svm.CSTAR; simp only [vcpu.svm.SAVE]; step*
+
+@[step] theorem vcpu.svm.LSTAR.spec : vcpu.svm.LSTAR ⦃ v => v = 1544#u64 ⦄ := by
+  unfold vcpu.svm.LSTAR; simp only [vcpu.svm.SAVE]; step*
+
+@[step] theorem vcpu.svm.STAR.spec : vcpu.svm.STAR ⦃ v => v = 1536#u64 ⦄ := by
+  unfold vcpu.svm.STAR; simp only [vcpu.svm.SAVE]; step*
+
+@[step] theorem vcpu.svm.RAX.spec : vcpu.svm.RAX ⦃ v => v = 1528#u64 ⦄ := by
+  unfold vcpu.svm.RAX; simp only [vcpu.svm.SAVE]; step*
+
+@[step] theorem vcpu.svm.ES.spec : vcpu.svm.ES ⦃ v => v = 1024#u64 ⦄ := by
+  unfold vcpu.svm.ES; simp only [vcpu.svm.SAVE]; step*
+
+@[step] theorem vcpu.svm.CS.spec : vcpu.svm.CS ⦃ v => v = 1040#u64 ⦄ := by
+  unfold vcpu.svm.CS; simp only [vcpu.svm.SAVE]; step*
+
+@[step] theorem vcpu.svm.SS.spec : vcpu.svm.SS ⦃ v => v = 1056#u64 ⦄ := by
+  unfold vcpu.svm.SS; simp only [vcpu.svm.SAVE]; step*
+
+@[step] theorem vcpu.svm.DS.spec : vcpu.svm.DS ⦃ v => v = 1072#u64 ⦄ := by
+  unfold vcpu.svm.DS; simp only [vcpu.svm.SAVE]; step*
+
+@[step] theorem vcpu.svm.FS.spec : vcpu.svm.FS ⦃ v => v = 1088#u64 ⦄ := by
+  unfold vcpu.svm.FS; simp only [vcpu.svm.SAVE]; step*
+
+@[step] theorem vcpu.svm.GS.spec : vcpu.svm.GS ⦃ v => v = 1104#u64 ⦄ := by
+  unfold vcpu.svm.GS; simp only [vcpu.svm.SAVE]; step*
+
+@[step] theorem vcpu.svm.GDTR.spec : vcpu.svm.GDTR ⦃ v => v = 1120#u64 ⦄ := by
+  unfold vcpu.svm.GDTR; simp only [vcpu.svm.SAVE]; step*
+
+@[step] theorem vcpu.svm.LDTR.spec : vcpu.svm.LDTR ⦃ v => v = 1136#u64 ⦄ := by
+  unfold vcpu.svm.LDTR; simp only [vcpu.svm.SAVE]; step*
+
+@[step] theorem vcpu.svm.IDTR.spec : vcpu.svm.IDTR ⦃ v => v = 1152#u64 ⦄ := by
+  unfold vcpu.svm.IDTR; simp only [vcpu.svm.SAVE]; step*
+
+@[step] theorem vcpu.svm.TR.spec : vcpu.svm.TR ⦃ v => v = 1168#u64 ⦄ := by
+  unfold vcpu.svm.TR; simp only [vcpu.svm.SAVE]; step*
+
+@[step] theorem vcpu.svm.CPL.spec : vcpu.svm.CPL ⦃ v => v = 1224#u64 ⦄ := by
+  unfold vcpu.svm.CPL; simp only [vcpu.svm.SAVE]; step*
+
+@[step] theorem vcpu.svm.CR4.spec : vcpu.svm.CR4 ⦃ v => v = 1352#u64 ⦄ := by
+  unfold vcpu.svm.CR4; simp only [vcpu.svm.SAVE]; step*
+
+@[step] theorem vcpu.svm.RSP.spec : vcpu.svm.RSP ⦃ v => v = 1496#u64 ⦄ := by
+  unfold vcpu.svm.RSP; simp only [vcpu.svm.SAVE]; step*
+
+@[step] theorem vcpu.svm.SYSENTER_CS.spec : vcpu.svm.SYSENTER_CS ⦃ v => v = 1576#u64 ⦄ := by
+  unfold vcpu.svm.SYSENTER_CS; simp only [vcpu.svm.SAVE]; step*
+
+@[step] theorem vcpu.svm.SYSENTER_ESP.spec : vcpu.svm.SYSENTER_ESP ⦃ v => v = 1584#u64 ⦄ := by
+  unfold vcpu.svm.SYSENTER_ESP; simp only [vcpu.svm.SAVE]; step*
+
+@[step] theorem vcpu.svm.SYSENTER_EIP.spec : vcpu.svm.SYSENTER_EIP ⦃ v => v = 1592#u64 ⦄ := by
+  unfold vcpu.svm.SYSENTER_EIP; simp only [vcpu.svm.SAVE]; step*
 
 @[simp, scalar_tac_simps] theorem fl4_abi.consts.error.InvalidArgument.val_eq : fl4_abi.consts.error.InvalidArgument.val = 1 := by
   unfold fl4_abi.consts.error.InvalidArgument; rfl
@@ -342,7 +468,22 @@ open fl4_core
 @[simp, scalar_tac_simps] theorem fl4_abi.consts.object.X86PageDirectory.val_eq : fl4_abi.consts.object.X86PageDirectory.val = 13 := by
   unfold fl4_abi.consts.object.X86PageDirectory; rfl
 
-@[simp, scalar_tac_simps] theorem fl4_abi.consts.object.Count.val_eq : fl4_abi.consts.object.Count.val = 14 := by
+@[simp, scalar_tac_simps] theorem fl4_abi.consts.object.X86Vcpu.val_eq : fl4_abi.consts.object.X86Vcpu.val = 14 := by
+  unfold fl4_abi.consts.object.X86Vcpu; rfl
+
+@[simp, scalar_tac_simps] theorem fl4_abi.consts.object.X86EptPml4.val_eq : fl4_abi.consts.object.X86EptPml4.val = 15 := by
+  unfold fl4_abi.consts.object.X86EptPml4; rfl
+
+@[simp, scalar_tac_simps] theorem fl4_abi.consts.object.X86EptPdpt.val_eq : fl4_abi.consts.object.X86EptPdpt.val = 16 := by
+  unfold fl4_abi.consts.object.X86EptPdpt; rfl
+
+@[simp, scalar_tac_simps] theorem fl4_abi.consts.object.X86EptPd.val_eq : fl4_abi.consts.object.X86EptPd.val = 17 := by
+  unfold fl4_abi.consts.object.X86EptPd; rfl
+
+@[simp, scalar_tac_simps] theorem fl4_abi.consts.object.X86EptPt.val_eq : fl4_abi.consts.object.X86EptPt.val = 18 := by
+  unfold fl4_abi.consts.object.X86EptPt; rfl
+
+@[simp, scalar_tac_simps] theorem fl4_abi.consts.object.Count.val_eq : fl4_abi.consts.object.Count.val = 19 := by
   unfold fl4_abi.consts.object.Count; rfl
 
 @[simp, scalar_tac_simps] theorem fl4_abi.consts.bits.SLOT.val_eq : fl4_abi.consts.bits.SLOT.val = 5 := by
@@ -350,6 +491,9 @@ open fl4_core
 
 @[simp, scalar_tac_simps] theorem fl4_abi.consts.bits.TCB.val_eq : fl4_abi.consts.bits.TCB.val = 12 := by
   unfold fl4_abi.consts.bits.TCB; rfl
+
+@[simp, scalar_tac_simps] theorem fl4_abi.consts.bits.VCPU.val_eq : fl4_abi.consts.bits.VCPU.val = 15 := by
+  unfold fl4_abi.consts.bits.VCPU; rfl
 
 @[simp, scalar_tac_simps] theorem fl4_abi.consts.bits.ENDPOINT.val_eq : fl4_abi.consts.bits.ENDPOINT.val = 4 := by
   unfold fl4_abi.consts.bits.ENDPOINT; rfl
@@ -615,68 +759,125 @@ open fl4_core
 @[simp, scalar_tac_simps] theorem fl4_abi.label.X86PDPTUnmap.val_eq : fl4_abi.label.X86PDPTUnmap.val = 48 := by
   unfold fl4_abi.label.X86PDPTUnmap; rfl
 
-@[simp, scalar_tac_simps] theorem fl4_abi.label.X86PageDirectoryMap.val_eq : fl4_abi.label.X86PageDirectoryMap.val = 49 := by
+@[simp, scalar_tac_simps] theorem fl4_abi.label.X86VCPUReadMSR.val_eq : fl4_abi.label.X86VCPUReadMSR.val = 49 := by
+  unfold fl4_abi.label.X86VCPUReadMSR; rfl
+
+@[simp, scalar_tac_simps] theorem fl4_abi.label.X86VCPUWriteMSR.val_eq : fl4_abi.label.X86VCPUWriteMSR.val = 50 := by
+  unfold fl4_abi.label.X86VCPUWriteMSR; rfl
+
+@[simp, scalar_tac_simps] theorem fl4_abi.label.X86PageDirectoryMap.val_eq : fl4_abi.label.X86PageDirectoryMap.val = 51 := by
   unfold fl4_abi.label.X86PageDirectoryMap; rfl
 
-@[simp, scalar_tac_simps] theorem fl4_abi.label.X86PageDirectoryUnmap.val_eq : fl4_abi.label.X86PageDirectoryUnmap.val = 50 := by
+@[simp, scalar_tac_simps] theorem fl4_abi.label.X86PageDirectoryUnmap.val_eq : fl4_abi.label.X86PageDirectoryUnmap.val = 52 := by
   unfold fl4_abi.label.X86PageDirectoryUnmap; rfl
 
-@[simp, scalar_tac_simps] theorem fl4_abi.label.X86PageTableMap.val_eq : fl4_abi.label.X86PageTableMap.val = 51 := by
+@[simp, scalar_tac_simps] theorem fl4_abi.label.X86PageTableMap.val_eq : fl4_abi.label.X86PageTableMap.val = 53 := by
   unfold fl4_abi.label.X86PageTableMap; rfl
 
-@[simp, scalar_tac_simps] theorem fl4_abi.label.X86PageTableUnmap.val_eq : fl4_abi.label.X86PageTableUnmap.val = 52 := by
+@[simp, scalar_tac_simps] theorem fl4_abi.label.X86PageTableUnmap.val_eq : fl4_abi.label.X86PageTableUnmap.val = 54 := by
   unfold fl4_abi.label.X86PageTableUnmap; rfl
 
-@[simp, scalar_tac_simps] theorem fl4_abi.label.X86PageMap.val_eq : fl4_abi.label.X86PageMap.val = 53 := by
+@[simp, scalar_tac_simps] theorem fl4_abi.label.X86PageMap.val_eq : fl4_abi.label.X86PageMap.val = 55 := by
   unfold fl4_abi.label.X86PageMap; rfl
 
-@[simp, scalar_tac_simps] theorem fl4_abi.label.X86PageUnmap.val_eq : fl4_abi.label.X86PageUnmap.val = 54 := by
+@[simp, scalar_tac_simps] theorem fl4_abi.label.X86PageUnmap.val_eq : fl4_abi.label.X86PageUnmap.val = 56 := by
   unfold fl4_abi.label.X86PageUnmap; rfl
 
-@[simp, scalar_tac_simps] theorem fl4_abi.label.X86PageDeriveSubframe.val_eq : fl4_abi.label.X86PageDeriveSubframe.val = 55 := by
+@[simp, scalar_tac_simps] theorem fl4_abi.label.X86PageDeriveSubframe.val_eq : fl4_abi.label.X86PageDeriveSubframe.val = 57 := by
   unfold fl4_abi.label.X86PageDeriveSubframe; rfl
 
-@[simp, scalar_tac_simps] theorem fl4_abi.label.X86PageTestAndClearAccessed.val_eq : fl4_abi.label.X86PageTestAndClearAccessed.val = 56 := by
+@[simp, scalar_tac_simps] theorem fl4_abi.label.X86PageTestAndClearAccessed.val_eq : fl4_abi.label.X86PageTestAndClearAccessed.val = 58 := by
   unfold fl4_abi.label.X86PageTestAndClearAccessed; rfl
 
-@[simp, scalar_tac_simps] theorem fl4_abi.label.X86PageGetAddress.val_eq : fl4_abi.label.X86PageGetAddress.val = 57 := by
+@[simp, scalar_tac_simps] theorem fl4_abi.label.X86PageGetAddress.val_eq : fl4_abi.label.X86PageGetAddress.val = 59 := by
   unfold fl4_abi.label.X86PageGetAddress; rfl
 
-@[simp, scalar_tac_simps] theorem fl4_abi.label.X86ASIDControlMakePool.val_eq : fl4_abi.label.X86ASIDControlMakePool.val = 58 := by
+@[simp, scalar_tac_simps] theorem fl4_abi.label.X86PageMapEPT.val_eq : fl4_abi.label.X86PageMapEPT.val = 60 := by
+  unfold fl4_abi.label.X86PageMapEPT; rfl
+
+@[simp, scalar_tac_simps] theorem fl4_abi.label.X86ASIDControlMakePool.val_eq : fl4_abi.label.X86ASIDControlMakePool.val = 61 := by
   unfold fl4_abi.label.X86ASIDControlMakePool; rfl
 
-@[simp, scalar_tac_simps] theorem fl4_abi.label.X86ASIDPoolAssign.val_eq : fl4_abi.label.X86ASIDPoolAssign.val = 59 := by
+@[simp, scalar_tac_simps] theorem fl4_abi.label.X86ASIDPoolAssign.val_eq : fl4_abi.label.X86ASIDPoolAssign.val = 62 := by
   unfold fl4_abi.label.X86ASIDPoolAssign; rfl
 
-@[simp, scalar_tac_simps] theorem fl4_abi.label.X86IOPortControlIssue.val_eq : fl4_abi.label.X86IOPortControlIssue.val = 60 := by
+@[simp, scalar_tac_simps] theorem fl4_abi.label.X86IOPortControlIssue.val_eq : fl4_abi.label.X86IOPortControlIssue.val = 63 := by
   unfold fl4_abi.label.X86IOPortControlIssue; rfl
 
-@[simp, scalar_tac_simps] theorem fl4_abi.label.X86IOPortIn8.val_eq : fl4_abi.label.X86IOPortIn8.val = 61 := by
+@[simp, scalar_tac_simps] theorem fl4_abi.label.X86IOPortIn8.val_eq : fl4_abi.label.X86IOPortIn8.val = 64 := by
   unfold fl4_abi.label.X86IOPortIn8; rfl
 
-@[simp, scalar_tac_simps] theorem fl4_abi.label.X86IOPortIn16.val_eq : fl4_abi.label.X86IOPortIn16.val = 62 := by
+@[simp, scalar_tac_simps] theorem fl4_abi.label.X86IOPortIn16.val_eq : fl4_abi.label.X86IOPortIn16.val = 65 := by
   unfold fl4_abi.label.X86IOPortIn16; rfl
 
-@[simp, scalar_tac_simps] theorem fl4_abi.label.X86IOPortIn32.val_eq : fl4_abi.label.X86IOPortIn32.val = 63 := by
+@[simp, scalar_tac_simps] theorem fl4_abi.label.X86IOPortIn32.val_eq : fl4_abi.label.X86IOPortIn32.val = 66 := by
   unfold fl4_abi.label.X86IOPortIn32; rfl
 
-@[simp, scalar_tac_simps] theorem fl4_abi.label.X86IOPortOut8.val_eq : fl4_abi.label.X86IOPortOut8.val = 64 := by
+@[simp, scalar_tac_simps] theorem fl4_abi.label.X86IOPortOut8.val_eq : fl4_abi.label.X86IOPortOut8.val = 67 := by
   unfold fl4_abi.label.X86IOPortOut8; rfl
 
-@[simp, scalar_tac_simps] theorem fl4_abi.label.X86IOPortOut16.val_eq : fl4_abi.label.X86IOPortOut16.val = 65 := by
+@[simp, scalar_tac_simps] theorem fl4_abi.label.X86IOPortOut16.val_eq : fl4_abi.label.X86IOPortOut16.val = 68 := by
   unfold fl4_abi.label.X86IOPortOut16; rfl
 
-@[simp, scalar_tac_simps] theorem fl4_abi.label.X86IOPortOut32.val_eq : fl4_abi.label.X86IOPortOut32.val = 66 := by
+@[simp, scalar_tac_simps] theorem fl4_abi.label.X86IOPortOut32.val_eq : fl4_abi.label.X86IOPortOut32.val = 69 := by
   unfold fl4_abi.label.X86IOPortOut32; rfl
 
-@[simp, scalar_tac_simps] theorem fl4_abi.label.X86IRQIssueIRQHandlerIOAPIC.val_eq : fl4_abi.label.X86IRQIssueIRQHandlerIOAPIC.val = 67 := by
+@[simp, scalar_tac_simps] theorem fl4_abi.label.X86IRQIssueIRQHandlerIOAPIC.val_eq : fl4_abi.label.X86IRQIssueIRQHandlerIOAPIC.val = 70 := by
   unfold fl4_abi.label.X86IRQIssueIRQHandlerIOAPIC; rfl
 
-@[simp, scalar_tac_simps] theorem fl4_abi.label.X86IRQIssueIRQHandlerMSI.val_eq : fl4_abi.label.X86IRQIssueIRQHandlerMSI.val = 68 := by
+@[simp, scalar_tac_simps] theorem fl4_abi.label.X86IRQIssueIRQHandlerMSI.val_eq : fl4_abi.label.X86IRQIssueIRQHandlerMSI.val = 71 := by
   unfold fl4_abi.label.X86IRQIssueIRQHandlerMSI; rfl
 
-@[simp, scalar_tac_simps] theorem fl4_abi.label.X86IRQIssueIRQHandlerIOAPICRemapped.val_eq : fl4_abi.label.X86IRQIssueIRQHandlerIOAPICRemapped.val = 69 := by
+@[simp, scalar_tac_simps] theorem fl4_abi.label.X86IRQIssueIRQHandlerIOAPICRemapped.val_eq : fl4_abi.label.X86IRQIssueIRQHandlerIOAPICRemapped.val = 72 := by
   unfold fl4_abi.label.X86IRQIssueIRQHandlerIOAPICRemapped; rfl
+
+@[simp, scalar_tac_simps] theorem fl4_abi.label.X86VCPUSetTCB.val_eq : fl4_abi.label.X86VCPUSetTCB.val = 73 := by
+  unfold fl4_abi.label.X86VCPUSetTCB; rfl
+
+@[simp, scalar_tac_simps] theorem fl4_abi.label.X86VCPUReadVMCS.val_eq : fl4_abi.label.X86VCPUReadVMCS.val = 74 := by
+  unfold fl4_abi.label.X86VCPUReadVMCS; rfl
+
+@[simp, scalar_tac_simps] theorem fl4_abi.label.X86VCPUWriteVMCS.val_eq : fl4_abi.label.X86VCPUWriteVMCS.val = 75 := by
+  unfold fl4_abi.label.X86VCPUWriteVMCS; rfl
+
+@[simp, scalar_tac_simps] theorem fl4_abi.label.X86VCPUFlushTLB.val_eq : fl4_abi.label.X86VCPUFlushTLB.val = 76 := by
+  unfold fl4_abi.label.X86VCPUFlushTLB; rfl
+
+@[simp, scalar_tac_simps] theorem fl4_abi.label.X86VCPUReadVMCB.val_eq : fl4_abi.label.X86VCPUReadVMCB.val = 77 := by
+  unfold fl4_abi.label.X86VCPUReadVMCB; rfl
+
+@[simp, scalar_tac_simps] theorem fl4_abi.label.X86VCPUWriteVMCB.val_eq : fl4_abi.label.X86VCPUWriteVMCB.val = 78 := by
+  unfold fl4_abi.label.X86VCPUWriteVMCB; rfl
+
+@[simp, scalar_tac_simps] theorem fl4_abi.label.X86VCPUEnableIOPort.val_eq : fl4_abi.label.X86VCPUEnableIOPort.val = 79 := by
+  unfold fl4_abi.label.X86VCPUEnableIOPort; rfl
+
+@[simp, scalar_tac_simps] theorem fl4_abi.label.X86VCPUDisableIOPort.val_eq : fl4_abi.label.X86VCPUDisableIOPort.val = 80 := by
+  unfold fl4_abi.label.X86VCPUDisableIOPort; rfl
+
+@[simp, scalar_tac_simps] theorem fl4_abi.label.X86VCPUWriteRegisters.val_eq : fl4_abi.label.X86VCPUWriteRegisters.val = 81 := by
+  unfold fl4_abi.label.X86VCPUWriteRegisters; rfl
+
+@[simp, scalar_tac_simps] theorem fl4_abi.label.X86EPTPDPTMap.val_eq : fl4_abi.label.X86EPTPDPTMap.val = 82 := by
+  unfold fl4_abi.label.X86EPTPDPTMap; rfl
+
+@[simp, scalar_tac_simps] theorem fl4_abi.label.X86EPTPDPTUnmap.val_eq : fl4_abi.label.X86EPTPDPTUnmap.val = 83 := by
+  unfold fl4_abi.label.X86EPTPDPTUnmap; rfl
+
+@[simp, scalar_tac_simps] theorem fl4_abi.label.X86EPTPDMap.val_eq : fl4_abi.label.X86EPTPDMap.val = 84 := by
+  unfold fl4_abi.label.X86EPTPDMap; rfl
+
+@[simp, scalar_tac_simps] theorem fl4_abi.label.X86EPTPDUnmap.val_eq : fl4_abi.label.X86EPTPDUnmap.val = 85 := by
+  unfold fl4_abi.label.X86EPTPDUnmap; rfl
+
+@[simp, scalar_tac_simps] theorem fl4_abi.label.X86EPTPTMap.val_eq : fl4_abi.label.X86EPTPTMap.val = 86 := by
+  unfold fl4_abi.label.X86EPTPTMap; rfl
+
+@[simp, scalar_tac_simps] theorem fl4_abi.label.X86EPTPTUnmap.val_eq : fl4_abi.label.X86EPTPTUnmap.val = 87 := by
+  unfold fl4_abi.label.X86EPTPTUnmap; rfl
+
+@[simp, scalar_tac_simps] theorem fl4_abi.label.TCBSetEPTRoot.val_eq : fl4_abi.label.TCBSetEPTRoot.val = 88 := by
+  unfold fl4_abi.label.TCBSetEPTRoot; rfl
 
 @[simp, scalar_tac_simps] theorem fl4_abi.config.NUM_DOMAINS.val_eq : fl4_abi.config.NUM_DOMAINS.val = 1 := by
   unfold fl4_abi.config.NUM_DOMAINS; rfl
@@ -933,6 +1134,21 @@ open fl4_core
 @[simp, scalar_tac_simps] theorem capability.VM_READ_ONLY.val_eq : capability.VM_READ_ONLY.val = 2 := by
   unfold capability.VM_READ_ONLY; rfl
 
+@[simp, scalar_tac_simps] theorem vcpu.IO.val_eq : vcpu.IO.val = 24576 := by
+  unfold vcpu.IO; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.TCB.val_eq : vcpu.TCB.val = 20480 := by
+  unfold vcpu.TCB; rfl
+
+@[simp, scalar_tac_simps] theorem layout.node.IPI_PENDING.val_eq : layout.node.IPI_PENDING.val = 120 := by
+  unfold layout.node.IPI_PENDING; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.NEXT.val_eq : vcpu.NEXT.val = 20488 := by
+  unfold vcpu.NEXT; rfl
+
+@[simp, scalar_tac_simps] theorem layout.ks.VCPU_HEAD.val_eq : layout.ks.VCPU_HEAD.val = 80 := by
+  unfold layout.ks.VCPU_HEAD; rfl
+
 @[simp, scalar_tac_simps] theorem layout.node.CONSUMED.val_eq : layout.node.CONSUMED.val = 40 := by
   unfold layout.node.CONSUMED; rfl
 
@@ -957,32 +1173,68 @@ open fl4_core
 @[simp, scalar_tac_simps] theorem vspace.PD_INDEX_OFFSET.val_eq : vspace.PD_INDEX_OFFSET.val = 21 := by
   unfold vspace.PD_INDEX_OFFSET; rfl
 
-@[simp, scalar_tac_simps] theorem layout.node.TIMER_ROOT.val_eq : layout.node.TIMER_ROOT.val = 104 := by
-  unfold layout.node.TIMER_ROOT; rfl
+@[simp, scalar_tac_simps] theorem vcpu.SHADOW.val_eq : vcpu.SHADOW.val = 4096 := by
+  unfold vcpu.SHADOW; rfl
 
-@[simp, scalar_tac_simps] theorem timer.RED.val_eq : timer.RED.val = 1 := by
-  unfold timer.RED; rfl
+@[simp, scalar_tac_simps] theorem layout.tcb.NAME_LEN.val_eq : layout.tcb.NAME_LEN.val = 64 := by
+  unfold layout.tcb.NAME_LEN; rfl
 
-@[simp, scalar_tac_simps] theorem layout.node.TIMER_MIN.val_eq : layout.node.TIMER_MIN.val = 112 := by
-  unfold layout.node.TIMER_MIN; rfl
+@[simp, scalar_tac_simps] theorem vcpu.svm.SAVE.val_eq : vcpu.svm.SAVE.val = 1024 := by
+  unfold vcpu.svm.SAVE; rfl
 
-@[simp, scalar_tac_simps] theorem layout.TREE_FUEL.val_eq : layout.TREE_FUEL.val = 128 := by
-  unfold layout.TREE_FUEL; rfl
+@[simp, scalar_tac_simps] theorem vcpu.svm.EVENT_INJ.val_eq : vcpu.svm.EVENT_INJ.val = 168 := by
+  unfold vcpu.svm.EVENT_INJ; rfl
 
-@[simp, scalar_tac_simps] theorem layout.node.IPI_PENDING.val_eq : layout.node.IPI_PENDING.val = 120 := by
-  unfold layout.node.IPI_PENDING; rfl
+@[simp, scalar_tac_simps] theorem vcpu.svm.INT_STATE.val_eq : vcpu.svm.INT_STATE.val = 104 := by
+  unfold vcpu.svm.INT_STATE; rfl
 
-@[simp, scalar_tac_simps] theorem layout.sc.YIELD_FROM.val_eq : layout.sc.YIELD_FROM.val = 56 := by
-  unfold layout.sc.YIELD_FROM; rfl
+@[simp, scalar_tac_simps] theorem vcpu.svm.INTERCEPT_EXC.val_eq : vcpu.svm.INTERCEPT_EXC.val = 8 := by
+  unfold vcpu.svm.INTERCEPT_EXC; rfl
 
-@[simp, scalar_tac_simps] theorem layout.sc.CONSUMED.val_eq : layout.sc.CONSUMED.val = 8 := by
-  unfold layout.sc.CONSUMED; rfl
+@[simp, scalar_tac_simps] theorem vcpu.vmx.GUEST_RFLAGS.val_eq : vcpu.vmx.GUEST_RFLAGS.val = 26656 := by
+  unfold vcpu.vmx.GUEST_RFLAGS; rfl
 
-@[simp, scalar_tac_simps] theorem layout.reg.RSI.val_eq : layout.reg.RSI.val = 1 := by
-  unfold layout.reg.RSI; rfl
+@[simp, scalar_tac_simps] theorem vcpu.vmx.GUEST_RIP.val_eq : vcpu.vmx.GUEST_RIP.val = 26654 := by
+  unfold vcpu.vmx.GUEST_RIP; rfl
 
-@[simp, scalar_tac_simps] theorem layout.reg.MSG_INFO.val_eq : layout.reg.MSG_INFO.val = 1 := by
-  unfold layout.reg.MSG_INFO; exact layout.reg.RSI.val_eq
+@[simp, scalar_tac_simps] theorem vcpu.vmx.GUEST_INTERRUPTABILITY.val_eq : vcpu.vmx.GUEST_INTERRUPTABILITY.val = 18468 := by
+  unfold vcpu.vmx.GUEST_INTERRUPTABILITY; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.CONTROL_ENTRY_INTERRUPTION_INFO.val_eq : vcpu.vmx.CONTROL_ENTRY_INTERRUPTION_INFO.val = 16406 := by
+  unfold vcpu.vmx.CONTROL_ENTRY_INTERRUPTION_INFO; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.CONTROL_PRIMARY_PROCESSOR_CONTROLS.val_eq : vcpu.vmx.CONTROL_PRIMARY_PROCESSOR_CONTROLS.val = 16386 := by
+  unfold vcpu.vmx.CONTROL_PRIMARY_PROCESSOR_CONTROLS; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.NUM_MRS.val_eq : vcpu.NUM_MRS.val = 30 := by
+  unfold vcpu.NUM_MRS; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.EXIT.val_eq : vcpu.EXIT.val = 20992 := by
+  unfold vcpu.EXIT; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.REGS.val_eq : vcpu.REGS.val = 20736 := by
+  unfold vcpu.REGS; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.VALID.val_eq : vcpu.VALID.val = 20528 := by
+  unfold vcpu.VALID; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.PENDING.val_eq : vcpu.PENDING.val = 20520 := by
+  unfold vcpu.PENDING; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.CR2.val_eq : vcpu.CR2.val = 20512 := by
+  unfold vcpu.CR2; rfl
+
+@[simp, scalar_tac_simps] theorem sched.Q_RELEASE.val_eq : sched.Q_RELEASE.val = 2 := by
+  unfold sched.Q_RELEASE; rfl
+
+@[simp, scalar_tac_simps] theorem sched.TS_RUNNING_VM.val_eq : sched.TS_RUNNING_VM.val = 8 := by
+  unfold sched.TS_RUNNING_VM; rfl
+
+@[simp, scalar_tac_simps] theorem sched.TS_RESTART.val_eq : sched.TS_RESTART.val = 2 := by
+  unfold sched.TS_RESTART; rfl
+
+@[simp, scalar_tac_simps] theorem sched.ACTION_CHOOSE_NEW.val_eq : sched.ACTION_CHOOSE_NEW.val = 1 := by
+  unfold sched.ACTION_CHOOSE_NEW; rfl
 
 @[simp, scalar_tac_simps] theorem msg.N_MSG_REGISTERS.val_eq : msg.N_MSG_REGISTERS.val = 4 := by
   unfold msg.N_MSG_REGISTERS; rfl
@@ -999,8 +1251,35 @@ open fl4_core
 @[simp, scalar_tac_simps] theorem layout.reg.R10.val_eq : layout.reg.R10.val = 9 := by
   unfold layout.reg.R10; rfl
 
+@[simp, scalar_tac_simps] theorem layout.reg.RSI.val_eq : layout.reg.RSI.val = 1 := by
+  unfold layout.reg.RSI; rfl
+
+@[simp, scalar_tac_simps] theorem layout.reg.MSG_INFO.val_eq : layout.reg.MSG_INFO.val = 1 := by
+  unfold layout.reg.MSG_INFO; exact layout.reg.RSI.val_eq
+
 @[simp, scalar_tac_simps] theorem layout.reg.BADGE.val_eq : layout.reg.BADGE.val = 0 := by
   unfold layout.reg.BADGE; exact layout.reg.RDI.val_eq
+
+@[simp, scalar_tac_simps] theorem vcpu.PREV.val_eq : vcpu.PREV.val = 20496 := by
+  unfold vcpu.PREV; rfl
+
+@[simp, scalar_tac_simps] theorem layout.node.TIMER_ROOT.val_eq : layout.node.TIMER_ROOT.val = 104 := by
+  unfold layout.node.TIMER_ROOT; rfl
+
+@[simp, scalar_tac_simps] theorem timer.RED.val_eq : timer.RED.val = 1 := by
+  unfold timer.RED; rfl
+
+@[simp, scalar_tac_simps] theorem layout.node.TIMER_MIN.val_eq : layout.node.TIMER_MIN.val = 112 := by
+  unfold layout.node.TIMER_MIN; rfl
+
+@[simp, scalar_tac_simps] theorem layout.TREE_FUEL.val_eq : layout.TREE_FUEL.val = 128 := by
+  unfold layout.TREE_FUEL; rfl
+
+@[simp, scalar_tac_simps] theorem layout.sc.YIELD_FROM.val_eq : layout.sc.YIELD_FROM.val = 56 := by
+  unfold layout.sc.YIELD_FROM; rfl
+
+@[simp, scalar_tac_simps] theorem layout.sc.CONSUMED.val_eq : layout.sc.CONSUMED.val = 8 := by
+  unfold layout.sc.CONSUMED; rfl
 
 @[simp, scalar_tac_simps] theorem layout.sc.REPLY.val_eq : layout.sc.REPLY.val = 32 := by
   unfold layout.sc.REPLY; rfl
@@ -1016,15 +1295,6 @@ open fl4_core
 
 @[simp, scalar_tac_simps] theorem sched.Q_QUEUED.val_eq : sched.Q_QUEUED.val = 1 := by
   unfold sched.Q_QUEUED; rfl
-
-@[simp, scalar_tac_simps] theorem sched.Q_RELEASE.val_eq : sched.Q_RELEASE.val = 2 := by
-  unfold sched.Q_RELEASE; rfl
-
-@[simp, scalar_tac_simps] theorem sched.TS_RESTART.val_eq : sched.TS_RESTART.val = 2 := by
-  unfold sched.TS_RESTART; rfl
-
-@[simp, scalar_tac_simps] theorem sched.ACTION_CHOOSE_NEW.val_eq : sched.ACTION_CHOOSE_NEW.val = 1 := by
-  unfold sched.ACTION_CHOOSE_NEW; rfl
 
 @[simp, scalar_tac_simps] theorem layout.node.RELEASE_HEAD.val_eq : layout.node.RELEASE_HEAD.val = 64 := by
   unfold layout.node.RELEASE_HEAD; rfl
@@ -1077,8 +1347,11 @@ open fl4_core
 @[simp, scalar_tac_simps] theorem obj.NTFN_WAITING.val_eq : obj.NTFN_WAITING.val = 1 := by
   unfold obj.NTFN_WAITING; rfl
 
-@[simp, scalar_tac_simps] theorem layout.tcb.NUM_SLOTS.val_eq : layout.tcb.NUM_SLOTS.val = 5 := by
+@[simp, scalar_tac_simps] theorem layout.tcb.NUM_SLOTS.val_eq : layout.tcb.NUM_SLOTS.val = 6 := by
   unfold layout.tcb.NUM_SLOTS; rfl
+
+@[simp, scalar_tac_simps] theorem ept.ADDRESS.val_eq : ept.ADDRESS.val = 4503599627366400 := by
+  unfold ept.ADDRESS; rfl
 
 @[simp, scalar_tac_simps] theorem cspace.WORD_BITS.val_eq : cspace.WORD_BITS.val = 64 := by
   unfold cspace.WORD_BITS; rfl
@@ -1242,11 +1515,11 @@ open fl4_core
 @[simp, scalar_tac_simps] theorem layout.cte.CAP1.val_eq : layout.cte.CAP1.val = 8 := by
   unfold layout.cte.CAP1; rfl
 
+@[simp, scalar_tac_simps] theorem layout.tcb.SLOT_EPT.val_eq : layout.tcb.SLOT_EPT.val = 5 := by
+  unfold layout.tcb.SLOT_EPT; rfl
+
 @[simp, scalar_tac_simps] theorem layout.tcb.FPU_SIZE.val_eq : layout.tcb.FPU_SIZE.val = 2752 := by
   unfold layout.tcb.FPU_SIZE; rfl
-
-@[simp, scalar_tac_simps] theorem layout.tcb.NAME_LEN.val_eq : layout.tcb.NAME_LEN.val = 64 := by
-  unfold layout.tcb.NAME_LEN; rfl
 
 @[simp, scalar_tac_simps] theorem layout.reg.ERROR.val_eq : layout.reg.ERROR.val = 15 := by
   unfold layout.reg.ERROR; rfl
@@ -1284,6 +1557,228 @@ open fl4_core
 @[simp, scalar_tac_simps] theorem msg.BUF_MSG.val_eq : msg.BUF_MSG.val = 1 := by
   unfold msg.BUF_MSG; rfl
 
+@[simp, scalar_tac_simps] theorem vcpu.vmx.GUEST_SYSENTER_EIP.val_eq : vcpu.vmx.GUEST_SYSENTER_EIP.val = 26662 := by
+  unfold vcpu.vmx.GUEST_SYSENTER_EIP; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.GUEST_SYSENTER_ESP.val_eq : vcpu.vmx.GUEST_SYSENTER_ESP.val = 26660 := by
+  unfold vcpu.vmx.GUEST_SYSENTER_ESP; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.GUEST_PENDING_DEBUG_EXCEPTIONS.val_eq : vcpu.vmx.GUEST_PENDING_DEBUG_EXCEPTIONS.val = 26658 := by
+  unfold vcpu.vmx.GUEST_PENDING_DEBUG_EXCEPTIONS; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.GUEST_RSP.val_eq : vcpu.vmx.GUEST_RSP.val = 26652 := by
+  unfold vcpu.vmx.GUEST_RSP; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.GUEST_DR7.val_eq : vcpu.vmx.GUEST_DR7.val = 26650 := by
+  unfold vcpu.vmx.GUEST_DR7; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.GUEST_IDTR_BASE.val_eq : vcpu.vmx.GUEST_IDTR_BASE.val = 26648 := by
+  unfold vcpu.vmx.GUEST_IDTR_BASE; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.GUEST_GDTR_BASE.val_eq : vcpu.vmx.GUEST_GDTR_BASE.val = 26646 := by
+  unfold vcpu.vmx.GUEST_GDTR_BASE; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.GUEST_TR_BASE.val_eq : vcpu.vmx.GUEST_TR_BASE.val = 26644 := by
+  unfold vcpu.vmx.GUEST_TR_BASE; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.GUEST_LDTR_BASE.val_eq : vcpu.vmx.GUEST_LDTR_BASE.val = 26642 := by
+  unfold vcpu.vmx.GUEST_LDTR_BASE; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.GUEST_GS_BASE.val_eq : vcpu.vmx.GUEST_GS_BASE.val = 26640 := by
+  unfold vcpu.vmx.GUEST_GS_BASE; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.GUEST_FS_BASE.val_eq : vcpu.vmx.GUEST_FS_BASE.val = 26638 := by
+  unfold vcpu.vmx.GUEST_FS_BASE; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.GUEST_DS_BASE.val_eq : vcpu.vmx.GUEST_DS_BASE.val = 26636 := by
+  unfold vcpu.vmx.GUEST_DS_BASE; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.GUEST_SS_BASE.val_eq : vcpu.vmx.GUEST_SS_BASE.val = 26634 := by
+  unfold vcpu.vmx.GUEST_SS_BASE; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.GUEST_CS_BASE.val_eq : vcpu.vmx.GUEST_CS_BASE.val = 26632 := by
+  unfold vcpu.vmx.GUEST_CS_BASE; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.GUEST_ES_BASE.val_eq : vcpu.vmx.GUEST_ES_BASE.val = 26630 := by
+  unfold vcpu.vmx.GUEST_ES_BASE; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.GUEST_CR4.val_eq : vcpu.vmx.GUEST_CR4.val = 26628 := by
+  unfold vcpu.vmx.GUEST_CR4; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.GUEST_CR3.val_eq : vcpu.vmx.GUEST_CR3.val = 26626 := by
+  unfold vcpu.vmx.GUEST_CR3; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.GUEST_CR0.val_eq : vcpu.vmx.GUEST_CR0.val = 26624 := by
+  unfold vcpu.vmx.GUEST_CR0; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.CONTROL_CR4_READ_SHADOW.val_eq : vcpu.vmx.CONTROL_CR4_READ_SHADOW.val = 24582 := by
+  unfold vcpu.vmx.CONTROL_CR4_READ_SHADOW; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.CONTROL_CR0_READ_SHADOW.val_eq : vcpu.vmx.CONTROL_CR0_READ_SHADOW.val = 24580 := by
+  unfold vcpu.vmx.CONTROL_CR0_READ_SHADOW; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.CONTROL_CR4_MASK.val_eq : vcpu.vmx.CONTROL_CR4_MASK.val = 24578 := by
+  unfold vcpu.vmx.CONTROL_CR4_MASK; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.CONTROL_CR0_MASK.val_eq : vcpu.vmx.CONTROL_CR0_MASK.val = 24576 := by
+  unfold vcpu.vmx.CONTROL_CR0_MASK; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.GUEST_PREEMPTION_TIMER_VALUE.val_eq : vcpu.vmx.GUEST_PREEMPTION_TIMER_VALUE.val = 18478 := by
+  unfold vcpu.vmx.GUEST_PREEMPTION_TIMER_VALUE; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.GUEST_SYSENTER_CS.val_eq : vcpu.vmx.GUEST_SYSENTER_CS.val = 18474 := by
+  unfold vcpu.vmx.GUEST_SYSENTER_CS; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.GUEST_SMBASE.val_eq : vcpu.vmx.GUEST_SMBASE.val = 18472 := by
+  unfold vcpu.vmx.GUEST_SMBASE; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.GUEST_ACTIVITY.val_eq : vcpu.vmx.GUEST_ACTIVITY.val = 18470 := by
+  unfold vcpu.vmx.GUEST_ACTIVITY; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.GUEST_TR_ACCESS_RIGHTS.val_eq : vcpu.vmx.GUEST_TR_ACCESS_RIGHTS.val = 18466 := by
+  unfold vcpu.vmx.GUEST_TR_ACCESS_RIGHTS; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.GUEST_LDTR_ACCESS_RIGHTS.val_eq : vcpu.vmx.GUEST_LDTR_ACCESS_RIGHTS.val = 18464 := by
+  unfold vcpu.vmx.GUEST_LDTR_ACCESS_RIGHTS; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.GUEST_GS_ACCESS_RIGHTS.val_eq : vcpu.vmx.GUEST_GS_ACCESS_RIGHTS.val = 18462 := by
+  unfold vcpu.vmx.GUEST_GS_ACCESS_RIGHTS; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.GUEST_FS_ACCESS_RIGHTS.val_eq : vcpu.vmx.GUEST_FS_ACCESS_RIGHTS.val = 18460 := by
+  unfold vcpu.vmx.GUEST_FS_ACCESS_RIGHTS; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.GUEST_DS_ACCESS_RIGHTS.val_eq : vcpu.vmx.GUEST_DS_ACCESS_RIGHTS.val = 18458 := by
+  unfold vcpu.vmx.GUEST_DS_ACCESS_RIGHTS; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.GUEST_SS_ACCESS_RIGHTS.val_eq : vcpu.vmx.GUEST_SS_ACCESS_RIGHTS.val = 18456 := by
+  unfold vcpu.vmx.GUEST_SS_ACCESS_RIGHTS; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.GUEST_CS_ACCESS_RIGHTS.val_eq : vcpu.vmx.GUEST_CS_ACCESS_RIGHTS.val = 18454 := by
+  unfold vcpu.vmx.GUEST_CS_ACCESS_RIGHTS; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.GUEST_ES_ACCESS_RIGHTS.val_eq : vcpu.vmx.GUEST_ES_ACCESS_RIGHTS.val = 18452 := by
+  unfold vcpu.vmx.GUEST_ES_ACCESS_RIGHTS; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.GUEST_IDTR_LIMIT.val_eq : vcpu.vmx.GUEST_IDTR_LIMIT.val = 18450 := by
+  unfold vcpu.vmx.GUEST_IDTR_LIMIT; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.GUEST_GDTR_LIMIT.val_eq : vcpu.vmx.GUEST_GDTR_LIMIT.val = 18448 := by
+  unfold vcpu.vmx.GUEST_GDTR_LIMIT; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.GUEST_TR_LIMIT.val_eq : vcpu.vmx.GUEST_TR_LIMIT.val = 18446 := by
+  unfold vcpu.vmx.GUEST_TR_LIMIT; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.GUEST_LDTR_LIMIT.val_eq : vcpu.vmx.GUEST_LDTR_LIMIT.val = 18444 := by
+  unfold vcpu.vmx.GUEST_LDTR_LIMIT; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.GUEST_GS_LIMIT.val_eq : vcpu.vmx.GUEST_GS_LIMIT.val = 18442 := by
+  unfold vcpu.vmx.GUEST_GS_LIMIT; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.GUEST_FS_LIMIT.val_eq : vcpu.vmx.GUEST_FS_LIMIT.val = 18440 := by
+  unfold vcpu.vmx.GUEST_FS_LIMIT; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.GUEST_DS_LIMIT.val_eq : vcpu.vmx.GUEST_DS_LIMIT.val = 18438 := by
+  unfold vcpu.vmx.GUEST_DS_LIMIT; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.GUEST_SS_LIMIT.val_eq : vcpu.vmx.GUEST_SS_LIMIT.val = 18436 := by
+  unfold vcpu.vmx.GUEST_SS_LIMIT; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.GUEST_CS_LIMIT.val_eq : vcpu.vmx.GUEST_CS_LIMIT.val = 18434 := by
+  unfold vcpu.vmx.GUEST_CS_LIMIT; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.GUEST_ES_LIMIT.val_eq : vcpu.vmx.GUEST_ES_LIMIT.val = 18432 := by
+  unfold vcpu.vmx.GUEST_ES_LIMIT; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.CONTROL_SECONDARY_PROCESSOR_CONTROLS.val_eq : vcpu.vmx.CONTROL_SECONDARY_PROCESSOR_CONTROLS.val = 16414 := by
+  unfold vcpu.vmx.CONTROL_SECONDARY_PROCESSOR_CONTROLS; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.CONTROL_ENTRY_INSTRUCTION_LENGTH.val_eq : vcpu.vmx.CONTROL_ENTRY_INSTRUCTION_LENGTH.val = 16410 := by
+  unfold vcpu.vmx.CONTROL_ENTRY_INSTRUCTION_LENGTH; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.CONTROL_ENTRY_EXCEPTION_ERROR_CODE.val_eq : vcpu.vmx.CONTROL_ENTRY_EXCEPTION_ERROR_CODE.val = 16408 := by
+  unfold vcpu.vmx.CONTROL_ENTRY_EXCEPTION_ERROR_CODE; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.CONTROL_ENTRY_CONTROLS.val_eq : vcpu.vmx.CONTROL_ENTRY_CONTROLS.val = 16402 := by
+  unfold vcpu.vmx.CONTROL_ENTRY_CONTROLS; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.CONTROL_EXIT_CONTROLS.val_eq : vcpu.vmx.CONTROL_EXIT_CONTROLS.val = 16396 := by
+  unfold vcpu.vmx.CONTROL_EXIT_CONTROLS; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.CONTROL_EXCEPTION_BITMAP.val_eq : vcpu.vmx.CONTROL_EXCEPTION_BITMAP.val = 16388 := by
+  unfold vcpu.vmx.CONTROL_EXCEPTION_BITMAP; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.CONTROL_PIN_EXECUTION_CONTROLS.val_eq : vcpu.vmx.CONTROL_PIN_EXECUTION_CONTROLS.val = 16384 := by
+  unfold vcpu.vmx.CONTROL_PIN_EXECUTION_CONTROLS; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.GUEST_PDPTE3.val_eq : vcpu.vmx.GUEST_PDPTE3.val = 10256 := by
+  unfold vcpu.vmx.GUEST_PDPTE3; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.GUEST_PDPTE2.val_eq : vcpu.vmx.GUEST_PDPTE2.val = 10254 := by
+  unfold vcpu.vmx.GUEST_PDPTE2; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.GUEST_PDPTE1.val_eq : vcpu.vmx.GUEST_PDPTE1.val = 10252 := by
+  unfold vcpu.vmx.GUEST_PDPTE1; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.GUEST_PDPTE0.val_eq : vcpu.vmx.GUEST_PDPTE0.val = 10250 := by
+  unfold vcpu.vmx.GUEST_PDPTE0; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.GUEST_PERF_GLOBAL_CTRL.val_eq : vcpu.vmx.GUEST_PERF_GLOBAL_CTRL.val = 10248 := by
+  unfold vcpu.vmx.GUEST_PERF_GLOBAL_CTRL; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.GUEST_EFER.val_eq : vcpu.vmx.GUEST_EFER.val = 10246 := by
+  unfold vcpu.vmx.GUEST_EFER; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.GUEST_PAT.val_eq : vcpu.vmx.GUEST_PAT.val = 10244 := by
+  unfold vcpu.vmx.GUEST_PAT; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.GUEST_DEBUGCTRL.val_eq : vcpu.vmx.GUEST_DEBUGCTRL.val = 10242 := by
+  unfold vcpu.vmx.GUEST_DEBUGCTRL; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.CONTROL_TSC_OFFSET.val_eq : vcpu.vmx.CONTROL_TSC_OFFSET.val = 8208 := by
+  unfold vcpu.vmx.CONTROL_TSC_OFFSET; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.GUEST_TR_SELECTOR.val_eq : vcpu.vmx.GUEST_TR_SELECTOR.val = 2062 := by
+  unfold vcpu.vmx.GUEST_TR_SELECTOR; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.GUEST_LDTR_SELECTOR.val_eq : vcpu.vmx.GUEST_LDTR_SELECTOR.val = 2060 := by
+  unfold vcpu.vmx.GUEST_LDTR_SELECTOR; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.GUEST_GS_SELECTOR.val_eq : vcpu.vmx.GUEST_GS_SELECTOR.val = 2058 := by
+  unfold vcpu.vmx.GUEST_GS_SELECTOR; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.GUEST_FS_SELECTOR.val_eq : vcpu.vmx.GUEST_FS_SELECTOR.val = 2056 := by
+  unfold vcpu.vmx.GUEST_FS_SELECTOR; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.GUEST_DS_SELECTOR.val_eq : vcpu.vmx.GUEST_DS_SELECTOR.val = 2054 := by
+  unfold vcpu.vmx.GUEST_DS_SELECTOR; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.GUEST_SS_SELECTOR.val_eq : vcpu.vmx.GUEST_SS_SELECTOR.val = 2052 := by
+  unfold vcpu.vmx.GUEST_SS_SELECTOR; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.GUEST_CS_SELECTOR.val_eq : vcpu.vmx.GUEST_CS_SELECTOR.val = 2050 := by
+  unfold vcpu.vmx.GUEST_CS_SELECTOR; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.GUEST_ES_SELECTOR.val_eq : vcpu.vmx.GUEST_ES_SELECTOR.val = 2048 := by
+  unfold vcpu.vmx.GUEST_ES_SELECTOR; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.SVM_I2_FORCED.val_eq : vcpu.SVM_I2_FORCED.val = 32381 := by
+  unfold vcpu.SVM_I2_FORCED; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.SVM_I1_FORCED.val_eq : vcpu.SVM_I1_FORCED.val = 2621472783 := by
+  unfold vcpu.SVM_I1_FORCED; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.PRIMARY_ALLOWED.val_eq : vcpu.PRIMARY_ALLOWED.val = 4225343116 := by
+  unfold vcpu.PRIMARY_ALLOWED; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.svm.NESTED_CTL.val_eq : vcpu.svm.NESTED_CTL.val = 144 := by
+  unfold vcpu.svm.NESTED_CTL; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.svm.INT_CTL.val_eq : vcpu.svm.INT_CTL.val = 96 := by
+  unfold vcpu.svm.INT_CTL; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.XCR0.val_eq : vcpu.XCR0.val = 20504 := by
+  unfold vcpu.XCR0; rfl
+
 @[simp, scalar_tac_simps] theorem objects.CHILD_PREFIX_LEN.val_eq : objects.CHILD_PREFIX_LEN.val = 11 := by
   unfold objects.CHILD_PREFIX_LEN; rfl
 
@@ -1301,6 +1796,54 @@ open fl4_core
 
 @[simp, scalar_tac_simps] theorem syscall.DEBUG_MESSAGE_START.val_eq : syscall.DEBUG_MESSAGE_START.val = 6 := by
   unfold syscall.DEBUG_MESSAGE_START; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.DATA_GUEST_LINEAR_ADDRESS.val_eq : vcpu.vmx.DATA_GUEST_LINEAR_ADDRESS.val = 25610 := by
+  unfold vcpu.vmx.DATA_GUEST_LINEAR_ADDRESS; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.DATA_IO_RIP.val_eq : vcpu.vmx.DATA_IO_RIP.val = 25608 := by
+  unfold vcpu.vmx.DATA_IO_RIP; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.DATA_IO_RDI.val_eq : vcpu.vmx.DATA_IO_RDI.val = 25606 := by
+  unfold vcpu.vmx.DATA_IO_RDI; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.DATA_IO_RSI.val_eq : vcpu.vmx.DATA_IO_RSI.val = 25604 := by
+  unfold vcpu.vmx.DATA_IO_RSI; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.DATA_IO_RCX.val_eq : vcpu.vmx.DATA_IO_RCX.val = 25602 := by
+  unfold vcpu.vmx.DATA_IO_RCX; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.DATA_EXIT_INSTRUCTION_INFO.val_eq : vcpu.vmx.DATA_EXIT_INSTRUCTION_INFO.val = 17422 := by
+  unfold vcpu.vmx.DATA_EXIT_INSTRUCTION_INFO; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.DATA_EXIT_INSTRUCTION_LENGTH.val_eq : vcpu.vmx.DATA_EXIT_INSTRUCTION_LENGTH.val = 17420 := by
+  unfold vcpu.vmx.DATA_EXIT_INSTRUCTION_LENGTH; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.DATA_IDT_VECTOR_ERROR.val_eq : vcpu.vmx.DATA_IDT_VECTOR_ERROR.val = 17418 := by
+  unfold vcpu.vmx.DATA_IDT_VECTOR_ERROR; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.DATA_IDT_VECTOR_INFO.val_eq : vcpu.vmx.DATA_IDT_VECTOR_INFO.val = 17416 := by
+  unfold vcpu.vmx.DATA_IDT_VECTOR_INFO; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.DATA_EXIT_INTERRUPT_ERROR.val_eq : vcpu.vmx.DATA_EXIT_INTERRUPT_ERROR.val = 17414 := by
+  unfold vcpu.vmx.DATA_EXIT_INTERRUPT_ERROR; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.DATA_EXIT_INTERRUPT_INFO.val_eq : vcpu.vmx.DATA_EXIT_INTERRUPT_INFO.val = 17412 := by
+  unfold vcpu.vmx.DATA_EXIT_INTERRUPT_INFO; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.DATA_INSTRUCTION_ERROR.val_eq : vcpu.vmx.DATA_INSTRUCTION_ERROR.val = 17408 := by
+  unfold vcpu.vmx.DATA_INSTRUCTION_ERROR; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.DATA_GUEST_PHYSICAL.val_eq : vcpu.vmx.DATA_GUEST_PHYSICAL.val = 9216 := by
+  unfold vcpu.vmx.DATA_GUEST_PHYSICAL; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.MSRS.val_eq : vcpu.MSRS.val = 20864 := by
+  unfold vcpu.MSRS; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.SVM_EVENT.val_eq : vcpu.SVM_EVENT.val = 18446744071562072063 := by
+  unfold vcpu.SVM_EVENT; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.SVM_I1_WRITABLE.val_eq : vcpu.SVM_I1_WRITABLE.val = 1673494512 := by
+  unfold vcpu.SVM_I1_WRITABLE; rfl
 
 @[simp, scalar_tac_simps] theorem untyped.RESET_CHUNK.val_eq : untyped.RESET_CHUNK.val = 65536 := by
   unfold untyped.RESET_CHUNK; rfl
@@ -1340,6 +1883,234 @@ open fl4_core
 
 @[simp, scalar_tac_simps] theorem tcb.N_FRAME.val_eq : tcb.N_FRAME.val = 18 := by
   unfold tcb.N_FRAME; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.CONTROL_VPID.val_eq : vcpu.vmx.CONTROL_VPID.val = 0 := by
+  unfold vcpu.vmx.CONTROL_VPID; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.HOST_ES_SELECTOR.val_eq : vcpu.vmx.HOST_ES_SELECTOR.val = 3072 := by
+  unfold vcpu.vmx.HOST_ES_SELECTOR; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.HOST_CS_SELECTOR.val_eq : vcpu.vmx.HOST_CS_SELECTOR.val = 3074 := by
+  unfold vcpu.vmx.HOST_CS_SELECTOR; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.HOST_SS_SELECTOR.val_eq : vcpu.vmx.HOST_SS_SELECTOR.val = 3076 := by
+  unfold vcpu.vmx.HOST_SS_SELECTOR; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.HOST_DS_SELECTOR.val_eq : vcpu.vmx.HOST_DS_SELECTOR.val = 3078 := by
+  unfold vcpu.vmx.HOST_DS_SELECTOR; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.HOST_FS_SELECTOR.val_eq : vcpu.vmx.HOST_FS_SELECTOR.val = 3080 := by
+  unfold vcpu.vmx.HOST_FS_SELECTOR; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.HOST_GS_SELECTOR.val_eq : vcpu.vmx.HOST_GS_SELECTOR.val = 3082 := by
+  unfold vcpu.vmx.HOST_GS_SELECTOR; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.HOST_TR_SELECTOR.val_eq : vcpu.vmx.HOST_TR_SELECTOR.val = 3084 := by
+  unfold vcpu.vmx.HOST_TR_SELECTOR; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.CONTROL_IOA_ADDRESS.val_eq : vcpu.vmx.CONTROL_IOA_ADDRESS.val = 8192 := by
+  unfold vcpu.vmx.CONTROL_IOA_ADDRESS; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.CONTROL_IOB_ADDRESS.val_eq : vcpu.vmx.CONTROL_IOB_ADDRESS.val = 8194 := by
+  unfold vcpu.vmx.CONTROL_IOB_ADDRESS; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.CONTROL_MSR_ADDRESS.val_eq : vcpu.vmx.CONTROL_MSR_ADDRESS.val = 8196 := by
+  unfold vcpu.vmx.CONTROL_MSR_ADDRESS; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.CONTROL_EXIT_MSR_STORE_ADDRESS.val_eq : vcpu.vmx.CONTROL_EXIT_MSR_STORE_ADDRESS.val = 8198 := by
+  unfold vcpu.vmx.CONTROL_EXIT_MSR_STORE_ADDRESS; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.CONTROL_EXIT_MSR_LOAD_ADDRESS.val_eq : vcpu.vmx.CONTROL_EXIT_MSR_LOAD_ADDRESS.val = 8200 := by
+  unfold vcpu.vmx.CONTROL_EXIT_MSR_LOAD_ADDRESS; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.CONTROL_ENTRY_MSR_LOAD_ADDRESS.val_eq : vcpu.vmx.CONTROL_ENTRY_MSR_LOAD_ADDRESS.val = 8202 := by
+  unfold vcpu.vmx.CONTROL_ENTRY_MSR_LOAD_ADDRESS; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.CONTROL_EXECUTIVE_VMCS_POINTER.val_eq : vcpu.vmx.CONTROL_EXECUTIVE_VMCS_POINTER.val = 8204 := by
+  unfold vcpu.vmx.CONTROL_EXECUTIVE_VMCS_POINTER; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.CONTROL_VIRTUAL_APIC_ADDRESS.val_eq : vcpu.vmx.CONTROL_VIRTUAL_APIC_ADDRESS.val = 8210 := by
+  unfold vcpu.vmx.CONTROL_VIRTUAL_APIC_ADDRESS; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.CONTROL_APIC_ACCESS_ADDRESS.val_eq : vcpu.vmx.CONTROL_APIC_ACCESS_ADDRESS.val = 8212 := by
+  unfold vcpu.vmx.CONTROL_APIC_ACCESS_ADDRESS; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.CONTROL_EPT_POINTER.val_eq : vcpu.vmx.CONTROL_EPT_POINTER.val = 8218 := by
+  unfold vcpu.vmx.CONTROL_EPT_POINTER; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.GUEST_VMCS_LINK_POINTER.val_eq : vcpu.vmx.GUEST_VMCS_LINK_POINTER.val = 10240 := by
+  unfold vcpu.vmx.GUEST_VMCS_LINK_POINTER; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.GUEST_VMCS_LINK_POINTER_HIGH.val_eq : vcpu.vmx.GUEST_VMCS_LINK_POINTER_HIGH.val = 10241 := by
+  unfold vcpu.vmx.GUEST_VMCS_LINK_POINTER_HIGH; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.HOST_PAT.val_eq : vcpu.vmx.HOST_PAT.val = 11264 := by
+  unfold vcpu.vmx.HOST_PAT; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.HOST_EFER.val_eq : vcpu.vmx.HOST_EFER.val = 11266 := by
+  unfold vcpu.vmx.HOST_EFER; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.HOST_PERF_GLOBAL_CTRL.val_eq : vcpu.vmx.HOST_PERF_GLOBAL_CTRL.val = 11268 := by
+  unfold vcpu.vmx.HOST_PERF_GLOBAL_CTRL; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.CONTROL_PAGE_FAULT_MASK.val_eq : vcpu.vmx.CONTROL_PAGE_FAULT_MASK.val = 16390 := by
+  unfold vcpu.vmx.CONTROL_PAGE_FAULT_MASK; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.CONTROL_PAGE_FAULT_MATCH.val_eq : vcpu.vmx.CONTROL_PAGE_FAULT_MATCH.val = 16392 := by
+  unfold vcpu.vmx.CONTROL_PAGE_FAULT_MATCH; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.CONTROL_CR3_TARGET_COUNT.val_eq : vcpu.vmx.CONTROL_CR3_TARGET_COUNT.val = 16394 := by
+  unfold vcpu.vmx.CONTROL_CR3_TARGET_COUNT; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.CONTROL_EXIT_MSR_STORE_COUNT.val_eq : vcpu.vmx.CONTROL_EXIT_MSR_STORE_COUNT.val = 16398 := by
+  unfold vcpu.vmx.CONTROL_EXIT_MSR_STORE_COUNT; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.CONTROL_EXIT_MSR_LOAD_COUNT.val_eq : vcpu.vmx.CONTROL_EXIT_MSR_LOAD_COUNT.val = 16400 := by
+  unfold vcpu.vmx.CONTROL_EXIT_MSR_LOAD_COUNT; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.CONTROL_ENTRY_MSR_LOAD_COUNT.val_eq : vcpu.vmx.CONTROL_ENTRY_MSR_LOAD_COUNT.val = 16404 := by
+  unfold vcpu.vmx.CONTROL_ENTRY_MSR_LOAD_COUNT; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.CONTROL_TPR_THRESHOLD.val_eq : vcpu.vmx.CONTROL_TPR_THRESHOLD.val = 16412 := by
+  unfold vcpu.vmx.CONTROL_TPR_THRESHOLD; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.CONTROL_PLE_GAP.val_eq : vcpu.vmx.CONTROL_PLE_GAP.val = 16416 := by
+  unfold vcpu.vmx.CONTROL_PLE_GAP; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.CONTROL_PLE_WINDOW.val_eq : vcpu.vmx.CONTROL_PLE_WINDOW.val = 16418 := by
+  unfold vcpu.vmx.CONTROL_PLE_WINDOW; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.DATA_EXIT_REASON.val_eq : vcpu.vmx.DATA_EXIT_REASON.val = 17410 := by
+  unfold vcpu.vmx.DATA_EXIT_REASON; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.HOST_SYSENTER_CS.val_eq : vcpu.vmx.HOST_SYSENTER_CS.val = 19456 := by
+  unfold vcpu.vmx.HOST_SYSENTER_CS; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.CONTROL_CR3_TARGET0.val_eq : vcpu.vmx.CONTROL_CR3_TARGET0.val = 24584 := by
+  unfold vcpu.vmx.CONTROL_CR3_TARGET0; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.CONTROL_CR3_TARGET1.val_eq : vcpu.vmx.CONTROL_CR3_TARGET1.val = 24586 := by
+  unfold vcpu.vmx.CONTROL_CR3_TARGET1; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.CONTROL_CR3_TARGET2.val_eq : vcpu.vmx.CONTROL_CR3_TARGET2.val = 24588 := by
+  unfold vcpu.vmx.CONTROL_CR3_TARGET2; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.CONTROL_CR3_TARGET3.val_eq : vcpu.vmx.CONTROL_CR3_TARGET3.val = 24590 := by
+  unfold vcpu.vmx.CONTROL_CR3_TARGET3; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.DATA_EXIT_QUALIFICATION.val_eq : vcpu.vmx.DATA_EXIT_QUALIFICATION.val = 25600 := by
+  unfold vcpu.vmx.DATA_EXIT_QUALIFICATION; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.HOST_CR0.val_eq : vcpu.vmx.HOST_CR0.val = 27648 := by
+  unfold vcpu.vmx.HOST_CR0; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.HOST_CR3.val_eq : vcpu.vmx.HOST_CR3.val = 27650 := by
+  unfold vcpu.vmx.HOST_CR3; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.HOST_CR4.val_eq : vcpu.vmx.HOST_CR4.val = 27652 := by
+  unfold vcpu.vmx.HOST_CR4; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.HOST_FS_BASE.val_eq : vcpu.vmx.HOST_FS_BASE.val = 27654 := by
+  unfold vcpu.vmx.HOST_FS_BASE; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.HOST_GS_BASE.val_eq : vcpu.vmx.HOST_GS_BASE.val = 27656 := by
+  unfold vcpu.vmx.HOST_GS_BASE; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.HOST_TR_BASE.val_eq : vcpu.vmx.HOST_TR_BASE.val = 27658 := by
+  unfold vcpu.vmx.HOST_TR_BASE; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.HOST_GDTR_BASE.val_eq : vcpu.vmx.HOST_GDTR_BASE.val = 27660 := by
+  unfold vcpu.vmx.HOST_GDTR_BASE; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.HOST_IDTR_BASE.val_eq : vcpu.vmx.HOST_IDTR_BASE.val = 27662 := by
+  unfold vcpu.vmx.HOST_IDTR_BASE; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.HOST_SYSENTER_ESP.val_eq : vcpu.vmx.HOST_SYSENTER_ESP.val = 27664 := by
+  unfold vcpu.vmx.HOST_SYSENTER_ESP; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.HOST_SYSENTER_EIP.val_eq : vcpu.vmx.HOST_SYSENTER_EIP.val = 27666 := by
+  unfold vcpu.vmx.HOST_SYSENTER_EIP; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.HOST_RSP.val_eq : vcpu.vmx.HOST_RSP.val = 27668 := by
+  unfold vcpu.vmx.HOST_RSP; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.vmx.HOST_RIP.val_eq : vcpu.vmx.HOST_RIP.val = 27670 := by
+  unfold vcpu.vmx.HOST_RIP; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.svm.INTERCEPT_CR.val_eq : vcpu.svm.INTERCEPT_CR.val = 0 := by
+  unfold vcpu.svm.INTERCEPT_CR; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.svm.INTERCEPT_DR.val_eq : vcpu.svm.INTERCEPT_DR.val = 4 := by
+  unfold vcpu.svm.INTERCEPT_DR; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.svm.INTERCEPT_MISC1.val_eq : vcpu.svm.INTERCEPT_MISC1.val = 12 := by
+  unfold vcpu.svm.INTERCEPT_MISC1; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.svm.INTERCEPT_MISC2.val_eq : vcpu.svm.INTERCEPT_MISC2.val = 16 := by
+  unfold vcpu.svm.INTERCEPT_MISC2; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.svm.INTERCEPT_MISC3.val_eq : vcpu.svm.INTERCEPT_MISC3.val = 20 := by
+  unfold vcpu.svm.INTERCEPT_MISC3; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.svm.PAUSE_FILTER.val_eq : vcpu.svm.PAUSE_FILTER.val = 56 := by
+  unfold vcpu.svm.PAUSE_FILTER; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.svm.IOPM_BASE.val_eq : vcpu.svm.IOPM_BASE.val = 64 := by
+  unfold vcpu.svm.IOPM_BASE; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.svm.MSRPM_BASE.val_eq : vcpu.svm.MSRPM_BASE.val = 72 := by
+  unfold vcpu.svm.MSRPM_BASE; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.svm.TSC_OFFSET.val_eq : vcpu.svm.TSC_OFFSET.val = 80 := by
+  unfold vcpu.svm.TSC_OFFSET; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.svm.ASID.val_eq : vcpu.svm.ASID.val = 88 := by
+  unfold vcpu.svm.ASID; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.svm.EXIT_CODE.val_eq : vcpu.svm.EXIT_CODE.val = 112 := by
+  unfold vcpu.svm.EXIT_CODE; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.svm.EXIT_INFO1.val_eq : vcpu.svm.EXIT_INFO1.val = 120 := by
+  unfold vcpu.svm.EXIT_INFO1; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.svm.EXIT_INFO2.val_eq : vcpu.svm.EXIT_INFO2.val = 128 := by
+  unfold vcpu.svm.EXIT_INFO2; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.svm.EXIT_INT_INFO.val_eq : vcpu.svm.EXIT_INT_INFO.val = 136 := by
+  unfold vcpu.svm.EXIT_INT_INFO; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.svm.AVIC_VAPIC_BAR.val_eq : vcpu.svm.AVIC_VAPIC_BAR.val = 152 := by
+  unfold vcpu.svm.AVIC_VAPIC_BAR; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.svm.GHCB.val_eq : vcpu.svm.GHCB.val = 160 := by
+  unfold vcpu.svm.GHCB; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.svm.NESTED_CR3.val_eq : vcpu.svm.NESTED_CR3.val = 176 := by
+  unfold vcpu.svm.NESTED_CR3; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.svm.VIRT_EXT.val_eq : vcpu.svm.VIRT_EXT.val = 184 := by
+  unfold vcpu.svm.VIRT_EXT; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.svm.CLEAN.val_eq : vcpu.svm.CLEAN.val = 192 := by
+  unfold vcpu.svm.CLEAN; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.svm.NEXT_RIP.val_eq : vcpu.svm.NEXT_RIP.val = 200 := by
+  unfold vcpu.svm.NEXT_RIP; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.svm.INSN_BYTES.val_eq : vcpu.svm.INSN_BYTES.val = 208 := by
+  unfold vcpu.svm.INSN_BYTES; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.svm.AVIC_BACKING.val_eq : vcpu.svm.AVIC_BACKING.val = 224 := by
+  unfold vcpu.svm.AVIC_BACKING; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.svm.AVIC_LOGICAL.val_eq : vcpu.svm.AVIC_LOGICAL.val = 240 := by
+  unfold vcpu.svm.AVIC_LOGICAL; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.svm.AVIC_PHYSICAL.val_eq : vcpu.svm.AVIC_PHYSICAL.val = 248 := by
+  unfold vcpu.svm.AVIC_PHYSICAL; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.svm.VMSA.val_eq : vcpu.svm.VMSA.val = 264 := by
+  unfold vcpu.svm.VMSA; rfl
 
 @[simp, scalar_tac_simps] theorem vspace.ASID_BITS.val_eq : vspace.ASID_BITS.val = 20 := by
   unfold vspace.ASID_BITS; rfl

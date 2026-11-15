@@ -22,6 +22,7 @@ reruns Lean, advancing failed attempts, until the file builds.
 Usage: gen_p0.py PROOFS_DIR
 """
 import json
+import os
 import re
 import subprocess
 import sys
@@ -139,6 +140,8 @@ for name in order:
                     continue
                 plus = " + 1" if op == "<=" else ""
                 if b in lens:
+                    if lens[b] not in argnames:
+                        continue
                     c = f"{lens[b]}.length{plus} - {names[v]}.val"
                     if c not in cands:
                         cands.append(c)
@@ -170,14 +173,40 @@ for name in order:
         e["kind"] = "fun"
     entries.append(e)
 
+# Recheck previously generated proof scripts before searching again. This
+# preserves successful loop measures across a source/proof port; Lean still
+# checks every script against the current definitions and assumptions.
+auto_path = proofs / "Fl4Proofs/P0/Auto.lean"
+cached = {}
+if auto_path.exists():
+    old = auto_path.read_text()
+    for e in entries:
+        if e["kind"] == "body" or e["name"] in manual:
+            continue
+        head = f"theorem {e['name']}.p0 {e['binders']} :\n    {e['call']} ⦃ _ => True ⦄ := by\n"
+        at = old.find(head)
+        if at < 0:
+            continue
+        start = at + len(head)
+        end = old.find("\n\n", start)
+        body = old[start:end]
+        if end >= 0 and not re.search(r"\b(?:sorry|admit)\b", body):
+            cached[e["name"]] = body
+
+print(f"gen_p0: rechecking {len(cached)} previous proof scripts", file=sys.stderr)
+
 attempt = {}      # name -> index of the measure (loops) or tactic (functions) to try
 # p0_auto, p0_split and p0_match are defined in Totality.lean.
-FUN_TACTICS = ["p0_auto", "p0_split", "p0_match"]
+FUN_TACTICS = ["p0_auto", "p0_split", "p0_match",
+               "set_option maxHeartbeats 4000000 in p0_data",
+               "set_option maxHeartbeats 4000000 in p0_structural"]
 reasons = {}
 
 
 def proof_of(e):
     n = e["name"]
+    if n in cached:
+        return cached[n]
     if e["kind"] == "const":
         return f"  exact WP.spec_mono Consts.{n}.spec (fun _ _ => trivial)"
     if n in specs:
@@ -219,7 +248,8 @@ def render():
         "import Fl4Proofs.P0.Eq",
         "import Fl4Proofs.P0.Specs",
         "open Aeneas Aeneas.Std Result",
-        "set_option maxHeartbeats 400000",
+        "set_option maxHeartbeats 4000000",
+        "set_option maxRecDepth 16384",
         "set_option linter.unusedVariables false",
         "",
         "namespace Fl4Proofs.P0",
@@ -256,28 +286,47 @@ by_name = {e["name"]: e for e in entries}
 for round_ in range(40):
     text, spans = render()
     auto_path.write_text(text)
-    r = subprocess.run(["lake", "env", "lean", str(auto_path)], cwd=proofs, capture_output=True, text=True)
+    # Build through Lake so successful checks also update the module cache
+    # used by the complete proof build and by subsequent gate runs.
+    r = subprocess.run(["lake", "build", "Fl4Proofs.P0.Auto"], cwd=proofs, capture_output=True, text=True)
     log = r.stdout + r.stderr
-    found = list(re.finditer(r"Auto\.lean:(\d+):\d+: error", log))
+    if path := os.environ.get("FL4_P0_LOG"):
+        Path(path).write_text(log)
+    found = list(re.finditer(
+        r"^(?:error: [^\n]*?Auto\.lean:(\d+):\d+:|[^\n]*?Auto\.lean:(\d+):\d+: error)", log, re.M))
     if not found:
+        if r.returncode != 0:
+            sys.exit("gen_p0: Lean failed outside a generated proof:\n" + log[:4000])
         break
     bad = set()
+    pending_manual = set()
+    hard_manual = set()
     for i, m in enumerate(found):
-        line = int(m.group(1))
+        line = int(m.group(1) or m.group(2))
         hit = [n for n, (a, b) in spans.items() if a <= line < b]
         if not hit:
             sys.exit("gen_p0: error outside generated proofs:\n" + log[:4000])
         n = hit[0]
         chunk = log[m.end():found[i + 1].start() if i + 1 < len(found) else len(log)]
+        if n in manual and "unknown constant" in chunk:
+            pending_manual.add(n)
+        elif n in manual:
+            hard_manual.add(n)
         goal = re.search(r"⊢ ((?:.|\n(?!\S))*)", chunk)
         reasons[n] = " ".join((goal.group(1) if goal else chunk.strip().split("\n")[0]).split())[:300]
         bad.add(n)
+    # A missing callee may be retried after its automatic proof advances.
+    # An independent failure in the same manual theorem must still be fatal.
+    bad -= pending_manual - hard_manual
     if bad & set(manual):
         sys.exit("gen_p0: hand-written proofs fail: " + ", ".join(sorted(bad & set(manual))) + "\n" + log[:4000])
     progress = False
     for n in bad:
         e = by_name[n]
-        if e["kind"] == "loop":
+        if n in cached:
+            del cached[n]
+            progress = True
+        elif e["kind"] == "loop":
             if attempt.get(n, 0) < len(e["cands"]):
                 attempt[n] = attempt.get(n, 0) + 1
                 progress = True

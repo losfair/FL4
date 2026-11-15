@@ -321,7 +321,12 @@ pub fn delete_asid<S: Store, A: Arch>(s: &mut S, a: &mut A, asid: u64, root: u64
     let e = pool.wrapping_add((asid & 511).wrapping_mul(8));
     let old = s.read(e);
     if old & !1 == root {
-        if old & 1 != 0 { crate::ept::invalidate(s, a, root); } else { a.invalidate_asid(asid); }
+        if old & 1 != 0 {
+            crate::ept::invalidate(s, a, root);
+            s.write(e, 0);
+            return;
+        }
+        a.invalidate_asid(asid);
         s.write(e, 0);
         let ct = sched::cur_thread(s);
         set_vm_root(s, a, ct);

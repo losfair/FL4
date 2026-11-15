@@ -113,6 +113,8 @@ theorem mod_numBits_of_lt {x : Nat} (h : x < 2 ^ 32) : x % 2 ^ System.Platform.n
 /-- Close a side condition left by `step*`, or leave it untouched. -/
 macro "p0_close" : tactic =>
   `(tactic| try (first
+    | trivial
+    | (exact (WP.spec_ok _).2 trivial)
     | scalar_tac
     | (simp_all; done)
     | (simp (disch := scalar_tac) only [mod_numBits_of_lt, Array.length_eq] at *; scalar_tac)
@@ -140,6 +142,53 @@ elab "p0_cases_prod" : tactic => withMainContext do
         return gs.toList.map (·.mvarId)
       return
   throwError "p0_cases_prod: no local of a product type"
+
+open Lean Elab Tactic Meta in
+/-- Expose a result or option that is matched beneath a monadic bind. -/
+elab "p0_cases_sum" : tactic => withMainContext do
+  let target ← getMainTarget
+  for d in (← getLCtx) do
+    if d.isImplementationDetail || !target.containsFVar d.fvarId then continue
+    let t ← whnfR (← instantiateMVars d.type)
+    if t.isAppOfArity ``core.result.Result 2 || t.isAppOfArity ``Option 1 then
+      liftMetaTactic fun g => do
+        let gs ← g.cases d.fvarId
+        return gs.toList.map (·.mvarId)
+      return
+  throwError "p0_cases_sum: no result or option in the goal"
+
+theorem p0_if {α : Type _} (c : Prop) [Decidable c] (x y : Result α) (P : α → Prop)
+    (hx : c → x ⦃ P ⦄) (hy : ¬ c → y ⦃ P ⦄) : (if c then x else y) ⦃ P ⦄ := by
+  by_cases h : c
+  · rw [if_pos h]; exact hx h
+  · rw [if_neg h]; exact hy h
+theorem p0_if_bind {α : Type _} {β : Type _} (c : Prop) [Decidable c] (x y : Result α)
+    (k : α → Result β) (P : β → Prop)
+    (hx : c → Aeneas.Std.bind x k ⦃ P ⦄) (hy : ¬ c → Aeneas.Std.bind y k ⦃ P ⦄) :
+    Aeneas.Std.bind (if c then x else y) k ⦃ P ⦄ := by
+  by_cases h : c
+  · rw [if_pos h]; exact hx h
+  · rw [if_neg h]; exact hy h
+
+open Lean Elab Tactic Meta in
+elab "p0_ite_head" : tactic => withMainContext do
+  let target ← getMainTarget
+  unless target.isAppOf ``Aeneas.Std.WP.spec do throwError "not a spec"
+  let args := target.getAppArgs
+  let program := args[args.size - 2]!
+  if program.isAppOf ``ite then
+    evalTactic (← `(tactic| apply p0_if <;> intro))
+  else if let some (m, _) := Aeneas.Step.getBindArgs? program then
+    if m.isAppOf ``ite then
+      evalTactic (← `(tactic| apply p0_if_bind <;> intro))
+    else throwError "bind head is not an if"
+  else throwError "head is not an if"
+macro "p0_structural" : tactic => `(tactic| (
+  (repeat' (first | p0_cases_sum | step | p0_ite_head | (simp only [bind_tc_ok, bind_ok]) | p0_cases_prod | split)) <;> p0_close))
+
+/-- Split data returned by callees before simplifying deeply nested binds. -/
+macro "p0_data" : tactic => `(tactic| (
+  (repeat' (first | p0_cases_sum | step | (simp only [bind_tc_ok, bind_ok]) | split | p0_cases_prod)) <;> p0_close))
 
 /-- The fallback for large matches on literals, where `step*` times out in
 `whnf`: split the matches explicitly. -/

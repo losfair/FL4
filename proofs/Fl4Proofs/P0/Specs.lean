@@ -45,4 +45,52 @@ theorem bvTrailingZeros_le {w : Nat} (x : BitVec w) : bvTrailingZeros x ≤ w :=
   show (BitVec.ofNat 64 (max 0 (x.val - y.val))).toNat = x.val - y.val
   rw [BitVec.toNat_ofNat, Nat.zero_max, Nat.mod_eq_of_lt (by omega)]
 
+/-- Frame-size encodings always produce a valid shift amount. -/
+@[step] theorem capability.FrameSize.bits.spec (sz : capability.FrameSize) :
+    capability.FrameSize.bits sz ⦃ r => r.val = 12 ∨ r.val = 21 ∨ r.val = 30 ⦄ := by
+  cases sz <;> simp [capability.FrameSize.bits]
+
+@[step] theorem root_map_total {S : Type _} (st : machine.Store S) (r : core.result.Result U64 error.LookupFault) :
+    core.result.Result.map_err (ept.root.closure.Insts.CoreOpsFunctionFnOnceTupleLookupFaultExc st) r () ⦃ _ => True ⦄ := by
+  cases r <;> simp [core.result.Result.map_err,
+    ept.root.closure.Insts.CoreOpsFunctionFnOnceTupleLookupFaultExc,
+    ept.root.closure.Insts.CoreOpsFunctionFnOnceTupleLookupFaultExc.call_once,
+    ept.slot.closure.Insts.CoreOpsFunctionFnOnceTupleLookupFaultExc,
+    ept.slot.closure.Insts.CoreOpsFunctionFnOnceTupleLookupFaultExc.call_once]
+@[step] theorem slot_map_total {S : Type _} (st : machine.Store S) (r : core.result.Result U64 error.LookupFault) :
+    core.result.Result.map_err (ept.slot.closure.Insts.CoreOpsFunctionFnOnceTupleLookupFaultExc st) r () ⦃ _ => True ⦄ := by
+  cases r <;> simp [core.result.Result.map_err,
+    ept.root.closure.Insts.CoreOpsFunctionFnOnceTupleLookupFaultExc,
+    ept.root.closure.Insts.CoreOpsFunctionFnOnceTupleLookupFaultExc.call_once,
+    ept.slot.closure.Insts.CoreOpsFunctionFnOnceTupleLookupFaultExc,
+    ept.slot.closure.Insts.CoreOpsFunctionFnOnceTupleLookupFaultExc.call_once]
+@[step] theorem msr_map_total (o : Option U64) (v : U64) :
+    core.option.Option.map vcpu.msr_addr.closure.Insts.CoreOpsFunctionFnOnceTupleU64U64 o v ⦃ _ => True ⦄ := by
+  cases o <;> simp [core.option.Option.map,
+    vcpu.msr_addr.closure.Insts.CoreOpsFunctionFnOnceTupleU64U64,
+    vcpu.msr_addr.closure.Insts.CoreOpsFunctionFnOnceTupleU64U64.call_once,
+    vcpu.msr_addr.closure_1.Insts.CoreOpsFunctionFnOnceTupleU64U64,
+    vcpu.msr_addr.closure_1.Insts.CoreOpsFunctionFnOnceTupleU64U64.call_once, lift, bind_ok]
+@[step] theorem msr_map1_total (o : Option U64) (v : U64) :
+    core.option.Option.map vcpu.msr_addr.closure_1.Insts.CoreOpsFunctionFnOnceTupleU64U64 o v ⦃ _ => True ⦄ := by
+  cases o <;> simp [core.option.Option.map,
+    vcpu.msr_addr.closure.Insts.CoreOpsFunctionFnOnceTupleU64U64,
+    vcpu.msr_addr.closure.Insts.CoreOpsFunctionFnOnceTupleU64U64.call_once,
+    vcpu.msr_addr.closure_1.Insts.CoreOpsFunctionFnOnceTupleU64U64,
+    vcpu.msr_addr.closure_1.Insts.CoreOpsFunctionFnOnceTupleU64U64.call_once, lift, bind_ok]
+
+@[step] theorem one_shift_positive (n : U64) (hn : n.val < 64) :
+    1#u64 <<< n ⦃ r => r.val = 2 ^ n.val ∧ r.bv = 1#64 <<< n.val ∧ 0 < r.val ⦄ := by
+  have heq : (1#u64 <<< n : Result U64) = ok ⟨1#64 <<< n.val⟩ := by
+    simp only [HShiftLeft.hShiftLeft, UScalar.shiftLeft_UScalar, UScalar.shiftLeft]
+    simp [hn]
+  rw [heq, WP.spec_ok]
+  have hp : 2 ^ n.val < 2 ^ 64 := Nat.pow_lt_pow_right (by decide) hn
+  have hv : (1#64 <<< n.val).toNat = 2 ^ n.val := by
+    rw [BitVec.toNat_shiftLeft]
+    change (1 <<< n.val) % 2 ^ 64 = 2 ^ n.val
+    rw [Nat.shiftLeft_eq, Nat.one_mul]
+    exact Nat.mod_eq_of_lt hp
+  exact ⟨hv, rfl, by rw [show (⟨1#64 <<< n.val⟩ : U64).val = (1#64 <<< n.val).toNat from rfl, hv]; positivity⟩
+
 end Fl4Proofs.P0

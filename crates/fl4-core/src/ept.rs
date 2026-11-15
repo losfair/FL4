@@ -50,8 +50,9 @@ pub fn invalidate<S: Store, A: Arch>(s: &mut S, a: &mut A, root: u64) {
     let mask = (s.read(root.wrapping_add(CORES)) >> 32)
         | (s.read(root.wrapping_add(CORES + 8)) & 0xffff_ffff_0000_0000);
     a.invalidate_ept(root, mask);
-    s.write(root.wrapping_add(CORES), 0);
-    s.write(root.wrapping_add(CORES + 8), 0);
+    // Keep a conservative history for the root's lifetime. Invalidation
+    // changes no page-table memory; later flushes still reach every core
+    // that could retain this root. Retyping the object clears the history.
 }
 pub fn lookup<S: Store>(s: &S, root: u64, gpa: u64, level: u64) -> Result<u64, LookupFault> {
     let mut table = root;

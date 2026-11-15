@@ -867,7 +867,7 @@ pub fn decode<S: Store, A: Arch>(
                 let mut i = 0;
                 let mut n = 0;
                 while i < value {
-                    let off = f + i * 8;
+                    let off = f.wrapping_add(i.wrapping_mul(8));
                     let val = if vmcb_hidden(off) {
                         0
                     } else if off == svm::RAX {

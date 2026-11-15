@@ -92,8 +92,9 @@ pub fn send_signal<S: Store, A: Arch>(s: &mut S, a: &mut A, n_ptr: u64, badge: u
         } else {
             set_active(s, n, badge);
             if !t.is_null() && t.state(s) == sched::TS_RUNNING_VM {
+                // The owner checks bound signals before every VM entry.
+                // Interrupt an in-flight guest so it reaches that check.
                 crate::smp::remote_tcb_stall(s, a, t);
-                crate::vcpu::check(s, a, t);
             }
         }
     } else if st == NTFN_WAITING {

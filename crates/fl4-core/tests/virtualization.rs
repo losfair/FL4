@@ -347,7 +347,7 @@ fn nested_asids_are_distinct_and_unmapping_reaches_all_recorded_cores() {
     assert_eq!(a.invalidations, vec![(root, 3)]);
     ept::mark_core(&mut s, root);
     vspace::delete_asid_pool(&mut s, &mut a, 0, pool);
-    assert_eq!(a.invalidations.last(), Some(&(root, 2)));
+    assert_eq!(a.invalidations.last(), Some(&(root, 3)));
     assert!(ept::find(&s, 1).is_err());
 }
 #[test]

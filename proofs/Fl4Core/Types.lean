@@ -357,12 +357,12 @@ structure debug.Breakpoint where
 def ept.root.closure (S : Type _) := Unit
 
 /-- [fl4_core::ept::slot::{closure}]
-    Source: 'crates/fl4-core/src/ept.rs', lines 70:40-70:99 -/
+    Source: 'crates/fl4-core/src/ept.rs', lines 71:40-71:99 -/
 @[reducible]
 def ept.slot.closure (S : Type _) := Unit
 
 /-- [fl4_core::vspace::TableCap]
-    Source: 'crates/fl4-core/src/vspace.rs', lines 711:0-719:1 -/
+    Source: 'crates/fl4-core/src/vspace.rs', lines 716:0-724:1 -/
 structure vspace.TableCap where
   map_lbl : Std.U64
   unmap_lbl : Std.U64
@@ -373,7 +373,7 @@ structure vspace.TableCap where
   vaddr : Std.U64
 
 /-- [fl4_core::vspace::FrameCap]
-    Source: 'crates/fl4-core/src/vspace.rs', lines 436:0-445:1 -/
+    Source: 'crates/fl4-core/src/vspace.rs', lines 441:0-450:1 -/
 structure vspace.FrameCap where
   ptr : Std.U64
   size : capability.FrameSize
@@ -385,7 +385,7 @@ structure vspace.FrameCap where
   vaddr : Std.U64
 
 /-- [fl4_core::vspace::VRoot]
-    Source: 'crates/fl4-core/src/vspace.rs', lines 498:0-501:1 -/
+    Source: 'crates/fl4-core/src/vspace.rs', lines 503:0-506:1 -/
 structure vspace.VRoot where
   pml4 : Std.U64
   asid : Std.U64
