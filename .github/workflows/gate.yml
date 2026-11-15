@@ -35,6 +35,10 @@ jobs:
           done
       - name: Boot and runtime probe without virtualization
         run: FL4_TESTS='^FL4VCPU' cargo xtask fl4test --setup kvm-no-vm --smp 2
+      - name: VCPU execution without a PMU
+        run: |
+          FL4_TESTS='^FL4VCPU' cargo xtask fl4test --setup kvm-no-pmu --smp 1
+          FL4_TESTS='^FL4VCPU' cargo xtask fl4test --setup kvm-no-pmu --smp 4 --release
       - name: Differential fuzzing against seL4 (DESIGN.md §12)
         run: cargo xtask fuzz --setup kvm
       - name: Extract and prove (P0 must be complete)

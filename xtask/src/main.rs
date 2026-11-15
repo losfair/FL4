@@ -106,6 +106,7 @@ fn qemu_cmd(setup: &str, smp: u32, kernel: &Path, initrd: Option<&Path>) -> Comm
         // 2 (where sel4test's driver puts it) never interrupts.
         "kvm" => c.args(["-enable-kvm", "-machine", "kernel-irqchip=split", "-cpu", "host,+invtsc"]),
         "kvm-no-vm" => c.args(["-enable-kvm", "-machine", "kernel-irqchip=split", "-cpu", "host,-vmx,-svm"]),
+        "kvm-no-pmu" => c.args(["-enable-kvm", "-machine", "kernel-irqchip=split", "-cpu", "host,pmu=off"]),
         // The fallback paths: xAPIC, the APIC one-shot timer, no PCIDs,
         // the FS/GS MSRs, XSAVEOPT.
         "kvm-reduced" => c.args(["-enable-kvm", "-machine", "kernel-irqchip=split", "-cpu", "host,-x2apic,-tsc-deadline,-pcid,-invpcid,-fsgsbase,-xsaves,-xsavec"]),
@@ -114,7 +115,7 @@ fn qemu_cmd(setup: &str, smp: u32, kernel: &Path, initrd: Option<&Path>) -> Comm
         // An Intel CPU without IA32_ARCH_CAPABILITIES counts as vulnerable
         // to Meltdown: the skim window paths (TCG has no PCIDs).
         "tcg-intel" => c.args(["-accel", "tcg", "-cpu", "Skylake-Client-v1,-hle,-rtm"]),
-        s => fail(&format!("unknown setup {s} (kvm, kvm-reduced, kvm-no-vm, tcg, tcg-intel)")),
+        s => fail(&format!("unknown setup {s} (kvm, kvm-reduced, kvm-no-vm, kvm-no-pmu, tcg, tcg-intel)")),
     };
     c.args(["-m", "3G", "-smp"]).arg(smp.to_string());
     c.args(["-display", "none", "-serial", "stdio", "-no-reboot", "-monitor", "none"]);

@@ -198,6 +198,30 @@ fn control_msr(field: u32, true_controls: bool) -> u32 {
         field
     }
 }
+
+fn has_perf_global_ctrl(max_leaf: u32, pmu_eax: u32) -> bool {
+    // Version 1 is insufficient under KVM: it emulates GLOBAL_CTRL only
+    // for architectural PMU version 2 or later. Nested VMX control MSRs
+    // may still advertise the load controls when the PMU is hidden.
+    max_leaf >= 0xa && pmu_eax & 0xff >= 2
+}
+
+fn pmu_controls(field: u32, value: u64, perf_global_ctrl: bool) -> Option<u64> {
+    let bit = match field {
+        0x483 => 1 << 12, // VM exit loads the host's GLOBAL_CTRL.
+        0x484 => 1 << 13, // VM entry loads the guest's GLOBAL_CTRL.
+        _ => 0,
+    };
+    if perf_global_ctrl {
+        Some(value)
+    } else if value & bit != 0 {
+        // A mandatory load of an unavailable MSR cannot be made safe.
+        None
+    } else {
+        Some(value & !(bit << 32))
+    }
+}
+
 fn init_vmx(bsp: bool) -> bool {
     if cpu::cpuid(1, 0).ecx & (1 << 5) == 0 {
         return false;
@@ -207,10 +231,23 @@ fn init_vmx(bsp: bool) -> bool {
         return false;
     }
     let true_controls = basic & (1 << 55) != 0;
+    let max_leaf = cpu::cpuid(0, 0).eax;
+    let pmu_eax = if max_leaf >= 0xa {
+        cpu::cpuid(0xa, 0).eax
+    } else {
+        0
+    };
+    let perf_global_ctrl = has_perf_global_ctrl(max_leaf, pmu_eax);
     for f in [
         0x481u32, 0x482, 0x483, 0x484, 0x485, 0x486, 0x487, 0x488, 0x489, 0x48b,
     ] {
-        let value = cpu::rdmsr(control_msr(f, true_controls));
+        let Some(value) = pmu_controls(
+            f,
+            cpu::rdmsr(control_msr(f, true_controls)),
+            perf_global_ctrl,
+        ) else {
+            return false;
+        };
         if bsp {
             CAPS[(f - 0x480) as usize].store(value, Ordering::Relaxed);
         } else if CAPS[(f - 0x480) as usize].load(Ordering::Relaxed) != value {
@@ -364,6 +401,8 @@ fn host_vmcs(gdt: &Table, idt: &Table, tr: u64) {
     ] {
         vmwrite(field, value);
     }
+    // init_vmx removes this capability when CPUID does not expose a
+    // usable PMU; a raw VMX capability bit alone cannot authorize RDMSR.
     if capability(0x483) >> 32 & (1 << 12) != 0 {
         vmwrite(HOST_PERF_GLOBAL_CTRL, cpu::rdmsr(0x38f));
     }
@@ -715,6 +754,30 @@ pub fn empty_root() -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn vmx_perf_controls_require_an_available_pmu() {
+        for (max_leaf, pmu_eax, available) in [
+            (9, 2, false),
+            (0xa, 0, false),
+            (0xa, 0x0730_0400, false),
+            (0xa, 1, false),
+            (0xa, 0x0730_0402, true),
+            (0x20, 5, true),
+        ] {
+            assert_eq!(has_perf_global_ctrl(max_leaf, pmu_eax), available);
+            for (field, bit) in [(0x483, 1u64 << 12), (0x484, 1 << 13)] {
+                let raw = 0xffff_ffff_0000_0000 | (1 << 9);
+                let filtered = pmu_controls(field, raw, available).unwrap();
+                assert_eq!((filtered >> 32) & bit != 0, available);
+                assert_eq!(filtered & !(bit << 32), raw & !(bit << 32));
+                assert_eq!(
+                    pmu_controls(field, raw | bit, available).is_some(),
+                    available
+                );
+            }
+        }
+        assert_eq!(pmu_controls(0x482, u64::MAX, false), Some(u64::MAX));
+    }
     #[test]
     fn vmx_true_control_msr_addresses() {
         for (base, address) in [

@@ -65,6 +65,7 @@ revocation, and deletion of a running VCPU:
 cargo test -p fl4-core
 FL4_TESTS='^FL4VCPU' cargo xtask fl4test --smp 4 --setup kvm
 FL4_TESTS='^FL4VCPU' cargo xtask fl4test --smp 2 --setup kvm-no-vm
+FL4_TESTS='^FL4VCPU' cargo xtask fl4test --smp 1 --setup kvm-no-pmu
 ```
 
 The expanded core extracts and its generated Lean model type-checks.

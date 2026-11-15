@@ -34,6 +34,14 @@ static int vmcs_write(seL4_CPtr v, seL4_Word field, seL4_Word val)
 {
     return seL4_X86_VCPU_WriteVMCS(v, field, val).error;
 }
+static unsigned pmu_version(void)
+{
+    unsigned a, b, c, d;
+    asm volatile("cpuid" : "=a"(a), "=b"(b), "=c"(c), "=d"(d) : "a"(0), "c"(0));
+    if (a < 0xa) { return 0; }
+    asm volatile("cpuid" : "=a"(a), "=b"(b), "=c"(c), "=d"(d) : "a"(0xa), "c"(0));
+    return a & 0xff;
+}
 static int test_vm_policy(env_t env)
 {
     vka_object_t v;
@@ -68,6 +76,16 @@ static int test_vm_policy(env_t env)
         test_check((ctl & ((1 << 19) | (1 << 20) | (1 << 23))) == ((1 << 19) | (1 << 20) | (1 << 23)));
         test_eq(vmcs_write(v.cptr, 0x6000, 0), seL4_NoError);
         test_check((seL4_X86_VCPU_ReadVMCS(v.cptr, 0x6000).value & (3ull << 29)) == (3ull << 29));
+        /* VMX load-control capability bits alone do not imply that the
+         * PMU MSR exists (e.g. nested KVM with -cpu host,pmu=off). */
+        seL4_X86_VCPU_WriteVMCS_t entry = seL4_X86_VCPU_WriteVMCS(v.cptr, 0x4012, 1 << 13);
+        seL4_X86_VCPU_WriteVMCS_t exit = seL4_X86_VCPU_WriteVMCS(v.cptr, 0x400c, 1 << 12);
+        test_eq(entry.error, seL4_NoError);
+        test_eq(exit.error, seL4_NoError);
+        if (pmu_version() < 2) {
+            test_eq(entry.written & (1 << 13), 0);
+            test_eq(exit.written & (1 << 12), 0);
+        }
     }
     vka_free_object(&env->vka, &v);
     return sel4test_get_result();
@@ -133,7 +151,7 @@ static int test_vm_execute(env_t env)
         test_eq(vmcb_write(v.cptr, 0x008, (1ull << 50) | (1ull << 56)), seL4_NoError);
         ctl = seL4_X86_VCPU_ReadVMCB(v.cptr, 8, 1).value >> 32;
     } else {
-        test_eq(vmcs_write(v.cptr, 0x4012, 0), seL4_NoError);
+        test_eq(vmcs_write(v.cptr, 0x4012, 1 << 13), seL4_NoError);
         test_eq(vmcs_write(v.cptr, 0x401e, 2 | (1 << 7)), seL4_NoError);
         test_eq(vmcs_write(v.cptr, 0x6800, 0x20), seL4_NoError);
         test_eq(vmcs_write(v.cptr, 0x6820, 2), seL4_NoError);
