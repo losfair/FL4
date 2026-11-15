@@ -27,11 +27,11 @@ macro "pres_step0" : tactic => `(tactic| first
   | with_reducible exact pres_doMachineOp _ | with_reducible exact pres_doExtendedOp _
   | with_reducible exact pres_asUser _ _
   | with_reducible exact pres_archThreadSet _ _ | with_reducible exact pres_setObject_ntfn _ _
-  | ((with_reducible apply pres_threadSet); intro _; exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, fun _ => rfl⟩)
+  | ((with_reducible apply pres_threadSet); intro _; exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, fun _ => rfl⟩)
   | ((with_reducible apply pres_updateSchedContext); intro _ _; exact ⟨rfl, fun _ => rfl, fun _ => rfl⟩)
   | ((with_reducible apply pres_updateSkObjRef); intro _; trivial)
   | ((with_reducible apply pres_updateSkObjRef); intro _ _; exact ⟨rfl, rfl⟩)
-  | ((with_reducible apply pres_threadSet); intro _; exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, Bool.noConfusion⟩)
+  | ((with_reducible apply pres_threadSet); intro _; exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, Bool.noConfusion⟩)
   | ((with_reducible apply pres_updateSchedContext); intro _ _; exact ⟨rfl, Bool.noConfusion, fun _ => rfl⟩)
   | ((with_reducible apply pres_updateSchedContext); intro _ _; exact ⟨rfl, fun _ => rfl, Bool.noConfusion⟩)
   | ((with_reducible apply pres_updateSkObjRef); intro _; exact Bool.noConfusion)
@@ -161,7 +161,7 @@ theorem pres_setMrs (t : ObjRef) (buf : Option ObjRef) (msgs : List Message) :
     Pres f (setMrs (Z := Unit) t buf msgs) := by
   unfold setMrs storeWordOffs
   refine pres_getTcb_bind fun x => presAt_pure_bind _ (presAt_pure_bind _ ?_)
-  refine presAt_setObject_tcb_bind ⟨rfl, rfl, rfl, rfl, rfl, rfl, fun _ => rfl⟩ fun _ => ?_
+  refine presAt_setObject_tcb_bind ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, fun _ => rfl⟩ fun _ => ?_
   pres_auto
 
 theorem pres_replyFromKernel (t : ObjRef) (x : Data × List Data) :

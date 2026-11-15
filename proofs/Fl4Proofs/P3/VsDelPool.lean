@@ -58,8 +58,8 @@ theorem mapM_ms {β α : Type} (f : α → NonDet (State Unit) β) (hf : ∀ x �
 
 /-- The step of l4v `delete_asid_pool`'s loop. -/
 def dpStep (base : Asid) (pool : AsidLowIndex → Option ObjRef) (offset : Asid) : SMonad Unit Unit :=
-  NonDet.when (pool (ucast asidLowLen offset) ≠ none) <|
-    hwAsidInvalidate (base + offset) (the (pool (ucast asidLowLen offset)))
+  NonDet.when (nativeAsidRoot (pool (ucast asidLowLen offset)) ≠ none) <|
+    hwAsidInvalidate (base + offset) (the (nativeAsidRoot (pool (ucast asidLowLen offset))))
 
 theorem dpStep_ms (base : Asid) (pool : AsidLowIndex → Option ObjRef) (x : Asid) (σ : State Unit) (r : Unit)
     (σ' : State Unit) (h : (r, σ') ∈ (dpStep base pool x σ).1) : ∃ ms, σ' = { σ with machineState := ms } := by
@@ -141,17 +141,21 @@ theorem delete_asid_pool_loop_rel {A : Type} {ar : machine.Arch A} {P : Set U64}
     (hP : VsPlaced P (L.ksb s)) (hR : VsRel P (L.mem s) (L.ksb s) σ) (hS : SR s a σ) {pool : U64} (hp : pool ∈ P)
     {f : Fl4Spec.AsidLowIndex → Option Fl4Spec.ObjRef} (hkf : σ.kheap pool.bv = some (.archObj (.asidPool f)))
     (base : U64) :
-    vspace.delete_asid_pool_loop st ar s a base pool 0#u64 ⦃ a' => ∃ ms,
-      dpReach base.bv f 512 σ { σ with machineState := ms } ∧ SR s a' { σ with machineState := ms } ⦄ := by
+    vspace.delete_asid_pool_loop st ar s a base pool 0#u64 ⦃ r => r.1 = s ∧ ∃ ms,
+      dpReach base.bv f 512 σ { σ with machineState := ms } ∧ SR s r.2 { σ with machineState := ms } ⦄ := by
   obtain ⟨pa, pf⟩ := hP.pal pool hp
-  have hgf : ∀ lo : U64, lo.val < 512 → f (Fl4Spec.ucast 9 lo.bv) = optRef (L.mem s (peA pool lo)) := by
+  have hgf : ∀ lo : U64, lo.val < 512 → Fl4Spec.nativeAsidRoot (f (Fl4Spec.ucast 9 lo.bv)) = nativeRef (L.mem s (peA pool lo)) := by
     obtain ⟨f, hg, hgf⟩ := hR.pool pool hp
-    rw [hkf] at hg; injection hg with hg; injection hg with hg; injection hg with hg; subst hg; exact hgf
+    rw [hkf] at hg; injection hg with hg; injection hg with hg; injection hg with hg; subst hg
+    intro lo hlo
+    rw [hgf lo hlo, nativeAsidRoot_optRef]
   unfold vspace.delete_asid_pool_loop
-  apply loop.spec_decr_nat (measure := fun x => 512 - x.2.val)
-    (inv := fun x => x.2.val ≤ 512 ∧ ∃ ms,
-      dpReach base.bv f x.2.val σ { σ with machineState := ms } ∧ SR s x.1 { σ with machineState := ms })
-  · rintro ⟨a1, i⟩ ⟨hi5, ms, ⟨rs, hm⟩, hS1⟩
+  apply loop.spec_decr_nat (measure := fun x => 512 - x.2.2.val)
+    (inv := fun x => x.1 = s ∧ x.2.2.val ≤ 512 ∧ ∃ ms,
+      dpReach base.bv f x.2.2.val σ { σ with machineState := ms } ∧ SR s x.2.1 { σ with machineState := ms })
+  · rintro ⟨s1, a1, i⟩ ⟨hs1, hi5, ms, ⟨rs, hm⟩, hS1⟩
+    dsimp only at hs1
+    subst s1
     unfold vspace.delete_asid_pool_loop.body
     simp only at hi5 hm hS1 ⊢
     by_cases h1 : i < 512#u64
@@ -166,55 +170,70 @@ theorem delete_asid_pool_loop_rel {A : Type} {ar : machine.Arch A} {P : Set U64}
         rw [peA_val pf hi]
         simp [core.num.U64.wrapping_add_val_eq, U64.size_def, U64.numBits, hi1]; omega
       rw [he] at hv
+      try simp only [lift, bind_ok]
       have hgi := hgf i hi
       have hib : (i.bv : BitVec 64) = BitVec.ofNat 64 i.val := by
         apply BitVec.eq_of_toNat_eq; rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt (by omega)]; rfl
       have hstep : Fl4Spec.NonDet.mapM (dpStep base.bv f) (dpOffs.take (i.val + 1)) σ =
           Fl4Spec.NonDet.mapM (dpStep base.bv f) (dpOffs.take i.val ++ [BitVec.ofNat 64 i.val]) σ := by
         rw [dpOffs_take_succ i.val hi]
-      by_cases h0 : v = 0#u64
-      · simp only [h0, bne_self_eq_false, Bool.false_eq_true, ↓reduceIte]
-        apply ok_bind_spec
-        step as ⟨i2, hi2⟩
-        have hc : f (Fl4Spec.ucast Fl4Spec.asidLowLen (BitVec.ofNat 64 i.val)) = none := by
-          rw [← hib, hgi, ← hv, h0]; exact optRef_zero
-        have hi2' : i2.val = i.val + 1 := by simpa using hi2
-        refine ⟨by omega, ⟨ms, ⟨rs ++ [()], ?_⟩, hS1⟩, by omega⟩
-        rw [hi2', hstep]
+      have hstay (hc : Fl4Spec.nativeAsidRoot (f (Fl4Spec.ucast Fl4Spec.asidLowLen (BitVec.ofNat 64 i.val))) = none) :
+          dpReach base.bv f (i.val + 1) σ { σ with machineState := ms } := by
+        refine ⟨rs ++ [()], ?_⟩
+        rw [hstep]
         refine mapM_snoc_mem _ _ _ _ _ _ _ _ hm ?_
         unfold dpStep
         rw [nd_when_false (by rw [hc]; simp)]
         exact rfl
-      · have hne : (v != 0#u64) = true := by simp [h0]
-        simp only [hne, ↓reduceIte]
-        have hc : f (Fl4Spec.ucast Fl4Spec.asidLowLen (BitVec.ofNat 64 i.val)) = some v.bv := by
-          rw [← hib, hgi, ← hv]; unfold optRef; rw [if_neg h0]
-        refine WP.spec_bind (hH.inval s a1 _ (core.num.U64.wrapping_add base i) v.bv (hR.ms ms) hS1) ?_
-        rintro a2 ⟨σ2, hm2, hS2⟩
-        obtain ⟨ms2, rfl⟩ := doMachineOp_mem hm2
+      refine WP.spec_bind (Pₘ := fun r : S × A => r.1 = s ∧ ∃ ms2,
+        dpReach base.bv f (i.val + 1) σ { σ with machineState := ms2 } ∧
+          SR s r.2 { σ with machineState := ms2 }) ?_ ?_
+      · by_cases htag : v &&& 1#u64 = 0#u64
+        · simp only [htag, bne_self_eq_false, Bool.false_eq_true, ↓reduceIte]
+          by_cases h0 : v = 0#u64
+          · simp only [h0, bne_self_eq_false, Bool.false_eq_true, ↓reduceIte, WP.spec_ok]
+            simp only [bind_ok, bind_tc_ok, WP.spec_ok]
+            refine ⟨trivial, ms, hstay ?_, hS1⟩
+            rw [← hib, hgi, ← hv, h0]; exact nativeRef_zero
+          · have hc : Fl4Spec.nativeAsidRoot (f (Fl4Spec.ucast Fl4Spec.asidLowLen (BitVec.ofNat 64 i.val))) = some v.bv := by
+              rw [← hib, hgi, ← hv]
+              simp only [nativeRef, htag, ↓reduceIte, optRef, if_neg h0]
+            simp only [bne_iff_ne, if_pos h0]
+            refine WP.spec_bind (hH.inval s a1 _ (core.num.U64.wrapping_add base i) v.bv (hR.ms ms) hS1) ?_
+            rintro a2 ⟨σ2, hm2, hS2⟩
+            obtain ⟨ms2, rfl⟩ := doMachineOp_mem hm2
+            refine (WP.spec_ok _).2 ⟨rfl, ms2, ⟨rs ++ [()], ?_⟩, hS2⟩
+            rw [hstep]
+            refine mapM_snoc_mem _ _ _ _ _ _ _ _ hm ?_
+            unfold dpStep
+            have hw : Fl4Spec.NonDet.when (Fl4Spec.nativeAsidRoot (f (Fl4Spec.ucast Fl4Spec.asidLowLen (BitVec.ofNat 64 i.val))) ≠ none)
+                (Fl4Spec.hwAsidInvalidate (Z := Unit) (base.bv + BitVec.ofNat 64 i.val)
+                  (Fl4Spec.the (Fl4Spec.nativeAsidRoot (f (Fl4Spec.ucast Fl4Spec.asidLowLen (BitVec.ofNat 64 i.val)))))) =
+                Fl4Spec.hwAsidInvalidate (Z := Unit) (base.bv + BitVec.ofNat 64 i.val) v.bv := by
+              unfold Fl4Spec.NonDet.when; rw [if_pos (by rw [hc]; simp), hc]; rfl
+            rw [hw]
+            have hb : (core.num.U64.wrapping_add base i).bv = base.bv + BitVec.ofNat 64 i.val := by
+              rw [← hib]; rfl
+            rw [← hb]
+            exact hm2
+        · simp only [bne_iff_ne, if_pos htag]
+          refine WP.spec_mono (ept_invalidate_native hH s a1 { σ with machineState := ms } hS1 _) ?_
+          rintro ⟨s2, a2⟩ ⟨hs2, hS2⟩
+          exact ⟨hs2, ms, hstay (by rw [← hib, hgi, ← hv]; simp [nativeRef, htag]), hS2⟩
+      · rintro ⟨s2, a2⟩ ⟨hs2, ms2, hm2, hS2⟩
+        dsimp only at hs2
+        subst s2
         step as ⟨i2, hi2⟩
         have hi2' : i2.val = i.val + 1 := by simpa using hi2
-        refine ⟨by omega, ⟨ms2, ⟨rs ++ [()], ?_⟩, hS2⟩, by omega⟩
-        rw [hi2', hstep]
-        refine mapM_snoc_mem _ _ _ _ _ _ _ _ hm ?_
-        unfold dpStep
-        have hw : Fl4Spec.NonDet.when (f (Fl4Spec.ucast Fl4Spec.asidLowLen (BitVec.ofNat 64 i.val)) ≠ none)
-            (Fl4Spec.hwAsidInvalidate (Z := Unit) (base.bv + BitVec.ofNat 64 i.val)
-              (Fl4Spec.the (f (Fl4Spec.ucast Fl4Spec.asidLowLen (BitVec.ofNat 64 i.val))))) =
-            Fl4Spec.hwAsidInvalidate (Z := Unit) (base.bv + BitVec.ofNat 64 i.val) v.bv := by
-          unfold Fl4Spec.NonDet.when; rw [if_pos (by rw [hc]; simp), hc]; rfl
-        rw [hw]
-        have hb : (core.num.U64.wrapping_add base i).bv = base.bv + BitVec.ofNat 64 i.val := by
-          rw [← hib]; rfl
-        rw [← hb]
-        exact hm2
+        refine ⟨by omega, ⟨ms2, ?_, hS2⟩, by omega⟩
+        rw [hi2']; exact hm2
     · simp only [h1, ↓reduceIte, WP.spec_ok]
       have hi : i.val = 512 := by
         have : ¬ i.val < 512 := fun h => h1 ((gt_iff_val).2 (by simpa using h))
         omega
       rw [hi] at hm
-      exact ⟨ms, ⟨rs, hm⟩, hS1⟩
-  · refine ⟨by simp, σ.machineState, ⟨[], ?_⟩, hS⟩
+      exact ⟨trivial, ms, ⟨rs, hm⟩, hS1⟩
+  · refine ⟨rfl, by simp, σ.machineState, ⟨[], ?_⟩, hS⟩
     simp [Fl4Spec.NonDet.mapM, Fl4Spec.NonDet.pure]
 
 
@@ -292,7 +311,9 @@ theorem delete_asid_pool_relR {A : Type} {ar : machine.Arch A} {P : Set U64} {SR
       unfold Fl4Spec.NonDet.when
       rw [if_pos hc, nd_bind_one (getAsidPool_eq hkf)]
     refine WP.spec_bind (delete_asid_pool_loop_rel hH s a σ hP hR hS hpP hkf base) ?_
-    rintro a1 ⟨ms, ⟨rs, hm⟩, hS1⟩
+    rintro ⟨sloop, a1⟩ ⟨hsl, ms, ⟨rs, hm⟩, hS1⟩
+    dsimp only at hsl
+    subst sloop
     rw [dpOffs_take_512] at hm
     step as ⟨i2, hi2⟩
     have hi2v : i2.val = base.val >>> 9 := by simpa using hi2

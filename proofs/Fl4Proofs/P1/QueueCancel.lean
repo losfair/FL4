@@ -212,18 +212,18 @@ theorem not_blocked_inactive : ¬ Blocked sched.TS_INACTIVE := by
   unfold Blocked; rw [h3, h4, h6, ts_inactive]; decide
 theorem not_runnable_inactive : ¬ Runnable sched.TS_INACTIVE := by
   obtain ⟨h1, h2, -⟩ := ts_vals
-  unfold Runnable; rw [h1, h2, ts_inactive]; decide
+  unfold Runnable; rw [h1, h2, ts_inactive]; simp [sched.TS_RUNNING_VM]
 theorem not_blocked_reply : ¬ Blocked sched.TS_BLOCKED_ON_REPLY := by
   obtain ⟨-, -, h3, h4, h6⟩ := ts_vals
   unfold Blocked; rw [h3, h4, h6, ts_reply]; decide
 theorem not_runnable_reply : ¬ Runnable sched.TS_BLOCKED_ON_REPLY := by
   obtain ⟨h1, h2, -⟩ := ts_vals
-  unfold Runnable; rw [h1, h2, ts_reply]; decide
+  unfold Runnable; rw [h1, h2, ts_reply]; simp [sched.TS_RUNNING_VM]
 theorem not_runnable_of_blocked {v : U64} (h : Blocked v) : ¬ Runnable v := by
   obtain ⟨h1, h2, h3, h4, h6⟩ := ts_vals
   unfold Blocked at h; unfold Runnable
   rw [h1, h2]; rw [h3, h4, h6] at h
-  rcases h with rfl | rfl | rfl <;> decide
+  rcases h with rfl | rfl | rfl <;> simp [sched.TS_RUNNING_VM]
 theorem runnable_ne_reply {v : U64} (h : Runnable v) : v ≠ sched.TS_BLOCKED_ON_REPLY :=
   fun e => not_runnable_reply (e ▸ h)
 theorem runnable_ne_recv {v : U64} (h : Runnable v) : v ≠ sched.TS_BLOCKED_ON_RECV :=

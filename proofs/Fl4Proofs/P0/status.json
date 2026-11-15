@@ -13,6 +13,7 @@
   "vcpu.decode_loop3",
   "vcpu.decode_loop4",
   "vcpu.init_loop1",
+  "vcpu.revoke_ports_loop",
   "vcpu.sanitize_vmcs",
   "vcpu.vmcs_addr"
  ],
@@ -98,7 +99,6 @@
   "vcpu.report_loop0",
   "vcpu.report_loop1",
   "vcpu.reset_svm_loop",
-  "vcpu.revoke_ports_loop",
   "vcpu.valid_pat_loop",
   "vspace.copy_global_mappings_loop",
   "vspace.decode_loop0",

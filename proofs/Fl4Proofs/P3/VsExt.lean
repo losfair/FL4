@@ -103,16 +103,18 @@ theorem frame_getaddr_rel {A : Type} {ar : machine.Arch A} {th : TypedHeap} {P L
         ¬ (replyRunning σ.curThread call [Fl4Spec.addrFromPPtr f.ptr.bv] σ1).2 ∧
         ((), σ') ∈ (replyRunning σ.curThread call [Fl4Spec.addrFromPPtr f.ptr.bv] σ1).1 ∧
         UR st th P L4 L3 L2 L1 SR res.2.1 res.2.2 σ' ⦄ := by
-  obtain ⟨ptr, sz, rt, dev, mp, fa, fv⟩ := f
+  obtain ⟨ptr, sz, rt, dev, mp, ep, fa, fv⟩ := f
   have hdec : ExceptT.run (Fl4Spec.archDecodeInvocation (Z := Unit) slbl args xs cte
-      (frameACapG ⟨ptr, sz, rt, dev, mp, fa, fv⟩) vcs) σ =
+      (frameACapG ⟨ptr, sz, rt, dev, mp, ep, fa, fv⟩) vcs) σ =
       ({(.ok (.invokePage (.pageGetAddr ptr.bv)), σ)}, False) := decodeGetAddr_eq hl _ _ _ _ _ _ _ _ _ σ
   unfold vspace.decode_frame
   have hn1 : ¬ fl4_abi.label.X86PageGetAddress = fl4_abi.label.X86PageMap := by
     unfold fl4_abi.label.X86PageGetAddress fl4_abi.label.X86PageMap; decide
   have hn2 : ¬ fl4_abi.label.X86PageGetAddress = fl4_abi.label.X86PageUnmap := by
     unfold fl4_abi.label.X86PageGetAddress fl4_abi.label.X86PageUnmap; decide
-  simp only [frameCapOf, vspace.as_frame, bind_ok, hn1, hn2, ↓reduceIte]
+  have hnEpt : ¬ fl4_abi.label.X86PageGetAddress = fl4_abi.label.X86PageMapEPT := by
+    unfold fl4_abi.label.X86PageGetAddress fl4_abi.label.X86PageMapEPT; decide
+  simp only [frameCapOf, vspace.as_frame, bind_ok, hn1, hn2, hnEpt, ↓reduceIte]
   rw [hct]
   apply ok_bind_spec
   have hkt' : σ.kheap ct.bv = some (.tcb xct) := by rw [hcur]; exact hkt

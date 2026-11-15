@@ -119,6 +119,8 @@ abbrev IoAsid := BitVec 16
 /-- l4v: Arch_Structs_A.X64_A.arch_cap. The IOSpace and IO page table caps
 are commented out in l4v (`FIXME x64-vtd`) and not ported (no IOMMU). -/
 inductive ArchCap where
+  | vcpuCap (ref : ObjRef)
+  | eptCap (ref : ObjRef) (level : Nat) (mapped : Option (Asid × VSpaceRef))
   | asidPoolCap (acapAsidPool : ObjRef) (acapAsidBase : Asid)
   | asidControlCap
   | ioPortCap (acapIoPortFirstPort : IoPort) (acapIoPortLastPort : IoPort)
@@ -263,6 +265,8 @@ deriving Inhabited
 /-- l4v: Arch_Structs_A.X64_A.arch_kernel_obj. The IO root, context and page
 tables are commented out in l4v (`FIXME x64-vtd`) and not ported. -/
 inductive ArchKernelObj where
+  | vcpu (words : Word → Word)
+  | ept (level : Nat) (entries : BitVec 9 → Word)
   | asidPool (pool : BitVec 9 → Option ObjRef)
   | pageTable (pt : BitVec 9 → PTE)
   | pageDirectory (pd : BitVec 9 → PDE)
@@ -279,6 +283,8 @@ def cteLevelBits : Nat := 5
 
 /-- l4v: Arch_Structs_A.X64_A.arch_obj_size. -/
 def archObjSize : ArchCap → Nat
+  | .vcpuCap _ => 15
+  | .eptCap _ _ _ => tableSize
   | .asidPoolCap _ _ => pageBits
   | .asidControlCap => 0
   | .ioPortCap _ _ => 0
@@ -291,6 +297,7 @@ def archObjSize : ArchCap → Nat
 
 /-- l4v: Arch_Structs_A.X64_A.arch_cap_is_device. -/
 def archCapIsDevice : ArchCap → Bool
+  | .vcpuCap _ | .eptCap _ _ _ => false
   | .asidPoolCap _ _ => false
   | .asidControlCap => false
   | .ioPortCap _ _ => false
@@ -323,6 +330,8 @@ def untypedMaxBits : Nat := 47
 
 /-- l4v: Arch_Structs_A.X64_A.arch_kobj_size. -/
 def archKobjSize : ArchKernelObj → Nat
+  | .vcpu _ => 15
+  | .ept _ _ => tableSize
   | .asidPool _ => pageBits
   | .pageTable _ => tableSize
   | .pageDirectory _ => tableSize
@@ -332,6 +341,7 @@ def archKobjSize : ArchKernelObj → Nat
 
 /-- l4v: Arch_Structs_A.X64_A.aobj_ref. -/
 def aobjRef : ArchCap → Option ObjRef
+  | .vcpuCap p | .eptCap p _ _ => some p
   | .asidPoolCap x _ => some x
   | .asidControlCap => none
   | .ioPortCap _ _ => none
@@ -358,6 +368,11 @@ inductive AObjectType where
   | pdptObj
   | pml4Obj
   | asidPoolObj
+  | vcpuObj
+  | eptPml4Obj
+  | eptPdptObj
+  | eptPdObj
+  | eptPtObj
 deriving DecidableEq, Repr, Inhabited
 
 /-- l4v: Arch_Structs_A.X64_A.X64IRQState. -/
@@ -424,6 +439,11 @@ def archDefaultCap (tp : AObjectType) (r : ObjRef) (_n : Nat) (dev : Bool) : Arc
   | .pdptObj => .pdPointerTableCap r none
   | .pml4Obj => .pml4Cap r none
   | .asidPoolObj => .asidPoolCap r 0 -- unused
+  | .vcpuObj => .vcpuCap r
+  | .eptPml4Obj => .eptCap r 0 none
+  | .eptPdptObj => .eptCap r 39 none
+  | .eptPdObj => .eptCap r 30 none
+  | .eptPtObj => .eptCap r 21 none
 
 /-- l4v: Arch_Structs_A.X64_A.default_arch_object. -/
 def defaultArchObject (tp : AObjectType) (dev : Bool) (_n : Nat) : ArchKernelObj :=
@@ -436,6 +456,11 @@ def defaultArchObject (tp : AObjectType) (dev : Bool) (_n : Nat) : ArchKernelObj
   | .pdptObj => .pdPointerTable fun _ => .invalidPDPTE
   | .pml4Obj => .pageMapL4 fun _ => .invalidPML4E
   | .asidPoolObj => .asidPool fun _ => none
+  | .vcpuObj => .vcpu fun _ => 0
+  | .eptPml4Obj => .ept 0 fun _ => 0
+  | .eptPdptObj => .ept 39 fun _ => 0
+  | .eptPdObj => .ept 30 fun _ => 0
+  | .eptPtObj => .ept 21 fun _ => 0
 
 /-- l4v: Arch_Structs_A.X64_A.x64_vspace_region_uses. -/
 abbrev X64VSpaceRegionUses := VSpaceRef → X64VSpaceRegionUse
@@ -478,6 +503,8 @@ def pml4Bits : Nat := tableSize
 /-- l4v: Arch_Structs_A.X64_A.aa_type (the datatype). -/
 inductive AAType where
   | aASIDPool
+  | aVcpu
+  | aEpt (level : Nat)
   | aPageTable
   | aPageDirectory
   | aPDPointerTable
@@ -489,6 +516,8 @@ deriving DecidableEq, Repr, Inhabited
 /-- l4v: Arch_Structs_A.X64_A.aa_type (the function). -/
 def aaType (ao : ArchKernelObj) : AAType :=
   match ao with
+  | .vcpu _ => .aVcpu
+  | .ept level _ => .aEpt level
   | .pageTable _ => .aPageTable
   | .pageDirectory _ => .aPageDirectory
   | .dataPage dev sz => if dev then .aDeviceData sz else .aUserData sz

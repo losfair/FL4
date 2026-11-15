@@ -23,7 +23,7 @@ theorem obj.Tcb.set_mcp.wr (s : S) (t : obj.Tcb) (v : U64) :
 
 /-- A write of a TCB field no invariant reads (the `MCP` field, say). -/
 theorem plainW_all {s : S} {t K v : U64} (h : BlkOK st T Cs Ω H Sg Rp Scs Nt Z Ac s) (ht : t ∈ T)
-    (hK : 160 ≤ K.val) (hK' : K.val < 4096) (hK8 : K.val % 8 = 0)
+    (hK : 192 ≤ K.val) (hK' : K.val < 4096) (hK8 : K.val % 8 = 0)
     (hKn : K.val ≠ 3464 ∧ K.val ≠ 3360 ∧ K.val ≠ 3328 ∧ K.val ≠ 3592 ∧ K.val ≠ 3368 ∧ K.val ≠ 3472)
     (hKt : K.val < 3528 ∨ 3592 ≤ K.val)
     (hKq : K.val ≠ 3480 ∧ K.val ≠ 3488 ∧ K.val ≠ 3496 ∧ K.val ≠ 3504 ∧ K.val ≠ 3520 ∧ K.val ≠ 3448 ∧
@@ -169,21 +169,23 @@ theorem sched.set_priority.kw (s : S) (t : obj.Tcb) (prio : U64) (Q : U64 → U6
   split
   · exact running_kw s t prio Q R h ht hv (Or.inl ‹_›) hcur
   · split
-    · exact running_kw s t prio Q R h ht hv (Or.inr ‹_›) hcur
-    · have hnr : ¬ Runnable (L.mem s (stA t)) := by rintro (e | e) <;> contradiction
-      have hq0 := notQ_of_not_runnable h ht hnr
-      have fe := fun (s : S) ep xs hT hE hq hm => endpoint.reorder_ep.foot (st := st) (T := T) s ep t xs hT hE hq hm
-      have fn := fun (s : S) ep xs hT hE hq hm =>
-        notification.reorder_ntfn.foot (st := st) (T := T) s ep t xs hT hE hq hm
-      split
-      · exact blocked_kw s t prio Q R h ht hv hq0 (by simp) (Or.inr (Or.inl ‹_›)) hEs _ fe
-      · split
-        · exact blocked_kw s t prio Q R h ht hv hq0 (by simp) (Or.inl ‹_›) hEs _ fe
+    · exact running_kw s t prio Q R h ht hv (Or.inr (Or.inl ‹_›)) hcur
+    · split
+      · exact running_kw s t prio Q R h ht hv (Or.inr (Or.inr ‹_›)) hcur
+      · have hnr : ¬ Runnable (L.mem s (stA t)) := by rintro (e | e | e) <;> contradiction
+        have hq0 := notQ_of_not_runnable h ht hnr
+        have fe := fun (s : S) ep xs hT hE hq hm => endpoint.reorder_ep.foot (st := st) (T := T) s ep t xs hT hE hq hm
+        have fn := fun (s : S) ep xs hT hE hq hm =>
+          notification.reorder_ntfn.foot (st := st) (T := T) s ep t xs hT hE hq hm
+        split
+        · exact blocked_kw s t prio Q R h ht hv hq0 (by simp) (Or.inr (Or.inl ‹_›)) hEs _ fe
         · split
-          · exact blocked_kw s t prio Q R h ht hv hq0 (by simp) (Or.inr (Or.inr ‹_›)) hEs _ fn
-          · step with obj.Tcb.set_prio.spec as ⟨s1, s1_post⟩
-            subst s1_post
-            exact foot_field h.tcbs ht (K := 3448#u64) (by simp) (by simp) (by simp) (by simp)
+          · exact blocked_kw s t prio Q R h ht hv hq0 (by simp) (Or.inl ‹_›) hEs _ fe
+          · split
+            · exact blocked_kw s t prio Q R h ht hv hq0 (by simp) (Or.inr (Or.inr ‹_›)) hEs _ fn
+            · step with obj.Tcb.set_prio.spec as ⟨s1, s1_post⟩
+              subst s1_post
+              exact foot_field h.tcbs ht (K := 3448#u64) (by simp) (by simp) (by simp) (by simp)
 
 /-- seL4 `setPriority`: `BlkOK` (with `SCsOK` and `SgOK`) and the footprint,
 for a priority below 256, when the current thread, if it is `t`, is bound and

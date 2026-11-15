@@ -232,7 +232,7 @@ theorem getCap_tcb_three {σ : State Unit} {t : ObjRef} {x : Tcb} (hk : σ.kheap
   rw [Notif.nd_pure_bind']
   have : tcbCnodeMap x (tcbCnodeIndex 3) = some x.tcbFaultHandler := by
     unfold tcbCnodeMap
-    rw [Function.update_of_ne (by decide), Function.update_self]
+    rw [Function.update_of_ne (by decide), Function.update_of_ne (by decide), Function.update_self]
   rw [this]; rfl
 
 /-- **The spec's `empty_slot` of the fault-handler slot** of a TCB holding a

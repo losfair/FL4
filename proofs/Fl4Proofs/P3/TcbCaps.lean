@@ -436,7 +436,7 @@ TCB `t`, the new cap `nc` derived from the cap at the source slot): FL4's
 is small enough for its fuel (`hB`). -/
 theorem install_tcb_cap_refinesQ {Q : (U64 → U64) → MdbGhost → Prop} (hQ : ∀ m G m' G', MdbStep m G m' G' → Q m G → Q m' G') (th : TypedHeap) (hP : Placed th) (hO : FinObjHyp (L := L) arI th)
     (hPP : PPHypD (L := L) arI th) (hPD : PostDelHyp (L := L) arI th)
-    (K : Nat) (hK : ∀ p r, th p = some (.cnode r) → 2 ^ r ≤ K) (hK5 : 5 ≤ K)
+    (K : Nat) (hK : ∀ p r, th p = some (.cnode r) → 2 ^ r ≤ K) (hK6 : 6 ≤ K)
     (hB : ∀ m G, MdbLinks th m G → psiD m G * (K + 1) + K < 2 ^ 64 - 1)
     (s0 s : S) (a : A) (σ : Fl4Spec.State Unit) (G : MdbGhost) (hDS : DState (L := L) th s σ G)
     (hMO : Q (L.mem s) G)
@@ -472,7 +472,7 @@ theorem install_tcb_cap_refinesQ {Q : (U64 → U64) → MdbGhost → Prop} (hQ :
       rw [hg0, hca0.abs]; rfl
     refine ⟨σ', G', Or.inl ⟨hr1, mem_bindE_ok (by rw [capDelete_null hg0']; rfl) (mem_of_run hrun),
       fun y hy hyt => (hcz0 y hy hyt).trans (ChgZ.of_eq (hcap y hy (hyt n hn)))⟩, hDS', hQ _ _ _ _ hst hMO⟩
-  · apply WP.spec_bind (delete_full arI th hP (finalHyp_full th hP) hO hPP hPD K hK hK5 _ hAt s a σ G hDS
+  · apply WP.spec_bind (delete_full arI th hP (finalHyp_full th hP) hO hPP hPD K hK hK6 _ hAt s a σ G hDS
       (by rw [capV_of_capAt hc0]; exact hc0n) (hB _ G hDS.1.2.2.1))
     rintro ⟨r, s1, a1⟩ ⟨σ1, G1, hDS1, -, -, hmD, hcase⟩
     simp only [uncurry_apply_pair] at hcase hDS1 hmD ⊢
@@ -730,7 +730,7 @@ delete of the buffer slot, the IPC buffer word and the scheduler (`BufHyp`,
 P1's), the frame cap's checks and insert. -/
 theorem install_buffer_refinesQ {Q : (U64 → U64) → MdbGhost → Prop} (hQ : ∀ m G m' G', MdbStep m G m' G' → Q m G → Q m' G') (th : TypedHeap) (hP : Placed th) (hO : FinObjHyp (L := L) arI th)
     (hPP : PPHypD (L := L) arI th) (hPD : PostDelHyp (L := L) arI th)
-    (K : Nat) (hK : ∀ p r, th p = some (.cnode r) → 2 ^ r ≤ K) (hK5 : 5 ≤ K)
+    (K : Nat) (hK : ∀ p r, th p = some (.cnode r) → 2 ^ r ≤ K) (hK6 : 6 ≤ K)
     (hB : ∀ m G, MdbLinks th m G → psiD m G * (K + 1) + K < 2 ^ 64 - 1)
     (s0 s : S) (a : A) (σ : Fl4Spec.State Unit) (G : MdbGhost) (hDS : DState (L := L) th s σ G)
     (hMO : Q (L.mem s) G) (t : U64) (ht : th t = some .tcb)
@@ -772,10 +772,10 @@ theorem install_buffer_refinesQ {Q : (U64 → U64) → MdbGhost → Prop} (hQ : 
       obtain ⟨rfl, rfl⟩ := hbuf
       simp only [still_valid_zero, bind_ok, Bool.false_eq_true, ↓reduceIte]
       apply WP.spec_mono (hBuf.tail s2 a1 σ2 G1 hDS2)
-      rintro res ⟨hr1, -, hS5, σ5, htail, hCR5, hK5'⟩
+      rintro res ⟨hr1, -, hS5, σ5, htail, hCR5, hK6'⟩
       refine ⟨σ5, G1, Or.inl ⟨hr1, ?_, fun y hy hyt =>
         ((hcz y hy hyt).trans (ChgZ.of_eq (hS2.capV hy))).trans (ChgZ.of_eq (hS5.capV hy))⟩,
-        hDS2.of_same hS5 hCR5 hK5', hQ _ _ _ _ (MdbStep.of_same hDS2.1.2.2.1 hS5) hMO2⟩
+        hDS2.of_same hS5 hCR5 hK6', hQ _ _ _ _ (MdbStep.of_same hDS2.1.2.2.1 hS5) hMO2⟩
       refine mem_bindE_ok hmem (mem_bindE_ok (mem_liftE_ok hts) (mem_bindE_ok (s' := σ2) (a := ()) ?_ htail))
       exact mem_liftE_ok (x := ((), σ2)) rfl
     | some p =>
@@ -798,10 +798,10 @@ theorem install_buffer_refinesQ {Q : (U64 → U64) → MdbGhost → Prop} (hQ : 
       rintro s4 ⟨σ4, G4, hchk, hDS4, hcap4, hst4⟩
       have hMO4 := hQ _ _ _ _ (MdbStep.same_left hDS1.1.2.2.1 hS2 hst4) hMO1
       apply WP.spec_mono (hBuf.tail s4 a1 σ4 G4 hDS4)
-      rintro res ⟨hr1, -, hS5, σ5, htail, hCR5, hK5'⟩
+      rintro res ⟨hr1, -, hS5, σ5, htail, hCR5, hK6'⟩
       refine ⟨σ5, G4, Or.inl ⟨hr1, ?_, fun y hy hyt =>
         (((hcz y hy hyt).trans (ChgZ.of_eq (hS2.capV hy))).trans (ChgZ.of_eq (hcap4 y hy (hyt 2 (by decide))))).trans
-          (ChgZ.of_eq (hS5.capV hy))⟩, hDS4.of_same hS5 hCR5 hK5', hQ _ _ _ _ (MdbStep.of_same hDS4.1.2.2.1 hS5) hMO4⟩
+          (ChgZ.of_eq (hS5.capV hy))⟩, hDS4.of_same hS5 hCR5 hK6', hQ _ _ _ _ (MdbStep.of_same hDS4.1.2.2.1 hS5) hMO4⟩
       refine mem_bindE_ok hmem (mem_bindE_ok (mem_liftE_ok hts) (mem_bindE_ok (s' := σ4) (a := ()) ?_ htail))
       exact mem_liftE_ok (x := ((), σ4)) (by simp only [frameOf]; rw [hchk]; rfl)
   rw [hbuf]
@@ -816,7 +816,7 @@ theorem install_buffer_refinesQ {Q : (U64 → U64) → MdbGhost → Prop} (hQ : 
     have hg0' : Fl4Spec.getCap (Z := Unit) (t.bv, Fl4Spec.tcbCnodeIndex 2) σ = ({(.nullCap, σ)}, False) := by
       rw [hg0, hca0.abs]; rfl
     exact cont s a σ G hDS hMO (by rw [capV_of_capAt hc0]) hcz0 (by rw [capDelete_null hg0']; rfl)
-  · apply WP.spec_bind (delete_full arI th hP (finalHyp_full th hP) hO hPP hPD K hK hK5 _ hAt s a σ G hDS
+  · apply WP.spec_bind (delete_full arI th hP (finalHyp_full th hP) hO hPP hPD K hK hK6 _ hAt s a σ G hDS
       (by rw [capV_of_capAt hc0]; exact hc0n) (hB _ G hDS.1.2.2.1))
     rintro ⟨r, s1, a1⟩ ⟨σ1, G1, hDS1, -, -, hmD, hcase⟩
     simp only [uncurry_apply_pair] at hcase hDS1 hmD ⊢
@@ -862,7 +862,7 @@ variable {S : Type} {st : machine.Store S} [L : P1.LawfulStore st] {A : Type} (a
 /-- `install_tcb_cap_refinesQ` with the new cap's conditions as `NewCapOK`. -/
 theorem install_okQ {Q : (U64 → U64) → MdbGhost → Prop} (hQ : ∀ m G m' G', MdbStep m G m' G' → Q m G → Q m' G') (th : TypedHeap) (hP : Placed th) (hO : FinObjHyp (L := L) arI th)
     (hPP : PPHypD (L := L) arI th) (hPD : PostDelHyp (L := L) arI th)
-    (K : Nat) (hK : ∀ p r, th p = some (.cnode r) → 2 ^ r ≤ K) (hK5 : 5 ≤ K)
+    (K : Nat) (hK : ∀ p r, th p = some (.cnode r) → 2 ^ r ≤ K) (hK6 : 6 ≤ K)
     (hB : ∀ m G, MdbLinks th m G → psiD m G * (K + 1) + K < 2 ^ 64 - 1)
     (s0 s : S) (a : A) (σ : Fl4Spec.State Unit) (G : MdbGhost) (hDS : DState (L := L) th s σ G)
     (hMO : Q (L.mem s) G)
@@ -875,7 +875,7 @@ theorem install_okQ {Q : (U64 → U64) → MdbGhost → Prop} (hQ : ∀ m G m' G
   obtain ⟨ps, rs, hps, h1s, hls, hwf, hcv, he, hfw, hsh, hbd, hkey, hvk⟩ := hok
   obtain ⟨sa, idxs⟩ := sl
   simp only at h1s hls; subst h1s
-  exact install_tcb_cap_refinesQ arI hQ th hP hO hPP hPD K hK hK5 hB s0 s a σ G hDS hMO t ht n hn idx hidx hcz0 ssl hAs
+  exact install_tcb_cap_refinesQ arI hQ th hP hO hPP hPD K hK hK6 hB s0 s a σ G hDS hMO t ht n hn idx hidx hcz0 ssl hAs
     nc hwf hcv he hfw hps hls rfl hsh hbd hkey hvk
 
 /-- **FL4's `thread_control_caps` refines the spec's cap installs of
@@ -886,7 +886,7 @@ scheduler are P1's (`BufHyp`). The new caps are derived from their source
 slots' caps at the start (`NewCapOK`). -/
 theorem thread_control_caps_refinesQ {Q : (U64 → U64) → MdbGhost → Prop} (hQ : ∀ m G m' G', MdbStep m G m' G' → Q m G → Q m' G') (th : TypedHeap) (hP : Placed th) (hO : FinObjHyp (L := L) arI th)
     (hPP : PPHypD (L := L) arI th) (hPD : PostDelHyp (L := L) arI th)
-    (K : Nat) (hK : ∀ p r, th p = some (.cnode r) → 2 ^ r ≤ K) (hK5 : 5 ≤ K)
+    (K : Nat) (hK : ∀ p r, th p = some (.cnode r) → 2 ^ r ≤ K) (hK6 : 6 ≤ K)
     (hB : ∀ m G, MdbLinks th m G → psiD m G * (K + 1) + K < 2 ^ 64 - 1)
     (s : S) (a : A) (σ : Fl4Spec.State Unit) (G : MdbGhost) (hDS : DState (L := L) th s σ G)
     (hMO : Q (L.mem s) G)
@@ -918,27 +918,27 @@ theorem thread_control_caps_refinesQ {Q : (U64 → U64) → MdbGhost → Prop} (
   -- the fault handler
   (first
     | with_reducible refine inst_skipQ ?_
-    | refine inst_seqQ (install_okQ arI hQ th hP hO hPP hPD K hK hK5 hB s s a σ G hDS hMO t ht 3 (by decide) _ i3 r0 ssl hAs
+    | refine inst_seqQ (install_okQ arI hQ th hP hO hPP hPD K hK hK6 hB s s a σ G hDS hMO t ht 3 (by decide) _ i3 r0 ssl hAs
         _ _ (hfh hF)) (fun s1 a1 σ1 G1 hDS1 _ hcz1 hmo1 => ?_)) <;>
   -- the timeout handler
   (first
     | with_reducible refine inst_skipQ ?_
-    | refine inst_seqQ (install_okQ arI hQ th hP hO hPP hPD K hK hK5 hB s _ _ _ _ ‹DState _ _ _ _› (by first | assumption | exact hMO) t ht 4 (by decide) _ i4
+    | refine inst_seqQ (install_okQ arI hQ th hP hO hPP hPD K hK hK6 hB s _ _ _ _ ‹DState _ _ _ _› (by first | assumption | exact hMO) t ht 4 (by decide) _ i4
         (by first | assumption | exact r0) ssl hAs _ _ (htmh hT)) (fun s1 a1 σ1 G1 hDS1 _ hcz1 hmo1 => ?_)) <;>
   -- the CSpace root
   (first
     | with_reducible refine inst_skipQ ?_
-    | refine inst_seqQ (install_okQ arI hQ th hP hO hPP hPD K hK hK5 hB s _ _ _ _ ‹DState _ _ _ _› (by first | assumption | exact hMO) t ht 0 (by decide) _ i0
+    | refine inst_seqQ (install_okQ arI hQ th hP hO hPP hPD K hK hK6 hB s _ _ _ _ ‹DState _ _ _ _› (by first | assumption | exact hMO) t ht 0 (by decide) _ i0
         (by first | assumption | exact r0) ssl hAs _ _ (hcr hS)) (fun s1 a1 σ1 G1 hDS1 _ hcz1 hmo1 => ?_)) <;>
   -- the VSpace root
   (first
     | with_reducible refine inst_skipQ ?_
-    | refine inst_seqQ (install_okQ arI hQ th hP hO hPP hPD K hK hK5 hB s _ _ _ _ ‹DState _ _ _ _› (by first | assumption | exact hMO) t ht 1 (by decide) _ i1
+    | refine inst_seqQ (install_okQ arI hQ th hP hO hPP hPD K hK hK6 hB s _ _ _ _ ‹DState _ _ _ _› (by first | assumption | exact hMO) t ht 1 (by decide) _ i1
         (by first | assumption | exact r0) ssl hAs _ _ (hvr hS)) (fun s1 a1 σ1 G1 hDS1 _ hcz1 hmo1 => ?_)) <;>
   -- the IPC buffer
   (first
     | with_reducible refine inst_skipQ ?_
-    | refine inst_seqQ (install_buffer_refinesQ arI hQ th hP hO hPP hPD K hK hK5 hB s _ _ _ _ ‹DState _ _ _ _›
+    | refine inst_seqQ (install_buffer_refinesQ arI hQ th hP hO hPP hPD K hK hK6 hB s _ _ _ _ ‹DState _ _ _ _›
         (by first | assumption | exact hMO) t ht
         (by first | assumption | exact r0) ssl hAs addr ptr (hBuf hU) bc0 bfr hbfr) (fun s1 a1 σ1 G1 hDS1 _ hcz1 hmo1 => ?_)) <;>
   exact inst_doneQ ‹DState _ _ _ _› (by first | assumption | exact hMO) (by first | assumption | exact r0)
@@ -955,7 +955,7 @@ variable {S : Type} {st : machine.Store S} [L : P1.LawfulStore st] {A : Type} (a
 `thread_control_caps_refinesQ` at `MdbOK`, every step an `MdbStep`. -/
 theorem thread_control_caps_mdbOK (th : TypedHeap) (hP : Placed th) (hO : FinObjHyp (L := L) arI th)
     (hPP : PPHypD (L := L) arI th) (hPD : PostDelHyp (L := L) arI th)
-    (K : Nat) (hK : ∀ p r, th p = some (.cnode r) → 2 ^ r ≤ K) (hK5 : 5 ≤ K)
+    (K : Nat) (hK : ∀ p r, th p = some (.cnode r) → 2 ^ r ≤ K) (hK6 : 6 ≤ K)
     (hB : ∀ m G, MdbLinks th m G → psiD m G * (K + 1) + K < 2 ^ 64 - 1)
     (s : S) (a : A) (σ : Fl4Spec.State Unit) (G : MdbGhost) (hDS : DState (L := L) th s σ G)
     (hMO : MdbOKV (L.ksb s) (L.mem s) G)
@@ -972,7 +972,7 @@ theorem thread_control_caps_mdbOK (th : TypedHeap) (hP : Placed th) (hO : FinObj
     tcb.thread_control_caps st arI s a t (cslotAddr ssl) (fh.1, cslotAddr fh.2) (tmh.1, cslotAddr tmh.2)
       (cr.1, cslotAddr cr.2) (vr.1, cslotAddr vr.2) addr (bufArg bc0 bfr) flags ⦃ res =>
       InstPostQ (L := L) (MdbOKV (L.ksb s)) th t (tcCapsSpec t ssl flags fh tmh cr vr ptr bfr) s σ res ⦄ :=
-  thread_control_caps_refinesQ arI (MdbOKV.step _) th hP hO hPP hPD K hK hK5 hB s a σ G hDS hMO t ht ssl
+  thread_control_caps_refinesQ arI (MdbOKV.step _) th hP hO hPP hPD K hK hK6 hB s a σ G hDS hMO t ht ssl
     hAs flags fh tmh cr vr hfh htmh hcr hvr addr ptr hBuf bc0 bfr hbfr
 
 end
@@ -984,7 +984,7 @@ variable {S : Type} {st : machine.Store S} [L : P1.LawfulStore st] {A : Type} (a
 
 theorem install_tcb_cap_refines (th : TypedHeap) (hP : Placed th) (hO : FinObjHyp (L := L) arI th)
     (hPP : PPHypD (L := L) arI th) (hPD : PostDelHyp (L := L) arI th)
-    (K : Nat) (hK : ∀ p r, th p = some (.cnode r) → 2 ^ r ≤ K) (hK5 : 5 ≤ K)
+    (K : Nat) (hK : ∀ p r, th p = some (.cnode r) → 2 ^ r ≤ K) (hK6 : 6 ≤ K)
     (hB : ∀ m G, MdbLinks th m G → psiD m G * (K + 1) + K < 2 ^ 64 - 1)
     (s0 s : S) (a : A) (σ : Fl4Spec.State Unit) (G : MdbGhost) (hDS : DState (L := L) th s σ G)
     (t : U64) (ht : th t = some .tcb) (n : Nat) (hn : n < tcbSlots) (idx : U64) (hidx : idx.val = n)
@@ -1000,11 +1000,11 @@ theorem install_tcb_cap_refines (th : TypedHeap) (hP : Placed th) (hO : FinObjHy
     (hv : ∀ P L4 L3 L2 L1 : Set U64, Vs.VCapOK P L4 L3 L2 L1 srcC0 → Vs.VCapOK P L4 L3 L2 L1 nc) :
     tcb.install_tcb_cap st arI s a t (cslotAddr ssl) idx nc (cslotAddr (ps.bv, idxs)) ⦃ res =>
       InstPost (L := L) th t (Fl4Spec.installTcbCap t.bv ssl n (some (absCap nc, (ps.bv, idxs)))) s0 σ res ⦄ :=
-  WP.spec_mono (install_tcb_cap_refinesQ arI (Q := fun _ _ => True) (fun _ _ _ _ _ _ => trivial) th hP hO hPP hPD K hK hK5 hB s0 s a σ G hDS trivial t ht n hn idx hidx hcz0 ssl hAs nc hwf hcv he hfw hps hls hsrc0 hsh hbd hkey hv) (fun _ h => h.old)
+  WP.spec_mono (install_tcb_cap_refinesQ arI (Q := fun _ _ => True) (fun _ _ _ _ _ _ => trivial) th hP hO hPP hPD K hK hK6 hB s0 s a σ G hDS trivial t ht n hn idx hidx hcz0 ssl hAs nc hwf hcv he hfw hps hls hsrc0 hsh hbd hkey hv) (fun _ h => h.old)
 
 theorem install_buffer_refines (th : TypedHeap) (hP : Placed th) (hO : FinObjHyp (L := L) arI th)
     (hPP : PPHypD (L := L) arI th) (hPD : PostDelHyp (L := L) arI th)
-    (K : Nat) (hK : ∀ p r, th p = some (.cnode r) → 2 ^ r ≤ K) (hK5 : 5 ≤ K)
+    (K : Nat) (hK : ∀ p r, th p = some (.cnode r) → 2 ^ r ≤ K) (hK6 : 6 ≤ K)
     (hB : ∀ m G, MdbLinks th m G → psiD m G * (K + 1) + K < 2 ^ 64 - 1)
     (s0 s : S) (a : A) (σ : Fl4Spec.State Unit) (G : MdbGhost) (hDS : DState (L := L) th s σ G)
     (t : U64) (ht : th t = some .tcb)
@@ -1015,11 +1015,11 @@ theorem install_buffer_refines (th : TypedHeap) (hP : Placed th) (hO : FinObjHyp
     (hbfr : ∀ c sl, bfr = some (c, sl) → NewCapOK th (L.mem s0) c sl) :
     tcb.install_buffer st arI s a t (cslotAddr ssl) addr (bufArg bc0 bfr) ⦃ res =>
       InstPost (L := L) th t (Fl4Spec.installTcbFrameCap t.bv ssl (some (ptr, frameOf bfr))) s0 σ res ⦄ :=
-  WP.spec_mono (install_buffer_refinesQ arI (Q := fun _ _ => True) (fun _ _ _ _ _ _ => trivial) th hP hO hPP hPD K hK hK5 hB s0 s a σ G hDS trivial t ht hcz0 ssl hAs addr ptr hBuf bc0 bfr hbfr) (fun _ h => h.old)
+  WP.spec_mono (install_buffer_refinesQ arI (Q := fun _ _ => True) (fun _ _ _ _ _ _ => trivial) th hP hO hPP hPD K hK hK6 hB s0 s a σ G hDS trivial t ht hcz0 ssl hAs addr ptr hBuf bc0 bfr hbfr) (fun _ h => h.old)
 
 theorem install_ok (th : TypedHeap) (hP : Placed th) (hO : FinObjHyp (L := L) arI th)
     (hPP : PPHypD (L := L) arI th) (hPD : PostDelHyp (L := L) arI th)
-    (K : Nat) (hK : ∀ p r, th p = some (.cnode r) → 2 ^ r ≤ K) (hK5 : 5 ≤ K)
+    (K : Nat) (hK : ∀ p r, th p = some (.cnode r) → 2 ^ r ≤ K) (hK6 : 6 ≤ K)
     (hB : ∀ m G, MdbLinks th m G → psiD m G * (K + 1) + K < 2 ^ 64 - 1)
     (s0 s : S) (a : A) (σ : Fl4Spec.State Unit) (G : MdbGhost) (hDS : DState (L := L) th s σ G)
     (t : U64) (ht : th t = some .tcb) (n : Nat) (hn : n < tcbSlots) (idx : U64) (hidx : idx.val = n)
@@ -1028,11 +1028,11 @@ theorem install_ok (th : TypedHeap) (hP : Placed th) (hO : FinObjHyp (L := L) ar
     (nc : capability.Cap) (sl : Fl4Spec.CslotPtr) (hok : NewCapOK th (L.mem s0) nc sl) :
     tcb.install_tcb_cap st arI s a t (cslotAddr ssl) idx nc (cslotAddr sl) ⦃ res =>
       InstPost (L := L) th t (Fl4Spec.installTcbCap t.bv ssl n (some (absCap nc, sl))) s0 σ res ⦄ :=
-  WP.spec_mono (install_okQ arI (Q := fun _ _ => True) (fun _ _ _ _ _ _ => trivial) th hP hO hPP hPD K hK hK5 hB s0 s a σ G hDS trivial t ht n hn idx hidx hcz0 ssl hAs nc sl hok) (fun _ h => h.old)
+  WP.spec_mono (install_okQ arI (Q := fun _ _ => True) (fun _ _ _ _ _ _ => trivial) th hP hO hPP hPD K hK hK6 hB s0 s a σ G hDS trivial t ht n hn idx hidx hcz0 ssl hAs nc sl hok) (fun _ h => h.old)
 
 theorem thread_control_caps_refines (th : TypedHeap) (hP : Placed th) (hO : FinObjHyp (L := L) arI th)
     (hPP : PPHypD (L := L) arI th) (hPD : PostDelHyp (L := L) arI th)
-    (K : Nat) (hK : ∀ p r, th p = some (.cnode r) → 2 ^ r ≤ K) (hK5 : 5 ≤ K)
+    (K : Nat) (hK : ∀ p r, th p = some (.cnode r) → 2 ^ r ≤ K) (hK6 : 6 ≤ K)
     (hB : ∀ m G, MdbLinks th m G → psiD m G * (K + 1) + K < 2 ^ 64 - 1)
     (s : S) (a : A) (σ : Fl4Spec.State Unit) (G : MdbGhost) (hDS : DState (L := L) th s σ G)
     (t : U64) (ht : th t = some .tcb) (ssl : Fl4Spec.CslotPtr) (hAs : AbsSlot th ssl) (flags : U64)
@@ -1048,7 +1048,7 @@ theorem thread_control_caps_refines (th : TypedHeap) (hP : Placed th) (hO : FinO
     tcb.thread_control_caps st arI s a t (cslotAddr ssl) (fh.1, cslotAddr fh.2) (tmh.1, cslotAddr tmh.2)
       (cr.1, cslotAddr cr.2) (vr.1, cslotAddr vr.2) addr (bufArg bc0 bfr) flags ⦃ res =>
       InstPost (L := L) th t (tcCapsSpec t ssl flags fh tmh cr vr ptr bfr) s σ res ⦄ :=
-  WP.spec_mono (thread_control_caps_refinesQ arI (Q := fun _ _ => True) (fun _ _ _ _ _ _ => trivial) th hP hO hPP hPD K hK hK5 hB s a σ G hDS trivial t ht ssl hAs flags fh tmh cr vr hfh htmh hcr hvr addr ptr hBuf bc0 bfr hbfr) (fun _ h => h.old)
+  WP.spec_mono (thread_control_caps_refinesQ arI (Q := fun _ _ => True) (fun _ _ _ _ _ _ => trivial) th hP hO hPP hPD K hK hK6 hB s a σ G hDS trivial t ht ssl hAs flags fh tmh cr vr hfh htmh hcr hvr addr ptr hBuf bc0 bfr hbfr) (fun _ h => h.old)
 
 end
 

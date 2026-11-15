@@ -389,10 +389,10 @@ def PortInCallHypM (s : S) (σ : Fl4Spec.State Unit) (ar : A) (ct port size : U6
         (.invokeIOPort (.ioPortInvocation (BitVec.ofNat 16 port.val) d))).run σ1).1 ∧
       ∃ z ∈ (specTail true ct.bv rr σy).1, RelTopM (L := L) res.2.1 z.2 ⦄
 
-/-- **IOPort `In` called** (labels 61..63, `call` true): `DecOKRM`, the reply
+/-- **IOPort `In` called** (labels 64..66, `call` true): `DecOKRM`, the reply
 being FL4's own (`PortInCallHypM`). -/
 theorem decode_invocation_ioport_in_callM (s : S) (ar : A) (σ : Fl4Spec.State Unit)
-    (lbl : U64) (hl : 61 ≤ lbl.val ∧ lbl.val ≤ 63)
+    (lbl : U64) (hl : 64 ≤ lbl.val ∧ lbl.val ≤ 66)
     (slbl : Fl4Spec.Data) (hlbl : Fl4Spec.invocationType slbl = .archInvocationLabel (inLabel (portSz lbl)))
     (length buf ct : U64) (hct : sched.cur_thread st s = ok ct) (args : List U64)
     (hlen : length.val = args.length)
@@ -403,12 +403,12 @@ theorem decode_invocation_ioport_in_callM (s : S) (ar : A) (σ : Fl4Spec.State U
       PortInCallHypM (L := L) arI s σ ar ct port ⟨BitVec.ofNat 64 (portSz lbl)⟩ (inData (portSz lbl)))
     (slot : U64) (blk don fp : Bool) (extra : Aeneas.Std.Array obj.Slot 3#usize) (ci : Fl4Spec.CapRef)
     (sl : Fl4Spec.CslotPtr) (excaps : List (Fl4Spec.Cap × Fl4Spec.CslotPtr)) (buffer : Option Fl4Spec.ObjRef) :
-    DecOKRM (L := L) arI s ar σ lbl length slot (.IoPort first last) blk true don fp buf extra slbl
+    DecOKRM (L := L) arI s ar σ lbl length slot (.IoPort first last 0#u64) blk true don fp buf extra slbl
       (args.map UScalar.bv) ci sl excaps buffer ct := by
   unfold DecOKRM syscall.decode_invocation
   rw [hct]; simp only [bind_ok]
   have hsz : portSz lbl = 1 ∨ portSz lbl = 2 ∨ portSz lbl = 4 := by unfold portSz; split_ifs <;> simp
-  have hspec : specDec fp slbl (args.map UScalar.bv) ci sl (.IoPort first last) excaps buffer =
+  have hspec : specDec fp slbl (args.map UScalar.bv) ci sl (.IoPort first last 0#u64) excaps buffer =
       Fl4Spec.NonDetE.liftME Fl4Spec.Fl4Invocation.invokeArchObject (Fl4Spec.NonDetE.liftME Fl4Spec.Fl4ArchInvocation.spec
         (Fl4Spec.decodePortInvocation slbl (args.map UScalar.bv)
           (.ioPortCap (BitVec.ofNat 16 first.val) (BitVec.ofNat 16 last.val)))) := rfl
@@ -417,14 +417,14 @@ theorem decode_invocation_ioport_in_callM (s : S) (ar : A) (σ : Fl4Spec.State U
   simp only
   rw [hct, port_size_eq lbl ⟨hl.1, by omega⟩, is_port_in_eq lbl ⟨hl.1, by omega⟩]
   simp only [bind_ok]
-  have hszU : (if lbl.val = 61 ∨ lbl.val = 64 then 1#u64 else if lbl.val = 62 ∨ lbl.val = 65 then 2#u64
+  have hszU : (if lbl.val = 64 ∨ lbl.val = 67 then 1#u64 else if lbl.val = 65 ∨ lbl.val = 68 then 2#u64
       else 4#u64) = ⟨BitVec.ofNat 64 (portSz lbl)⟩ := by
     unfold portSz; split_ifs <;> rfl
   rw [hszU]
   have hsz0 : ¬ (⟨BitVec.ofNat 64 (portSz lbl)⟩ : U64) = 0#u64 := by
     rw [u64_eq_iff]; show ¬ (BitVec.ofNat 64 (portSz lbl)).toNat = 0
     rcases hsz with h | h | h <;> rw [h] <;> decide
-  rw [if_neg hsz0, decide_eq_true (by omega : lbl.val ≤ 63)]
+  rw [if_neg hsz0, decide_eq_true (by omega : lbl.val ≤ 66)]
   simp only [↓reduceIte]
   -- the argument
   by_cases h1 : length < 1#u64

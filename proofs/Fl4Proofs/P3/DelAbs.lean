@@ -1,7 +1,7 @@
 /-
 P3 (DESIGN.md §9), CSpace: **writing a cap into any slot of the typed heap**,
 a CNode's or a TCB's. The spec's `set_cap` on a TCB slot updates one of the
-five cap fields of the TCB. With it, `empty_slot` and `cap_swap` hold for
+six cap fields of the TCB. With it, `empty_slot` and `cap_swap` hold for
 TCB slots too (`empty_full_abs`, `swap_full_abs`), which the deletion of a
 TCB's zombie needs.
 -/
@@ -12,6 +12,7 @@ namespace Fl4Proofs.P3
 open fl4_core Classical
 
 noncomputable section
+set_option maxHeartbeats 1000000
 
 /-! ## The spec's `set_cap` on a TCB slot -/
 
@@ -25,7 +26,8 @@ def tcbSet (tcb : Tcb) (i : Nat) (a : Cap) : Tcb :=
   else if i = 1 then { tcb with tcbVtable := a }
   else if i = 2 then { tcb with tcbIpcframe := a }
   else if i = 3 then { tcb with tcbFaultHandler := a }
-  else { tcb with tcbTimeoutHandler := a }
+  else if i = 4 then { tcb with tcbTimeoutHandler := a }
+  else { tcb with tcbEpt := a }
 
 theorem tcbIdx_ne {i j : Nat} (hi : i < tcbSlots) (hj : j < tcbSlots) (h : i ≠ j) :
     tcbCnodeIndex i ≠ tcbCnodeIndex j := fun e => h (tcbCnodeIndex_inj hi hj e)
@@ -44,6 +46,11 @@ theorem tcbCnodeMap_set (tcb : Tcb) {i : Nat} (hi : i < tcbSlots) (a : Cap) :
   have d23 := d 2 3 (by decide) (by decide) (by decide)
   have d24 := d 2 4 (by decide) (by decide) (by decide)
   have d34 := d 3 4 (by decide) (by decide) (by decide)
+  have d05 := d 0 5 (by decide) (by decide) (by decide)
+  have d15 := d 1 5 (by decide) (by decide) (by decide)
+  have d25 := d 2 5 (by decide) (by decide) (by decide)
+  have d35 := d 3 5 (by decide) (by decide) (by decide)
+  have d45 := d 4 5 (by decide) (by decide) (by decide)
   funext x
   unfold tcbSlots at hi
   interval_cases i <;>
@@ -51,7 +58,8 @@ theorem tcbCnodeMap_set (tcb : Tcb) {i : Nat} (hi : i < tcbSlots) (a : Cap) :
       show ¬ (2 : Nat) = 0 by decide, show ¬ (3 : Nat) = 0 by decide, show ¬ (4 : Nat) = 0 by decide,
       show ¬ (2 : Nat) = 1 by decide, show ¬ (3 : Nat) = 1 by decide, show ¬ (4 : Nat) = 1 by decide,
       show ¬ (3 : Nat) = 2 by decide, show ¬ (4 : Nat) = 2 by decide, show ¬ (4 : Nat) = 3 by decide,
-      show ¬ (1 : Nat) = 0 by decide] <;>
+      show ¬ (1 : Nat) = 0 by decide,
+      show ¬ (5 : Nat) = 0 by decide, show ¬ (5 : Nat) = 1 by decide, show ¬ (5 : Nat) = 2 by decide, show ¬ (5 : Nat) = 3 by decide, show ¬ (5 : Nat) = 4 by decide] <;>
     split_ifs <;> simp_all
 
 /-- The abstract state after writing `a` into cap slot `i` of the TCB at `t`. -/
@@ -86,16 +94,22 @@ theorem setCap_tcb {σ : State Z} {t : ObjRef} {tcb : Tcb} {i : Nat} (a : Cap)
   have d32 := d 3 2 (by decide) (by decide) (by decide)
   have d42 := d 4 2 (by decide) (by decide) (by decide)
   have d43 := d 4 3 (by decide) (by decide) (by decide)
+  have d50 := d 5 0 (by decide) (by decide) (by decide)
+  have d51 := d 5 1 (by decide) (by decide) (by decide)
+  have d52 := d 5 2 (by decide) (by decide) (by decide)
+  have d53 := d 5 3 (by decide) (by decide) (by decide)
+  have d54 := d 5 4 (by decide) (by decide) (by decide)
   unfold setCap
   show (getObject t >>= _) σ = _
   rw [nd_bind_single hobj]
   rw [← hset]
   unfold tcbSlots at hi
-  interval_cases i <;> simp only [tcbSet, d10, d20, d30, d40, d21, d31, d41, d32, d42, d43, ↓reduceIte,
+  interval_cases i <;> simp only [tcbSet, d10, d20, d30, d40, d21, d31, d41, d32, d42, d43, d50, d51, d52, d53, d54, ↓reduceIte,
     show ¬ (2 : Nat) = 0 by decide, show ¬ (3 : Nat) = 0 by decide, show ¬ (4 : Nat) = 0 by decide,
     show ¬ (2 : Nat) = 1 by decide, show ¬ (3 : Nat) = 1 by decide, show ¬ (4 : Nat) = 1 by decide,
     show ¬ (3 : Nat) = 2 by decide, show ¬ (4 : Nat) = 2 by decide, show ¬ (4 : Nat) = 3 by decide,
-    show ¬ (1 : Nat) = 0 by decide] <;> rw [nd_pure_bind]
+    show ¬ (1 : Nat) = 0 by decide,
+      show ¬ (5 : Nat) = 0 by decide, show ¬ (5 : Nat) = 1 by decide, show ¬ (5 : Nat) = 2 by decide, show ¬ (5 : Nat) = 3 by decide, show ¬ (5 : Nat) = 4 by decide] <;> rw [nd_pure_bind]
 
 end Spec
 

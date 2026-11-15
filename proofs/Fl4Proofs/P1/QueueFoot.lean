@@ -5,7 +5,7 @@ bytes at the start of the object), the cores' node words, the frame words
 `Sg` (reply objects, the SCs' `TCB`/`CORE`/`REPLY` words, the
 notifications' frame words), the SC objects, and the queue words of the
 endpoints and notifications `Es`.  A cap slot lies outside all of these (a
-CNode slot is in a CNode, a TCB slot below offset 160 of its TCB, an IRQ slot
+CNode slot is in a CNode, a TCB slot below offset 192 of its TCB, an IRQ slot
 in the kernel-global area), so an operation with a `KW` footprint keeps every
 cap slot.
 -/
@@ -22,7 +22,7 @@ variable {Cs Sg Rp Scs Nt : Set U64} {Z : U64 → Nat}
 /-- The words the kernel operations write (relative to the nodes of `s0`). -/
 def KW (st : machine.Store S) [L : LawfulStore st] (T Cs Sg Scs : Set U64) (Z : U64 → Nat) (Es : Set U64)
     (s0 : S) (b : U64) : Prop :=
-  (∃ y ∈ T, ∃ K : U64, 160 ≤ K.val ∧ K.val < 4096 ∧ K.val ≠ 3576 ∧ K.val ≠ 3584 ∧
+  (∃ y ∈ T, ∃ K : U64, 192 ≤ K.val ∧ K.val < 4096 ∧ K.val ≠ 3576 ∧ K.val ≠ 3584 ∧
     b = core.num.U64.wrapping_add y K) ∨
   (∃ c ∈ Cs, ∃ o : U64, o.val < 4288 ∧ o.val ≠ 88 ∧ b = L.nodeAt s0 c o) ∨
   b ∈ Sg ∨ (∃ c ∈ Scs, InSC c (Z c) b) ∨
@@ -70,7 +70,7 @@ theorem Foot.of' {s s' : S} {B : U64 → Prop} (h : WritesIn st s s' B)
 
 /-! ## The words of `KW` -/
 
-theorem kw_field {s : S} {y K : U64} (hy : y ∈ T) (hK : 160 ≤ K.val) (hK' : K.val < 4096)
+theorem kw_field {s : S} {y K : U64} (hy : y ∈ T) (hK : 192 ≤ K.val) (hK' : K.val < 4096)
     (hKd : K.val ≠ 3576 ∧ K.val ≠ 3584) :
     KW st T Cs Sg Scs Z Es s (core.num.U64.wrapping_add y K) := Or.inl ⟨y, hy, K, hK, hK', hKd.1, hKd.2, rfl⟩
 
@@ -90,7 +90,7 @@ theorem foot_wr {s : S} {a v : U64} (ha : Aligned a) (hk : KW st T Cs Sg Scs Z E
     Foot st T Cs Sg Scs Z Es s (L.wr s a v) :=
   (writesIn_wr ha).mono fun b hb => hb ▸ hk
 
-theorem foot_field {s : S} {y K v : U64} (hT : TcbPlaced T) (hy : y ∈ T) (hK : 160 ≤ K.val) (hK' : K.val < 4096)
+theorem foot_field {s : S} {y K v : U64} (hT : TcbPlaced T) (hy : y ∈ T) (hK : 192 ≤ K.val) (hK' : K.val < 4096)
     (hK8 : K.val % 8 = 0) (hKd : K.val ≠ 3576 ∧ K.val ≠ 3584) :
     Foot st T Cs Sg Scs Z Es s (L.wr s (core.num.U64.wrapping_add y K) v) :=
   foot_wr (field_aligned (hT y hy) hK' hK8) (kw_field hy hK hK' hKd)

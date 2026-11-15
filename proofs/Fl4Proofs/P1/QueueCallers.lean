@@ -38,12 +38,23 @@ variable {S : Type _} {st : machine.Store S} [L : LawfulStore st] {T : Set U64} 
     obj.Tcb.set_prio st t s v ⦃ s' => s' = L.wr s (prioA t) v ⦄ := by
   unfold obj.Tcb.set_prio; step*; simp_all [prioA]
 
+@[step] theorem sched.is_runnable.spec (s : S) (t : obj.Tcb) :
+    sched.is_runnable st s t ⦃ b => b = decide (L.mem s (stA t) = sched.TS_RUNNING ∨
+      L.mem s (stA t) = sched.TS_RESTART ∨ L.mem s (stA t) = sched.TS_RUNNING_VM) ⦄ := by
+  unfold sched.is_runnable
+  step
+  repeat' split
+  all_goals simp_all [Runnable, lift]
+
 /-- `is_schedulable` only says yes for a thread outside the release queue. -/
 @[step] theorem sched.is_schedulable.spec (s : S) (t : obj.Tcb) :
     sched.is_schedulable st s t ⦃ b => b = true → (L.mem s (inqA t) &&& sched.Q_RELEASE) = 0#u64 ⦄ := by
-  unfold sched.is_schedulable sched.is_runnable sporadic.sc_active
-  step
-  split <;> simp only [bind_ok] <;> step* <;> simp_all
+  unfold sched.is_schedulable
+  step with sched.is_runnable.spec
+  split <;> (try simp only [bind_ok]) <;> step* <;> try simp_all
+  all_goals
+    unfold sporadic.sc_active
+    step* <;> try simp_all
 
 /-! ## TCB fields as addresses -/
 
@@ -758,25 +769,27 @@ theorem sched.set_priority.inv {Cs : Set U64} (s : S) (t : obj.Tcb) (prio : U64)
   obtain ⟨r1, r2, r3, r4, r5⟩ := ts_vals
   have hnR : ∀ v : U64, v = sched.TS_BLOCKED_ON_RECV ∨ v = sched.TS_BLOCKED_ON_SEND ∨ v = sched.TS_BLOCKED_ON_NTFN →
       ¬ Runnable v := by
-    rintro v hv' (e | e) <;> rcases hv' with e' | e' | e' <;> rw [e'] at e <;> simp_all
+    rintro v hv' (e | e | e) <;> rcases hv' with e' | e' | e' <;> rw [e'] at e <;> simp_all [sched.TS_RUNNING_VM]
   unfold sched.set_priority
   step as ⟨sv, sv_post⟩
   subst sv_post
   split
   · exact running_path s t prio Q R h ht hv (Or.inl ‹_›) hcur
   · split
-    · exact running_path s t prio Q R h ht hv (Or.inr ‹_›) hcur
-    · have hnr : ¬ Runnable (L.mem s (stA t)) := by rintro (e | e) <;> contradiction
-      have hq0 := notQ_of_not_runnable h ht hnr
-      split
-      · exact blocked_path_ep s t prio Q R h ht hv hq0 (by simp) (Or.inr (Or.inl ‹_›))
-      · split
-        · exact blocked_path_ep s t prio Q R h ht hv hq0 (by simp) (Or.inl ‹_›)
+    · exact running_path s t prio Q R h ht hv (Or.inr (Or.inl ‹_›)) hcur
+    · split
+      · exact running_path s t prio Q R h ht hv (Or.inr (Or.inr ‹_›)) hcur
+      · have hnr : ¬ Runnable (L.mem s (stA t)) := by rintro (e | e | e) <;> contradiction
+        have hq0 := notQ_of_not_runnable h ht hnr
+        split
+        · exact blocked_path_ep s t prio Q R h ht hv hq0 (by simp) (Or.inr (Or.inl ‹_›))
         · split
-          · exact blocked_path_ntfn s t prio Q R h ht hv hq0 (by simp) (Or.inr (Or.inr ‹_›))
-          · step as ⟨s1, s1_post⟩
-            subst s1_post
-            exact ⟨Q, inv_wr_prio h ht hq0 hv⟩
+          · exact blocked_path_ep s t prio Q R h ht hv hq0 (by simp) (Or.inl ‹_›)
+          · split
+            · exact blocked_path_ntfn s t prio Q R h ht hv hq0 (by simp) (Or.inr (Or.inr ‹_›))
+            · step as ⟨s1, s1_post⟩
+              subst s1_post
+              exact ⟨Q, inv_wr_prio h ht hq0 hv⟩
 
 /-! ## `append` (`tcbSchedAppend`) -/
 

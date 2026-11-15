@@ -274,9 +274,9 @@ theorem donate_bound_refines {N T C : Set U64} {c : U64} (s : S) (a : A) (σ : F
     -- `f`'s SC word
     refine WP.spec_bind (obj.Tcb.set_sc.spec' s4 f 0#u64) ?_
     rintro s5 rfl
-    obtain ⟨hS5, hf5, hK5⟩ := hS4.set_tcb_sc hf hkf2 (v := 0#u64) (Or.inl rfl)
-    rw [optRef_zero] at hS5 hK5
-    have hR5 := hR4.frame hP hf5 hK5
+    obtain ⟨hS5, hf5, hK6⟩ := hS4.set_tcb_sc hf hkf2 (v := 0#u64) (Or.inl rfl)
+    rw [optRef_zero] at hS5 hK6
+    have hR5 := hR4.frame hP hf5 hK6
     have hI3 : Inv (updK σ2 f.bv (.tcb { xf with tcbSchedContext := none })) := hI2.unboundTcb hkf2 hyf hk2 hnq2
     set σ3 := updK σ2 f.bv (.tcb { xf with tcbSchedContext := none }) with hσ3
     have hN3 : NSC N C σ3 := fun m hm x q hx hq => by

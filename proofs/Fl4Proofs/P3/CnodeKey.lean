@@ -15,7 +15,7 @@ noncomputable section
 theorem mask_okey {r : capability.Rights} {c c' : capability.Cap} (h : capability.mask_cap_rights r c = ok c') :
     okey c' = okey c := by
   cases c <;> simp only [capability.mask_cap_rights] at h
-  case Frame p sz v dev m a va =>
+  case Frame p sz v dev m ept a va =>
     unfold capability.mask_vm_rights at h
     repeat' split at h
     all_goals (simp at h; subst h; simp [okey])

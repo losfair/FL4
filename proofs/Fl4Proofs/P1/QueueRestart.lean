@@ -21,7 +21,7 @@ variable {Cs Sg Rp Scs Nt : Set U64} {Z : U64 → Nat} {A : Type _} {ar : machin
 
 theorem ts_restart : sched.TS_RESTART = 2#u64 := ts_vals.2.1
 
-theorem runnable_restart : Runnable sched.TS_RESTART := Or.inr rfl
+theorem runnable_restart : Runnable sched.TS_RESTART := Or.inr (Or.inl rfl)
 theorem not_blocked_restart : ¬ Blocked sched.TS_RESTART := by
   obtain ⟨-, -, h3, h4, h6⟩ := ts_vals
   unfold Blocked; rw [h3, h4, h6, ts_restart]; decide
@@ -55,7 +55,7 @@ theorem sched.is_stopped.spec (s : S) (t : obj.Tcb) :
     intro v hv hr
     unfold Runnable at hr
     rw [h1, h2] at hr; rw [h3, h4, h6, ts_reply] at hv
-    rcases hr with rfl | rfl <;> rcases hv with e | e | e | e <;> simp at e
+    rcases hr with rfl | rfl | rfl <;> rcases hv with e | e | e | e <;> simp [sched.TS_RUNNING_VM] at e
   unfold sched.is_stopped
   step with obj.Tcb.state.spec as ⟨v, v_post⟩
   split

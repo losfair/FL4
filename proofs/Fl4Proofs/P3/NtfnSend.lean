@@ -251,7 +251,8 @@ theorem send_signal_idle_bound_idle (hP : NPlaced T N) (s : S) (a : A) (σ : Fl4
     (hR : NtfnStateRel N T (L.mem s) σ) {n : U64} (hn : n ∈ N) {x : Fl4Spec.Notification}
     (hk : σ.kheap n.bv = some (.notification x)) (hidle : x.ntfnObj = .idleNtfn)
     {t : Fl4Spec.ObjRef} {tcb : Fl4Spec.Tcb} (hb : x.ntfnBoundTcb = some t) (hkt : σ.kheap t = some (.tcb tcb))
-    (hrb : Fl4Spec.receiveBlocked tcb.tcbState = false) (badge : U64) :
+    (hrb : Fl4Spec.receiveBlocked tcb.tcbState = false)
+    (hvm : tcb.tcbState ≠ .runningVM) (badge : U64) :
     notification.send_signal st ar s a n badge ⦃ r =>
       r.2 = a ∧ SingleRel (st := st) N T s σ (Fl4Spec.sendSignal n.bv badge.bv σ) r.1 ⦄ := by
   have hx := hR.at_ntfn hn hk
@@ -264,6 +265,12 @@ theorem send_signal_idle_bound_idle (hP : NPlaced T N) (s : S) (a : A) (σ : Fl4
     rw [e, tsVals.2.2.1] at h3
     revert hrb h3
     cases tcb.tcbState <;> simp [tsCode, Fl4Spec.receiveBlocked]
+  have hnvm : L.mem s (tStA (L.mem s (nBoundA n))) ≠ sched.TS_RUNNING_VM := by
+    intro e
+    have h3 := hy.st
+    rw [e] at h3
+    simp only [sched.TS_RUNNING_VM] at h3
+    cases hst : tcb.tcbState <;> simp_all [tsCode]
   unfold notification.send_signal
   step
   have : st = obj.NTFN_IDLE := by rw [st_post]; exact stOf_idle hx.obj hidle
@@ -276,7 +283,19 @@ theorem send_signal_idle_bound_idle (hP : NPlaced T N) (s : S) (a : A) (σ : Fl4
   step
   subst s1_post
   obtain ⟨hR', hW⟩ := set_active_rel hP hR hn hk hidle badge
-  exact ⟨_, sendSignal_activate hk hidle (Or.inr ⟨t, tcb, hb, hkt, hrb⟩) badge.bv, hR',
+  have hst' : L.mem (L.wr (L.wr s (epTSA n)
+      ((L.mem s (epTSA n) &&& ~~~3#u64) ||| (obj.NTFN_ACTIVE &&& 3#u64))) (nBadgeA n) badge)
+      (tStA (L.mem s (nBoundA n))) = L.mem s (tStA (L.mem s (nBoundA n))) := by
+    have h1 := nwr_wr (L := L) hP (K := 8#u64) hn (by simp) (by simp) s
+      ((L.mem s (epTSA n) &&& ~~~3#u64) ||| (obj.NTFN_ACTIVE &&& 3#u64))
+    rw [← epTSA_eq] at h1
+    have h2 := nwr_wr (L := L) hP (K := 16#u64) hn (by simp) (by simp)
+      (L.wr s (epTSA n) ((L.mem s (epTSA n) &&& ~~~3#u64) ||| (obj.NTFN_ACTIVE &&& 3#u64))) badge
+    rw [← nBadgeA_eq] at h2
+    exact ((h1.trans h2).tcb _ hbT).1.st
+  step with obj.Tcb.state.spec as ⟨vm_state, hvs⟩
+  simp only [hvs, hst', hnvm, decide_false, Bool.false_eq_true, ↓reduceIte, bind_ok, WP.spec_ok]
+  exact ⟨trivial, _, sendSignal_activate hk hidle (Or.inr ⟨t, tcb, hb, hkt, hrb⟩) badge.bv, hR',
     NtfnStep.ntfn hk rfl rfl, hW⟩
 
 /-- **Active**: the badge is OR-ed into the pending one. -/

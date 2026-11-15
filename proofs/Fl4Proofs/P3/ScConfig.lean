@@ -1013,10 +1013,10 @@ theorem cfg_pre_refines {N T C : Set U64} {c : U64} (s : S) (a : A) (σ : Fl4Spe
       (fun y m hy => by rw [hcs, hkb, hk] at hy; cases hy; exact hxt) hS4.idle
       (by show t.bv ∉ (σ.releaseQueue.filter fun x => decide (t.bv ≠ x)); rw [hflt]; exact htR)
       (OffOK.of_eq hO rfl rfl rfl rfl) (hT.mrt a2) (hT.mb a2)) ?_
-    rintro s5 ⟨σc, hcm, hS5, hR5, hN5, hI5, hK5, -, hwc⟩
+    rintro s5 ⟨σc, hcm, hS5, hR5, hN5, hI5, hK6, -, hwc⟩
     rw [WP.spec_ok]
-    rw [hcs] at hK5
-    obtain ⟨k1, k2, k3, k4, k5, k6, k7, k8, k9⟩ := hK5
+    rw [hcs] at hK6
+    obtain ⟨k1, k2, k3, k4, k5, k6, k7, k8, k9⟩ := hK6
     refine ⟨σc, hsp σc (by unfold Fl4Spec.NonDet.when; rw [if_pos (show σb.curSc = p.bv from hcp)]; exact hcm),
       hS5, hR5, hN5, hI5,
       ⟨fun d q => by rw [k7]; exact hNQb.1 d q, by rw [k3]; exact hNQb.2⟩,
@@ -1272,8 +1272,8 @@ theorem cfg_tail_refines {N T C : Set U64} {c : U64} (s : S) (a : A) (σ : Fl4Sp
     obtain ⟨x0, n0, -, hx0⟩ := hs0.scs p hp; exact (hx0.hdr h1 h2).1
   step with obj.Sc.set_badge.spec2 as ⟨s5, hs5⟩
   subst hs5
-  obtain ⟨hS5, hf5, hK5⟩ := hS.set_sc_badge hp hk badge
-  have hR5 := hR.frame hP hf5 hK5
+  obtain ⟨hS5, hf5, hK6⟩ := hS.set_sc_badge hp hk badge
+  have hR5 := hR.frame hP hf5 hK6
   have h4 : Fl4Spec.setScObjRef (Z := Unit) Fl4Spec.scBadgeUpdate p.bv badge.bv σ =
       ({((), updSc σ p.bv { y with scBadge := badge.bv } n)}, False) := updateSchedContext_eq hk _
   have hk5 : (updSc σ p.bv { y with scBadge := badge.bv } n).kheap p.bv =

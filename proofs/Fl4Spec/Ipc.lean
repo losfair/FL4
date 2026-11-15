@@ -511,7 +511,8 @@ def endTimeslice (canTimeout : Bool) : SMonad Z Unit := do
   let scPtr ← NonDet.gets fun s : State Z => s.curSc
   let roundRobin ← isRoundRobin scPtr
   let ct ← NonDet.gets fun s : State Z => s.curThread
-  let valid ← isValidTimeoutHandler ct
+  let ts ← getThreadState ct
+  let valid ← if ts = .runningVM then pure false else isValidTimeoutHandler ct
   if canTimeout ∧ ¬roundRobin ∧ valid
   then do
     let sc ← getSchedContext scPtr

@@ -129,7 +129,7 @@ theorem decode_unset_eq (s : S) (ar : A) (p : U64) (c : tcb.Ctx)
         ok (r1, s, ar)) := by
   unfold tcb.decode
   rw [hstall]
-  simp only [bind_ok, u64_eq_iff, lbl_tcbReadRegisters_val, lbl_tcbWriteRegisters_val, lbl_tcbCopyRegisters_val, lbl_tcbConfigure_val, lbl_tcbSetPriority_val, lbl_tcbSetMCPriority_val, lbl_tcbSetSchedParams_val, lbl_tcbSetTimeoutEndpoint_val, lbl_tcbSetIPCBuffer_val, lbl_tcbSetSpace_val, lbl_tcbSuspend_val, lbl_tcbResume_val, lbl_tcbBindNotification_val, lbl_tcbUnbindNotification_val, lbl_tcbSetBreakpoint_val, lbl_tcbGetBreakpoint_val, lbl_tcbUnsetBreakpoint_val, lbl_tcbConfigureSingleStepping_val, lbl_tcbSetTLSBase_val, lbl_tcbSetFlags_val, lbl_tcbReadFPU_val, lbl_tcbWriteFPU_val, lbl_tcbSetTimer_val]
+  simp only [bind_ok, u64_eq_iff, lbl_tcbSetEPTRoot_val, lbl_tcbReadRegisters_val, lbl_tcbWriteRegisters_val, lbl_tcbCopyRegisters_val, lbl_tcbConfigure_val, lbl_tcbSetPriority_val, lbl_tcbSetMCPriority_val, lbl_tcbSetSchedParams_val, lbl_tcbSetTimeoutEndpoint_val, lbl_tcbSetIPCBuffer_val, lbl_tcbSetSpace_val, lbl_tcbSuspend_val, lbl_tcbResume_val, lbl_tcbBindNotification_val, lbl_tcbUnbindNotification_val, lbl_tcbSetBreakpoint_val, lbl_tcbGetBreakpoint_val, lbl_tcbUnsetBreakpoint_val, lbl_tcbConfigureSingleStepping_val, lbl_tcbSetTLSBase_val, lbl_tcbSetFlags_val, lbl_tcbReadFPU_val, lbl_tcbWriteFPU_val, lbl_tcbSetTimer_val]
   simp only [Nat.reduceEqDiff, ↓reduceIte]
   rfl
 
@@ -209,7 +209,7 @@ theorem decode_timer_eq (s : S) (ar : A) (p : U64) (c : tcb.Ctx)
         ok (core.result.Result.Ok (), s3, ar)) := by
   unfold tcb.decode
   rw [hstall]
-  simp only [bind_ok, u64_eq_iff, lbl_tcbReadRegisters_val, lbl_tcbWriteRegisters_val, lbl_tcbCopyRegisters_val, lbl_tcbConfigure_val, lbl_tcbSetPriority_val, lbl_tcbSetMCPriority_val, lbl_tcbSetSchedParams_val, lbl_tcbSetTimeoutEndpoint_val, lbl_tcbSetIPCBuffer_val, lbl_tcbSetSpace_val, lbl_tcbSuspend_val, lbl_tcbResume_val, lbl_tcbBindNotification_val, lbl_tcbUnbindNotification_val, lbl_tcbSetBreakpoint_val, lbl_tcbGetBreakpoint_val, lbl_tcbUnsetBreakpoint_val, lbl_tcbConfigureSingleStepping_val, lbl_tcbSetTLSBase_val, lbl_tcbSetFlags_val, lbl_tcbReadFPU_val, lbl_tcbWriteFPU_val, lbl_tcbSetTimer_val]
+  simp only [bind_ok, u64_eq_iff, lbl_tcbSetEPTRoot_val, lbl_tcbReadRegisters_val, lbl_tcbWriteRegisters_val, lbl_tcbCopyRegisters_val, lbl_tcbConfigure_val, lbl_tcbSetPriority_val, lbl_tcbSetMCPriority_val, lbl_tcbSetSchedParams_val, lbl_tcbSetTimeoutEndpoint_val, lbl_tcbSetIPCBuffer_val, lbl_tcbSetSpace_val, lbl_tcbSuspend_val, lbl_tcbResume_val, lbl_tcbBindNotification_val, lbl_tcbUnbindNotification_val, lbl_tcbSetBreakpoint_val, lbl_tcbGetBreakpoint_val, lbl_tcbUnsetBreakpoint_val, lbl_tcbConfigureSingleStepping_val, lbl_tcbSetTLSBase_val, lbl_tcbSetFlags_val, lbl_tcbReadFPU_val, lbl_tcbWriteFPU_val, lbl_tcbSetTimer_val]
   simp only [Nat.reduceEqDiff, ↓reduceIte]
   rfl
 
@@ -284,7 +284,7 @@ theorem decode_getbp_eq (s : S) (ar : A) (p : U64) (c : tcb.Ctx)
       (tcb.decode_get_breakpoint st s p c >>= fun x => ok (x.1, x.2, ar)) := by
   unfold tcb.decode
   rw [hstall]
-  simp only [bind_ok, u64_eq_iff, lbl_tcbReadRegisters_val, lbl_tcbWriteRegisters_val, lbl_tcbCopyRegisters_val, lbl_tcbConfigure_val, lbl_tcbSetPriority_val, lbl_tcbSetMCPriority_val, lbl_tcbSetSchedParams_val, lbl_tcbSetTimeoutEndpoint_val, lbl_tcbSetIPCBuffer_val, lbl_tcbSetSpace_val, lbl_tcbSuspend_val, lbl_tcbResume_val, lbl_tcbBindNotification_val, lbl_tcbUnbindNotification_val, lbl_tcbSetBreakpoint_val, lbl_tcbGetBreakpoint_val, lbl_tcbUnsetBreakpoint_val, lbl_tcbConfigureSingleStepping_val, lbl_tcbSetTLSBase_val, lbl_tcbSetFlags_val, lbl_tcbReadFPU_val, lbl_tcbWriteFPU_val, lbl_tcbSetTimer_val]
+  simp only [bind_ok, u64_eq_iff, lbl_tcbSetEPTRoot_val, lbl_tcbReadRegisters_val, lbl_tcbWriteRegisters_val, lbl_tcbCopyRegisters_val, lbl_tcbConfigure_val, lbl_tcbSetPriority_val, lbl_tcbSetMCPriority_val, lbl_tcbSetSchedParams_val, lbl_tcbSetTimeoutEndpoint_val, lbl_tcbSetIPCBuffer_val, lbl_tcbSetSpace_val, lbl_tcbSuspend_val, lbl_tcbResume_val, lbl_tcbBindNotification_val, lbl_tcbUnbindNotification_val, lbl_tcbSetBreakpoint_val, lbl_tcbGetBreakpoint_val, lbl_tcbUnsetBreakpoint_val, lbl_tcbConfigureSingleStepping_val, lbl_tcbSetTLSBase_val, lbl_tcbSetFlags_val, lbl_tcbReadFPU_val, lbl_tcbWriteFPU_val, lbl_tcbSetTimer_val]
   simp only [Nat.reduceEqDiff, ↓reduceIte]
   rfl
 
@@ -368,7 +368,7 @@ theorem decode_step_eq (s : S) (ar : A) (p : U64) (c : tcb.Ctx)
       tcb.decode_configure_single_stepping st arI s ar p c := by
   unfold tcb.decode
   rw [hstall]
-  simp only [bind_ok, u64_eq_iff, lbl_tcbReadRegisters_val, lbl_tcbWriteRegisters_val, lbl_tcbCopyRegisters_val, lbl_tcbConfigure_val, lbl_tcbSetPriority_val, lbl_tcbSetMCPriority_val, lbl_tcbSetSchedParams_val, lbl_tcbSetTimeoutEndpoint_val, lbl_tcbSetIPCBuffer_val, lbl_tcbSetSpace_val, lbl_tcbSuspend_val, lbl_tcbResume_val, lbl_tcbBindNotification_val, lbl_tcbUnbindNotification_val, lbl_tcbSetBreakpoint_val, lbl_tcbGetBreakpoint_val, lbl_tcbUnsetBreakpoint_val, lbl_tcbConfigureSingleStepping_val, lbl_tcbSetTLSBase_val, lbl_tcbSetFlags_val, lbl_tcbReadFPU_val, lbl_tcbWriteFPU_val, lbl_tcbSetTimer_val]
+  simp only [bind_ok, u64_eq_iff, lbl_tcbSetEPTRoot_val, lbl_tcbReadRegisters_val, lbl_tcbWriteRegisters_val, lbl_tcbCopyRegisters_val, lbl_tcbConfigure_val, lbl_tcbSetPriority_val, lbl_tcbSetMCPriority_val, lbl_tcbSetSchedParams_val, lbl_tcbSetTimeoutEndpoint_val, lbl_tcbSetIPCBuffer_val, lbl_tcbSetSpace_val, lbl_tcbSuspend_val, lbl_tcbResume_val, lbl_tcbBindNotification_val, lbl_tcbUnbindNotification_val, lbl_tcbSetBreakpoint_val, lbl_tcbGetBreakpoint_val, lbl_tcbUnsetBreakpoint_val, lbl_tcbConfigureSingleStepping_val, lbl_tcbSetTLSBase_val, lbl_tcbSetFlags_val, lbl_tcbReadFPU_val, lbl_tcbWriteFPU_val, lbl_tcbSetTimer_val]
   simp only [Nat.reduceEqDiff, ↓reduceIte]
   rfl
 
@@ -453,7 +453,7 @@ theorem decode_flags_eq (s : S) (ar : A) (p : U64) (c : tcb.Ctx)
     tcb.decode st arI s ar fl4_abi.label.TCBSetFlags p c = tcb.decode_set_flags st arI s ar p c := by
   unfold tcb.decode
   rw [hstall]
-  simp only [bind_ok, u64_eq_iff, lbl_tcbReadRegisters_val, lbl_tcbWriteRegisters_val, lbl_tcbCopyRegisters_val, lbl_tcbConfigure_val, lbl_tcbSetPriority_val, lbl_tcbSetMCPriority_val, lbl_tcbSetSchedParams_val, lbl_tcbSetTimeoutEndpoint_val, lbl_tcbSetIPCBuffer_val, lbl_tcbSetSpace_val, lbl_tcbSuspend_val, lbl_tcbResume_val, lbl_tcbBindNotification_val, lbl_tcbUnbindNotification_val, lbl_tcbSetBreakpoint_val, lbl_tcbGetBreakpoint_val, lbl_tcbUnsetBreakpoint_val, lbl_tcbConfigureSingleStepping_val, lbl_tcbSetTLSBase_val, lbl_tcbSetFlags_val, lbl_tcbReadFPU_val, lbl_tcbWriteFPU_val, lbl_tcbSetTimer_val]
+  simp only [bind_ok, u64_eq_iff, lbl_tcbSetEPTRoot_val, lbl_tcbReadRegisters_val, lbl_tcbWriteRegisters_val, lbl_tcbCopyRegisters_val, lbl_tcbConfigure_val, lbl_tcbSetPriority_val, lbl_tcbSetMCPriority_val, lbl_tcbSetSchedParams_val, lbl_tcbSetTimeoutEndpoint_val, lbl_tcbSetIPCBuffer_val, lbl_tcbSetSpace_val, lbl_tcbSuspend_val, lbl_tcbResume_val, lbl_tcbBindNotification_val, lbl_tcbUnbindNotification_val, lbl_tcbSetBreakpoint_val, lbl_tcbGetBreakpoint_val, lbl_tcbUnsetBreakpoint_val, lbl_tcbConfigureSingleStepping_val, lbl_tcbSetTLSBase_val, lbl_tcbSetFlags_val, lbl_tcbReadFPU_val, lbl_tcbWriteFPU_val, lbl_tcbSetTimer_val]
   simp only [Nat.reduceEqDiff, ↓reduceIte]
   rfl
 
@@ -785,11 +785,11 @@ where fl4Spec_fpu : Nat := Fl4Spec.fl4FpuStateSize
 `fpu_transfer` whose checks pass ends `Ok`, every slot word kept from the
 restart's state. -/
 def FpuHyp (th : TypedHeap) (s : S) (σ : Fl4Spec.State Unit) (ct p : U64) (c : tcb.Ctx) (toFrame : Bool) : Prop :=
-  ∀ s1 σ1 (a : A) (x ptr offset r asid va : U64) (m : Bool) (sz : capability.FrameSize),
+  ∀ s1 σ1 (a : A) (x ptr offset r asid va : U64) (m ep : Bool) (sz : capability.FrameSize),
     sched.set_thread_state st s ct sched.TS_RESTART = ok s1 →
     Fl4Spec.setThreadState (Z := Unit) ct.bv .restart σ = ({((), σ1)}, False) →
     Aeneas.Std.Array.index_usize c.extra 0#usize = ok x → x ≠ 0#u64 → ¬ c.length < 1#u64 →
-    tcb.arg st s c 0#u64 = ok offset → capV (L.mem s) x = .Frame ptr sz r false m asid va →
+    tcb.arg st s c 0#u64 = ok offset → capV (L.mem s) x = .Frame ptr sz r false m ep asid va →
     FpuPass toFrame offset r sz →
     tcb.fpu_transfer st arI s a p c toFrame ⦃ res => res.1 = .Ok () ∧ SlotsSame th (L.mem s1) (L.mem res.2.1) ⦄
 
@@ -865,12 +865,12 @@ theorem fpu_refines (th : TypedHeap) (hP : Placed th)
   rw [← hxe0] at hcwf
   generalize hc : capV (L.mem s) x0 = c at hcwf hspec
   -- the checks passing: FL4's work
-  have hfr : ∀ ptr sz r m asid va, c = .Frame ptr sz r false m asid va → FpuPass toFrame y0 r sz →
+  have hfr : ∀ ptr sz r m ep asid va, c = .Frame ptr sz r false m ep asid va → FpuPass toFrame y0 r sz →
       tcb.fpu_transfer st arI s ar p ⟨length, buf, call, slot, extra⟩ toFrame ⦃ res =>
         TopPostM (L := L) σ blk call don (Fl4Spec.NonDetE.liftME Fl4Spec.Fl4Invocation.invokeFl4TCB
           (Fl4Spec.decodeFl4FpuTransfer (Z := Unit) toFrame ((y0 :: rest).map UScalar.bv) p.bv (e0 :: erest)))
           s res ⦄ := by
-    intro ptr sz r m asid va hcf hpass
+    intro ptr sz r m ep asid va hcf hpass
     subst hcf
     obtain ⟨s1, σ1, -, hs1, hst1, hS1, hDS1, -, -, -⟩ := restart_dstate th hP s σ G hDS ct hct hcur htcb hact
     have hfr1 : MdbOKV (L.ksb s) (L.mem s1) G := MdbOKV.of_same hDS.1.2.2.1 hS1 hFR
@@ -894,7 +894,7 @@ theorem fpu_refines (th : TypedHeap) (hP : Placed th)
         unfold FpuPass.fl4Spec_fpu at hrm
         omega), retOk_bind]
       rfl
-    refine WP.spec_mono (hF s1 σ1 ar x0 ptr y0 r asid va m sz hs1 (by rw [← hcur]; exact hst1) hx0 h0 hl ha0 hc
+    refine WP.spec_mono (hF s1 σ1 ar x0 ptr y0 r asid va m ep sz hs1 (by rw [← hcur]; exact hst1) hx0 h0 hl ha0 hc
       ⟨hr1, hr3, hm, hlt, hrm⟩) ?_
     rintro ⟨r2, s2, a2⟩ ⟨hr2, hS2⟩
     simp only at hr2; subst hr2
@@ -913,9 +913,9 @@ theorem fpu_refines (th : TypedHeap) (hP : Placed th)
         ({(.error (.invalidCapability 1), σ)}, False) := fun _ => run_liftME_err rfl
   have herr1 : ErrRel (.Sys (.InvalidCapability 1#u64)) (.invalidCapability 1) := Or.inr ⟨1#u64, rfl, rfl⟩
   cases c
-  case Frame ptr sz r dev m asid va =>
+  case Frame ptr sz r dev m ept asid va =>
     by_cases hpass : dev = false ∧ FpuPass toFrame y0 r sz
-    · obtain ⟨rfl, hp⟩ := hpass; exact hfr _ _ _ _ _ _ rfl hp
+    · obtain ⟨rfl, hp⟩ := hpass; exact hfr _ _ _ _ _ _ _ rfl hp
     have hvk : capability.VM_KERNEL_ONLY = 1#u64 := by simp only [capability.VM_KERNEL_ONLY]
     have hvrw : capability.VM_READ_WRITE = 3#u64 := by simp only [capability.VM_READ_WRITE]
     obtain ⟨hw1, hw3⟩ := hcwf
@@ -997,7 +997,7 @@ theorem decode_fpu_eq (s : S) (ar : A) (p : U64) (c : tcb.Ctx)
   constructor <;>
   · unfold tcb.decode
     rw [hstall]
-    simp only [bind_ok, u64_eq_iff, lbl_tcbReadRegisters_val, lbl_tcbWriteRegisters_val, lbl_tcbCopyRegisters_val, lbl_tcbConfigure_val, lbl_tcbSetPriority_val, lbl_tcbSetMCPriority_val, lbl_tcbSetSchedParams_val, lbl_tcbSetTimeoutEndpoint_val, lbl_tcbSetIPCBuffer_val, lbl_tcbSetSpace_val, lbl_tcbSuspend_val, lbl_tcbResume_val, lbl_tcbBindNotification_val, lbl_tcbUnbindNotification_val, lbl_tcbSetBreakpoint_val, lbl_tcbGetBreakpoint_val, lbl_tcbUnsetBreakpoint_val, lbl_tcbConfigureSingleStepping_val, lbl_tcbSetTLSBase_val, lbl_tcbSetFlags_val, lbl_tcbReadFPU_val, lbl_tcbWriteFPU_val, lbl_tcbSetTimer_val]
+    simp only [bind_ok, u64_eq_iff, lbl_tcbSetEPTRoot_val, lbl_tcbReadRegisters_val, lbl_tcbWriteRegisters_val, lbl_tcbCopyRegisters_val, lbl_tcbConfigure_val, lbl_tcbSetPriority_val, lbl_tcbSetMCPriority_val, lbl_tcbSetSchedParams_val, lbl_tcbSetTimeoutEndpoint_val, lbl_tcbSetIPCBuffer_val, lbl_tcbSetSpace_val, lbl_tcbSuspend_val, lbl_tcbResume_val, lbl_tcbBindNotification_val, lbl_tcbUnbindNotification_val, lbl_tcbSetBreakpoint_val, lbl_tcbGetBreakpoint_val, lbl_tcbUnsetBreakpoint_val, lbl_tcbConfigureSingleStepping_val, lbl_tcbSetTLSBase_val, lbl_tcbSetFlags_val, lbl_tcbReadFPU_val, lbl_tcbWriteFPU_val, lbl_tcbSetTimer_val]
     simp only [Nat.reduceEqDiff, ↓reduceIte]
     rfl
 
@@ -1057,7 +1057,7 @@ theorem decode_setbp_eq (s : S) (ar : A) (p : U64) (c : tcb.Ctx)
       (tcb.set_breakpoint_checked st s p c >>= fun x => ok (x.1, x.2, ar)) := by
   unfold tcb.decode
   rw [hstall]
-  simp only [bind_ok, u64_eq_iff, lbl_tcbReadRegisters_val, lbl_tcbWriteRegisters_val, lbl_tcbCopyRegisters_val, lbl_tcbConfigure_val, lbl_tcbSetPriority_val, lbl_tcbSetMCPriority_val, lbl_tcbSetSchedParams_val, lbl_tcbSetTimeoutEndpoint_val, lbl_tcbSetIPCBuffer_val, lbl_tcbSetSpace_val, lbl_tcbSuspend_val, lbl_tcbResume_val, lbl_tcbBindNotification_val, lbl_tcbUnbindNotification_val, lbl_tcbSetBreakpoint_val, lbl_tcbGetBreakpoint_val, lbl_tcbUnsetBreakpoint_val, lbl_tcbConfigureSingleStepping_val, lbl_tcbSetTLSBase_val, lbl_tcbSetFlags_val, lbl_tcbReadFPU_val, lbl_tcbWriteFPU_val, lbl_tcbSetTimer_val]
+  simp only [bind_ok, u64_eq_iff, lbl_tcbSetEPTRoot_val, lbl_tcbReadRegisters_val, lbl_tcbWriteRegisters_val, lbl_tcbCopyRegisters_val, lbl_tcbConfigure_val, lbl_tcbSetPriority_val, lbl_tcbSetMCPriority_val, lbl_tcbSetSchedParams_val, lbl_tcbSetTimeoutEndpoint_val, lbl_tcbSetIPCBuffer_val, lbl_tcbSetSpace_val, lbl_tcbSuspend_val, lbl_tcbResume_val, lbl_tcbBindNotification_val, lbl_tcbUnbindNotification_val, lbl_tcbSetBreakpoint_val, lbl_tcbGetBreakpoint_val, lbl_tcbUnsetBreakpoint_val, lbl_tcbConfigureSingleStepping_val, lbl_tcbSetTLSBase_val, lbl_tcbSetFlags_val, lbl_tcbReadFPU_val, lbl_tcbWriteFPU_val, lbl_tcbSetTimer_val]
   simp only [Nat.reduceEqDiff, ↓reduceIte]
   rfl
 
@@ -1088,7 +1088,7 @@ theorem ext_lbl {slbl : Fl4Spec.Data} {lbl : U64} (hlbl : Fl4Spec.genInvocationT
   have h1 : Fl4Spec.genInvocationType slbl = .invalidInvocation := by rw [hlbl, hg]
   exact ⟨h1, by rw [hext h1, hl]⟩
 
-/-- **`tcb::decode`, every label, the CSpace-side and the extension labels
+/-- **`tcb::decode`, native labels, the CSpace-side and the extension labels
 proved**: `tcb_decode_cspace` with FL4's extensions discharged here (their
 work as `SetBpHyp`, `UnsetBpHyp`, `GetBpHyp`, `SingleStepHyp`,
 `SetTimerHyp`, `FpuHyp`, `SetFlagsHyp`; the argument reads `ArgRel`).
@@ -1098,6 +1098,7 @@ theorem tcb_decode_ext (th : TypedHeap) (hP : Placed th) (hT : TcHyps (L := L) a
     (s : S) (ar : A) (σ : Fl4Spec.State Unit) (G : MdbGhost) (hDS : DState (L := L) th s σ G) (hFR : MdbOKV (L.ksb s) (L.mem s) G)
     (lbl p : U64) (hp : th p = some .tcb) (slbl : Fl4Spec.Data)
     (hlbl : Fl4Spec.genInvocationType slbl = tcbLabelOf lbl)
+    (hNative : lbl ≠ fl4_abi.label.TCBSetEPTRoot)
     (hext : Fl4Spec.genInvocationType slbl = .invalidInvocation → Fl4Spec.fl4TcbExtLabelOf slbl = tcbExtOf lbl)
     (length buf ct : U64) (hct : sched.cur_thread st s = ok ct) (args : List U64)
     (hlen : length.val = args.length)
@@ -1151,7 +1152,7 @@ theorem tcb_decode_ext (th : TypedHeap) (hP : Placed th) (hT : TcHyps (L := L) a
     TcbOKF (L := L) arI s ar σ lbl p
       ⟨length, buf, call, cslotAddr ssl, extra⟩ blk call don slbl (args.map UScalar.bv) ci ssl excaps buffer := by
   have hA1 : ArgRel (st := st) s σ ct buf buffer 1 := fun i hi => hA i (by omega)
-  refine tcb_decode_cspace arI th hP hT s ar σ G hDS hFR lbl p hp slbl hlbl hext length buf ct hct args hlen hargs hcur
+  refine tcb_decode_cspace arI th hP hT s ar σ G hDS hFR lbl p hp slbl hlbl hNative hext length buf ct hct args hlen hargs hcur
     htcb hact hcw hstall' call ssl hAs extra x0 x1 x2 hx0 hx1 hx2 excaps hX hnc blk don ci buffer hres hBuf hRead
     hWrite hCopy hSetPriority hSetMCPriority hSetSchedParams hSuspend hResume hBindNotification hUnbindNotification
     ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_

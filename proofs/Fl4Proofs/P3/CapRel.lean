@@ -251,18 +251,20 @@ def absCap : capability.Cap → Fl4Spec.Cap
   | .Domain => .domainCap
   | .SchedContext p sb => .schedContextCap p.bv (sb.val - Fl4Spec.minSchedContextBits)
   | .SchedControl _ => .schedControlCap
-  | .Frame p sz r dev m asid va =>
-    .archObjectCap (.pageCap dev p.bv (vmRightsOf r) (if m then .vmVSpaceMap else .vmNoMap)
+  | .Frame p sz r dev m ept asid va =>
+    .archObjectCap (.pageCap dev p.bv (vmRightsOf r) (if m then (if ept then .vmEptMap else .vmVSpaceMap) else .vmNoMap)
       (frameSizeOf sz) (if m then some (asid.bv, va.bv) else none))
   | .PageTable p m asid va => .archObjectCap (.pageTableCap p.bv (if m then some (asid.bv, va.bv) else none))
   | .PageDirectory p m asid va =>
     .archObjectCap (.pageDirectoryCap p.bv (if m then some (asid.bv, va.bv) else none))
   | .Pdpt p m asid va => .archObjectCap (.pdPointerTableCap p.bv (if m then some (asid.bv, va.bv) else none))
   | .Pml4 p m asid => .archObjectCap (.pml4Cap p.bv (if m then some asid.bv else none))
+  | .Vcpu p => .archObjectCap (.vcpuCap p.bv)
+  | .Ept p level m asid va => .archObjectCap (.eptCap p.bv level.val (if m then some (asid.bv, va.bv) else none))
   | .AsidControl => .archObjectCap .asidControlCap
   | .AsidPool p base => .archObjectCap (.asidPoolCap p.bv base.bv)
   | .IoPortControl => .archObjectCap .ioPortControlCap
-  | .IoPort f l => .archObjectCap (.ioPortCap (BitVec.ofNat 16 f.val) (BitVec.ofNat 16 l.val))
+  | .IoPort f l _ => .archObjectCap (.ioPortCap (BitVec.ofNat 16 f.val) (BitVec.ofNat 16 l.val))
 
 /-- Field ranges under which `absCap` is faithful. Every cap `Cap::decode`
 produces satisfies the CNode bounds on radix and guard size
@@ -273,8 +275,8 @@ def CapWf : capability.Cap → Prop
   | .IrqHandler i => i.val < 256
   | .Zombie _ zt _ => zt.val ≤ 64 ∨ zt.val = 65
   | .SchedContext _ sb => Fl4Spec.minSchedContextBits ≤ sb.val
-  | .Frame _ _ r _ _ _ _ => 1 ≤ r.val ∧ r.val ≤ 3
-  | .IoPort f l => f.val < 2 ^ 16 ∧ l.val < 2 ^ 16
+  | .Frame _ _ r _ _ _ _ _ => 1 ≤ r.val ∧ r.val ≤ 3
+  | .IoPort f l _ => f.val < 2 ^ 16 ∧ l.val < 2 ^ 16
   | _ => True
 
 /-- The capability relation: FL4 cap `c` represents abstract cap `a`. -/
@@ -490,7 +492,7 @@ theorem decode_cnode_inv {w0 w1 p r gs g : U64} (h : capability.Cap.decode w0 w1
   simp only [shr_eq _ 59#i32 (by decide) (by decide), unpack_ptr_eq, bind_ok] at h
   split at h
   all_goals simp [shr_eq _ 48#i32 (by decide) (by decide), shr_eq _ 50#i32 (by decide) (by decide),
-    shr_eq _ 58#i32 (by decide) (by decide), shr_eq _ 16#i32 (by decide) (by decide), lift, bit_eq, from_code_eq,
+    shr_eq _ 58#i32 (by decide) (by decide), shr_eq _ 53#i32 (by decide) (by decide), shr_eq _ 16#i32 (by decide) (by decide), lift, bit_eq, from_code_eq,
     unpack_asid_eq _ 54#u64 _ (by decide), unpack_asid_eq _ 49#u64 _ (by decide)] at h
   case h_5 =>
     obtain ⟨-, rfl, rfl, rfl⟩ := h
@@ -500,6 +502,8 @@ theorem decode_cnode_inv {w0 w1 p r gs g : U64} (h : capability.Cap.decode w0 w1
       have := w1.bv.isLt
       rw [Nat.shiftRight_eq_div_pow]; omega
     · simp only [UScalar.val_and]; exact Nat.lt_of_le_of_lt Nat.and_le_right (by decide)
+
+  all_goals split_ifs at h <;> simp_all
 
 theorem CapWf_of_decode_cnode {w0 w1 p r gs g : U64} (h : capability.Cap.decode w0 w1 = ok (.CNode p r gs g))
     (hg : g.val < 2 ^ gs.val) : CapWf (.CNode p r gs g) :=

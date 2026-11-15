@@ -40,10 +40,10 @@ theorem refs_base {w : capability.Cap} {q : U64} (h : q.bv ∈ Fl4Spec.objRefs (
   obtain ⟨h1, h2⟩ := refs_phys h; exact ⟨h1, by unfold baseF; rw [h2]⟩
 
 /-- A large RAM frame's window is its range. -/
-theorem large_window {p r a va : U64} {m : Bool}
-    (hreg : baseF (.Frame p .Large r false m a va) ≤ topF (.Frame p .Large r false m a va)) :
-    baseF (.Frame p .Large r false m a va) = p.val ∧ topF (.Frame p .Large r false m a va) = p.val + 2 ^ 21 - 1 :=
-  ⟨(Vs.frame_range p .Large r false m a va).1, Vs.large_top hreg⟩
+theorem large_window {p r a va : U64} {m ep : Bool}
+    (hreg : baseF (.Frame p .Large r false m ep a va) ≤ topF (.Frame p .Large r false m ep a va)) :
+    baseF (.Frame p .Large r false m ep a va) = p.val ∧ topF (.Frame p .Large r false m ep a va) = p.val + 2 ^ 21 - 1 :=
+  ⟨(Vs.frame_range p .Large r false m a va ep).1, Vs.large_top hreg⟩
 
 /-! ## `UtInv` -/
 
@@ -177,14 +177,14 @@ end
 /-- Two caps alike for the frame invariant. -/
 def FrA (c' c : capability.Cap) : Prop :=
   Fl4Spec.objRefs (absCap c') = Fl4Spec.objRefs (absCap c) ∧ isFrame c' = isFrame c ∧
-    ∀ p r m a va, c' = .Frame p .Large r false m a va → ∃ r0 m0 a0 v0, c = .Frame p .Large r0 false m0 a0 v0
+    ∀ p r m ep a va, c' = .Frame p .Large r false m ep a va → ∃ r0 m0 ep0 a0 v0, c = .Frame p .Large r0 false m0 ep0 a0 v0
 
 theorem CapAlike.frA {c' c : capability.Cap} (h : CapAlike c' c) : FrA c' c := ⟨h.refs, h.frame, h.large⟩
 
-theorem FrA.refl (c : capability.Cap) : FrA c c := ⟨rfl, rfl, fun p r m a va h => ⟨r, m, a, va, h⟩⟩
+theorem FrA.refl (c : capability.Cap) : FrA c c := ⟨rfl, rfl, fun p r m ep a va h => ⟨r, m, ep, a, va, h⟩⟩
 
 theorem FrA.ut {p sb fi f : U64} {d : Bool} : FrA (.Untyped p sb f d) (.Untyped p sb fi d) :=
-  ⟨rfl, rfl, fun _ _ _ _ _ h => by cases h⟩
+  ⟨rfl, rfl, fun _ _ _ _ _ _ h => by cases h⟩
 
 theorem not_ut_of_refs {w : capability.Cap} {q : U64} (h : q.bv ∈ Fl4Spec.objRefs (absCap w)) : isUt w = false := by
   cases hw : isUt w
@@ -196,23 +196,23 @@ variable {mem mem' : U64 → U64} {G : MdbGhost}
 
 theorem Vs.FrameInv.of_fr (h : Vs.FrameInv mem G) (hk : ∀ z ∈ G.chains.flatten, FrA (capV mem' z) (capV mem z)) :
     Vs.FrameInv mem' G := by
-  intro x hx p r m a va hcx w hw q h1 h2 hq
-  obtain ⟨r0, m0, a0, v0, hcx0⟩ := (hk x hx).2.2 p r m a va hcx
+  intro x hx p r m ep a va hcx w hw q h1 h2 hq
+  obtain ⟨r0, m0, ep0, a0, v0, hcx0⟩ := (hk x hx).2.2 p r m ep a va hcx
   rw [(hk w hw).1] at hq
-  obtain ⟨hf, hch⟩ := h x hx p r0 m0 a0 v0 hcx0 w hw q h1 h2 hq
+  obtain ⟨hf, hch⟩ := h x hx p r0 m0 ep0 a0 v0 hcx0 w hw q h1 h2 hq
   exact ⟨by rw [(hk w hw).2.1]; exact hf, hch⟩
 
 theorem Vs.FrameInv.rename' (h : Vs.FrameInv mem G) (e : U64 ≃ U64)
     (hk : ∀ z ∈ G.chains.flatten, FrA (capV mem' (e z)) (capV mem z)) : Vs.FrameInv mem' (renG G e) := by
   have hmem : ∀ z, z ∈ (renG G e).chains.flatten ↔ e.symm z ∈ G.chains.flatten := fun z => mem_renG e z
-  intro x hx p r m a va hcx w hw q h1 h2 hq
+  intro x hx p r m ep a va hcx w hw q h1 h2 hq
   have hx0 := (hmem x).1 hx
   have hw0 := (hmem w).1 hw
   have lx := hk _ hx0; rw [Equiv.apply_symm_apply] at lx
   have lw := hk _ hw0; rw [Equiv.apply_symm_apply] at lw
-  obtain ⟨r0, m0, a0, v0, hcx0⟩ := lx.2.2 p r m a va hcx
+  obtain ⟨r0, m0, ep0, a0, v0, hcx0⟩ := lx.2.2 p r m ep a va hcx
   rw [lw.1] at hq
-  obtain ⟨hf, ch, hch, hxc, hwc⟩ := h _ hx0 p r0 m0 a0 v0 hcx0 _ hw0 q h1 h2 hq
+  obtain ⟨hf, ch, hch, hxc, hwc⟩ := h _ hx0 p r0 m0 ep0 a0 v0 hcx0 _ hw0 q h1 h2 hq
   refine ⟨by rw [lw.2.1]; exact hf, ch.map e, List.mem_map.2 ⟨ch, hch, rfl⟩, ?_, ?_⟩
   · exact List.mem_map.2 ⟨_, hxc, by simp⟩
   · exact List.mem_map.2 ⟨_, hwc, by simp⟩
@@ -236,7 +236,7 @@ theorem Vs.FrameInv.nonphys (hF : Vs.FrameInv mem G) {src dest : U64} {c : capab
     (hcd : capV mem' dest = c) (hcp : physF c = false) (hrefs : Fl4Spec.objRefs (absCap c) = ∅)
     (hc : ∀ z ∈ G.chains.flatten, capV mem' z = capV mem z) : Vs.FrameInv mem' (insG G src dest b) := by
   refine hF.insert_fresh hsrc hdest b hcd (by rw [hc src hsrc]; exact MdbLike.refl _) (fun z hz _ => hc z hz)
-    (fun p r mm a va e => ?_) (fun x _ p r m a va _ q _ _ hq => by rw [hrefs] at hq; exact hq)
+    (fun p r mm ep a va e => ?_) (fun x _ p r m ep a va _ q _ _ hq => by rw [hrefs] at hq; exact hq)
   have := not_frame_of_phys hcp; rw [e] at this; cases this
 
 theorem Vs.FrameInv.pool (hM : MdbLinks th mem G) (hI : MdbInv mem G) (hU : UtInv mem G) (hF : Vs.FrameInv mem G)
@@ -245,28 +245,28 @@ theorem Vs.FrameInv.pool (hM : MdbLinks th mem G) (hI : MdbInv mem G) (hU : UtIn
     (hcf : capV mem' val = .AsidPool q b) (hbA : baseF (.AsidPool q b) = baseF (capV mem x))
     (hc : ∀ z ∈ G.chains.flatten, capV mem' z = capV mem z) : Vs.FrameInv mem' (insG G x val true) := by
   refine hF.insert_fresh hx hval true hcf (by rw [hc x hx]; exact MdbLike.refl _) (fun z hz _ => hc z hz)
-    (fun _ _ _ _ _ e => by cases e) (fun y hy p0 r m a va hcy q0 h1 h2 hq => ?_)
+    (fun _ _ _ _ _ _ e => by cases e) (fun y hy p0 r m ep a va hcy q0 h1 h2 hq => ?_)
   have hq0 : q0 = q := by
     simp [absCap, Fl4Spec.objRefs, Fl4Spec.aobjRef] at hq; exact P1.eq_of_bv hq
   subst hq0
   have hbq : baseF (.AsidPool q0 b) = q0.val := by unfold baseF; rw [ptrF_ap]
-  have hry := hU.reg y hy (by rw [hcy]; exact physF_frame _ _ _ _ _ _ _)
+  have hry := hU.reg y hy (by rw [hcy]; exact physF_frame _ _ _ _ _ _ _ _)
   rw [hcy] at hry
   obtain ⟨y1, y2⟩ := large_window hry
   have hrx := hU.reg x hx (by rw [hcx]; exact physF_ut _ _ _ _)
   have hyx : y ≠ x := by intro e; rw [e, hcx] at hcy; cases hcy
   have hnd' : ¬ Disj (capV mem y) (capV mem x) := by
     unfold Disj; rw [hcy, y1, y2, ← hbA, hbq]; rw [← hbA, hbq] at hrx; omega
-  rcases hU.drange x hx p sb f d hcx y hy hyx (by rw [hcy]; exact physF_frame _ _ _ _ _ _ _) hnd' with e | e
+  rcases hU.drange x hx p sb f d hcx y hy hyx (by rw [hcy]; exact physF_frame _ _ _ _ _ _ _ _) hnd' with e | e
   · exact hnd y e
   · have := hI.anc_ut e (by rw [hcx]; rfl); rw [hcy] at this; cases this
 
 theorem Vs.FrameInv.alias' (hV : Vs.FrameInv mem G) {src dest : U64} (b : Bool) (hsrc : src ∈ G.chains.flatten)
     (hdest : dest ∉ G.chains.flatten) {ptr rt fa fv q0 vm : U64} {mm : Bool}
-    (hsC : capV mem src = .Frame ptr .Large rt false mm fa fv)
-    (hcd : capV mem' dest = .Frame q0 .Small vm false false 0#u64 0#u64)
+    (hsC : capV mem src = .Frame ptr .Large rt false mm false fa fv)
+    (hcd : capV mem' dest = .Frame q0 .Small vm false false false 0#u64 0#u64)
     (hq1 : ptr.val ≤ q0.val) (hq2 : q0.val < ptr.val + 2 ^ 21)
-    (halg : ∀ x ∈ G.chains.flatten, ∀ p r m a va, capV mem x = .Frame p .Large r false m a va → p.val % 2 ^ 21 = 0)
+    (halg : ∀ x ∈ G.chains.flatten, ∀ p r m ep a va, capV mem x = .Frame p .Large r false m ep a va → p.val % 2 ^ 21 = 0)
     (hc : ∀ z ∈ G.chains.flatten, capV mem' z = capV mem z) : Vs.FrameInv mem' (insG G src dest b) :=
   hV.insert_alias hsrc hdest b hsC hcd (hc src hsrc) (fun z hz _ => hc z hz) hq1 hq2 halg
 
@@ -310,10 +310,10 @@ theorem new_rng {j : Nat} (hj : j < w) : p.val + fi.val ≤ baseF (cj j) ∧ top
 /-- **Retype keeps the frame invariant**, its chains growing. -/
 theorem frameInv (hF : Vs.FrameInv mem0 G0) (hch : ∀ ch ∈ G0.chains, ∃ ch' ∈ Gf.chains, ∀ z ∈ ch, z ∈ ch') :
     Vs.FrameInv memf Gf := by
-  intro x hx pp r m a va hcx w' hw q h1 h2 hq
+  intro x hx pp r m ep a va hcx w' hw q h1 h2 hq
   rcases h.F1 x hx with hx0 | ⟨j, hj, rfl⟩
-  · obtain ⟨r0, m0, a0, v0, hcx0⟩ := (h.oldF hU hx0).2.2 pp r m a va hcx
-    have hxp : physF (capV mem0 x) = true := by rw [hcx0]; exact physF_frame _ _ _ _ _ _ _
+  · obtain ⟨r0, m0, ep0, a0, v0, hcx0⟩ := (h.oldF hU hx0).2.2 pp r m ep a va hcx
+    have hxp : physF (capV mem0 x) = true := by rw [hcx0]; exact physF_frame _ _ _ _ _ _ _ _
     have hrx := hU.reg x hx0 hxp
     rw [hcx0] at hrx
     obtain ⟨x1, x2⟩ := large_window hrx
@@ -323,7 +323,7 @@ theorem frameInv (hF : Vs.FrameInv mem0 G0) (hch : ∀ ch ∈ G0.chains, ∃ ch'
     rcases h.F1 w' hw with hw0 | ⟨l, hl, rfl⟩
     · have lw := h.oldF hU hw0
       rw [lw.1] at hq
-      obtain ⟨hf, ch, hch0, hxc, hwc⟩ := hF x hx0 pp r0 m0 a0 v0 hcx0 w' hw0 q h1 h2 hq
+      obtain ⟨hf, ch, hch0, hxc, hwc⟩ := hF x hx0 pp r0 m0 ep0 a0 v0 hcx0 w' hw0 q h1 h2 hq
       obtain ⟨ch', hch', hsub⟩ := hch ch hch0
       exact ⟨by rw [lw.2.1]; exact hf, ch', hch', hsub x hxc, hsub w' hwc⟩
     · rw [h.F2a l hl] at hq

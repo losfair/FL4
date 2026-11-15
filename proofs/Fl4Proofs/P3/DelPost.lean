@@ -39,11 +39,11 @@ variable {S : Type} {st : machine.Store S} [L : P1.LawfulStore st] {A : Type} (a
 
 /-- The IO port cleanup (a hypothesis): as `PostDelHyp`, for IO port caps. -/
 def PostIoHyp (th : TypedHeap) : Prop :=
-  ∀ (s : S) (a : A) (σ : Fl4Spec.State Unit) (G : MdbGhost) (f l : U64),
-    DState (L := L) th s σ G → CapWf (.IoPort f l) →
-    objects.post_cap_deletion st arI s a (.IoPort f l) ⦃ r =>
+  ∀ (s : S) (a : A) (σ : Fl4Spec.State Unit) (G : MdbGhost) (f l owner : U64),
+    DState (L := L) th s σ G → CapWf (.IoPort f l owner) →
+    objects.post_cap_deletion st arI s a (.IoPort f l owner) ⦃ r =>
       SlotsSame th (L.mem s) (L.mem r.1) ∧ ∃ σ',
-        ((), σ') ∈ (Fl4Spec.postCapDeletion (Z := Unit) (absCap (.IoPort f l)) σ).1 ∧ CRel th (L.mem r.1) σ' G ⦄
+        ((), σ') ∈ (Fl4Spec.postCapDeletion (Z := Unit) (absCap (.IoPort f l owner)) σ).1 ∧ CRel th (L.mem r.1) σ' G ⦄
 
 theorem crel_same {th : TypedHeap} {m m' : U64 → U64} {σ σ' : Fl4Spec.State Unit} {G : MdbGhost}
     (h : CRel th m σ G) (hS : SlotsSame th m m') (hk : σ'.kheap = σ.kheap) (hc : σ'.cdt = σ.cdt)
@@ -91,7 +91,7 @@ theorem postDelHyp_of (th : TypedHeap) (hP : Placed th)
   cases cl <;> simp only [CleanCap] at hcl
   · exact absurd rfl hcln
   · exact post_irq arI th hP hmask hout s a σ G hDS.1 _
-  · exact hio s a σ G _ _ hDS hclw
+  · exact hio s a σ G _ _ _ hDS hclw
 
 end
 

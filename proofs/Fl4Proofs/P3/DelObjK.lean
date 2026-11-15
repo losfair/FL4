@@ -133,9 +133,7 @@ theorem finWorkAt_ntfn (th : TypedHeap) (hP : Placed th) (hP1 : NtfnP1Hyp (L := 
   obtain ⟨n, b0, b1, b2, rfl⟩ := hk
   obtain ⟨T, Cs, Ω, H, Sg, Rp, Scs, Nt, Z, Ac, hB, hSC, hn, hH⟩ := hP1 s σ G sl n b0 b1 b2 hDS hA hc
   have hfin : decide (Fl4Spec.isFinalCap' (absCap (.Notification n b0 b1 b2)) σ) = true := by
-    rcases hw with ⟨h, -⟩ | ⟨_, _, _, _, _, _, h⟩
-    · exact h
-    · cases h
+    simpa [FinWork, isFrame] using hw
   rw [hfin]
   obtain ⟨σ', hmem⟩ := hEx s σ G sl _ ⟨n, b0, b1, b2, rfl⟩ hDS hA hc (of_decide_eq_true hfin)
   refine WP.spec_mono (P1.fin_cap_ntfn.slots (ar := arI) s a n b0 b1 b2 true false hB hn hH) ?_
@@ -152,9 +150,7 @@ theorem finWorkAt_reply (th : TypedHeap) (hP : Placed th) (hAT : P0.ArchTotal ar
   obtain ⟨p, x, rfl⟩ := hk
   obtain ⟨T, Cs, Ω, H, Sg, Rp, Scs, Nt, Z, Ac, hB, hSC, hp⟩ := hP1 s σ G sl p x hDS hA hc
   have hfin : decide (Fl4Spec.isFinalCap' (absCap (.Reply p x)) σ) = true := by
-    rcases hw with ⟨h, -⟩ | ⟨_, _, _, _, _, _, h⟩
-    · exact h
-    · cases h
+    simpa [FinWork, isFrame] using hw
   rw [hfin]
   obtain ⟨σ', hmem⟩ := hEx s σ G sl _ ⟨p, x, rfl⟩ hDS hA hc (of_decide_eq_true hfin)
   refine WP.spec_mono (P1.fin_cap_reply.slots hAT s a p x true false hB hp) ?_

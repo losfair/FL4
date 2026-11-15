@@ -55,7 +55,7 @@ def OObj (N T C E R : Set U64) (B : Set (U64 × Fl4Spec.Word)) (c : U64) (s : S)
 /-- The objects the VSpace code writes. -/
 def VObj (th : TypedHeap) (P L4 L3 L2 L1 : Set U64) (ksb a : U64) : Prop :=
   (∃ q r, th q = some (.cnode r) ∧ q.val ≤ a.val ∧ a.val < q.val + 32 * 2 ^ r) ∨
-  (∃ t, th t = some .tcb ∧ t.val ≤ a.val ∧ a.val < t.val + 160) ∨
+  (∃ t, th t = some .tcb ∧ t.val ≤ a.val ∧ a.val < t.val + 192) ∨
   (∃ q, (q ∈ P ∨ q ∈ L4 ∨ q ∈ L3 ∨ q ∈ L2 ∨ q ∈ L1) ∧ q.val ≤ a.val ∧ a.val < q.val + 4096) ∨
   (ksb.val + 288000 ≤ a.val ∧ a.val < ksb.val + 288000 + 16384)
 

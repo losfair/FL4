@@ -708,17 +708,25 @@ fn ports<S: Store>(s: &mut S, v: u64, low: u64, high: u64, disable: bool) {
         port += 1;
     }
 }
-pub fn revoke_ports<S: Store, A: Arch>(s: &mut S, a: &mut A, low: u64, high: u64) {
+/// Revoke a cap's grant, as seL4's clearVPIDIOPortMappings does on every
+/// cap finalisation. A stale owner must still name a live VCPU before use.
+pub fn revoke_ports<S: Store, A: Arch>(s: &mut S, a: &mut A, owner: u64, low: u64, high: u64) {
+    if owner == 0 {
+        return;
+    }
     a.vcpu_barrier();
     let mut v = ks_get(s, ks::VCPU_HEAD);
     let mut fuel = layout::WALK_FUEL;
     while v != 0 && fuel > 0 {
         fuel -= 1;
-        stall(s, a, v);
-        ports(s, v, low, high, true);
+        if v == owner {
+            stall(s, a, v);
+            ports(s, v, low, high, true);
+        }
         v = get(s, v, NEXT);
     }
 }
+
 fn msr_slot(f: u64) -> Option<u64> {
     match f {
         0xc000_0081 => Some(0),

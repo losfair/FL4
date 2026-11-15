@@ -391,12 +391,12 @@ structure vspace.VRoot where
   asid : Std.U64
 
 /-- [fl4_core::vcpu::msr_addr::{closure#1}]
-    Source: 'crates/fl4-core/src/vcpu.rs', lines 753:20-753:76 -/
+    Source: 'crates/fl4-core/src/vcpu.rs', lines 761:20-761:76 -/
 @[reducible]
 def vcpu.msr_addr.closure_1 := Std.U64
 
 /-- [fl4_core::vcpu::msr_addr::{closure}]
-    Source: 'crates/fl4-core/src/vcpu.rs', lines 748:30-748:55 -/
+    Source: 'crates/fl4-core/src/vcpu.rs', lines 756:30-756:55 -/
 @[reducible]
 def vcpu.msr_addr.closure := Std.U64
 

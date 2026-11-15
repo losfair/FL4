@@ -1,5 +1,6 @@
 /-
-P1: the kernel entries `handle_syscall` and `handle_interrupt_entry` keep
+P1: native kernel entries (`handle_syscall` excluding VMEnter, and
+`handle_interrupt_entry`) keep
 `EntryInv` (established by `schedule`, `sched.schedule.entry`).
 
 Inside an entry, before the final `schedule`, the current SC word is not
@@ -589,9 +590,10 @@ theorem syscall.set_tls_base_self.entry (hA : P0.ArchTotal ar) (hNt : ∀ n ∈ 
   · rintro s2 ⟨Ac2, h2⟩
     exact syscall.finish.entry hA hNt E s2 a1 h2
 
-/-- seL4 `handleUnknownSyscall`. -/
+/-- Native `handleUnknownSyscall`, excluding the new VMEnter transition. -/
 theorem syscall.handle_unknown_syscall.entry (hA : P0.ArchTotal ar) (hNt : ∀ n ∈ Nt, H n = some .ntfn)
     (E : EntryHyps st ar T Cs Ω H Sg Rp Scs Nt Z U) {Ac : Set U64} (s : S) (a : A) (number : I64)
+    (hNative : number ≠ fl4_abi.syscall.SysVMEnter)
     (h : EntryInv st T Cs Ω H Sg Rp Scs Nt Z Ac s) :
     syscall.handle_unknown_syscall st ar s a number ⦃ s' _ =>
       ∃ Ac', EntryInv st T Cs Ω H Sg Rp Scs Nt Z Ac' s' ⦄ := by
@@ -617,10 +619,11 @@ theorem syscall.handle_unknown_syscall.entry (hA : P0.ArchTotal ar) (hNt : ∀ n
     · step as ⟨i, _⟩
       exact syscall.unknown_syscall_fault.entry hA hNt E s1 a1 i h1
 
-/-- **`handle_syscall` keeps `EntryInv`**: the budget check at the entry, the
+/-- **Native `handle_syscall` keeps `EntryInv`**: the budget check at the entry, the
 dispatch (with `HCur` across the invocation, `HCur.step`), then `schedule`. -/
 theorem syscall.handle_syscall.entry (hA : P0.ArchTotal ar) (hNt : ∀ n ∈ Nt, H n = some .ntfn)
     (E : EntryHyps st ar T Cs Ω H Sg Rp Scs Nt Z U) {Ac : Set U64} (s : S) (a : A) (number : I64)
+    (hNative : number ≠ fl4_abi.syscall.SysVMEnter)
     (h : EntryInv st T Cs Ω H Sg Rp Scs Nt Z Ac s) :
     syscall.handle_syscall st ar s a number ⦃ s' _ => ∃ Ac', EntryInv st T Cs Ω H Sg Rp Scs Nt Z Ac' s' ⦄ := by
   have hcT : L.curW s ∈ T := h.1.choose_spec.choose_spec.curT
@@ -637,9 +640,9 @@ theorem syscall.handle_syscall.entry (hA : P0.ArchTotal ar) (hNt : ∀ n ∈ Nt,
   · step as ⟨i3, _⟩
     exact syscall.unknown_syscall_fault.entry hA hNt E s1 a i3 h1
   split
-  · exact syscall.handle_unknown_syscall.entry hA hNt E s1 a number h1
+  · exact syscall.handle_unknown_syscall.entry hA hNt E s1 a number hNative h1
   split
-  · exact syscall.handle_unknown_syscall.entry hA hNt E s1 a number h1
+  · exact syscall.handle_unknown_syscall.entry hA hNt E s1 a number hNative h1
   have hcA1 : L.cscW s1 ∈ Ac := h1.2.2.2.2.2.1
   refine WP.spec_bind (syscall.budget_ok.bxc hA E s1 a h1) ?_
   rintro ⟨b, s2, a1⟩ ⟨h2, k2⟩
@@ -672,19 +675,19 @@ theorem syscall.handle_interrupt_entry.entry (hA : P0.ArchTotal ar) (hNt : ∀ n
   try simp only [WP.uncurry'_pair]
   exact syscall.finish.entry hA hNt E s3 a3 h3
 
-/-- **Every kernel entry keeps `EntryInv`** (`handle_syscall` for any syscall
-number, `handle_interrupt_entry` for any IRQ), with the active set possibly
+/-- **Native kernel entries keep `EntryInv`** (`handle_syscall` excluding
+VMEnter, `handle_interrupt_entry` for any IRQ), with the active set possibly
 shrinking (SC deletion).  The hypotheses not proved in P1 are collected in
 `EntryHyps`; `hA` is P0's arch totality and `hNt` says the notification
 set is the heap's notifications. -/
 theorem kernel_entry.entry (hA : P0.ArchTotal ar) (hNt : ∀ n ∈ Nt, H n = some .ntfn)
     (E : EntryHyps st ar T Cs Ω H Sg Rp Scs Nt Z U) {Ac : Set U64} (s : S) (a : A)
     (h : EntryInv st T Cs Ω H Sg Rp Scs Nt Z Ac s) :
-    (∀ number : I64, syscall.handle_syscall st ar s a number ⦃ s' _ =>
+    (∀ number : I64, number ≠ fl4_abi.syscall.SysVMEnter → syscall.handle_syscall st ar s a number ⦃ s' _ =>
       ∃ Ac', EntryInv st T Cs Ω H Sg Rp Scs Nt Z Ac' s' ⦄) ∧
     (∀ irq : U64, syscall.handle_interrupt_entry st ar s a irq ⦃ s' _ =>
       ∃ Ac', EntryInv st T Cs Ω H Sg Rp Scs Nt Z Ac' s' ⦄) :=
-  ⟨fun number => syscall.handle_syscall.entry hA hNt E s a number h,
+  ⟨fun number hNative => syscall.handle_syscall.entry hA hNt E s a number hNative h,
    fun irq => syscall.handle_interrupt_entry.entry hA hNt E s a irq h⟩
 
 end

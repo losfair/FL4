@@ -50,7 +50,7 @@ theorem tcb_slot_ctable (p : U64) : obj.Tcb.slot p layout.tcb.SLOT_CTABLE = ok p
 theorem fin_thread.rem {A : Type _} {ar : machine.Arch A} (hA : P0.ArchTotal ar) (s : S) (a : A) (p : U64)
     (fin : Bool) :
     objects.finalise_cap_object st ar s a (.Thread p) fin ⦃ r =>
-      r.1 = (if fin then .Zombie p capability.ZOMBIE_TCB 5#u64 else .Null, .Null) ⦄ := by
+      r.1 = (if fin then .Zombie p capability.ZOMBIE_TCB 6#u64 else .Null, .Null) ⦄ := by
   have hS := L.total
   unfold objects.finalise_cap_object
   dsimp only
@@ -133,13 +133,14 @@ footprint adds only the debug-list words); the remainder is the thread's
 zombie when final. -/
 theorem fin_cap_thread.slots {A : Type _} {ar : machine.Arch A} (hA : P0.ArchTotal ar) (s : S) (a : A) (p : U64)
     (fin ex : Bool) (h : BlkOK st T Cs Ω H Sg Rp Scs Nt Z Ac s) (hp : p ∈ T) (hna : L.actionW s ≠ p)
-    (hidle : L.idleW s ≠ p) :
+    (hidle : L.idleW s ≠ p)
+    (hv0 : L.mem s (core.num.U64.wrapping_add p 3664#u64) = 0#u64) :
     objects.finalise_cap st ar s a (.Thread p) fin ex ⦃ r =>
-      r.1 = (if fin then .Zombie p capability.ZOMBIE_TCB 5#u64 else .Null, .Null) ∧
+      r.1 = (if fin then .Zombie p capability.ZOMBIE_TCB 6#u64 else .Null, .Null) ∧
       BlkOK st T Cs Ω H Sg Rp Scs Nt Z Ac r.2.1 ∧ FootD st T Cs Sg Scs Z (EH H) s r.2.1 ∧
       ∀ b, Aligned b → CapW T Ω Sg b → L.mem r.2.1 b = L.mem s b ⦄ := by
   rw [fin_cap_eq_obj (by simp)]
-  exact WP.spec_mono (WP.spec_and (fin_thread.rem hA s a p fin) (fin_thread.blk hA s a p fin h hp hna hidle))
+  exact WP.spec_mono (WP.spec_and (fin_thread.rem hA s a p fin) (fin_thread.blk hA s a p fin h hp hna hidle hv0))
     fun r ⟨e, hb, f⟩ => ⟨e, hb, f, footD_keeps_capw h (le_refl _) f⟩
 
 end

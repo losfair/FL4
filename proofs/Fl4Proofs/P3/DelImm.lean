@@ -137,7 +137,7 @@ def ImmPost (th : TypedHeap) (sl : Fl4Spec.CslotPtr) (s0 : S) (σ0 : Fl4Spec.Sta
 theorem nuX_zombie {K : Nat} {mem : U64 → U64} {x p zt n : U64} (h : capV mem x = .Zombie p zt n) :
     nuX K mem x = n.val := by unfold nuX; rw [h]
 
-theorem nuX_le {K : Nat} {th : TypedHeap} (hK : ∀ p r, th p = some (.cnode r) → 2 ^ r ≤ K) (hK5 : 5 ≤ K)
+theorem nuX_le {K : Nat} {th : TypedHeap} (hK : ∀ p r, th p = some (.cnode r) → 2 ^ r ≤ K) (hK6 : 6 ≤ K)
     {mem : U64 → U64} (hD : DelInv th mem) {x : U64} (hx : IsSlot th x) : nuX K mem x ≤ K := by
   unfold nuX
   split
@@ -150,7 +150,7 @@ theorem nuX_le {K : Nat} {th : TypedHeap} (hK : ∀ p r, th p = some (.cnode r) 
 /-- **FL4's immediate finalisation loop refines `finalise_slot slot True`.** -/
 theorem immediate_loop (th : TypedHeap) (hP : Placed th) (hF : FinalHyp (L := L) th)
     (hO : FinObjHyp (L := L) arI th) (hPP : PPHypD (L := L) arI th) (hPD : PostDelHyp (L := L) arI th)
-    (K : Nat) (hK : ∀ p r, th p = some (.cnode r) → 2 ^ r ≤ K) (hK5 : 5 ≤ K)
+    (K : Nat) (hK : ∀ p r, th p = some (.cnode r) → 2 ^ r ≤ K) (hK6 : 6 ≤ K)
     (sl : Fl4Spec.CslotPtr) (hA : AbsSlot th sl) (s0 : S) (σ0 : Fl4Spec.State Unit) (G0 : MdbGhost)
     (s : S) (a : A) (fuel : U64) (hinv : ImmInv (L := L) (A := A) K th sl s0 σ0 G0 (s, a, fuel))
     (hfuel : fuel.val ≤ 2 ^ 64 - 1) :
@@ -435,7 +435,7 @@ theorem immediate_loop (th : TypedHeap) (hP : Placed th) (hF : FinalHyp (L := L)
     have hphi : psiD (L.mem s3) G3 * (K + 1) + nuX K (L.mem s3) (cslotAddr sl) + 1 ≤
         psiD (L.mem s) G * (K + 1) + nuX K (L.mem s) (cslotAddr sl) := by
       have := hmullt _ (lt_of_lt_of_le hstr hps2')
-      have := nuX_le hK hK5 hD3 hxs (K := K)
+      have := nuX_le hK hK6 hD3 hxs (K := K)
       omega
     have hps4 : psiD (L.mem s3) G3 ≤ psiD (L.mem s3) G3 := le_refl _
     have hnul4 : capV (L.mem s3) (cslotAddr sl) = .Null → psiD (L.mem s3) G3 < psiD (L.mem s) G :=

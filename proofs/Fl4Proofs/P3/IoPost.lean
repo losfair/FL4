@@ -122,7 +122,7 @@ variable {S : Type} {st : machine.Store S} [L : P1.LawfulStore st] {A : Type} (a
 /-- **`PostIoHyp` holds**, the bitmap words being outside the objects. -/
 theorem postIoHyp_of (th : TypedHeap) (hP : Placed th) (hio : ∀ s : S, IoLayout th (L.ksb s)) :
     PostIoHyp (L := L) arI th := by
-  intro s a σ G f l hDS hwf
+  intro s a σ G f l owner hDS hwf
   obtain ⟨hf, hl⟩ := hwf
   unfold objects.post_cap_deletion ioport.free_ioports
   simp only

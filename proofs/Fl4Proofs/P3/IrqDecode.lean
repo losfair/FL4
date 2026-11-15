@@ -26,9 +26,9 @@ def irqHLabelOf (lbl : U64) : Fl4Spec.GenInvocationLabels :=
 /-- The spec's label `slbl` of the IRQ control invocation at FL4 label `lbl`. -/
 def IrqCLabel (lbl : U64) (slbl : Fl4Spec.Data) : Prop :=
   (lbl.val = 33 → Fl4Spec.genInvocationType slbl = .irqIssueIRQHandler) ∧
-  (lbl.val = 67 → Fl4Spec.invocationType slbl = .archInvocationLabel .x64IRQIssueIRQHandlerIOAPIC) ∧
-  (lbl.val = 68 → Fl4Spec.invocationType slbl = .archInvocationLabel .x64IRQIssueIRQHandlerMSI) ∧
-  (lbl.val ≠ 33 → lbl.val ≠ 67 → lbl.val ≠ 68 → lbl.val ≠ 69 →
+  (lbl.val = 70 → Fl4Spec.invocationType slbl = .archInvocationLabel .x64IRQIssueIRQHandlerIOAPIC) ∧
+  (lbl.val = 71 → Fl4Spec.invocationType slbl = .archInvocationLabel .x64IRQIssueIRQHandlerMSI) ∧
+  (lbl.val ≠ 33 → lbl.val ≠ 70 → lbl.val ≠ 71 → lbl.val ≠ 72 →
     Fl4Spec.genInvocationType slbl ≠ .irqIssueIRQHandler ∧
     Fl4Spec.invocationType slbl ≠ .archInvocationLabel .x64IRQIssueIRQHandlerIOAPIC ∧
     Fl4Spec.invocationType slbl ≠ .archInvocationLabel .x64IRQIssueIRQHandlerMSI)
@@ -93,7 +93,7 @@ theorem irq_control_decode_refines (th : TypedHeap) (hP : Placed th) (s : S) (ar
     (hAR : ArchIrqRel arI ar σ) :
     interrupt.decode_irq_control st arI s ar lbl length (cslotAddr (ps.bv, idxs)) buf extra ⦃ res =>
       CPost (L := L) Fl4Spec.invokeFl4IrqControl th (L.ksb s) σ
-        (Fl4Spec.decodeFl4IrqControl (decide (lbl.val = 69)) slbl (args.map UScalar.bv) (ps.bv, idxs) excaps)
+        (Fl4Spec.decodeFl4IrqControl (decide (lbl.val = 72)) slbl (args.map UScalar.bv) (ps.bv, idxs) excaps)
         s res ⦄ := by
   obtain ⟨l33, l67, l68, lo⟩ := hlbl
   by_cases h33 : lbl.val = 33
@@ -103,29 +103,29 @@ theorem irq_control_decode_refines (th : TypedHeap) (hP : Placed th) (s : S) (ar
     simp only [h33]
     exact irq_issue_refines arI th hP s ar σ G hCR hL hIR hHA hFI hFR slbl (l33 h33) length buf ct hct args hlen hargs
       hcur htcb hact hact2 extra x0 hx0 excaps hex hps hls hsrcC nA hnum hnA hmask
-  by_cases h67 : lbl.val = 67
+  by_cases h70 : lbl.val = 70
   · have e : lbl = fl4_abi.label.X86IRQIssueIRQHandlerIOAPIC :=
-      UScalar.eq_of_val_eq (by rw [h67]; simp [fl4_abi.label.X86IRQIssueIRQHandlerIOAPIC])
+      UScalar.eq_of_val_eq (by rw [h70]; simp [fl4_abi.label.X86IRQIssueIRQHandlerIOAPIC])
     subst e
-    simp only [h67]
-    exact irq_ioapic_refines arI th hP s ar σ G hCR hL hIR hHA hFI hFR slbl (l67 h67) length buf ct hct args hlen hargs
+    simp only [h70]
+    exact irq_ioapic_refines arI th hP s ar σ G hCR hL hIR hHA hFI hFR slbl (l67 h70) length buf ct hct args hlen hargs
       hcur htcb hact hact2 extra x0 hx0 excaps hex hps hls hsrcC hAR
-  by_cases h68 : lbl.val = 68
+  by_cases h71 : lbl.val = 71
   · have e : lbl = fl4_abi.label.X86IRQIssueIRQHandlerMSI :=
-      UScalar.eq_of_val_eq (by rw [h68]; simp [fl4_abi.label.X86IRQIssueIRQHandlerMSI])
+      UScalar.eq_of_val_eq (by rw [h71]; simp [fl4_abi.label.X86IRQIssueIRQHandlerMSI])
     subst e
-    simp only [h68]
-    exact irq_msi_refines arI th hP s ar σ G hCR hL hIR hHA hFI hFR slbl (l68 h68) length buf ct hct args hlen hargs
+    simp only [h71]
+    exact irq_msi_refines arI th hP s ar σ G hCR hL hIR hHA hFI hFR slbl (l68 h71) length buf ct hct args hlen hargs
       hcur htcb hact hact2 extra x0 hx0 excaps hex hps hls hsrcC hmask
-  by_cases h69 : lbl.val = 69
+  by_cases h72 : lbl.val = 72
   · have e : lbl = fl4_abi.label.X86IRQIssueIRQHandlerIOAPICRemapped :=
-      UScalar.eq_of_val_eq (by rw [h69]; simp [fl4_abi.label.X86IRQIssueIRQHandlerIOAPICRemapped])
+      UScalar.eq_of_val_eq (by rw [h72]; simp [fl4_abi.label.X86IRQIssueIRQHandlerIOAPICRemapped])
     subst e
-    simp only [h69]
+    simp only [h72]
     exact irq_remap_refines arI th hP s ar σ G hCR hL hIR hHA hFI hFR slbl length buf ct hct args hlen hargs
       hcur htcb hact hact2 extra x0 hx0 excaps hex hps hls hsrcC hAR
-  simp only [h69]
-  exact irq_ctl_other_refines arI th s ar σ lbl h33 h67 h68 h69 slbl (lo h33 h67 h68 h69) length _ buf extra _ _ _
+  simp only [h72]
+  exact irq_ctl_other_refines arI th s ar σ lbl h33 h70 h71 h72 slbl (lo h33 h70 h71 h72) length _ buf extra _ _ _
 
 end
 

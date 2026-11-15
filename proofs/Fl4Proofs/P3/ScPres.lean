@@ -29,7 +29,7 @@ noncomputable section
 `f.1` keeps the yield-to links, `f.2` the call stacks. -/
 def PK (f : Bool × Bool) : KernelObject → KernelObject → Prop
   | .tcb x, .tcb y => y.tcbCtable = x.tcbCtable ∧ y.tcbVtable = x.tcbVtable ∧ y.tcbIpcframe = x.tcbIpcframe ∧
-      y.tcbFaultHandler = x.tcbFaultHandler ∧ y.tcbTimeoutHandler = x.tcbTimeoutHandler ∧
+      y.tcbFaultHandler = x.tcbFaultHandler ∧ y.tcbTimeoutHandler = x.tcbTimeoutHandler ∧ y.tcbEpt = x.tcbEpt ∧
       y.tcbMcpriority = x.tcbMcpriority ∧ (f.1 = true → y.tcbYieldTo = x.tcbYieldTo)
   | .schedContext x n, .schedContext y m =>
       m = n ∧ (f.1 = true → y.scYieldFrom = x.scYieldFrom) ∧ (f.2 = true → y.scReplies = x.scReplies)
@@ -50,9 +50,9 @@ theorem PK.trans {f : Bool × Bool} {a b c : KernelObject} (h1 : PK f a b) (h2 :
     | trivial
     | exact h2
     | exact h2.trans h1
-    | (obtain ⟨a1, a2, a3, a4, a5, a6, a7⟩ := h1; obtain ⟨b1, b2, b3, b4, b5, b6, b7⟩ := h2
-       exact ⟨b1.trans a1, b2.trans a2, b3.trans a3, b4.trans a4, b5.trans a5, b6.trans a6,
-         fun h => (b7 h).trans (a7 h)⟩)
+    | (obtain ⟨a1, a2, a3, a4, a5, a6, a7, a8⟩ := h1; obtain ⟨b1, b2, b3, b4, b5, b6, b7, b8⟩ := h2
+       exact ⟨b1.trans a1, b2.trans a2, b3.trans a3, b4.trans a4, b5.trans a5, b6.trans a6, b7.trans a7,
+         fun h => (b8 h).trans (a8 h)⟩)
     | (obtain ⟨a1, a2, a3⟩ := h1; obtain ⟨b1, b2, b3⟩ := h2
        exact ⟨b1.trans a1, fun h => (b2 h).trans (a2 h), fun h => (b3 h).trans (a3 h)⟩)
     | (intro h; exact ⟨(h2 h).1.trans (h1 h).1, (h2 h).2.trans (h1 h).2⟩)
@@ -64,7 +64,7 @@ theorem PK.weaken {f f' : Bool × Bool} {a b : KernelObject} (h : PK f a b) (h1 
   all_goals first
     | trivial
     | exact h
-    | exact ⟨h.1, h.2.1, h.2.2.1, h.2.2.2.1, h.2.2.2.2.1, h.2.2.2.2.2.1, fun e => h.2.2.2.2.2.2 (h1 e)⟩
+    | exact ⟨h.1, h.2.1, h.2.2.1, h.2.2.2.1, h.2.2.2.2.1, h.2.2.2.2.2.1, h.2.2.2.2.2.2.1, fun e => h.2.2.2.2.2.2.2 (h1 e)⟩
     | exact ⟨h.1, fun e => h.2.1 (h1 e), fun e => h.2.2 (h2 e)⟩
     | exact fun e => h (h2 e)
 

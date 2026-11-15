@@ -381,12 +381,12 @@ theorem decode_invocation_frame_capX (th : TypedHeap) (s : S) (ar : A) (σ : Fl4
     (hargs : ∀ (i : U64) x, args[i.val]? = some x → msg.syscall_arg st s ct buf i = ok x)
     {pc : U64} {r : Nat} (hpc : th pc = some (.cnode r)) {idx : List Bool} (hidx : idx.length = r)
     {p : U64} {sz : capability.FrameSize} {rt asid va : U64} {d m : Bool}
-    (hcap : capAt (L.mem s) (cslotAddr (pc.bv, idx)) = ok (.Frame p sz rt d m asid va))
+    (hcap : capAt (L.mem s) (cslotAddr (pc.bv, idx)) = ok (.Frame p sz rt d m false asid va))
     (hAl : ErrRel (.Sys .AlignmentError) .alignmentError)
     (hno : sz = .Large → d = false → ∀ x ∈ G.chains.flatten,
-      Disj (capV (L.mem s) x) (.Frame p sz rt d m asid va) ∨
+      Disj (capV (L.mem s) x) (.Frame p sz rt d m false asid va) ∨
       (isFrame (capV (L.mem s) x) = true ∧ revOf (L.mem s) x = false) ∨
-      Within (.Frame p sz rt d m asid va) (capV (L.mem s) x))
+      Within (.Frame p sz rt d m false asid va) (capV (L.mem s) x))
     (extra : Aeneas.Std.Array obj.Slot 3#usize) (excaps : List (Fl4Spec.Cap × Fl4Spec.CslotPtr))
     (hext : (vspace.extra extra 0#usize = ok none ∧ excaps = []) ∨
       ∃ x vc vc' xsl rest, vspace.extra extra 0#usize = ok (some x) ∧ capAt (L.mem s) x = ok vc ∧
@@ -394,7 +394,7 @@ theorem decode_invocation_frame_capX (th : TypedHeap) (s : S) (ar : A) (σ : Fl4
     (hxs : ∀ x, vspace.extra extra 0#usize = ok (some x) → IsSlot th x)
     (blk call don fp : Bool) (ci : Fl4Spec.CapRef) (buffer : Option Fl4Spec.ObjRef) :
     DecOKMX (L := L) arI (FinX st th P L4 L3 L2 L1 (TopSR st th P L4 L3 L2 L1 N T C E R B c AR)) s ar σ lbl length
-      (cslotAddr (pc.bv, idx)) (.Frame p sz rt d m asid va) blk call don fp
+      (cslotAddr (pc.bv, idx)) (.Frame p sz rt d m false asid va) blk call don fp
       buf extra slbl (args.map UScalar.bv) ci (pc.bv, idx) excaps buffer := by
   have hsl : IsSlot th (cslotAddr (pc.bv, idx)) :=
     AbsSlot.isSlot (th := th) (sl := (pc.bv, idx)) ⟨pc, rfl, Or.inl (by simpa [hidx] using hpc)⟩
@@ -414,7 +414,7 @@ theorem decode_invocation_frame_capX (th : TypedHeap) (s : S) (ar : A) (σ : Fl4
   have hX0 := vs_x0 hS hR hPt hPI hCur
   have hDS : lbl = fl4_abi.label.X86PageDeriveSubframe →
       DecOKMQX (L := L) arI (fun _ => True) (FinX st th P L4 L3 L2 L1 (TopSR st th P L4 L3 L2 L1 N T C E R B c AR))
-        s ar σ lbl length (cslotAddr (pc.bv, idx)) (.Frame p sz rt d m asid va) blk call don fp
+        s ar σ lbl length (cslotAddr (pc.bv, idx)) (.Frame p sz rt d m false asid va) blk call don fp
         buf extra slbl (args.map UScalar.bv) ci (pc.bv, idx) excaps buffer := fun hl => by
     have hext'' : (vspace.extra extra 0#usize = ok none ∧ excaps = []) ∨
         ∃ y nc nc' nsl rest, vspace.extra extra 0#usize = ok (some y) ∧ capAt (L.mem s) y = ok nc ∧
@@ -618,6 +618,8 @@ theorem decode_invocation_asid_pool_capX (th : TypedHeap) (s : S) (ar : A) (σ :
     (hrun : ∀ x, σ.kheap σ.curThread = some (.tcb x) → Fl4Spec.runnable x.tcbState = true)
     (ptr base : U64)
     (extra : Aeneas.Std.Array obj.Slot 3#usize) (excaps : List (Fl4Spec.Cap × Fl4Spec.CslotPtr))
+    (hNative : ∀ x, vspace.extra extra 0#usize = ok (some x) →
+      ∀ p level mapped asid va, capAt (L.mem s) x ≠ ok (.Ept p level mapped asid va))
     (hext : (vspace.extra extra 0#usize = ok none ∧ excaps = []) ∨
       ∃ (pc : U64) (r : Nat) (idx : List Bool) (vc : capability.Cap) (vc' : Fl4Spec.Cap)
         (rest : List (Fl4Spec.Cap × Fl4Spec.CslotPtr)), th pc = some (.cnode r) ∧ idx.length = r ∧
@@ -661,7 +663,7 @@ theorem decode_invocation_asid_pool_capX (th : TypedHeap) (s : S) (ar : A) (σ :
       (fun _ h => Or.inr (Or.inr (Or.inr (Or.inl h)))) (vsInvHyps_top curT_top))
   refine DecOKMQX.toX arI (decode_invocation_asid_poolX arI th hS.2.pl s ar σ G hCR hFI hMO (fun _ _ _ _ => trivial)
     hH ⟨⟨hS, P1.WritesIn.refl _ _⟩, hPt⟩ hS.2.vs hS.2.sd hR hS.2.vo
-    lbl slbl hlA length buf ct hct hcur htcb hact hrun ptr base hok.2.1 hok.2.2 extra excaps hext'
+    lbl slbl hlA length buf ct hct hcur htcb hact hrun ptr base hok.2.1 hok.2.2 extra excaps hNative hext'
     (X := FinX st th P L4 L3 L2 L1 (TopSR st th P L4 L3 L2 L1 N T C E R B c AR)) (vs_x0 hS hR hPt hPI hCur)
     (fun s' a' σ' hSR hR' hAW hCR' hMO' hK => ⟨hSR.1.1, hR', hSR.2, fun p hp lo hl hne => ?_,
       CurOK.of_inv hCur hK hCR'.2.2.1 hMO'.2.2⟩)
@@ -669,7 +671,7 @@ theorem decode_invocation_asid_pool_capX (th : TypedHeap) (s : S) (ar : A) (σ :
   by_cases e : L.mem s' (peA p lo) = L.mem s (peA p lo)
   · rw [e] at hne ⊢; exact hPI p hp lo hl hne
   · obtain ⟨x, p1, a1, hx, hcx, hv⟩ := hAW _ (Or.inr ⟨p, hp, lo, hl, rfl⟩) e
-    rw [hv]; exact hL4 x p1 a1 hx hcx
+    rw [hv]; exact fun _ => hL4 x p1 a1 hx hcx
 
 /-! ## `MakePool` -/
 

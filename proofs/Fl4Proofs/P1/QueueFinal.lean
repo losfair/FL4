@@ -1503,13 +1503,28 @@ theorem objects.debug_remove.blk (s : S) (t : U64) (h : BlkOK st T Cs Ω H Sg Rp
 theorem obj.Sc.yield_from.val (s : S) (c : obj.Sc) : obj.Sc.yield_from st c s ⦃ v => v = L.mem s (scYieldFromA c) ⦄ := by
   unfold obj.Sc.yield_from; step*; simp_all [scYieldFromA]
 
+/-- The VCPU link is an extra TCB field; native TCBs have no bound VCPU. -/
+@[step] theorem vcpu.bound.spec (s : S) (t : obj.Tcb) :
+    vcpu.bound st s t ⦃ v => v = L.mem s (core.num.U64.wrapping_add t 3664#u64) ⦄ := by
+  unfold vcpu.bound
+  step* <;> simp_all
+
+/-- Detaching an unbound native TCB changes neither memory nor hardware. -/
+theorem vcpu.detach_none {A : Type _} (ar : machine.Arch A) (s : S) (a : A) (t : obj.Tcb)
+    (h0 : L.mem s (core.num.U64.wrapping_add t 3664#u64) = 0#u64) :
+    vcpu.detach st ar s a t ⦃ r => r = (s, a) ⦄ := by
+  unfold vcpu.detach
+  step with vcpu.bound.spec
+  simp_all
+
 /-- `finalise_cap` of a final thread cap: the thread leaves every scheduler
 structure, its notification, timer, SC and yield links are cut, it is
 suspended and leaves its core's debug list.  The thread must not be the idle
 thread nor the scheduler's switch-to candidate. -/
 theorem fin_thread.blk {A : Type _} {ar : machine.Arch A} (hA : P0.ArchTotal ar) (s : S) (a : A) (p : U64)
     (fin : Bool) (h : BlkOK st T Cs Ω H Sg Rp Scs Nt Z Ac s) (hp : p ∈ T) (hna : L.actionW s ≠ p)
-    (hidle : L.idleW s ≠ p) :
+    (hidle : L.idleW s ≠ p)
+    (hv0 : L.mem s (core.num.U64.wrapping_add p 3664#u64) = 0#u64) :
     objects.finalise_cap_object st ar s a (.Thread p) fin ⦃ r =>
       BlkOK st T Cs Ω H Sg Rp Scs Nt Z Ac r.2.1 ∧ FootD st T Cs Sg Scs Z (EH H) s r.2.1 ⦄ := by
   unfold objects.finalise_cap_object
@@ -1517,9 +1532,17 @@ theorem fin_thread.blk {A : Type _} {ar : machine.Arch A} (hA : P0.ArchTotal ar)
   split
   swap
   · exact (WP.spec_ok _).2 ⟨h, (Foot.refl _).d⟩
-  refine WP.spec_bind (smp.remote_tcb_stall.blk hA s a p h) ?_
-  rintro ⟨s1, a1⟩ ⟨h1, f1, ea1, -, ei1⟩
+  have hStart := h
+  obtain ⟨⟨Q0, R0, hq0⟩, hb0, hx0, hs0, hg0⟩ := hStart
+  refine WP.spec_bind (WP.spec_and (smp.remote_tcb_stall.blk hA s a p h)
+    (smp.remote_tcb_stall.all hA s a p hq0 hb0 hx0 hs0 hg0)) ?_
+  rintro ⟨s1, a1⟩ ⟨⟨h1, f1, ea1, -, ei1⟩, _, _, _, _, _, _, _, _, _, keep, _⟩
   try simp only [WP.uncurry'_pair]
+  refine WP.spec_bind (vcpu.detach_none ar s1 a1 p (by
+    rw [keep p hp 3664#u64 (by simp) (by simp)]; exact hv0)) ?_
+  intro r hr
+  subst r
+  try dsimp only
   refine WP.spec_bind (notification.unbind_notification.blkF s1 p h1 hp) fun s2 ⟨h2, f2, n2⟩ => ?_
   refine WP.spec_bind (timer.remove.tf (s0 := s2) s2 p ⟨h2, Foot.refl _, ANI.refl _⟩ hp) fun s3 ⟨h3, f3, n3⟩ => ?_
   have ea3 : L.actionW s3 = L.actionW s := by rw [n3.1, n2.1, ea1]

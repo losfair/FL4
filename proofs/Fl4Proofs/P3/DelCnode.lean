@@ -44,7 +44,7 @@ theorem cnode_revoke_full (th : TypedHeap) (s : S) (ar : A)
     (hcur : σ.curThread = ct.bv) (htcb : th ct = some .tcb)
     (hO : FinObjHyp (L := L) arI th) (hPP : PPHypD (L := L) arI th)
     (hPD : PostDelHyp (L := L) arI th)
-    (K : Nat) (hK : ∀ p r, th p = some (.cnode r) → 2 ^ r ≤ K) (hK5 : 5 ≤ K)
+    (K : Nat) (hK : ∀ p r, th p = some (.cnode r) → 2 ^ r ≤ K) (hK6 : 6 ≤ K)
     (hDE : DelE (L := L) th K s σ) :
     cnode.decode st arI s ar fl4_abi.label.CNodeRevoke length cap buf extra ⦃ res =>
       PInvPost (L := L) th σ G (Fl4Spec.decodeCnodeInvocation slbl (args.map UScalar.bv) a excaps) s
@@ -55,7 +55,7 @@ theorem cnode_revoke_full (th : TypedHeap) (s : S) (ar : A)
     omega
   exact cnode_revoke_refines arI th s ar σ G hR hV hP hM hC slbl hlbl length buf ct hct args hlen hargs cap a hca hcv
     extra excaps hI hact hcur htcb (DelE (L := L) th K) psiD psiD_slotsSame
-    (delHyp_full arI th hP (finalHyp_full th hP) hO hPP hPD K hK hK5) (rppHyp_full arI th K hPP)
+    (delHyp_full arI th hP (finalHyp_full th hP) hO hPP hPD K hK hK6) (rppHyp_full arI th K hPP)
     (fun s1 σ1 hS h => delE_restart hDE hS (ksub_of_eq (setThreadState_nks _ _) h))
     (fun _ _ G1 hCR hE1 => ⟨hE1.2.2.1, hE1.2.2.2 G1 hCR.2.2.1⟩) hfew
 
@@ -76,13 +76,13 @@ theorem cnode_delete_full (th : TypedHeap) (s : S) (ar : A)
     (hcur : σ.curThread = ct.bv) (htcb : th ct = some .tcb)
     (hO : FinObjHyp (L := L) arI th) (hPP : PPHypD (L := L) arI th)
     (hPD : PostDelHyp (L := L) arI th)
-    (K : Nat) (hK : ∀ p r, th p = some (.cnode r) → 2 ^ r ≤ K) (hK5 : 5 ≤ K)
+    (K : Nat) (hK : ∀ p r, th p = some (.cnode r) → 2 ^ r ≤ K) (hK6 : 6 ≤ K)
     (hDE : DelE (L := L) th K s σ) :
     cnode.decode st arI s ar fl4_abi.label.CNodeDelete length cap buf extra ⦃ res =>
       PInvPost (L := L) th σ G (Fl4Spec.decodeCnodeInvocation slbl (args.map UScalar.bv) a excaps) s
         (res.1, res.2.1) ⦄ :=
   cnode_delete_refines arI th s ar σ G hR hV hP hM hC slbl hlbl length buf ct hct args hlen hargs cap a hca hcv
-    extra excaps hI hact hcur htcb (DelE (L := L) th K) psiD (delHyp_full arI th hP (finalHyp_full th hP) hO hPP hPD K hK hK5)
+    extra excaps hI hact hcur htcb (DelE (L := L) th K) psiD (delHyp_full arI th hP (finalHyp_full th hP) hO hPP hPD K hK hK6)
     (fun s1 σ1 hS h => delE_restart hDE hS (ksub_of_eq (setThreadState_nks _ _) h))
     (fun _ _ G1 hCR hE1 => ⟨hE1.2.2.1, hE1.2.2.2 G1 hCR.2.2.1⟩)
 

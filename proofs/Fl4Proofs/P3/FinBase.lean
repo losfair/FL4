@@ -18,6 +18,7 @@ inductive OKey where
   | ep (p : U64) | ntfn (p : U64) | reply (p : U64) | cnode (p r : U64) | thread (p : U64) | irq (i : U64)
   | sc (p sb : U64) | frame (p : U64) (sz : capability.FrameSize) (d : Bool) | pt (p : U64) | pd (p : U64)
   | pdpt (p : U64) | pml4 (p : U64) | pool (p : U64) | io (f l : U64)
+  | vcpu (p : U64) | ept (p level : U64)
 
 def okey : capability.Cap → Option OKey
   | .Endpoint p .. => some (.ep p)
@@ -32,8 +33,10 @@ def okey : capability.Cap → Option OKey
   | .PageDirectory p .. => some (.pd p)
   | .Pdpt p .. => some (.pdpt p)
   | .Pml4 p .. => some (.pml4 p)
+  | .Vcpu p => some (.vcpu p)
+  | .Ept p level .. => some (.ept p level)
   | .AsidPool p _ => some (.pool p)
-  | .IoPort f l => some (.io f l)
+  | .IoPort f l _ => some (.io f l)
   | _ => none
 
 

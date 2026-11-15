@@ -1160,13 +1160,14 @@ release queue. -/
 theorem sched.is_schedulable.spec' (s : S) (t : obj.Tcb) :
     sched.is_schedulable st s t ⦃ b => b = true → Runnable (L.mem s (stA t)) ∧ L.mem s (scA t) ≠ 0#u64 ∧
       (L.mem s (inqA t) &&& sched.Q_RELEASE) = 0#u64 ∧ L.rmax s (L.mem s (scA t)) ≠ 0#u64 ⦄ := by
-  unfold sched.is_schedulable sched.is_runnable
-  step with obj.Tcb.state.spec as ⟨v, v_post⟩
-  refine WP.spec_bind (Pₘ := fun b => b = true → Runnable (L.mem s (stA t))) ?_ ?_
-  · split
-    · rename_i e; simp only [WP.spec_ok]; intro _; left; rw [← v_post]; exact e
-    · simp only [WP.spec_ok]; intro e; right; rw [← v_post]; simpa using e
-  intro b hb
+  unfold sched.is_schedulable
+  refine WP.spec_bind (sched.is_runnable.spec s t) ?_
+  intro b bh
+  have hb : b = true → Runnable (L.mem s (stA t)) := by
+    intro h
+    unfold Runnable
+    apply of_decide_eq_true
+    exact bh.symm.trans h
   split
   · step with obj.Tcb.sc.spec as ⟨i, i_post⟩
     step with obj.Sc.is_null.spec as ⟨b1, b1_post⟩

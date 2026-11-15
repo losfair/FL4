@@ -474,26 +474,28 @@ theorem frame_unmap_rel {A : Type} {ar : machine.Arch A} {th : TypedHeap} {P L4 
         MapSpec σ iv σ' ∧ UR st th P L4 L3 L2 L1 SR res.2.1 res.2.2 σ' ∧
         SlotFoot th (L.mem s) (L.mem res.2.1) (cslotAddr (pc.bv, idx)) ∧
         VsLike (capV (L.mem res.2.1) (cslotAddr (pc.bv, idx))) (frameCapOf f) ∧ KFoot σ σ' ⦄ := by
-  obtain ⟨ptr, sz, rt, dev, mp, fa, fv⟩ := f
+  obtain ⟨ptr, sz, rt, dev, mp, ep, fa, fv⟩ := f
   rw [show Fl4Spec.archDecodeInvocation (Z := Unit) slbl args xs (pc.bv, idx)
-      (frameACapG ⟨ptr, sz, rt, dev, mp, fa, fv⟩) vcs =
-    Fl4Spec.decodePageInvocation slbl args (pc.bv, idx) (frameACapG ⟨ptr, sz, rt, dev, mp, fa, fv⟩) vcs from rfl]
+      (frameACapG ⟨ptr, sz, rt, dev, mp, ep, fa, fv⟩) vcs =
+    Fl4Spec.decodePageInvocation slbl args (pc.bv, idx) (frameACapG ⟨ptr, sz, rt, dev, mp, ep, fa, fv⟩) vcs from rfl]
   unfold frameACapG
   dsimp only
   rw [decodeUnmap_eq hl]
   unfold vspace.decode_frame
   have hne : ¬ fl4_abi.label.X86PageUnmap = fl4_abi.label.X86PageMap := by
     unfold fl4_abi.label.X86PageUnmap fl4_abi.label.X86PageMap; decide
-  simp only [frameCapOf, vspace.as_frame, bind_ok, hne, ↓reduceIte]
-  have hfcv : CapValid th (frameCapOf ⟨ptr, sz, rt, dev, mp, fa, fv⟩) :=
+  have hneEpt : ¬ fl4_abi.label.X86PageUnmap = fl4_abi.label.X86PageMapEPT := by
+    unfold fl4_abi.label.X86PageUnmap fl4_abi.label.X86PageMapEPT; decide
+  simp only [frameCapOf, vspace.as_frame, bind_ok, hne, hneEpt, ↓reduceIte]
+  have hfcv : CapValid th (frameCapOf ⟨ptr, sz, rt, dev, mp, ep, fa, fv⟩) :=
     hSV.cnode pc r hpc (blVal 0 idx) (hidx ▸ blVal_lt idx) _ (by rw [show slotAddr pc.bv (BitVec.ofNat 64 (blVal 0 idx)) = cslotAddr (pc.bv, idx) from (slotAddr_ofBl pc idx).symm]; exact hcx)
   obtain ⟨cs, hkc, hwf, hsl⟩ := hSt.cnode pc r hpc
   have hcs : cs idx = some (.archObjectCap (.pageCap dev ptr.bv (vmRightsOf rt) (if mp then .vmVSpaceMap else .vmNoMap)
       (frameSizeOf sz) (if mp then some (fa.bv, fv.bv) else none))) := by
     obtain ⟨c, ac, hc, hac, hca⟩ := hsl idx hidx
-    have : c = .Frame ptr sz rt dev mp fa fv := by
+    have : c = .Frame ptr sz rt dev mp false fa fv := by
       have h2 : capAt (L.mem s) (cslotAddr (pc.bv, idx)) = ok c := hc
-      rw [hcx] at h2; exact (by simpa [frameCapOf] using h2 : capability.Cap.Frame ptr sz rt dev mp fa fv = c).symm
+      rw [hcx] at h2; exact (by simpa [frameCapOf] using h2 : capability.Cap.Frame ptr sz rt dev mp false fa fv = c).symm
     subst this
     rw [hac, ← hca.2]; rfl
   rw [hct]
@@ -509,17 +511,17 @@ theorem frame_unmap_rel {A : Type} {ar : machine.Arch A} {th : TypedHeap} {P L4 
   have hxs : IsSlotAt th pc (blVal 0 idx) := Or.inl ⟨r, hpc, hidx ▸ blVal_lt idx⟩
   have hx0 : cslotAddr (pc.bv, idx) = slotOf pc (blVal 0 idx) := slotAddr_ofBl pc idx
   set nc : Fl4Spec.Cap := .archObjectCap (.pageCap dev ptr.bv (vmRightsOf rt) .vmNoMap (frameSizeOf sz) none) with hnc
-  have hca : CapRel (.Frame ptr sz rt dev false 0#u64 0#u64) nc := ⟨hfw, rfl⟩
-  have hew : EncWf (.Frame ptr sz rt dev false 0#u64 0#u64) := ⟨hfe.1, hfe.2.1, by decide, by decide⟩
+  have hca : CapRel (.Frame ptr sz rt dev false false 0#u64 0#u64) nc := ⟨hfw, rfl⟩
+  have hew : EncWf (.Frame ptr sz rt dev false false 0#u64 0#u64) := ⟨hfe.1, hfe.2.1, by decide, by decide⟩
   have hxsl : IsSlot th (cslotAddr (pc.bv, idx)) :=
     (show AbsSlot th (pc.bv, idx) from ⟨pc, rfl, Or.inl (by simpa [hidx] using hpc)⟩).isSlot
   -- the final `set_cap`, from a state `s4`/`σ4` with the CNode unchanged
   have fin_cap : ∀ (s4 : S) (a4 : A) (σ4 : Fl4Spec.State Unit), UR st th P L4 L3 L2 L1 SR s4 a4 σ4 →
       σ4.kheap pc.bv = some (.cnode r cs) → L.ksb s4 = L.ksb s →
-      obj.Slot.set_cap st (cslotAddr (pc.bv, idx)) s4 (.Frame ptr sz rt dev false 0#u64 0#u64) ⦃ s5 =>
+      obj.Slot.set_cap st (cslotAddr (pc.bv, idx)) s4 (.Frame ptr sz rt dev false false 0#u64 0#u64) ⦃ s5 =>
         UR st th P L4 L3 L2 L1 SR s5 a4 (setCnodeSlot σ4 pc.bv r cs idx nc) ∧
         SlotFoot th (L.mem s4) (L.mem s5) (cslotAddr (pc.bv, idx)) ∧
-        capV (L.mem s5) (cslotAddr (pc.bv, idx)) = .Frame ptr sz rt dev false 0#u64 0#u64 ⦄ := by
+        capV (L.mem s5) (cslotAddr (pc.bv, idx)) = .Frame ptr sz rt dev false false 0#u64 0#u64 ⦄ := by
     rintro s4 a4 σ4 ⟨hS4, hSt4, hSV4, hR4, hPt4⟩ hkc4 hks4
     refine WP.spec_mono (WP.spec_and (set_cap_refines th s4 σ4 hSt4 hSV4 hPl hpc hidx _ _ hca (by exact hfcv) hew)
       (WP.spec_and (set_cap_spec (L := L) _ s4 _) (set_cap_foot hPl hxsl s4 _ hew))) ?_
@@ -596,7 +598,7 @@ theorem frame_unmap_rel {A : Type} {ar : machine.Arch A} {th : TypedHeap} {P L4 
     have hall' : ∀ x σ', (x, σ') ∈ (Fl4Spec.unmapPage (Z := Unit) (frameSizeOf sz) fa.bv fv.bv ptr.bv σ1).1 →
         σ'.kheap pc.bv = σ1.kheap pc.bv := fun x σ' hx =>
       hall x σ' hx pc.bv (fun ao h => by rw [hkc1] at h; cases h)
-    show (obj.Slot.set_cap st (cslotAddr (pc.bv, idx)) s3 (.Frame ptr sz rt dev false 0#u64 0#u64) >>= fun s5 =>
+    show (obj.Slot.set_cap st (cslotAddr (pc.bv, idx)) s3 (.Frame ptr sz rt dev false false 0#u64 0#u64) >>= fun s5 =>
       ok (core.result.Result.Ok (), s5, a3)) ⦃ _ ⦄
     refine WP.spec_bind (fin_cap s3 a3 σu hU3 ((hall' _ _ hu).trans hkc1) (hk3.trans hk1)) ?_
     rintro s5 ⟨hU5, hF5, hcv5⟩

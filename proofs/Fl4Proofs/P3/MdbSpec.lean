@@ -17,8 +17,8 @@ theorem srB_ut (p sb fi fi' : U64) (d d' : Bool) :
   apply srB_of_eq
   simp [objects.same_region_as, objects.cap_is_physical, capability.Cap.ptr, objects.cap_size_bits, mask_eq, lift]
 
-theorem srB_frame (p : U64) (sz : capability.FrameSize) (r r' : U64) (d d' m m' : Bool) (a a' v v' : U64) :
-    srB (.Frame p sz r d m a v) (.Frame p sz r' d' m' a' v') =
+theorem srB_frame (p : U64) (sz : capability.FrameSize) (r r' : U64) (d d' m m' e e' : Bool) (a a' v v' : U64) :
+    srB (.Frame p sz r d m e a v) (.Frame p sz r' d' m' e' a' v') =
       decide (p ≤ core.num.U64.wrapping_add p (maskF (fbitsF sz))) := by
   apply srB_of_eq
   simp [objects.same_region_as, frame_bits_eq, mask_eq, lift]
@@ -67,7 +67,7 @@ theorem srB_spec_self (c d : capability.Cap) (hsh : shape d = shape c) (hs : srB
     simp only [absCap, Fl4Spec.sameRegionAs, Fl4Spec.objSize, Fl4Spec.isPhysical, Fl4Spec.objRefOf,
       natCast_shl_one]
     exact ⟨trivial, BitVec.le_refl _, h, BitVec.le_refl _⟩
-  case Frame.Frame p sz r dev m a v p' sz' r' dev' m' a' v' =>
+  case Frame.Frame p sz r dev m ept a v p' sz' r' dev' m' ept' a' v' =>
     obtain ⟨rfl, rfl⟩ := hsh
     rw [srB_frame] at hs
     have hb : (fbitsF sz').val < 64 := by

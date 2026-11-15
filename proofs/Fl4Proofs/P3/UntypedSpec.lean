@@ -2,7 +2,7 @@
 P3 (DESIGN.md §9), untyped: helper facts for `untyped::decode` against l4v
 `decode_untyped_invocation` (Fl4Spec/Decode.lean).
 
-* the object type numbers (`fl4_abi::consts::object`, 0..13) as the spec's
+* the object type numbers (`fl4_abi::consts::object`, 0..18) as the spec's
   `data_to_obj_type` numbering (`objTypeOf`), and the object size FL4's
   `object_size` gives (`zOf`), which is `obj_bits_api` for every type but
   the TCB (FL4 TCBs are 4 KiB, `bits::TCB = 12`; the spec's X64 `tcb_bits`
@@ -30,21 +30,23 @@ def zOf (n us : Nat) : Nat :=
   if n = 0 ∨ n = 5 then us else if n = 1 then 12 else
         if n = 2 then 4 else if n = 3 then 6 else if n = 4 then 5 + us else
         if n = 6 then 5 else if n = 9 then 30 else if n = 10 then 12 else
-        if n = 11 then 21 else 12
+        if n = 11 then 21 else if n = 14 then 15 else 12
 
-theorem objTypeOf_none (n : Nat) : objTypeOf n = none ↔ 14 ≤ n := by
+theorem objTypeOf_none (n : Nat) : objTypeOf n = none ↔ 19 ≤ n := by
   unfold objTypeOf archDataToObjType
   constructor
   · intro h; by_contra hn; interval_cases n <;> simp at h
   · intro h; simp only [show ¬ n = 0 by omega, show ¬ n = 1 by omega, show ¬ n = 2 by omega, show ¬ n = 3 by omega,
       show ¬ n = 4 by omega, show ¬ n = 5 by omega, show ¬ n = 6 by omega, show ¬ n - 7 = 0 by omega,
       show ¬ n - 7 = 1 by omega, show ¬ n - 7 = 2 by omega, show ¬ n - 7 = 3 by omega, show ¬ n - 7 = 4 by omega,
-      show ¬ n - 7 = 5 by omega, show ¬ n - 7 = 6 by omega, ↓reduceIte, Option.map_none]
+      show ¬ n - 7 = 5 by omega, show ¬ n - 7 = 6 by omega,
+      show ¬ n - 7 = 7 by omega, show ¬ n - 7 = 8 by omega, show ¬ n - 7 = 9 by omega,
+      show ¬ n - 7 = 10 by omega, show ¬ n - 7 = 11 by omega, ↓reduceIte, Option.map_none]
 
 theorem objTypeOf_some {n : Nat} {t : ApiObjectType} (h : objTypeOf n = some t) (h1 : n ≠ 1) (us : Nat) :
-    n < 14 ∧ objBitsApi t us = zOf n us ∧ (isFrameType t = true ↔ n = 9 ∨ n = 10 ∨ n = 11) ∧
+    n < 19 ∧ objBitsApi t us = zOf n us ∧ (isFrameType t = true ↔ n = 9 ∨ n = 10 ∨ n = 11) ∧
       (t = .untyped ↔ n = 0) ∧ (t = .capTableObject ↔ n = 4) ∧ (t = .schedContextObject ↔ n = 5) := by
-  have hn : n < 14 := by
+  have hn : n < 19 := by
     by_contra hc; have := (objTypeOf_none n).2 (by omega); rw [this] at h; cases h
   refine ⟨hn, ?_⟩
   unfold objTypeOf archDataToObjType at h
@@ -55,10 +57,10 @@ theorem objTypeOf_some {n : Nat} {t : ApiObjectType} (h : objTypeOf n = some t) 
 /-- With FL4's object sizes (`Fl4Spec/Ext/TcbSize.lean`), `zOf` is
 `obj_bits_api` for every type, the TCB included. -/
 theorem objTypeOf_fl4 {n : Nat} {t : ApiObjectType} (h : objTypeOf n = some t) (us : Nat) :
-    n < 14 ∧ fl4ObjBitsApi t us = zOf n us ∧ (isFrameType t = true ↔ n = 9 ∨ n = 10 ∨ n = 11) ∧
+    n < 19 ∧ fl4ObjBitsApi t us = zOf n us ∧ (isFrameType t = true ↔ n = 9 ∨ n = 10 ∨ n = 11) ∧
       (t = .untyped ↔ n = 0) ∧ (t = .capTableObject ↔ n = 4) ∧ (t = .schedContextObject ↔ n = 5) ∧
       (t = .tcbObject ↔ n = 1) := by
-  have hn : n < 14 := by
+  have hn : n < 19 := by
     by_contra hc; have := (objTypeOf_none n).2 (by omega); rw [this] at h; cases h
   refine ⟨hn, ?_⟩
   unfold objTypeOf archDataToObjType at h
@@ -117,10 +119,10 @@ end
 section
 open fl4_core
 
-/-- The object size `object_size` gives, for the type numbers below 14 but TCB. -/
+/-- The object size `object_size` gives, for every object type, with FL4's TCB size. -/
 theorem retype_size_cases (nt us : U64) :
     untyped.retype_size nt us = ok (
-      if nt.val ≥ 14 then .Err (.Sys (.InvalidArgument 0#u64)) else
+      if nt.val ≥ 19 then .Err (.Sys (.InvalidArgument 0#u64)) else
       let z : Nat := zOf nt.val us.val
       if us.val ≥ 64 ∨ z > 47 then .Err (.Sys (.RangeError 0#u64 47#u64))
       else if nt.val = 4 ∧ us.val = 0 then .Err (.Sys (.InvalidArgument 1#u64))
@@ -133,23 +135,29 @@ theorem retype_size_cases (nt us : U64) :
     fl4_abi.consts.object.SchedContext, fl4_abi.consts.object.Reply, fl4_abi.consts.object.X86Page4K,
     fl4_abi.consts.object.X86LargePage, fl4_abi.consts.object.X64HugePage, fl4_abi.consts.object.X86PageTable,
     fl4_abi.consts.object.X86PageDirectory, fl4_abi.consts.object.X86Pdpt, fl4_abi.consts.object.X64Pml4,
+    fl4_abi.consts.object.X86Vcpu, fl4_abi.consts.bits.VCPU,
     fl4_abi.consts.bits.TCB, fl4_abi.consts.bits.ENDPOINT, fl4_abi.consts.bits.NOTIFICATION,
     fl4_abi.consts.bits.SLOT, fl4_abi.consts.bits.REPLY, fl4_abi.consts.bits.MAX_UNTYPED,
     fl4_abi.consts.bits.MIN_UNTYPED, fl4_abi.consts.bits.MIN_SCHED_CONTEXT, lift, bind_ok]
-  by_cases h14 : nt.val ≥ 14
-  · have : nt ≥ 14#u64 := by scalar_tac
+  by_cases h14 : nt.val ≥ 19
+  · have : nt ≥ 19#u64 := by scalar_tac
     simp [this, h14]
-  · have : ¬ nt ≥ 14#u64 := by scalar_tac
+  · have : ¬ nt ≥ 19#u64 := by scalar_tac
     simp only [this, ↓reduceIte, h14]
-    have hn : nt.val < 14 := by omega
+    have hn : nt.val < 19 := by omega
     simp only [u64_eq_iff]
     generalize hv : nt.val = n at *
     interval_cases n
     all_goals simp [zOf]
+    all_goals try simp only [show (15#u64).val = 15 from rfl]
     all_goals (split_ifs <;> (try simp_all) <;> (try rfl) <;>
       (try (simp [U64.size_def, UScalarTy.U64_numBits_eq, U64.numBits] at *; omega)) <;>
       (try (congr 2; apply UScalar.eq_of_val_eq; simp [core.num.U64.wrapping_add_val_eq, U64.size_def, UScalarTy.U64_numBits_eq, U64.numBits]; omega)) <;> (try omega))
-    all_goals (rename_i h1 _; have : (5 : Nat) % U64.size = 5 := Nat.mod_eq_of_lt (by simp [U64.size_def, UScalarTy.U64_numBits_eq, U64.numBits]); omega)
+    all_goals try norm_num [U64.size_def, UScalarTy.U64_numBits_eq, U64.numBits]
+    all_goals (
+      have hsum : 5 + us.val < 18446744073709551616 := by omega
+      simp only [Nat.mod_eq_of_lt hsum, show ¬ 47 < 5 + us.val by omega, ↓reduceIte]
+      congr 2)
 
 section
 variable {S : Type} {st : machine.Store S} [L : P1.LawfulStore st]
@@ -255,11 +263,13 @@ theorem decode_untyped_inv {w0 w1 p sb fi : U64} {dev : Bool}
   simp only [shr_eq _ 59#i32 (by decide) (by decide), unpack_ptr_eq, bind_ok] at h
   split at h
   all_goals simp [shr_eq _ 48#i32 (by decide) (by decide), shr_eq _ 50#i32 (by decide) (by decide),
-    shr_eq _ 58#i32 (by decide) (by decide), shr_eq _ 16#i32 (by decide) (by decide), lift, bit_eq, from_code_eq,
+    shr_eq _ 58#i32 (by decide) (by decide), shr_eq _ 16#i32 (by decide) (by decide),
+    shr_eq _ 53#i32 (by decide) (by decide), lift, bit_eq, from_code_eq,
     unpack_asid_eq _ 54#u64 _ (by decide), unpack_asid_eq _ 49#u64 _ (by decide)] at h
   case h_1 =>
     obtain ⟨-, rfl, -, -⟩ := h
     simp only [UScalar.val_and]; exact Nat.lt_of_le_of_lt Nat.and_le_right (by decide)
+  all_goals split_ifs at h <;> simp_all
 
 theorem capAt_untyped_inv {mem : U64 → U64} {a p sb fi : U64} {dev : Bool}
     (h : capAt mem a = ok (.Untyped p sb fi dev)) : sb.val < 64 := decode_untyped_inv h

@@ -85,22 +85,22 @@ theorem check_valid_ipc_buffer_rel (vptr : U64) (c : capability.Cap) (σ : Fl4Sp
       | _ => rfl
     | _ => rfl
   cases c
-  case Frame p sz r dev m a v =>
+  case Frame p sz r dev m ept a v =>
     cases dev
     case true =>
       refine ⟨_, rfl, Or.inr ⟨_, .illegalOperation, rfl, Or.inl (Or.inl trivial), ill _ ?_⟩⟩
       intro d q r' m' fs mp
-      by_cases e : absCap (.Frame p sz r true m a v) = .archObjectCap (.pageCap d q r' m' fs mp)
+      by_cases e : absCap (.Frame p sz r true m ept a v) = .archObjectCap (.pageCap d q r' m' fs mp)
       · right; simp [absCap] at e; exact e.1
       · left; exact e
     case false =>
-      have hsp : Fl4Spec.checkValidIpcBuffer (Z := Unit) vptr.bv (absCap (.Frame p sz r false m a v)) =
+      have hsp : Fl4Spec.checkValidIpcBuffer (Z := Unit) vptr.bv (absCap (.Frame p sz r false m ept a v)) =
           (do Fl4Spec.NonDetE.whenE (¬ Fl4Spec.isAligned vptr.bv 10) (Fl4Spec.NonDetE.throwError .alignmentError)
               Fl4Spec.NonDetE.returnOk ()) := by
         unfold Fl4Spec.checkValidIpcBuffer; rw [msgAlignBits_eq]; rfl
       generalize hD : ExceptT.run (Fl4Spec.checkValidIpcBuffer (Z := Unit) vptr.bv
-        (absCap (.Frame p sz r false m a v))) σ = D
-      have hFL : vspace.check_valid_ipc_buffer vptr (.Frame p sz r false m a v) =
+        (absCap (.Frame p sz r false m ept a v))) σ = D
+      have hFL : vspace.check_valid_ipc_buffer vptr (.Frame p sz r false m ept a v) =
           ok (if (vptr &&& 1023#u64) != 0#u64 then .Err (.Sys .AlignmentError) else .Ok ()) := by
         simp only [vspace.check_valid_ipc_buffer, Bool.false_eq_true, ↓reduceIte, ipc_shift, bind_ok]
         have h1 : (1024#u64 - 1#u64 : Result U64) = ok 1023#u64 := rfl

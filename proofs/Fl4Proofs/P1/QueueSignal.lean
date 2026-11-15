@@ -407,7 +407,13 @@ theorem notification.send_signal.tinv {A : Type _} {ar : machine.Arch A} (hA : P
         (by rw [st2]; rintro (hb | hb); exact not_blocked_running hb; exact running_ne.1 hb)) ?_
       rintro ⟨s', a'⟩ ⟨hb', tm'⟩
       exact hI.of_tmfr hb' ((TmFr.of_keepT k1).trans ((TmFr.of_keepT k2).trans tm'))
-    · exact act s sa
+    · refine WP.spec_bind sa fun s1 h1 => ?_
+      step with obj.Tcb.state.spec
+      split
+      · obtain ⟨⟨Q1, R1, hq1⟩, hb1, hx1, hs1, hg1⟩ := h1
+        exact WP.spec_mono (smp.remote_tcb_stall.all hA s1 a i hq1 hb1 hx1 hs1 hg1)
+          fun r ⟨hq2, hb2, hx2, hs2, hg2, _⟩ => ⟨⟨Q1, R1, hq2⟩, hb2, hx2, hs2, hg2⟩
+      · exact (WP.spec_ok _).2 h1
   · split
     · -- a waiting notification
       rename_i hnidl hwait

@@ -21,7 +21,7 @@ frame's mapping). -/
 theorem mask_vcap {r : capability.Rights} {c c' : capability.Cap} (h : capability.mask_cap_rights r c = ok c')
     (P L4 L3 L2 L1 : Set U64) (hv : Vs.VCapOK P L4 L3 L2 L1 c) : Vs.VCapOK P L4 L3 L2 L1 c' := by
   cases c <;> simp only [capability.mask_cap_rights] at h
-  case Frame p sz v dev m a va =>
+  case Frame p sz v dev m ept a va =>
     unfold capability.mask_vm_rights at h
     repeat' split at h
     all_goals (simp at h; subst h; exact hv)
@@ -52,7 +52,7 @@ theorem derive_vcap {S : Type} {st : machine.Store S} {s : S} {slot : obj.Slot} 
         core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual]
       intro h; subst h; trivial
     | _ => simp
-  case Frame p sz r dv m a va =>
+  case Frame p sz r dv m ept a va =>
     simp only [objects.derive_cap] at h; simp at h; subst h
     simp only [Vs.VCapOK] at hv ⊢; exact ⟨fun e => absurd e (by decide), hv.2⟩
   all_goals simp only [objects.derive_cap] at h
@@ -151,7 +151,7 @@ theorem insert_ctl_mstep (hP : Placed th) (s : S) (G : MdbGhost) (hM : MdbLinks 
     rw [capAt_capV] at this; simpa using this
   have hphys : ∀ x, CtlPair x c → physF x = false ∧ physF c = false ∧ Fl4Spec.objRefs (absCap c) = ∅ := by
     intro x h
-    rcases h.cases with ⟨rfl, i, rfl⟩ | ⟨rfl, f, l, rfl⟩ <;>
+    rcases h.cases with ⟨rfl, i, rfl⟩ | ⟨rfl, f, l, vcpu, rfl⟩ <;>
       exact ⟨ok_inj (phys_eq _).symm, ok_inj (phys_eq _).symm, by
         simp [absCap, Fl4Spec.objRefs, Fl4Spec.aobjRef]⟩
   obtain ⟨h1, h2, h3⟩ := hphys srcC hctl

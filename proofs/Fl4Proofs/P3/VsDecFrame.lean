@@ -178,8 +178,9 @@ theorem decodeMP_illegal {lbl : Fl4Spec.Data}
 section
 variable {S : Type} {st : machine.Store S} [L : P1.LawfulStore st] {A : Type} (arI : machine.Arch A)
 
-/-- The frame labels, FL4's and the spec's. -/
+/-- Label agreement for native frame invocations, excluding EPT mapping. -/
 structure FrameLabel (lbl : U64) (slbl : Fl4Spec.Data) : Prop where
+  native : lbl ≠ fl4_abi.label.X86PageMapEPT
   ds : Fl4Spec.dataToNat slbl = Fl4Spec.fl4DeriveSubframeLabel → lbl = fl4_abi.label.X86PageDeriveSubframe
   dsr : lbl = fl4_abi.label.X86PageDeriveSubframe → Fl4Spec.dataToNat slbl = Fl4Spec.fl4DeriveSubframeLabel
   tac : Fl4Spec.dataToNat slbl = Fl4Spec.fl4TestAndClearLabel → lbl = fl4_abi.label.X86PageTestAndClearAccessed
@@ -223,7 +224,7 @@ theorem decode_invocation_frameX (th : TypedHeap) (hP : Placed th) (s : S) (ar :
     (hargs : ∀ (i : U64) x, args[i.val]? = some x → msg.syscall_arg st s ct buf i = ok x)
     {pc : U64} {r : Nat} (hpc : th pc = some (.cnode r)) {idx : List Bool} (hidx : idx.length = r)
     {p : U64} {sz : capability.FrameSize} {rt asid va : U64} {d m : Bool}
-    (hcap : capAt (L.mem s) (cslotAddr (pc.bv, idx)) = ok (.Frame p sz rt d m asid va))
+    (hcap : capAt (L.mem s) (cslotAddr (pc.bv, idx)) = ok (.Frame p sz rt d m false asid va))
     (hfm : m = true → asid ≠ 0#u64)
     (hpaS : sz = .Small → (core.num.U64.wrapping_sub p layout.PPTR_BASE &&& 4503599627366400#u64) =
       core.num.U64.wrapping_sub p layout.PPTR_BASE)
@@ -239,19 +240,19 @@ theorem decode_invocation_frameX (th : TypedHeap) (hP : Placed th) (s : S) (ar :
         ∀ p' asid', vc = .Pml4 p' true asid' → p' ∈ L4 ∧ asid' ≠ 0#u64 ∧ asid'.val < 2 ^ 20)
     (blk call don fp : Bool) (ci : Fl4Spec.CapRef) (buffer : Option Fl4Spec.ObjRef)
     (hGA : lbl = fl4_abi.label.X86PageGetAddress →
-      DecOKRM (L := L) arI s ar σ lbl length (cslotAddr (pc.bv, idx)) (.Frame p sz rt d m asid va) blk call don fp
+      DecOKRM (L := L) arI s ar σ lbl length (cslotAddr (pc.bv, idx)) (.Frame p sz rt d m false asid va) blk call don fp
         buf extra slbl (args.map UScalar.bv) ci (pc.bv, idx) excaps buffer ct)
     (hTAC : lbl = fl4_abi.label.X86PageTestAndClearAccessed →
-      DecOKRM (L := L) arI s ar σ lbl length (cslotAddr (pc.bv, idx)) (.Frame p sz rt d m asid va) blk call don fp
+      DecOKRM (L := L) arI s ar σ lbl length (cslotAddr (pc.bv, idx)) (.Frame p sz rt d m false asid va) blk call don fp
         buf extra slbl (args.map UScalar.bv) ci (pc.bv, idx) excaps buffer ct)
     (hDS : lbl = fl4_abi.label.X86PageDeriveSubframe →
-      DecOKMQX (L := L) arI Q X s ar σ lbl length (cslotAddr (pc.bv, idx)) (.Frame p sz rt d m asid va) blk call don fp
+      DecOKMQX (L := L) arI Q X s ar σ lbl length (cslotAddr (pc.bv, idx)) (.Frame p sz rt d m false asid va) blk call don fp
         buf extra slbl (args.map UScalar.bv) ci (pc.bv, idx) excaps buffer) :
     (lbl ≠ fl4_abi.label.X86PageGetAddress ∧ lbl ≠ fl4_abi.label.X86PageTestAndClearAccessed ∧
-    DecOKMQX (L := L) arI Q X s ar σ lbl length (cslotAddr (pc.bv, idx)) (.Frame p sz rt d m asid va) blk call don fp
+    DecOKMQX (L := L) arI Q X s ar σ lbl length (cslotAddr (pc.bv, idx)) (.Frame p sz rt d m false asid va) blk call don fp
       buf extra slbl (args.map UScalar.bv) ci (pc.bv, idx) excaps buffer) ∨
     ((lbl = fl4_abi.label.X86PageGetAddress ∨ lbl = fl4_abi.label.X86PageTestAndClearAccessed) ∧
-    DecOKRM (L := L) arI s ar σ lbl length (cslotAddr (pc.bv, idx)) (.Frame p sz rt d m asid va) blk call don fp
+    DecOKRM (L := L) arI s ar σ lbl length (cslotAddr (pc.bv, idx)) (.Frame p sz rt d m false asid va) blk call don fp
       buf extra slbl (args.map UScalar.bv) ci (pc.bv, idx) excaps buffer ct) := by
   by_cases hga : lbl = fl4_abi.label.X86PageGetAddress
   · exact Or.inr ⟨Or.inl hga, hGA hga⟩
@@ -265,10 +266,10 @@ theorem decode_invocation_frameX (th : TypedHeap) (hP : Placed th) (s : S) (ar :
   obtain ⟨cS, aS, hcS, hcaS, -⟩ := hSt.slot_cap (Z := Unit) (sl := (pc.bv, idx)) (p := pc) rfl
     (by simpa [hidx] using hpc)
   rw [hcap] at hcS; cases eq_of_ok_eq hcS
-  have hfw : CapWf (.Frame p sz rt d m asid va) := hcaS.1
-  have hfe : EncWf (.Frame p sz rt d m asid va) := by
+  have hfw : CapWf (.Frame p sz rt d m false asid va) := hcaS.1
+  have hfe : EncWf (.Frame p sz rt d m false asid va) := by
     have h := hcap; rw [capAt_words] at h; exact decode_encWf h
-  have hfcv : CapValid th (.Frame p sz rt d m asid va) :=
+  have hfcv : CapValid th (.Frame p sz rt d m false asid va) :=
     hSV.cnode pc r hpc (blVal 0 idx) (hidx ▸ blVal_lt idx) _
       (by rw [show slotAddr pc.bv (BitVec.ofNat 64 (blVal 0 idx)) = cslotAddr (pc.bv, idx) from
         (slotAddr_ofBl pc idx).symm]; exact hcap)
@@ -282,15 +283,15 @@ theorem decode_invocation_frameX (th : TypedHeap) (hP : Placed th) (s : S) (ar :
     hPV b ⟨q, Or.inr (Or.inr (Or.inr hq)), i, hi, e⟩
   unfold DecOKMQX syscall.decode_invocation
   rw [hct]; simp only [bind_ok]
-  have hspec : specDec fp slbl (args.map UScalar.bv) ci (pc.bv, idx) (.Frame p sz rt d m asid va) excaps buffer =
+  have hspec : specDec fp slbl (args.map UScalar.bv) ci (pc.bv, idx) (.Frame p sz rt d m false asid va) excaps buffer =
       Fl4Spec.NonDetE.liftME Fl4Spec.Fl4Invocation.invokeArchObject
         (Fl4Spec.fl4ArchDecodeInvocation (Z := Unit) slbl (args.map UScalar.bv) ci (pc.bv, idx)
-          (frameACapG ⟨p, sz, rt, d, m, asid, va⟩) excaps) := rfl
+          (frameACapG ⟨p, sz, rt, d, m, false, asid, va⟩) excaps) := rfl
   rw [hspec]
   have hd : Fl4Spec.fl4ArchDecodeInvocation (Z := Unit) slbl (args.map UScalar.bv) ci (pc.bv, idx)
-      (frameACapG ⟨p, sz, rt, d, m, asid, va⟩) excaps =
+      (frameACapG ⟨p, sz, rt, d, m, false, asid, va⟩) excaps =
       Fl4Spec.NonDetE.liftME Fl4Spec.Fl4ArchInvocation.spec (Fl4Spec.archDecodeInvocation (Z := Unit) slbl
-        (args.map UScalar.bv) ci (pc.bv, idx) (frameACapG ⟨p, sz, rt, d, m, asid, va⟩) excaps) := by
+        (args.map UScalar.bv) ci (pc.bv, idx) (frameACapG ⟨p, sz, rt, d, m, false, asid, va⟩) excaps) := by
     unfold Fl4Spec.fl4ArchDecodeInvocation frameACapG; dsimp only
     rw [if_neg (fun h => hds (hlbl.ds h)), if_neg (fun h => htac (hlbl.tac h))]
   rw [hd]
@@ -300,7 +301,7 @@ theorem decode_invocation_frameX (th : TypedHeap) (hP : Placed th) (s : S) (ar :
   · subst hmap
     have hl := hlbl.map rfl
     unfold vspace.decode_frame
-    simp only [vspace.as_frame, bind_ok, ↓reduceIte]
+    simp only [vspace.as_frame, bind_ok, hlbl.native, Bool.false_eq_true, ↓reduceIte, ite_self]
     rcases hext with ⟨hex, rfl⟩ | ⟨x, vc, vc', xsl, rest, hex, hcx, hvr, rfl, hvc⟩
     · unfold vspace.decode_page_map
       rw [hct, hex]
@@ -309,18 +310,18 @@ theorem decode_invocation_frameX (th : TypedHeap) (hP : Placed th) (s : S) (ar :
         decodeMap_trunc hl _ _ _ _ _ _ _ _ _ (by simp) σ, Or.inl trivial⟩) hX0
     have post : ∀ res, ((∃ e e', res.1 = .Err e ∧ MapErrRel e e' ∧
         ExceptT.run (Fl4Spec.archDecodeInvocation (Z := Unit) slbl (args.map UScalar.bv) ci (pc.bv, idx)
-          (frameACapG ⟨p, sz, rt, d, m, asid, va⟩) ((vc', xsl) :: rest)) σ = ({(.error e', σ)}, False) ∧
+          (frameACapG ⟨p, sz, rt, d, m, false, asid, va⟩) ((vc', xsl) :: rest)) σ = ({(.error e', σ)}, False) ∧
           res.2.1 = s ∧ res.2.2 = ar) ∨
       (res.1 = .Ok () ∧ ∃ iv σ', ExceptT.run (Fl4Spec.archDecodeInvocation (Z := Unit) slbl (args.map UScalar.bv)
-          ci (pc.bv, idx) (frameACapG ⟨p, sz, rt, d, m, asid, va⟩) ((vc', xsl) :: rest)) σ = ({(.ok iv, σ)}, False) ∧
+          ci (pc.bv, idx) (frameACapG ⟨p, sz, rt, d, m, false, asid, va⟩) ((vc', xsl) :: rest)) σ = ({(.ok iv, σ)}, False) ∧
         MapSpec σ iv σ' ∧ StateRel th (L.mem res.2.1) σ' ∧ SlotsValid th (L.mem res.2.1) ∧
         VsRel P (L.mem res.2.1) (L.ksb res.2.1) σ' ∧ PtRel L4 L3 L2 L1 (L.mem res.2.1) σ' ∧ SR res.2.1 res.2.2 σ' ∧
         SlotFoot th (L.mem s) (L.mem res.2.1) (cslotAddr (pc.bv, idx)) ∧
-        VsLike (capV (L.mem res.2.1) (cslotAddr (pc.bv, idx))) (frameCapOf ⟨p, sz, rt, d, m, asid, va⟩) ∧
+        VsLike (capV (L.mem res.2.1) (cslotAddr (pc.bv, idx))) (frameCapOf ⟨p, sz, rt, d, m, false, asid, va⟩) ∧
         KFoot σ σ')) →
         TopPostMX (L := L) X σ blk call don (Fl4Spec.NonDetE.liftME Fl4Spec.Fl4Invocation.invokeArchObject
           (Fl4Spec.NonDetE.liftME Fl4Spec.Fl4ArchInvocation.spec (Fl4Spec.archDecodeInvocation (Z := Unit) slbl
-            (args.map UScalar.bv) ci (pc.bv, idx) (frameACapG ⟨p, sz, rt, d, m, asid, va⟩) ((vc', xsl) :: rest))))
+            (args.map UScalar.bv) ci (pc.bv, idx) (frameACapG ⟨p, sz, rt, d, m, false, asid, va⟩) ((vc', xsl) :: rest))))
           s res ∧ FootQ Q s res := by
       rintro res (⟨e, e', h1, he, hdec, h2, h2a⟩ | ⟨h1, iv, σ', hdec, hms, hSt', hSV', hR', hPt', hSRq, hF, hL, hK⟩)
       · exact topMQX_err (⟨e, h1, h2, e', hdec, he.elim id (fun ⟨h3, h4⟩ => h3 ▸ h4 ▸ hAl)⟩) (by rw [h2, h2a]; exact hX0)
@@ -329,19 +330,19 @@ theorem decode_invocation_frameX (th : TypedHeap) (hP : Placed th) (s : S) (ar :
           (crelM_after hCR hFI hMO hcap hSt' hSV' hF hL hK rfl)⟩, Or.inr (hQ _ _ _ hSRq)⟩
     cases sz
     · exact WP.spec_mono (frame_map_rel hH1 s ar σ hP hVP hD hPP hPS hPV1 hPO hSt hSV hR hPt hS ct hct hcur' hkt (hrun _ hkt)
-        htcb hact ⟨p, .Small, rt, d, m, asid, va⟩ rfl hfw hfe hfcv hfm (hpaS rfl) hpc hidx hl length buf args hlen
+        htcb hact ⟨p, .Small, rt, d, m, false, asid, va⟩ rfl hfw hfe hfcv hfm (hpaS rfl) hpc hidx hl length buf args hlen
         hargs ci extra hex hcx hvr xsl rest hvc) post
     · exact WP.spec_mono (frame_map_large_rel hHL s ar σ hP hVP hD hPP hPS hPV hPO hSt hSV hR hPt hS ct hct hcur'
-        hkt (hrun _ hkt) htcb hact ⟨p, .Large, rt, d, m, asid, va⟩ rfl hfw hfe hfcv hfm (hpaL rfl) hpc hidx hl length buf args
+        hkt (hrun _ hkt) htcb hact ⟨p, .Large, rt, d, m, false, asid, va⟩ rfl hfw hfe hfcv hfm (hpaL rfl) hpc hidx hl length buf args
         hlen hargs ci extra hex hcx hvr xsl rest hvc) post
     · exact WP.spec_mono (frame_map_huge_rel hHL s ar σ hP hVP hD hPP hPS hPV hPO hSt hSV hR hPt hS ct hct hcur'
-        hkt (hrun _ hkt) htcb hact ⟨p, .Huge, rt, d, m, asid, va⟩ rfl hfw hfe hfcv hfm (hpaH rfl) hpc hidx hl length buf args
+        hkt (hrun _ hkt) htcb hact ⟨p, .Huge, rt, d, m, false, asid, va⟩ rfl hfw hfe hfcv hfm (hpaH rfl) hpc hidx hl length buf args
         hlen hargs ci extra hex hcx hvr xsl rest hvc) post
   by_cases hunmap : lbl = fl4_abi.label.X86PageUnmap
   · subst hunmap
     have hl := hlbl.unmap rfl
     refine WP.spec_mono (frame_unmap_rel hHU s ar σ hP hVP hD hPP hPS hPV hPI hPO hSt hSV hR hPt hS ct hct hcur'
-      hkt (hrun _ hkt) htcb hact ⟨p, sz, rt, d, m, asid, va⟩ hfw hfe hfm hpc hidx hcap hl length buf call extra
+      hkt (hrun _ hkt) htcb hact ⟨p, sz, rt, d, m, false, asid, va⟩ hfw hfe hfm hpc hidx hcap hl length buf call extra
       (args.map UScalar.bv) ci excaps) ?_
     rintro res ⟨h1, iv, σ', hdec, hms, ⟨hSRq, hSt', hSV', hR', hPt'⟩, hF, hL, hK⟩
     exact ⟨topMX_of_lift2 ⟨iv, hdec, _, hst1, _, perf_page_mem blk call don hst1 hms,
@@ -349,10 +350,10 @@ theorem decode_invocation_frameX (th : TypedHeap) (hP : Placed th) (s : S) (ar :
       (crelM_after hCR hFI hMO hcap hSt' hSV' hF hL hK rfl)⟩, Or.inr (hQ _ _ _ hSRq)⟩
   obtain ⟨o1, o2, o3⟩ := hlbl.other hmap hunmap hga htac hds
   unfold vspace.decode_frame
-  simp only [vspace.as_frame, bind_ok, hmap, hunmap, hga, htac, hds, ↓reduceIte, error.illegal, WP.spec_ok]
+  simp only [vspace.as_frame, bind_ok, hmap, hunmap, hga, htac, hds, hlbl.native, ↓reduceIte, error.illegal, WP.spec_ok]
   refine topMQX_err (⟨_, rfl, rfl, .illegalOperation, ?_, Or.inl trivial⟩) hX0
   show ExceptT.run (Fl4Spec.decodePageInvocation (Z := Unit) slbl (args.map UScalar.bv) (pc.bv, idx)
-    (frameACapG ⟨p, sz, rt, d, m, asid, va⟩) excaps) σ = _
+    (frameACapG ⟨p, sz, rt, d, m, false, asid, va⟩) excaps) σ = _
   unfold Fl4Spec.decodePageInvocation frameACapG; dsimp only
   rw [if_neg o1, if_neg o2, if_neg o3]; rfl
 
@@ -379,7 +380,7 @@ theorem decode_invocation_frame (th : TypedHeap) (hP : Placed th) (s : S) (ar : 
     (hargs : ∀ (i : U64) x, args[i.val]? = some x → msg.syscall_arg st s ct buf i = ok x)
     {pc : U64} {r : Nat} (hpc : th pc = some (.cnode r)) {idx : List Bool} (hidx : idx.length = r)
     {p : U64} {sz : capability.FrameSize} {rt asid va : U64} {d m : Bool}
-    (hcap : capAt (L.mem s) (cslotAddr (pc.bv, idx)) = ok (.Frame p sz rt d m asid va))
+    (hcap : capAt (L.mem s) (cslotAddr (pc.bv, idx)) = ok (.Frame p sz rt d m false asid va))
     (hfm : m = true → asid ≠ 0#u64)
     (hpaS : sz = .Small → (core.num.U64.wrapping_sub p layout.PPTR_BASE &&& 4503599627366400#u64) =
       core.num.U64.wrapping_sub p layout.PPTR_BASE)
@@ -395,19 +396,19 @@ theorem decode_invocation_frame (th : TypedHeap) (hP : Placed th) (s : S) (ar : 
         ∀ p' asid', vc = .Pml4 p' true asid' → p' ∈ L4 ∧ asid' ≠ 0#u64 ∧ asid'.val < 2 ^ 20)
     (blk call don fp : Bool) (ci : Fl4Spec.CapRef) (buffer : Option Fl4Spec.ObjRef)
     (hGA : lbl = fl4_abi.label.X86PageGetAddress →
-      DecOKRM (L := L) arI s ar σ lbl length (cslotAddr (pc.bv, idx)) (.Frame p sz rt d m asid va) blk call don fp
+      DecOKRM (L := L) arI s ar σ lbl length (cslotAddr (pc.bv, idx)) (.Frame p sz rt d m false asid va) blk call don fp
         buf extra slbl (args.map UScalar.bv) ci (pc.bv, idx) excaps buffer ct)
     (hTAC : lbl = fl4_abi.label.X86PageTestAndClearAccessed →
-      DecOKRM (L := L) arI s ar σ lbl length (cslotAddr (pc.bv, idx)) (.Frame p sz rt d m asid va) blk call don fp
+      DecOKRM (L := L) arI s ar σ lbl length (cslotAddr (pc.bv, idx)) (.Frame p sz rt d m false asid va) blk call don fp
         buf extra slbl (args.map UScalar.bv) ci (pc.bv, idx) excaps buffer ct)
     (hDS : lbl = fl4_abi.label.X86PageDeriveSubframe →
-      DecOKMQ (L := L) arI Q s ar σ lbl length (cslotAddr (pc.bv, idx)) (.Frame p sz rt d m asid va) blk call don fp
+      DecOKMQ (L := L) arI Q s ar σ lbl length (cslotAddr (pc.bv, idx)) (.Frame p sz rt d m false asid va) blk call don fp
         buf extra slbl (args.map UScalar.bv) ci (pc.bv, idx) excaps buffer) :
     (lbl ≠ fl4_abi.label.X86PageGetAddress ∧ lbl ≠ fl4_abi.label.X86PageTestAndClearAccessed ∧
-    DecOKMQ (L := L) arI Q s ar σ lbl length (cslotAddr (pc.bv, idx)) (.Frame p sz rt d m asid va) blk call don fp
+    DecOKMQ (L := L) arI Q s ar σ lbl length (cslotAddr (pc.bv, idx)) (.Frame p sz rt d m false asid va) blk call don fp
       buf extra slbl (args.map UScalar.bv) ci (pc.bv, idx) excaps buffer) ∨
     ((lbl = fl4_abi.label.X86PageGetAddress ∨ lbl = fl4_abi.label.X86PageTestAndClearAccessed) ∧
-    DecOKRM (L := L) arI s ar σ lbl length (cslotAddr (pc.bv, idx)) (.Frame p sz rt d m asid va) blk call don fp
+    DecOKRM (L := L) arI s ar σ lbl length (cslotAddr (pc.bv, idx)) (.Frame p sz rt d m false asid va) blk call don fp
       buf extra slbl (args.map UScalar.bv) ci (pc.bv, idx) excaps buffer ct) := by
   exact (decode_invocation_frameX arI th hP s ar σ G hCR hFI hMO hQ (X := fun _ _ _ => True) trivial (fun _ _ _ _ _ _ _ _ _ => trivial) hH1 hHL hHU hS hVP hD hPP hPS hPV hPO hPI hR hPt lbl slbl hlbl length buf ct hct hcur htcb hact hrun args hlen hargs hpc hidx hcap hfm hpaS hpaL hpaH hAl extra excaps hext blk call don fp ci buffer hGA hTAC (fun h => DecOKMQ.toXT arI (hDS h))).imp (fun h => ⟨h.1, h.2.1, DecOKMQX.toMQ arI h.2.2⟩) id
 
@@ -887,18 +888,18 @@ theorem decode_invocation_frame_dsX (th : TypedHeap) (hP : Placed th) (s : S) (a
     (hargs : ∀ (i : U64) x, args[i.val]? = some x → msg.syscall_arg st s ct buf i = ok x)
     {pc : U64} {r : Nat} (hpc : th pc = some (.cnode r)) {idx : List Bool} (hidx : idx.length = r)
     {p : U64} {sz : capability.FrameSize} {rt asid va : U64} {d m : Bool}
-    (hcap : capAt (L.mem s) (cslotAddr (pc.bv, idx)) = ok (.Frame p sz rt d m asid va))
+    (hcap : capAt (L.mem s) (cslotAddr (pc.bv, idx)) = ok (.Frame p sz rt d m false asid va))
     (hno : sz = .Large → d = false → ∀ x ∈ G.chains.flatten,
-      Disj (capV (L.mem s) x) (.Frame p sz rt d m asid va) ∨
+      Disj (capV (L.mem s) x) (.Frame p sz rt d m false asid va) ∨
       (isFrame (capV (L.mem s) x) = true ∧ revOf (L.mem s) x = false) ∨
-      Within (.Frame p sz rt d m asid va) (capV (L.mem s) x))
+      Within (.Frame p sz rt d m false asid va) (capV (L.mem s) x))
     (hMO : MdbOKV (L.ksb s) (L.mem s) G) (hVC : VsCapsIn P L4 L3 L2 L1 (L.mem s) G)
     (extra : Aeneas.Std.Array obj.Slot 3#usize) (excaps : List (Fl4Spec.Cap × Fl4Spec.CslotPtr))
     (hext : (vspace.extra extra 0#usize = ok none ∧ excaps = []) ∨
       ∃ y nc nc' nsl rest, vspace.extra extra 0#usize = ok (some y) ∧ capAt (L.mem s) y = ok nc ∧
         CapRel nc nc' ∧ CapValid th nc ∧ excaps = (nc', nsl) :: rest)
     (blk call don fp : Bool) (ci : Fl4Spec.CapRef) (buffer : Option Fl4Spec.ObjRef) :
-    DecOKMQX (L := L) arI Q X s ar σ lbl length (cslotAddr (pc.bv, idx)) (.Frame p sz rt d m asid va) blk call don fp
+    DecOKMQX (L := L) arI Q X s ar σ lbl length (cslotAddr (pc.bv, idx)) (.Frame p sz rt d m false asid va) blk call don fp
       buf extra slbl (args.map UScalar.bv) ci (pc.bv, idx) excaps buffer := by
   subst hl
   have hCR0 := hCR
@@ -910,13 +911,13 @@ theorem decode_invocation_frame_dsX (th : TypedHeap) (hP : Placed th) (s : S) (a
     rw [hcur]; exact Notif.setThreadState_eq .restart hkt0
   unfold DecOKMQX syscall.decode_invocation
   rw [hct]; simp only [bind_ok]
-  have hspec : specDec fp slbl (args.map UScalar.bv) ci (pc.bv, idx) (.Frame p sz rt d m asid va) excaps buffer =
+  have hspec : specDec fp slbl (args.map UScalar.bv) ci (pc.bv, idx) (.Frame p sz rt d m false asid va) excaps buffer =
       Fl4Spec.NonDetE.liftME Fl4Spec.Fl4Invocation.invokeArchObject
         (Fl4Spec.NonDetE.liftME Fl4Spec.Fl4ArchInvocation.deriveSubframe
           (Fl4Spec.decodeDeriveSubframe (Z := Unit) (args.map UScalar.bv) (pc.bv, idx)
-            (frameACapG ⟨p, sz, rt, d, m, asid, va⟩) excaps)) := by
+            (frameACapG ⟨p, sz, rt, d, m, false, asid, va⟩) excaps)) := by
     show Fl4Spec.NonDetE.liftME _ (Fl4Spec.fl4ArchDecodeInvocation (Z := Unit) slbl (args.map UScalar.bv) ci (pc.bv, idx)
-      (frameACapG ⟨p, sz, rt, d, m, asid, va⟩) excaps) = _
+      (frameACapG ⟨p, sz, rt, d, m, false, asid, va⟩) excaps) = _
     unfold Fl4Spec.fl4ArchDecodeInvocation frameACapG; dsimp only
     rw [if_pos (hlbl.dsr rfl)]
   rw [hspec]
@@ -931,7 +932,9 @@ theorem decode_invocation_frame_dsX (th : TypedHeap) (hP : Placed th) (s : S) (a
     unfold fl4_abi.label.X86PageDeriveSubframe fl4_abi.label.X86PageGetAddress; decide
   have n4 : ¬ fl4_abi.label.X86PageDeriveSubframe = fl4_abi.label.X86PageTestAndClearAccessed := by
     unfold fl4_abi.label.X86PageDeriveSubframe fl4_abi.label.X86PageTestAndClearAccessed; decide
-  simp only [vspace.as_frame, bind_ok, n1, n2, n3, n4, ↓reduceIte]
+  have n5 : ¬ fl4_abi.label.X86PageDeriveSubframe = fl4_abi.label.X86PageMapEPT := by
+    unfold fl4_abi.label.X86PageDeriveSubframe fl4_abi.label.X86PageMapEPT; decide
+  simp only [vspace.as_frame, bind_ok, n1, n2, n3, n4, n5, ↓reduceIte]
   rcases hext with ⟨hex, rfl⟩ | ⟨y, nc, nc', nsl, rest, hex, hcy, hnr, hnv, rfl⟩
   · unfold vspace.derive_subframe
     rw [hct, hex]
@@ -969,18 +972,18 @@ theorem decode_invocation_frame_ds (th : TypedHeap) (hP : Placed th) (s : S) (ar
     (hargs : ∀ (i : U64) x, args[i.val]? = some x → msg.syscall_arg st s ct buf i = ok x)
     {pc : U64} {r : Nat} (hpc : th pc = some (.cnode r)) {idx : List Bool} (hidx : idx.length = r)
     {p : U64} {sz : capability.FrameSize} {rt asid va : U64} {d m : Bool}
-    (hcap : capAt (L.mem s) (cslotAddr (pc.bv, idx)) = ok (.Frame p sz rt d m asid va))
+    (hcap : capAt (L.mem s) (cslotAddr (pc.bv, idx)) = ok (.Frame p sz rt d m false asid va))
     (hno : sz = .Large → d = false → ∀ x ∈ G.chains.flatten,
-      Disj (capV (L.mem s) x) (.Frame p sz rt d m asid va) ∨
+      Disj (capV (L.mem s) x) (.Frame p sz rt d m false asid va) ∨
       (isFrame (capV (L.mem s) x) = true ∧ revOf (L.mem s) x = false) ∨
-      Within (.Frame p sz rt d m asid va) (capV (L.mem s) x))
+      Within (.Frame p sz rt d m false asid va) (capV (L.mem s) x))
     (hMO : MdbOKV (L.ksb s) (L.mem s) G) (hVC : VsCapsIn P L4 L3 L2 L1 (L.mem s) G)
     (extra : Aeneas.Std.Array obj.Slot 3#usize) (excaps : List (Fl4Spec.Cap × Fl4Spec.CslotPtr))
     (hext : (vspace.extra extra 0#usize = ok none ∧ excaps = []) ∨
       ∃ y nc nc' nsl rest, vspace.extra extra 0#usize = ok (some y) ∧ capAt (L.mem s) y = ok nc ∧
         CapRel nc nc' ∧ CapValid th nc ∧ excaps = (nc', nsl) :: rest)
     (blk call don fp : Bool) (ci : Fl4Spec.CapRef) (buffer : Option Fl4Spec.ObjRef) :
-    DecOKMQ (L := L) arI Q s ar σ lbl length (cslotAddr (pc.bv, idx)) (.Frame p sz rt d m asid va) blk call don fp
+    DecOKMQ (L := L) arI Q s ar σ lbl length (cslotAddr (pc.bv, idx)) (.Frame p sz rt d m false asid va) blk call don fp
       buf extra slbl (args.map UScalar.bv) ci (pc.bv, idx) excaps buffer := by
   exact DecOKMQX.toMQ arI (decode_invocation_frame_dsX arI th hP s ar σ G hCR hFI hU hQ (X := fun _ _ _ => True) trivial (fun _ _ _ _ _ _ _ _ _ => trivial) hH hS hPP hVP hVO hPO hR hPt lbl slbl hlbl hl length buf ct hct hcur htcb hact hkt hrun args hlen hargs hpc hidx hcap hno hMO hVC extra excaps hext blk call don fp ci buffer)
 
@@ -1002,6 +1005,8 @@ theorem decode_invocation_asid_poolX (th : TypedHeap) (hP : Placed th) (s : S) (
     (hrun : ∀ x, σ.kheap σ.curThread = some (.tcb x) → Fl4Spec.runnable x.tcbState = true)
     (ptr base : U64) (hb : base.val % 512 = 0) (hb20 : base.val < 2 ^ 20)
     (extra : Aeneas.Std.Array obj.Slot 3#usize) (excaps : List (Fl4Spec.Cap × Fl4Spec.CslotPtr))
+    (hNative : ∀ x, vspace.extra extra 0#usize = ok (some x) →
+      ∀ p level mapped asid va, capAt (L.mem s) x ≠ ok (.Ept p level mapped asid va))
     (hext : (vspace.extra extra 0#usize = ok none ∧ excaps = []) ∨
       ∃ (pc : U64) (r : Nat) (idx : List Bool) (vc : capability.Cap) (vc' : Fl4Spec.Cap)
         (rest : List (Fl4Spec.Cap × Fl4Spec.CslotPtr)), th pc = some (.cnode r) ∧ idx.length = r ∧
@@ -1058,6 +1063,8 @@ theorem decode_invocation_asid_poolX (th : TypedHeap) (hP : Placed th) (s : S) (
     have hres : ∀ v : Bool, v = true ∨ (∀ p1 a1, vc ≠ .Pml4 p1 v a1) → True := fun _ _ => trivial
     clear hres
     cases vc
+    case Ept p1 level mapped asid va =>
+      exact False.elim (hNative _ hex _ _ _ _ _ hcx)
     case Pml4 p1 b a1 =>
       cases b
       · exact absurd ⟨p1, a1, rfl⟩ hpm
@@ -1105,6 +1112,8 @@ theorem decode_invocation_asid_pool (th : TypedHeap) (hP : Placed th) (s : S) (a
     (hrun : ∀ x, σ.kheap σ.curThread = some (.tcb x) → Fl4Spec.runnable x.tcbState = true)
     (ptr base : U64) (hb : base.val % 512 = 0) (hb20 : base.val < 2 ^ 20)
     (extra : Aeneas.Std.Array obj.Slot 3#usize) (excaps : List (Fl4Spec.Cap × Fl4Spec.CslotPtr))
+    (hNative : ∀ x, vspace.extra extra 0#usize = ok (some x) →
+      ∀ p level mapped asid va, capAt (L.mem s) x ≠ ok (.Ept p level mapped asid va))
     (hext : (vspace.extra extra 0#usize = ok none ∧ excaps = []) ∨
       ∃ (pc : U64) (r : Nat) (idx : List Bool) (vc : capability.Cap) (vc' : Fl4Spec.Cap)
         (rest : List (Fl4Spec.Cap × Fl4Spec.CslotPtr)), th pc = some (.cnode r) ∧ idx.length = r ∧
@@ -1115,7 +1124,7 @@ theorem decode_invocation_asid_pool (th : TypedHeap) (hP : Placed th) (s : S) (a
     (buffer : Option Fl4Spec.ObjRef) :
     DecOKMQ (L := L) arI Q s ar σ lbl length slot (.AsidPool ptr base) blk call don fp buf extra slbl args ci sl excaps
       buffer := by
-  exact DecOKMQX.toMQ arI (decode_invocation_asid_poolX arI th hP s ar σ G hCR hFI hMO hQ hH hS hVP hD hR hVO lbl slbl hlA length buf ct hct hcur htcb hact hrun ptr base hb hb20 extra excaps hext (X := fun _ _ _ => True) trivial (fun _ _ _ _ _ _ _ _ _ => trivial) slot blk call don fp args ci sl buffer)
+  exact DecOKMQX.toMQ arI (decode_invocation_asid_poolX arI th hP s ar σ G hCR hFI hMO hQ hH hS hVP hD hR hVO lbl slbl hlA length buf ct hct hcur htcb hact hrun ptr base hb hb20 extra excaps hNative hext (X := fun _ _ _ => True) trivial (fun _ _ _ _ _ _ _ _ _ => trivial) slot blk call don fp args ci sl buffer)
 
 set_option maxHeartbeats 8000000 in
 /-- **The ASID control cap**, every label (`MakePool`: `makepool_rel`; the

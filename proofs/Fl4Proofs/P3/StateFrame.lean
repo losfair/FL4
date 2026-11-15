@@ -70,7 +70,8 @@ attribute [local step] tcb_state_spec' sc_is_null_spec' action_spec' set_action_
 theorem is_schedulable_spec' (s : S) (t : obj.Tcb) : sched.is_schedulable st s t ⦃ _ => True ⦄ := by
   unfold sched.is_schedulable sched.is_runnable sporadic.sc_active
   step
-  split <;> simp only [bind_ok] <;> step* <;> simp_all
+  repeat' (first | step | (simp only [bind_ok]) | split)
+  all_goals simp_all
 
 attribute [local step] is_schedulable_spec'
 

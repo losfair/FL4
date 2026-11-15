@@ -217,8 +217,8 @@ theorem unbind_tcb_refines {N T C : Set U64} {c : U64} (s : S) (σ : Fl4Spec.Sta
   -- the SC's TCB word
   refine WP.spec_mono (obj.Sc.set_tcb.spec' _ p 0#u64) ?_
   rintro s5 rfl
-  obtain ⟨hS5, hf5, hK5⟩ := hS4.set_sc_tcb hp hk4 0#u64
-  rw [optRef_zero] at hS5 hK5
+  obtain ⟨hS5, hf5, hK6⟩ := hS4.set_sc_tcb hp hk4 0#u64
+  rw [optRef_zero] at hS5 hK6
   have hI5 := hI3.unbound hkt3 hyt hk3 hnq3
   have hN3 : NSC N C σ3 := fun m hm x q hx hq => hN m hm x q (by rw [← hq1.1]; exact hx) hq
   have hw : WritesIn st s (L.wr (L.wr s3 (scA i) 0#u64) (scW p 24#u64) 0#u64)
@@ -233,7 +233,7 @@ theorem unbind_tcb_refines {N T C : Set U64} {c : U64} (s : S) (σ : Fl4Spec.Sta
   have hck : CKeep σ (updSc (updK σ3 i.bv (.tcb { xt with tcbSchedContext := none })) p.bv { y with scTcb := none } n) :=
     ((CKeep.of_kheap hq1.1).trans ((CKeep.updOther hkt3 (fun _ _ e => by cases e) (fun _ e => by cases e)
       (fun _ _ e => by cases e)).trans (CKeep.updSc hk4 rfl)))
-  refine ⟨_, ?_, hS5, hR4.frame hS4.placed hf5 hK5, hN3.updTcb.updSc, hI5, fun ha0 hId hti => ?_, hw, hck⟩
+  refine ⟨_, ?_, hS5, hR4.frame hS4.placed hf5 hK6, hN3.updTcb.updSc, hI5, fun ha0 hId hti => ?_, hw, hck⟩
   · -- the spec
     unfold Fl4Spec.schedContextUnbindTcb
     rw [nd_bind_one (getSchedContext_eq hk), hyt,

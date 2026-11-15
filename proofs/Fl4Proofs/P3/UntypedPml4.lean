@@ -82,6 +82,8 @@ theorem create_object_pml4 {A' : Type} (arI : machine.Arch A') (s : S) (ar : A')
   have hnt' : nt = 8#u64 := UScalar.eq_of_val_eq hnt
   subst hnt'
   unfold objects.create_object
+  simp only [fl4_abi.consts.object.X86Vcpu, fl4_abi.consts.object.X86EptPml4,
+    show ¬ (8#u64 : U64) = 14#u64 by decide, show ¬ (8#u64 : U64) ≥ 15#u64 by decide, ↓reduceIte]
   simp only [fl4_abi.consts.object.Tcb, fl4_abi.consts.object.Endpoint, fl4_abi.consts.object.Notification,
     fl4_abi.consts.object.CapTable, fl4_abi.consts.object.Untyped, fl4_abi.consts.object.SchedContext,
     fl4_abi.consts.object.Reply, fl4_abi.consts.object.X86Pdpt, fl4_abi.consts.object.X64Pml4,
@@ -1219,6 +1221,7 @@ theorem untyped_retype_refines_fl4P {A' : Type} (arI : machine.Arch A') (th : Ty
         (absCap (.Untyped p sb fi dev)) excaps) s ar (RetPostN (L := L) th (L.mem s) G σ Fl4Spec.fl4ObjBitsApi) res ⦄ := by
   have hAs : AbsSlot th (pp.bv, idx) := ⟨pp, rfl, Or.inl (by simpa [hidx] using hpp)⟩
   refine untyped_decode_refines_fl4 arI th s ar σ G hR hV hP hM hC hI lbl slbl hlbl length buf ct hct args hlen hargs
+    (fun x hx => Or.inl (by have := hnt x hx; omega))
     _ (pp.bv, idx) rfl hAs p sb fi dev hcap extra x0 hx0 excaps hex hfan _ ?_
   intro nt us dest off win t r reset fiv hnt0 hctx
   have hn := hnt nt hnt0

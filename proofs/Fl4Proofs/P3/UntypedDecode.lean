@@ -140,6 +140,7 @@ theorem untyped_decode_refines_with (bitsApi : Fl4Spec.ApiObjectType → Nat →
     (length buf ct : U64) (hct : sched.cur_thread st s = ok ct) (args : List U64)
     (hlen : length.val = args.length)
     (hargs : ∀ (i : U64) x, args[i.val]? = some x → msg.syscall_arg st s ct buf i = ok x)
+    (hNative : ∀ x, args.head? = some x → x.val < 14 ∨ 19 ≤ x.val)
     (hbits : ∀ (x : U64) t, args.head? = some x → objTypeOf x.val = some t → ∀ n, bitsApi t n = zOf x.val n)
     (slot : obj.Slot) (sl : Fl4Spec.CslotPtr) (hsl : slot = cslotAddr sl) (hAs : AbsSlot th sl)
     (p sb fi : U64) (dev : Bool) (hcap : capAt (L.mem s) slot = ok (.Untyped p sb fi dev))
@@ -197,9 +198,18 @@ theorem untyped_decode_refines_with (bitsApi : Fl4Spec.ApiObjectType → Nat →
     List.map_cons, List.getElem?_cons_zero, List.getElem?_cons_succ, Fl4Spec.the]
   simp only [Fl4Spec.NonDetE.returnOk, ndE_pure_bind, Fl4Spec.dataToNat, Fl4Spec.unat, UScalar.bv_toNat]
   have hd := dataToObjType_run nt.bv σ
+  have hnNative := hNative nt rfl
+  have hcollapse (m k : Result (core.result.Result Unit error.Exc × S × A)) :
+      (if nt ≥ 14#u64 then if nt < 19#u64 then m else k else k) = k := by
+    by_cases hg : nt ≥ 14#u64
+    · have hl : ¬ nt < 19#u64 := by scalar_tac
+      simp only [hg, hl, ↓reduceIte]
+    · simp only [hg, ↓reduceIte]
+  simp only [fl4_abi.consts.object.X86Vcpu, fl4_abi.consts.object.Count]
+  rw [hcollapse]
   rw [retype_size_cases]
   simp only [bind_ok]
-  by_cases h14 : nt.val ≥ 14
+  by_cases h14 : nt.val ≥ 19
   · have hn : objTypeOf nt.bv.toNat = none := (objTypeOf_none _).2 (by simpa using h14)
     rw [hn] at hd
     simp only [h14, ↓reduceIte, core.result.Result.Insts.CoreOpsTry.branch, bind_ok,
@@ -465,7 +475,7 @@ theorem untyped_decode_refines_with (bitsApi : Fl4Spec.ApiObjectType → Nat →
 
 
 /-- **FL4's `untyped::decode` refines l4v `decode_untyped_invocation`** for
-every type but the TCB (whose size FL4 changes, Fl4Spec/Ext/TcbSize.lean). -/
+native types except the TCB (whose size FL4 changes, Fl4Spec/Ext/TcbSize.lean). -/
 theorem untyped_decode_refines {A : Type} (arI : machine.Arch A) (th : TypedHeap) (s : S) (ar : A)
     (σ : Fl4Spec.State Unit) (G : MdbGhost)
     (hR : StateRel th (L.mem s) σ) (hV : SlotsValid th (L.mem s)) (hP : Placed th)
@@ -475,6 +485,7 @@ theorem untyped_decode_refines {A : Type} (arI : machine.Arch A) (th : TypedHeap
     (length buf ct : U64) (hct : sched.cur_thread st s = ok ct) (args : List U64)
     (hlen : length.val = args.length)
     (hargs : ∀ (i : U64) x, args[i.val]? = some x → msg.syscall_arg st s ct buf i = ok x)
+    (hNative : ∀ x, args.head? = some x → x.val < 14 ∨ 19 ≤ x.val)
     (hntcb : ∀ x, args.head? = some x → x.val ≠ 1)
     (slot : obj.Slot) (sl : Fl4Spec.CslotPtr) (hsl : slot = cslotAddr sl) (hAs : AbsSlot th sl)
     (p sb fi : U64) (dev : Bool) (hcap : capAt (L.mem s) slot = ok (.Untyped p sb fi dev))
@@ -494,10 +505,10 @@ theorem untyped_decode_refines {A : Type} (arI : machine.Arch A) (th : TypedHeap
       UPost σ (Fl4Spec.decodeUntypedInvocation slbl (args.map UScalar.bv) sl (absCap (.Untyped p sb fi dev)) excaps)
         s ar Q res ⦄ :=
   untyped_decode_refines_with Fl4Spec.objBitsApi arI th s ar σ G hR hV hP hM hC hI lbl slbl hlbl length buf ct hct args hlen hargs
-    (fun x t hx ht n => (objTypeOf_some ht (hntcb x hx) n).2.1) slot sl hsl hAs p sb fi dev hcap extra x0 hx0 excaps hex hfan Q hQ
+    hNative (fun x t hx ht n => (objTypeOf_some ht (hntcb x hx) n).2.1) slot sl hsl hAs p sb fi dev hcap extra x0 hx0 excaps hex hfan Q hQ
 
 /-- **FL4's `untyped::decode` refines FL4's `decode_untyped_invocation`**
-(the spec's with 4 KiB TCBs, Fl4Spec/Ext/TcbSize.lean), for every type. -/
+(the spec's with 4 KiB TCBs, Fl4Spec/Ext/TcbSize.lean), for native types. -/
 theorem untyped_decode_refines_fl4 {A : Type} (arI : machine.Arch A) (th : TypedHeap) (s : S) (ar : A)
     (σ : Fl4Spec.State Unit) (G : MdbGhost)
     (hR : StateRel th (L.mem s) σ) (hV : SlotsValid th (L.mem s)) (hP : Placed th)
@@ -507,6 +518,7 @@ theorem untyped_decode_refines_fl4 {A : Type} (arI : machine.Arch A) (th : Typed
     (length buf ct : U64) (hct : sched.cur_thread st s = ok ct) (args : List U64)
     (hlen : length.val = args.length)
     (hargs : ∀ (i : U64) x, args[i.val]? = some x → msg.syscall_arg st s ct buf i = ok x)
+    (hNative : ∀ x, args.head? = some x → x.val < 14 ∨ 19 ≤ x.val)
     (slot : obj.Slot) (sl : Fl4Spec.CslotPtr) (hsl : slot = cslotAddr sl) (hAs : AbsSlot th sl)
     (p sb fi : U64) (dev : Bool) (hcap : capAt (L.mem s) slot = ok (.Untyped p sb fi dev))
     (extra : Aeneas.Std.Array obj.Slot 3#usize) (x0 : U64) (hx0 : Aeneas.Std.Array.index_usize extra 0#usize = ok x0)
@@ -525,7 +537,7 @@ theorem untyped_decode_refines_fl4 {A : Type} (arI : machine.Arch A) (th : Typed
       UPost σ (Fl4Spec.fl4DecodeUntypedInvocation slbl (args.map UScalar.bv) sl (absCap (.Untyped p sb fi dev)) excaps)
         s ar Q res ⦄ :=
   untyped_decode_refines_with Fl4Spec.fl4ObjBitsApi arI th s ar σ G hR hV hP hM hC hI lbl slbl hlbl length buf ct hct args hlen hargs
-    (fun _ _ _ ht n => (objTypeOf_fl4 ht n).2.1) slot sl hsl hAs p sb fi dev hcap extra x0 hx0 excaps hex hfan Q hQ
+    hNative (fun _ _ _ ht n => (objTypeOf_fl4 ht n).2.1) slot sl hsl hAs p sb fi dev hcap extra x0 hx0 excaps hex hfan Q hQ
 end
 end
 end Fl4Proofs.P3

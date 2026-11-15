@@ -29,7 +29,7 @@ noncomputable section
 /-- The caps whose finalisation is object-specific work. -/
 def FinObjKind : capability.Cap → Prop
   | .Endpoint .. | .Notification .. | .Reply .. | .Thread _ | .SchedContext .. | .IrqHandler _
-  | .Frame .. | .PageTable .. | .PageDirectory .. | .Pdpt .. | .Pml4 .. | .AsidPool .. | .IoPort .. => True
+  | .Frame .. | .PageTable .. | .PageDirectory .. | .Pdpt .. | .Pml4 .. | .Vcpu .. | .Ept .. | .AsidPool .. | .IoPort .. => True
   | _ => False
 
 /-- The caps whose finalisation depends on finality: the object caps but
@@ -70,7 +70,7 @@ def soB : capability.Cap → capability.Cap → Bool
 theorem soB_eq (a b : capability.Cap) : objects.same_object_as a b = ok (soB a b) := by
   cases a <;> cases b <;> simp only [objects.same_object_as, soB, srB_eq, bind_ok, Bool.false_eq_true,
     ↓reduceIte] <;> try rfl
-  rename_i p sz _ d _ _ _ p' sz' _ d' _ _ _
+  rename_i p sz _ d _ _ _ _ p' sz' _ d' _ _ _ _
   by_cases hp : p = p'
   · subst hp; cases sz <;> cases sz' <;>
       simp [capability.FrameSize.Insts.CoreCmpPartialEqFrameSize.eq, fsB,
@@ -81,7 +81,7 @@ theorem soB_eq (a b : capability.Cap) : objects.same_object_as a b = ok (soB a b
 theorem soB_of_key {a b : capability.Cap} (h : okey a = okey b) (hn : okey a ≠ none) : soB a b = true := by
   cases a <;> cases b <;> simp only [okey, reduceCtorEq, Option.some.injEq, OKey.ep.injEq, OKey.ntfn.injEq,
     OKey.reply.injEq, OKey.cnode.injEq, OKey.thread.injEq, OKey.irq.injEq, OKey.sc.injEq, OKey.frame.injEq,
-    OKey.pt.injEq, OKey.pd.injEq, OKey.pdpt.injEq, OKey.pml4.injEq, OKey.pool.injEq, OKey.io.injEq,
+    OKey.pt.injEq, OKey.pd.injEq, OKey.pdpt.injEq, OKey.pml4.injEq, OKey.pool.injEq, OKey.io.injEq, OKey.vcpu.injEq, OKey.ept.injEq,
     ne_eq, not_true_eq_false] at h hn ⊢
   all_goals first
     | (obtain ⟨rfl, rfl, rfl⟩ := h; simp [soB, (fsB_iff _ _).2 rfl]; done)
@@ -94,7 +94,7 @@ theorem soB_of_key {a b : capability.Cap} (h : okey a = okey b) (hn : okey a ≠
 theorem shape_of_key {a b : capability.Cap} (h : okey a = okey b) (hn : okey a ≠ none) : shape a = shape b := by
   cases a <;> cases b <;> simp only [okey, reduceCtorEq, Option.some.injEq, OKey.ep.injEq, OKey.ntfn.injEq,
     OKey.reply.injEq, OKey.cnode.injEq, OKey.thread.injEq, OKey.irq.injEq, OKey.sc.injEq, OKey.frame.injEq,
-    OKey.pt.injEq, OKey.pd.injEq, OKey.pdpt.injEq, OKey.pml4.injEq, OKey.pool.injEq, OKey.io.injEq,
+    OKey.pt.injEq, OKey.pd.injEq, OKey.pdpt.injEq, OKey.pml4.injEq, OKey.pool.injEq, OKey.io.injEq, OKey.vcpu.injEq, OKey.ept.injEq,
     ne_eq, not_true_eq_false] at h hn ⊢
   all_goals first
     | (obtain ⟨rfl, rfl, rfl⟩ := h; rfl; done)
@@ -159,10 +159,11 @@ theorem key_of_so {a b : capability.Cap} (h : soB a b = true) (hb : NeedsFin b) 
 /-- A generic object reference of a cap (the one `same_object_as` keys on). -/
 def gref : capability.Cap → Option Fl4Spec.GenObjRef
   | .Endpoint p .. | .Notification p .. | .Reply p _ | .CNode p .. | .Thread p | .Zombie p .. | .SchedContext p _
-  | .Frame p .. | .PageTable p .. | .PageDirectory p .. | .Pdpt p .. | .Pml4 p .. | .AsidPool p _ =>
+  | .Frame p .. | .PageTable p .. | .PageDirectory p .. | .Pdpt p .. | .Pml4 p ..
+  | .Vcpu p | .Ept p .. | .AsidPool p _ =>
     some (.objRef p.bv)
   | .IrqHandler i => some (.iRQRef (BitVec.ofNat 8 i.val))
-  | .IoPort f _ => some (.archRef (.ioPortRef (BitVec.ofNat 16 f.val)))
+  | .IoPort f _ _ => some (.archRef (.ioPortRef (BitVec.ofNat 16 f.val)))
   | _ => none
 
 theorem gref_mem {c : capability.Cap} {r : Fl4Spec.GenObjRef} (h : gref c = some r) :
@@ -174,7 +175,7 @@ theorem gref_mem {c : capability.Cap} {r : Fl4Spec.GenObjRef} (h : gref c = some
 theorem gref_of_key {a b : capability.Cap} (h : okey a = okey b) (hn : okey a ≠ none) : gref a = gref b := by
   cases a <;> cases b <;> simp only [okey, ne_eq, not_true_eq_false, reduceCtorEq, Option.some.injEq, OKey.ep.injEq, OKey.ntfn.injEq,
     OKey.reply.injEq, OKey.cnode.injEq, OKey.thread.injEq, OKey.irq.injEq, OKey.sc.injEq, OKey.frame.injEq,
-    OKey.pt.injEq, OKey.pd.injEq, OKey.pdpt.injEq, OKey.pml4.injEq, OKey.pool.injEq, OKey.io.injEq] at h hn ⊢ <;>
+    OKey.pt.injEq, OKey.pd.injEq, OKey.pdpt.injEq, OKey.pml4.injEq, OKey.pool.injEq, OKey.io.injEq, OKey.vcpu.injEq, OKey.ept.injEq] at h hn ⊢ <;>
     simp [gref, h]
 
 theorem gref_ne_none {a : capability.Cap} (h : okey a ≠ none) : gref a ≠ none := by
@@ -255,6 +256,9 @@ end
 theorem tcbCnodeMap_some {t : Fl4Spec.Tcb} {c : Fl4Spec.CnodeIndex} {a : Fl4Spec.Cap}
     (h : Fl4Spec.tcbCnodeMap t c = some a) : ∃ i, i < tcbSlots ∧ c = Fl4Spec.tcbCnodeIndex i := by
   unfold Fl4Spec.tcbCnodeMap at h
+  by_cases h5 : c = Fl4Spec.tcbCnodeIndex 5
+  · exact ⟨5, by decide, h5⟩
+  rw [Function.update_of_ne h5] at h
   by_cases h4 : c = Fl4Spec.tcbCnodeIndex 4
   · exact ⟨4, by decide, h4⟩
   rw [Function.update_of_ne h4] at h

@@ -32,9 +32,9 @@ open fl4_core Fl4Proofs.P1 Fl4Proofs.P3.Notif Fl4Proofs.P3.Endp Fl4Proofs.P3
 
 noncomputable section
 
-/-- The cap of a decoded frame. -/
+/-- The native projection of a decoded frame, for the native mapping helper. -/
 def frameCapOf (f : vspace.FrameCap) : capability.Cap :=
-  .Frame f.ptr f.size f.rights f.is_device f.mapped f.asid f.vaddr
+  .Frame f.ptr f.size f.rights f.is_device f.mapped false f.asid f.vaddr
 
 /-- The spec's cap of a decoded 4K frame. -/
 def frameACap (f : vspace.FrameCap) : Fl4Spec.ArchCap :=
@@ -150,9 +150,9 @@ theorem PtWAll.aligned {L4 L3 L2 L1 : Set U64} (hP : PtPlaced L4 L3 L2 L1) {b : 
   show _ % 8 = 0; rw [peA_val (tbl_fit this) hi]; omega
 
 /-- FL4's lookup faults of `find_vspace_for_asid`. -/
-theorem find_vspace_for_asid_err (s : S) (asid : U64) :
-    vspace.find_vspace_for_asid st s asid ⦃ r => ∀ e, r = .Err e → e = .InvalidRoot ⦄ := by
-  unfold vspace.find_vspace_for_asid
+theorem find_asid_err (s : S) (asid : U64) :
+    vspace.find_asid st s asid ⦃ r => ∀ e, r = .Err e → e = .InvalidRoot ⦄ := by
+  unfold vspace.find_asid
   have hL : vspace.ASID_LOW_BITS = 9#u64 := by unfold vspace.ASID_LOW_BITS; rfl
   rw [hL]
   step as ⟨i, _hi⟩
@@ -167,6 +167,21 @@ theorem find_vspace_for_asid_err (s : S) (asid : U64) :
     split
     · exact (WP.spec_ok _).2 fun e he => by cases he; rfl
     · exact (WP.spec_ok _).2 fun e he => by cases he
+
+theorem find_vspace_for_asid_err (s : S) (asid : U64) :
+    vspace.find_vspace_for_asid st s asid ⦃ r => ∀ e, r = .Err e → e = .InvalidRoot ⦄ := by
+  unfold vspace.find_vspace_for_asid
+  refine WP.spec_bind (find_asid_err s asid) ?_
+  intro r hr
+  cases r with
+  | Err e =>
+    simp only [core.result.Result.Insts.CoreOpsTry.branch,
+      core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual,
+      core.convert.FromSame.from, core.convert.FromSame, bind_ok, WP.spec_ok]
+    simpa only [WP.spec_ok, core.convert.FromSame, core.convert.FromSame.from, lift, bind_ok, bind_tc_ok] using hr
+  | Ok w =>
+    simp only [core.result.Result.Insts.CoreOpsTry.branch, lift, bind_ok]
+    split <;> simp only [WP.spec_ok] <;> intro e he <;> cases he <;> rfl
 
 theorem shl12 : (1#u64 <<< (12#u64 &&& 63#u64)) = ok 4096#u64 := by
   rw [and63_of_lt (by decide), shl_u64_eq _ _ (by decide)]; rfl
@@ -326,8 +341,8 @@ macro "map_tail" : tactic => `(tactic| (
         rw [hσ1, stsAct_kheap]; simp [updK, hpct, hkc]
       set nc : Fl4Spec.Cap := .archObjectCap (.pageCap dev ptr.bv (vmRightsOf rt) .vmVSpaceMap .x64SmallPage
         (some (as1.bv, a0.bv))) with hnc
-      have hca : CapRel (.Frame ptr .Small rt dev true as1 a0) nc := ⟨hfw, rfl⟩
-      have hew : EncWf (.Frame ptr .Small rt dev true as1 a0) := ⟨hfe.1, hfe.2.1, has2, hva⟩
+      have hca : CapRel (.Frame ptr .Small rt dev true false as1 a0) nc := ⟨hfw, rfl⟩
+      have hew : EncWf (.Frame ptr .Small rt dev true false as1 a0) := ⟨hfe.1, hfe.2.1, has2, hva⟩
       have hxsl : IsSlot th (cslotAddr (pc.bv, idx)) :=
         (show AbsSlot th (pc.bv, idx) from ⟨pc, rfl, Or.inl (by simpa [hidx] using hpc)⟩).isSlot
       refine WP.spec_bind (WP.spec_and (set_cap_refines th s1 σ1 hSt1 hSV1 hPl hpc hidx _ _ hca (by exact hfcv) hew)
@@ -427,11 +442,11 @@ theorem frame_map_rel {A : Type} {ar : machine.Arch A} {th : TypedHeap} {P L4 L3
         VsRel P (L.mem res.2.1) (L.ksb res.2.1) σ' ∧ PtRel L4 L3 L2 L1 (L.mem res.2.1) σ' ∧ SR res.2.1 res.2.2 σ' ∧
         SlotFoot th (L.mem s) (L.mem res.2.1) (cslotAddr (pc.bv, idx)) ∧
         VsLike (capV (L.mem res.2.1) (cslotAddr (pc.bv, idx))) (frameCapOf f) ∧ KFoot σ σ') ⦄ := by
-  obtain ⟨ptr, sz, rt, dev, mp, fa, fv⟩ := f
+  obtain ⟨ptr, sz, rt, dev, mp, ep, fa, fv⟩ := f
   simp only at hsz hfm hpa ⊢
   subst hsz
   rw [show ∀ args' ex', Fl4Spec.archDecodeInvocation (Z := Unit) slbl args' xs (pc.bv, idx)
-      (frameACap ⟨ptr, .Small, rt, dev, mp, fa, fv⟩) ex' =
+      (frameACap ⟨ptr, .Small, rt, dev, mp, ep, fa, fv⟩) ex' =
     Fl4Spec.decodePageInvocation slbl args' (pc.bv, idx) (.pageCap dev ptr.bv (vmRightsOf rt)
       (if mp then .vmVSpaceMap else .vmNoMap) .x64SmallPage (if mp then some (fa.bv, fv.bv) else none)) ex' from
     fun _ _ => rfl]

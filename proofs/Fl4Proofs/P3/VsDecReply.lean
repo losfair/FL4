@@ -49,7 +49,7 @@ theorem decode_invocation_frame_getaddr (s : S) (ar : A) (σ : Fl4Spec.State Uni
     (slot : U64) (blk call don fp : Bool) (hga : GetAddrHyp (L := L) s σ ar ct p call) (extra : Aeneas.Std.Array obj.Slot 3#usize) (args : List Fl4Spec.Data)
     (ci : Fl4Spec.CapRef) (sl : Fl4Spec.CslotPtr) (excaps : List (Fl4Spec.Cap × Fl4Spec.CslotPtr))
     (buffer : Option Fl4Spec.ObjRef) :
-    DecOKRM (L := L) arI s ar σ lbl length slot (.Frame p sz rt d m asid va) blk call don fp buf extra slbl args ci sl
+    DecOKRM (L := L) arI s ar σ lbl length slot (.Frame p sz rt d m false asid va) blk call don fp buf extra slbl args ci sl
       excaps buffer ct := by
   subst hl
   unfold DecOKRM syscall.decode_invocation
@@ -62,19 +62,19 @@ theorem decode_invocation_frame_getaddr (s : S) (ar : A) (σ : Fl4Spec.State Uni
     unfold fl4_abi.label.X86PageGetAddress fl4_abi.label.X86PageDeriveSubframe; decide
   have n4 : ¬ fl4_abi.label.X86PageGetAddress = fl4_abi.label.X86PageTestAndClearAccessed := by
     unfold fl4_abi.label.X86PageGetAddress fl4_abi.label.X86PageTestAndClearAccessed; decide
-  have hspec : specDec fp slbl args ci sl (.Frame p sz rt d m asid va) excaps buffer =
+  have hspec : specDec fp slbl args ci sl (.Frame p sz rt d m false asid va) excaps buffer =
       Fl4Spec.NonDetE.liftME Fl4Spec.Fl4Invocation.invokeArchObject
         (Fl4Spec.NonDetE.liftME Fl4Spec.Fl4ArchInvocation.spec (Fl4Spec.archDecodeInvocation (Z := Unit) slbl
-          args ci sl (frameACapG ⟨p, sz, rt, d, m, asid, va⟩) excaps)) := by
+          args ci sl (frameACapG ⟨p, sz, rt, d, m, false, asid, va⟩) excaps)) := by
     show Fl4Spec.NonDetE.liftME _ (Fl4Spec.fl4ArchDecodeInvocation (Z := Unit) slbl args ci sl
-      (frameACapG ⟨p, sz, rt, d, m, asid, va⟩) excaps) = _
+      (frameACapG ⟨p, sz, rt, d, m, false, asid, va⟩) excaps) = _
     unfold Fl4Spec.fl4ArchDecodeInvocation frameACapG; dsimp only
     rw [if_neg (fun h => n3 (hlbl.ds h)), if_neg (fun h => n4 (hlbl.tac h))]
   rw [hspec]
   unfold vspace.decode
   rw [hct]; simp only [bind_ok]
   unfold vspace.decode_frame
-  simp only [vspace.as_frame, bind_ok, n1, n2, ↓reduceIte]
+  simp only [vspace.as_frame, bind_ok, n1, n2, hlbl.native, ↓reduceIte]
   rw [hct]; simp only [bind_ok, layout.paddr]
   refine WP.spec_mono hga ?_
   rintro res ⟨h1, hne, hall⟩
@@ -112,9 +112,9 @@ theorem tac_gen {P L4 L3 L2 L1 : Set U64} (s : S) (σ : Fl4Spec.State Unit)
       ∀ v : U64, (v = 1#u64 ∨ v = 0#u64) →
       vspace.reply1 st (L.wr s b (L.mem s b &&& ~~~32#u64)) ct call v ⦃ s2 => Q (.Ok (), s2) ⦄) :
     vspace.decode_test_and_clear_accessed st s f call ⦃ Q ⦄ := by
-  obtain ⟨ptr, sz, rt, dev, mp, fa, fv⟩ := f
+  obtain ⟨ptr, sz, rt, dev, mp, ep, fa, fv⟩ := f
   generalize hD : ExceptT.run (Fl4Spec.decodeTestAndClearAccessed (Z := Unit)
-    (frameACapG ⟨ptr, sz, rt, dev, mp, fa, fv⟩)) σ = D
+    (frameACapG ⟨ptr, sz, rt, dev, mp, ep, fa, fv⟩)) σ = D
   rw [hD] at herr hok
   unfold vspace.decode_test_and_clear_accessed
   cases sz with
@@ -263,7 +263,7 @@ theorem decode_invocation_frame_tac {P L4 L3 L2 L1 : Set U64} (s : S) (ar : A) (
     (extra : Aeneas.Std.Array obj.Slot 3#usize) (args : List Fl4Spec.Data)
     (ci : Fl4Spec.CapRef) (sl : Fl4Spec.CslotPtr) (excaps : List (Fl4Spec.Cap × Fl4Spec.CslotPtr))
     (buffer : Option Fl4Spec.ObjRef) :
-    DecOKRM (L := L) arI s ar σ lbl length slot (.Frame p sz rt d m asid va) blk call don fp buf extra slbl args ci sl
+    DecOKRM (L := L) arI s ar σ lbl length slot (.Frame p sz rt d m false asid va) blk call don fp buf extra slbl args ci sl
       excaps buffer ct := by
   subst hl
   unfold DecOKRM syscall.decode_invocation
@@ -276,22 +276,22 @@ theorem decode_invocation_frame_tac {P L4 L3 L2 L1 : Set U64} (s : S) (ar : A) (
     unfold fl4_abi.label.X86PageTestAndClearAccessed fl4_abi.label.X86PageGetAddress; decide
   have n4 : ¬ fl4_abi.label.X86PageTestAndClearAccessed = fl4_abi.label.X86PageDeriveSubframe := by
     unfold fl4_abi.label.X86PageTestAndClearAccessed fl4_abi.label.X86PageDeriveSubframe; decide
-  set f : vspace.FrameCap := ⟨p, sz, rt, d, m, asid, va⟩ with hfdef
-  have hspec : specDec fp slbl args ci sl (.Frame p sz rt d m asid va) excaps buffer =
+  set f : vspace.FrameCap := ⟨p, sz, rt, d, m, false, asid, va⟩ with hfdef
+  have hspec : specDec fp slbl args ci sl (.Frame p sz rt d m false asid va) excaps buffer =
       Fl4Spec.NonDetE.liftME Fl4Spec.Fl4Invocation.invokeArchObject
         (Fl4Spec.NonDetE.liftME Fl4Spec.Fl4ArchInvocation.testAndClearAccessed
           (Fl4Spec.decodeTestAndClearAccessed (Z := Unit) (frameACapG f))) := by
     show Fl4Spec.NonDetE.liftME _ (Fl4Spec.fl4ArchDecodeInvocation (Z := Unit) slbl args ci sl
-      (frameACapG ⟨p, sz, rt, d, m, asid, va⟩) excaps) = _
+      (frameACapG ⟨p, sz, rt, d, m, false, asid, va⟩) excaps) = _
     unfold Fl4Spec.fl4ArchDecodeInvocation frameACapG; dsimp only
     rw [if_neg (fun h => n4 (hlbl.ds h)), if_pos (hlbl.tacr rfl)]
   rw [hspec]
   unfold vspace.decode
   rw [hct]; simp only [bind_ok]
   unfold vspace.decode_frame
-  have hfc : vspace.as_frame (.Frame p sz rt d m asid va) = ok (some f) := rfl
+  have hfc : vspace.as_frame (.Frame p sz rt d m false asid va) = ok (some f) := rfl
   rw [hfc]
-  simp only [bind_ok, n1, n2, n3, ↓reduceIte]
+  simp only [bind_ok, n1, n2, n3, hlbl.native, ↓reduceIte]
   obtain ⟨σ1, hst, -⟩ := setThreadState_eq σ ct.bv tcb hkt .restart
   refine WP.spec_bind (tac_gen (L := L) s σ hR hPt hPP hPI ct hct f call
     (fun r => TopPostRM (L := L) σ blk call don (Fl4Spec.NonDetE.liftME Fl4Spec.Fl4Invocation.invokeArchObject

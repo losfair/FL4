@@ -135,7 +135,7 @@ theorem mapped_entry_small {L4 L3 L2 L1 : Set U64} (s : S) (σ : State Unit)
     (hPt : PtRel L4 L3 L2 L1 (L.mem s) σ) (hPP : PtPlaced L4 L3 L2 L1) {r1 : U64} (hr1 : r1 ∈ L4)
     (ptr rt asid vaddr : U64) (dev mp : Bool)
     (hf : ExceptT.run (findVspaceForAsid (Z := Unit) asid.bv) σ = ({(.ok r1.bv, σ)}, False)) :
-    vspace.mapped_entry st s ⟨ptr, .Small, rt, dev, mp, asid, vaddr⟩ r1 ⦃ o =>
+    vspace.mapped_entry st s ⟨ptr, .Small, rt, dev, mp, false, asid, vaddr⟩ r1 ⦃ o =>
       (o = none ∧ ExceptT.run (frameMappingSlot (Z := Unit) ptr.bv .x64SmallPage asid.bv vaddr.bv) σ =
         ({(.error (.invalidCapability 0), σ)}, False)) ∨
       (∃ q ∈ L1, o = some (peA q (vIdx vaddr 12)) ∧
@@ -200,7 +200,7 @@ theorem mapped_entry_large {L4 L3 L2 L1 : Set U64} (s : S) (σ : State Unit)
     (hPt : PtRel L4 L3 L2 L1 (L.mem s) σ) (hPP : PtPlaced L4 L3 L2 L1) {r1 : U64} (hr1 : r1 ∈ L4)
     (ptr rt asid vaddr : U64) (dev mp : Bool)
     (hf : ExceptT.run (findVspaceForAsid (Z := Unit) asid.bv) σ = ({(.ok r1.bv, σ)}, False)) :
-    vspace.mapped_entry st s ⟨ptr, .Large, rt, dev, mp, asid, vaddr⟩ r1 ⦃ o =>
+    vspace.mapped_entry st s ⟨ptr, .Large, rt, dev, mp, false, asid, vaddr⟩ r1 ⦃ o =>
       (o = none ∧ ExceptT.run (frameMappingSlot (Z := Unit) ptr.bv .x64LargePage asid.bv vaddr.bv) σ =
         ({(.error (.invalidCapability 0), σ)}, False)) ∨
       (∃ q ∈ L2, o = some (peA q (vIdx vaddr 21)) ∧
@@ -354,9 +354,9 @@ theorem tac_rel {A : Type} {th : TypedHeap} {P L4 L3 L2 L1 : Set U64}
           (UR st th P L4 L3 L2 L1 SR res.2 a)) ⦄ := by
   obtain ⟨hS, hSt, hSV, hR, hPt⟩ := hU
   have hkt' : σ.kheap ct.bv = some (.tcb xct) := by rw [hcur]; exact hkt
-  obtain ⟨ptr, sz, rt, dev, mp, fa, fv⟩ := f
+  obtain ⟨ptr, sz, rt, dev, mp, ep, fa, fv⟩ := f
   generalize hD : ExceptT.run (Fl4Spec.decodeTestAndClearAccessed (Z := Unit)
-    (frameACapG ⟨ptr, sz, rt, dev, mp, fa, fv⟩)) σ = D
+    (frameACapG ⟨ptr, sz, rt, dev, mp, ep, fa, fv⟩)) σ = D
   unfold vspace.decode_test_and_clear_accessed
   cases sz with
   | Huge =>
@@ -582,11 +582,13 @@ theorem frame_tac_rel {A : Type} {ar : machine.Arch A} {th : TypedHeap} {P L4 L3
     unfold fl4_abi.label.X86PageTestAndClearAccessed fl4_abi.label.X86PageUnmap; decide
   have hn3 : ¬ fl4_abi.label.X86PageTestAndClearAccessed = fl4_abi.label.X86PageGetAddress := by
     unfold fl4_abi.label.X86PageTestAndClearAccessed fl4_abi.label.X86PageGetAddress; decide
-  have hfc : vspace.as_frame (frameCapOf f) = ok (some f) := by
-    obtain ⟨ptr, sz, rt, dev, mp, fa, fv⟩ := f; rfl
+  have hfc : vspace.as_frame (frameCapOf f) = ok (some { f with is_ept := false }) := by
+    obtain ⟨ptr, sz, rt, dev, mp, ep, fa, fv⟩ := f; rfl
   rw [hfc]
-  simp only [bind_ok, hn1, hn2, hn3, ↓reduceIte]
-  refine WP.spec_bind (tac_rel hH s a σ hU hPl hPP hPS hVP hPV hPI ct hct hcur hkt f call) ?_
+  have hnEpt : ¬ fl4_abi.label.X86PageTestAndClearAccessed = fl4_abi.label.X86PageMapEPT := by
+    unfold fl4_abi.label.X86PageTestAndClearAccessed fl4_abi.label.X86PageMapEPT; decide
+  simp only [bind_ok, hn1, hn2, hn3, hnEpt, ↓reduceIte]
+  refine WP.spec_bind (tac_rel hH s a σ hU hPl hPP hPS hVP hPV hPI ct hct hcur hkt { f with is_ept := false } call) ?_
   rintro ⟨r, s1⟩ h
   rcases h with ⟨e, e', h1, h2, h3, h4⟩ | ⟨h1, h2⟩
   · exact (WP.spec_ok _).2 (Or.inl ⟨e, e', h1, h2, h3, h4, rfl⟩)

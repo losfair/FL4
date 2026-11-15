@@ -767,11 +767,11 @@ theorem derive_subframe_foot {A : Type} {ar : machine.Arch A} {th : TypedHeap} {
     (hU : UtInv (L.mem s) G) (hR : VsRel P (L.mem s) (L.ksb s) σ) (hPt : PtRel L4 L3 L2 L1 (L.mem s) σ)
     (hS : SR s a σ) (hVP : VsPlaced P (L.ksb s))
     (hVO : ∀ b, VsWrite P (L.ksb s) b → OutsideObjects th b) (hPO : ∀ b, PtWAll L4 L3 L2 L1 b → OutsideObjects th b)
-    (hcap : capAt (L.mem s) (cslotAddr (pp.bv, idx)) = ok (.Frame ptr sz rt dev mm fa fv))
+    (hcap : capAt (L.mem s) (cslotAddr (pp.bv, idx)) = ok (.Frame ptr sz rt dev mm false fa fv))
     (hno : sz = .Large → dev = false → ∀ x ∈ G.chains.flatten,
-      Disj (capV (L.mem s) x) (.Frame ptr sz rt dev mm fa fv) ∨
+      Disj (capV (L.mem s) x) (.Frame ptr sz rt dev mm false fa fv) ∨
       (isFrame (capV (L.mem s) x) = true ∧ revOf (L.mem s) x = false) ∨
-      Within (.Frame ptr sz rt dev mm fa fv) (capV (L.mem s) x))
+      Within (.Frame ptr sz rt dev mm false fa fv) (capV (L.mem s) x))
     (hFI : FinInv th (L.mem s) σ G)
     (hFR : Vs.FrameInv (L.mem s) G) (hVC : VsCapsIn P L4 L3 L2 L1 (L.mem s) G)
     (ct : U64) (hct : sched.cur_thread st s = ok ct) (hcur : ct.bv = σ.curThread)
@@ -783,7 +783,7 @@ theorem derive_subframe_foot {A : Type} {ar : machine.Arch A} {th : TypedHeap} {
     (ex : Array obj.Slot 3#usize) {y : obj.Slot} (hex0 : vspace.extra ex 0#usize = ok (some y))
     {nc : capability.Cap} (hcy : capAt (L.mem s) y = ok nc) {nc' : Fl4Spec.Cap} (hnr : CapRel nc nc')
     (hnv : CapValid th nc) (nsl : Fl4Spec.CslotPtr) (rest : List (Fl4Spec.Cap × Fl4Spec.CslotPtr)) :
-    vspace.derive_subframe st ar s a length (cslotAddr (pp.bv, idx)) (.Frame ptr sz rt dev mm fa fv) buf ex ⦃ res =>
+    vspace.derive_subframe st ar s a length (cslotAddr (pp.bv, idx)) (.Frame ptr sz rt dev mm false fa fv) buf ex ⦃ res =>
       WritesIn st s res.2.1 (VsFootW st th P L4 L3 L2 L1 s) ⦄ := by
   refine WP.spec_mono (derive_subframe_rel (SR := FootSRc st th SR s (VsFootW st th P L4 L3 L2 L1 s))
     (hH := VsSubHyps.foot (s0 := s) (fun _ h => h.toW) hPl hH)

@@ -180,7 +180,7 @@ theorem vcap_of_newV {S : Set U64} {c : capability.Cap} (h : NewVPlaced c) (hS :
     have := Fl4Proofs.P0.Consts.layout.PPTR_BASE.val_eq
     have : p.val = 0 := by rw [e]; rfl
     omega
-  | Frame p sz r dv m a va =>
+  | Frame p sz r dv m ept a va =>
     obtain ⟨rfl, hb, ha⟩ := h
     refine ⟨(fun e => by cases e), ?_⟩
     cases sz

@@ -250,7 +250,7 @@ theorem decode_invocation_irq_control (th : TypedHeap) (hP : Placed th) (s : S) 
     (hHA : HandlersActive (L.mem s) (L.ksb s) G) (hFI : FinInv th (L.mem s) σ G)
     (hFR : MdbOKV (L.ksb s) (L.mem s) G)
     (lbl : U64) (slbl : Fl4Spec.Data) (hlbl : IrqCLabel lbl slbl)
-    (hrm : decide (lbl.val = 69) = Fl4Spec.isFl4RemappedLabel slbl)
+    (hrm : decide (lbl.val = 72) = Fl4Spec.isFl4RemappedLabel slbl)
     (length buf ct : U64) (hct : sched.cur_thread st s = ok ct) (args : List U64)
     (hlen : length.val = args.length)
     (hargs : ∀ (i : U64) x, args[i.val]? = some x → msg.syscall_arg st s ct buf i = ok x)
@@ -270,7 +270,7 @@ theorem decode_invocation_irq_control (th : TypedHeap) (hP : Placed th) (s : S) 
   rw [hct]; simp only [bind_ok]
   have e : specDec fp slbl (args.map UScalar.bv) ci (ps.bv, idxs) .IrqControl excaps buffer =
       Fl4Spec.NonDetE.liftME Fl4Spec.Fl4Invocation.invokeIRQControl
-        (Fl4Spec.decodeFl4IrqControl (decide (lbl.val = 69)) slbl (args.map UScalar.bv) (ps.bv, idxs)
+        (Fl4Spec.decodeFl4IrqControl (decide (lbl.val = 72)) slbl (args.map UScalar.bv) (ps.bv, idxs)
           (excaps.map Prod.fst)) := by
     rw [hrm]; rfl
   rw [e]
@@ -291,7 +291,7 @@ theorem decode_invocation_ioport_control (th : TypedHeap) (hP : Placed th) (s : 
     (hIo : IoRel (L.mem s) (L.ksb s) σ) (hPA : IoPortsAlloc (L.mem s) (L.ksb s) G) (hFI : FinInv th (L.mem s) σ G)
     (hFR : MdbOKV (L.ksb s) (L.mem s) G)
     (lbl : U64) (slbl : Fl4Spec.Data)
-    (hlbl : lbl.val = 60 ↔ Fl4Spec.invocationType slbl = .archInvocationLabel .x64IOPortControlIssue)
+    (hlbl : lbl.val = 63 ↔ Fl4Spec.invocationType slbl = .archInvocationLabel .x64IOPortControlIssue)
     (length buf ct : U64) (hct : sched.cur_thread st s = ok ct) (args : List U64)
     (hlen : length.val = args.length)
     (hargs : ∀ (i : U64) x, args[i.val]? = some x → msg.syscall_arg st s ct buf i = ok x)
@@ -327,12 +327,12 @@ theorem decode_invocation_ioport (th : TypedHeap) (hP : Placed th) (s : S) (ar :
     (hcur : σ.curThread = ct.bv) (htcb : th ct = some .tcb)
     (hact : OutsideObjects th (L.nodeAt s (L.cpu s) layout.node.SCHED_ACTION))
     (first last : U64) (hfl : first.val ≤ last.val) (hl16 : last.val < 65536) (call : Bool)
-    (hcall : 61 ≤ lbl.val ∧ lbl.val ≤ 63 → call = false)
+    (hcall : 64 ≤ lbl.val ∧ lbl.val ≤ 66 → call = false)
     (hin : ∀ (a : A) p z, ∃ v a', arI.port_in a p z = ok (v, a'))
     (hout : ∀ (a : A) p z d, ∃ a', arI.port_out a p z d = ok a')
     (slot : U64) (blk don fp : Bool) (extra : Aeneas.Std.Array obj.Slot 3#usize) (ci : Fl4Spec.CapRef)
     (sl : Fl4Spec.CslotPtr) (excaps : List (Fl4Spec.Cap × Fl4Spec.CslotPtr)) (buffer : Option Fl4Spec.ObjRef) :
-    DecOK (L := L) arI s ar σ lbl length slot (.IoPort first last) blk call don fp buf extra slbl
+    DecOK (L := L) arI s ar σ lbl length slot (.IoPort first last 0#u64) blk call don fp buf extra slbl
       (args.map UScalar.bv) ci sl excaps buffer := by
   unfold DecOK syscall.decode_invocation
   rw [hct]; simp only [bind_ok]
@@ -452,7 +452,7 @@ theorem decode_invocation_refines (s : S) (ar : A) (σ : Fl4Spec.State Unit) (lb
       DecOK (L := L) arI s ar σ lbl length slot cap blk call don fp buf extra slbl args ci sl excaps buffer)
     (hSchedControl : ∀ c, cap = .SchedControl c →
       DecOK (L := L) arI s ar σ lbl length slot cap blk call don fp buf extra slbl args ci sl excaps buffer)
-    (hFrame : ∀ p sz r d m asid va, cap = .Frame p sz r d m asid va →
+    (hFrame : ∀ p sz r d m ept asid va, cap = .Frame p sz r d m ept asid va →
       DecOK (L := L) arI s ar σ lbl length slot cap blk call don fp buf extra slbl args ci sl excaps buffer)
     (hPageTable : ∀ p m asid va, cap = .PageTable p m asid va →
       DecOK (L := L) arI s ar σ lbl length slot cap blk call don fp buf extra slbl args ci sl excaps buffer)
@@ -466,9 +466,13 @@ theorem decode_invocation_refines (s : S) (ar : A) (σ : Fl4Spec.State Unit) (lb
       DecOK (L := L) arI s ar σ lbl length slot cap blk call don fp buf extra slbl args ci sl excaps buffer)
     (hAsidPool : ∀ p b, cap = .AsidPool p b →
       DecOK (L := L) arI s ar σ lbl length slot cap blk call don fp buf extra slbl args ci sl excaps buffer)
+    (hVcpu : ∀ p, cap = .Vcpu p →
+      DecOK (L := L) arI s ar σ lbl length slot cap blk call don fp buf extra slbl args ci sl excaps buffer)
+    (hEpt : ∀ p level m asid va, cap = .Ept p level m asid va →
+      DecOK (L := L) arI s ar σ lbl length slot cap blk call don fp buf extra slbl args ci sl excaps buffer)
     (hIoPortControl : cap = .IoPortControl →
       DecOK (L := L) arI s ar σ lbl length slot cap blk call don fp buf extra slbl args ci sl excaps buffer)
-    (hIoPort : ∀ f l, cap = .IoPort f l →
+    (hIoPort : ∀ f l vcpu, cap = .IoPort f l vcpu →
       DecOK (L := L) arI s ar σ lbl length slot cap blk call don fp buf extra slbl args ci sl excaps buffer) :
     DecOK (L := L) arI s ar σ lbl length slot cap blk call don fp buf extra slbl args ci sl excaps buffer := by
   cases cap with
@@ -489,7 +493,7 @@ theorem decode_invocation_refines (s : S) (ar : A) (σ : Fl4Spec.State Unit) (lb
   | Domain => exact hDomain rfl
   | SchedContext => exact hSchedContext _ _ rfl
   | SchedControl => exact hSchedControl _ rfl
-  | Frame => exact hFrame _ _ _ _ _ _ _ rfl
+  | Frame => exact hFrame _ _ _ _ _ _ _ _ rfl
   | PageTable => exact hPageTable _ _ _ _ rfl
   | PageDirectory => exact hPageDirectory _ _ _ _ rfl
   | Pdpt => exact hPdpt _ _ _ _ rfl
@@ -497,7 +501,9 @@ theorem decode_invocation_refines (s : S) (ar : A) (σ : Fl4Spec.State Unit) (lb
   | AsidControl => exact hAsidControl rfl
   | AsidPool => exact hAsidPool _ _ rfl
   | IoPortControl => exact hIoPortControl rfl
-  | IoPort => exact hIoPort _ _ rfl
+  | Vcpu => exact hVcpu _ rfl
+  | Ept => exact hEpt _ _ _ _ _ rfl
+  | IoPort => exact hIoPort _ _ _ rfl
 
 end
 

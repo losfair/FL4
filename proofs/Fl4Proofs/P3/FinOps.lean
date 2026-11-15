@@ -140,13 +140,13 @@ theorem insert_ctl_finM (hP : Placed th) (s : S) (G : MdbGhost) (hM : MdbLinks t
     (fun w hw => ?_)
   rw [hcap dest hd, if_pos rfl, hcap w (hslot w hw), if_neg (hne' w hw)]
   refine ⟨hov w hw, fun _ => hfr w hw, fun hf => ?_⟩
-  obtain ⟨p, sz, v, dv, m, a, va, e⟩ : ∃ p sz v dv m a va, capV (L.mem s) w = .Frame p sz v dv m a va := by
+  obtain ⟨p, sz, v, dv, m, ep, a, va, e⟩ : ∃ p sz v dv m ep a va, capV (L.mem s) w = .Frame p sz v dv m ep a va := by
     cases h : capV (L.mem s) w <;> rw [h] at hf <;> simp [isFrame] at hf
-    exact ⟨_, _, _, _, _, _, _, rfl⟩
+    exact ⟨_, _, _, _, _, _, _, _, rfl⟩
   rw [e]
-  rcases hctl.cases with ⟨-, i, rfl⟩ | ⟨-, f, l, rfl⟩
+  rcases hctl.cases with ⟨-, i, rfl⟩ | ⟨-, f, l, vcpu, rfl⟩
   · rw [srB_irqH]; simp
-  · rw [srB_ioP]; simp
+  · rw [srB_ioP]; simp [shape]
 
 /-- **`cdt::move_cap` keeps `FinM`**, for a cap of the old one's shape and
 object. -/

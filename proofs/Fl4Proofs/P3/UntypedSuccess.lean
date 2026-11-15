@@ -214,6 +214,7 @@ theorem objTypeOf_ne_pml4 {n : Nat} {t : Fl4Spec.ApiObjectType} (hn : n ≠ 8)
       show ¬ n = 4 by omega, show ¬ n = 5 by omega, show ¬ n = 6 by omega, show ¬ n - 7 = 0 by omega,
       show ¬ n - 7 = 1 by omega, show ¬ n - 7 = 2 by omega, show ¬ n - 7 = 3 by omega, show ¬ n - 7 = 4 by omega,
       show ¬ n - 7 = 5 by omega, show ¬ n - 7 = 6 by omega] at ht
+    split_ifs at ht <;> simp_all
 
 /-! ## The untyped invariant -/
 

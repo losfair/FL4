@@ -4,7 +4,7 @@ use fl4_core::error::{Exc, SysError};
 use fl4_core::layout::{self, ks, node, reg, tcb};
 use fl4_core::machine::{Arch, Store};
 use fl4_core::obj::{ks_set, node_set, Slot, Tcb};
-use fl4_core::{ept, sched, vcpu, vspace};
+use fl4_core::{ept, objects, sched, vcpu, vspace};
 use std::collections::BTreeMap;
 
 #[derive(Default)]
@@ -351,14 +351,47 @@ fn nested_asids_are_distinct_and_unmapping_reaches_all_recorded_cores() {
     assert!(ept::find(&s, 1).is_err());
 }
 #[test]
-fn final_port_revocation_clears_grants_in_all_live_vcpus() {
+fn port_cap_deletion_revokes_its_grant_even_when_not_final() {
     let (mut s, mut a, _, v) = fixture(1);
-    vcpu::init(&mut s, &a, v + 0x8000);
+    let other = v + 0x8000;
+    vcpu::init(&mut s, &a, other);
     vcpu::set(&mut s, v, vcpu::IO, 0);
-    vcpu::set(&mut s, v + 0x8000, vcpu::IO, 0);
-    vcpu::revoke_ports(&mut s, &mut a, 7, 9);
+    vcpu::set(&mut s, other, vcpu::IO, 0);
+    let cap = Cap::IoPort {
+        first: 7,
+        last: 9,
+        vcpu: v,
+    };
+    assert!(objects::finalise_cap_object(&mut s, &mut a, cap, false) == (Cap::Null, Cap::Null));
     assert_eq!(vcpu::get(&s, v, vcpu::IO), 0x380);
-    assert_eq!(vcpu::get(&s, v + 0x8000, vcpu::IO), 0x380);
+    assert_eq!(vcpu::get(&s, other, vcpu::IO), 0);
+    let cap = Cap::IoPort {
+        first: 7,
+        last: 9,
+        vcpu: other,
+    };
+    assert!(objects::finalise_cap_object(&mut s, &mut a, cap, true) == (Cap::Null, cap));
+    assert_eq!(vcpu::get(&s, other, vcpu::IO), 0x380);
+    // Final cleanup releases the global allocation without disturbing
+    // unrelated guest grants. Each deleted cap has already revoked its own.
+    vcpu::set(&mut s, v, vcpu::IO, 0);
+    objects::post_cap_deletion(&mut s, &mut a, cap);
+    assert_eq!(vcpu::get(&s, v, vcpu::IO), 0);
+}
+
+#[test]
+fn stale_port_cap_owners_do_not_write_deleted_vcpus() {
+    let (mut s, mut a, _, v) = fixture(1);
+    let stale = v + 0x8000;
+    let cap = Cap::IoPort {
+        first: 7,
+        last: 9,
+        vcpu: stale,
+    };
+    vcpu::set(&mut s, stale, vcpu::IO, 0);
+    objects::finalise_cap_object(&mut s, &mut a, cap, false);
+    assert_eq!(vcpu::get(&s, stale, vcpu::IO), 0);
+    assert_eq!(vcpu::get(&s, v, vcpu::IO), u64::MAX);
 }
 
 #[test]

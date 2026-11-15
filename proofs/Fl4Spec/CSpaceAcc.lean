@@ -54,6 +54,8 @@ def setCap (cap : Cap) : CslotPtr → SMonad Z Unit := fun (oref, cref) => do
           pure (KernelObject.tcb { tcb with tcbFaultHandler := cap })
         else if cref = tcbCnodeIndex 4 then
           pure (KernelObject.tcb { tcb with tcbTimeoutHandler := cap })
+        else if cref = tcbCnodeIndex 5 then
+          pure (KernelObject.tcb { tcb with tcbEpt := cap })
         else
           NonDet.fail
     | _ => NonDet.fail

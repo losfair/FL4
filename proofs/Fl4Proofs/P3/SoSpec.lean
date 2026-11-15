@@ -43,7 +43,7 @@ theorem soB_iff_nf (a b : capability.Cap) (ha : CapWf a) (hb : CapWf b) (hnu : i
     constructor
     · intro h; have := congrArg BitVec.toNat h; show sb.val - _ = sb'.val - _; rw [show sb.val = sb'.val from this]
     · intro h; apply BitVec.eq_of_toNat_eq; show sb.val = sb'.val; omega
-  case IoPort.IoPort f l f' l' =>
+  case IoPort.IoPort f l vc f' l' vc' =>
     simp only [CapWf] at ha hb
     have k : ∀ x y : U64, x.val < 2 ^ 16 → y.val < 2 ^ 16 →
         (x.bv = y.bv ↔ (BitVec.setWidth 16 x.bv : BitVec 16) = BitVec.setWidth 16 y.bv) := by
@@ -59,6 +59,9 @@ theorem soB_iff_nf (a b : capability.Cap) (ha : CapWf a) (hb : CapWf b) (hnu : i
         rw [Nat.mod_eq_of_lt h1, Nat.mod_eq_of_lt h2] at this
         exact this
     rw [k f f' ha.1 hb.1, k l l' ha.2 hb.2]
+  case Ept.Ept p level m asid va p' level' m' asid' va' =>
+    intro _
+    exact ⟨fun h => congrArg BitVec.toNat h, fun h => BitVec.eq_of_toNat_eq h⟩
 
 /-- **FL4's `same_object_as` is the spec's**, for well-formed caps, a frame
 cap's region not wrapping (`sameObjectAs` with itself). -/
@@ -68,14 +71,14 @@ theorem soB_iff (a b : capability.Cap) (ha : CapWf a) (hb : CapWf b)
   cases hu : isUt a
   · cases hf : isFrame a
     · exact soB_iff_nf a b ha hb hu hf
-    · obtain ⟨p, sz, r, d, m, asd, v, rfl⟩ : ∃ p sz r d m asd v, a = .Frame p sz r d m asd v := by
-        cases a <;> simp [isFrame] at hf; exact ⟨_, _, _, _, _, _, _, rfl⟩
+    · obtain ⟨p, sz, r, d, m, ep, asd, v, rfl⟩ : ∃ p sz r d m ep asd v, a = .Frame p sz r d m ep asd v := by
+        cases a <;> simp [isFrame] at hf; exact ⟨_, _, _, _, _, _, _, _, rfl⟩
       have hw := hfw rfl
       simp only [absCap, Fl4Spec.sameObjectAs, Fl4Spec.sameAobjectAs] at hw
       cases b <;> simp only [soB] <;>
         (try rw [srB_of_eq (by simp [objects.same_region_as]; rfl)]) <;>
         simp [Fl4Spec.sameObjectAs, Fl4Spec.sameRegionAs, absCap, Fl4Spec.sameAobjectAs, Fl4Spec.archSameRegionAs]
-      rename_i p' sz' r' d' m' asd' v'
+      rename_i p' sz' r' d' m' ep' asd' v'
       have hfs : ∀ a b : capability.FrameSize, frameSizeOf a = frameSizeOf b ↔ a = b := by
         intro a b; cases a <;> cases b <;> simp [frameSizeOf]
       have hbv : ∀ x y : U64, x.bv = y.bv ↔ x = y :=

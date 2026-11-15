@@ -236,6 +236,9 @@ theorem VsHyps.fin (hPP : PtPlaced L4 L3 L2 L1) (hWV : ∀ b, VsWrite P (L.ksb s
   inval := fun s a σ asid vs hR ⟨h, hPt⟩ => WP.spec_mono (hH.inval s a σ asid vs hR h.1)
     fun _ ⟨σ', hm, hS⟩ => ⟨σ', hm, h.kstep hS (KStep.mop hm), by
       obtain ⟨ms, rfl⟩ := doMachineOp_mem hm; exact hPt.same_heap rfl⟩
+  invEpt := fun s a σ root mask ⟨h, hPt⟩ =>
+    WP.spec_mono (hH.invEpt s a σ root mask h.1)
+      (fun _ hS => ⟨⟨hS, h.2⟩, hPt⟩)
   curT := fun s a σ h => hH.curT s a σ h.1.1
   root :=
     { setVs := fun s a σ ptr asid ⟨h, hPt⟩ => WP.spec_mono (hH.root.setVs s a σ ptr asid h.1)
@@ -409,9 +412,9 @@ theorem fin_frame (hH : VsUnmapPageHyps st A ar L3 L2 L1 SR) (s : S) (a : A) (σ
     (G : MdbGhost) (sl : Fl4Spec.CslotPtr) (hDS : DState (L := L) th s σ G) (hA : AbsSlot th sl)
     (hX : VsFinCtx st th P L4 L3 L2 L1 SR s a σ G)
     (p : U64) (sz : capability.FrameSize) (rt : U64) (d : Bool) (asid va : U64) (b : Bool)
-    (hc : capAt (L.mem s) (cslotAddr sl) = ok (.Frame p sz rt d true asid va)) :
-    objects.finalise_cap st ar s a (.Frame p sz rt d true asid va) b false ⦃ r =>
-      FinOKX (L := L) th s σ G sl (.Frame p sz rt d true asid va) b (FinX st th P L4 L3 L2 L1 SR) r ∧
+    (hc : capAt (L.mem s) (cslotAddr sl) = ok (.Frame p sz rt d true false asid va)) :
+    objects.finalise_cap st ar s a (.Frame p sz rt d true false asid va) b false ⦃ r =>
+      FinOKX (L := L) th s σ G sl (.Frame p sz rt d true false asid va) b (FinX st th P L4 L3 L2 L1 SR) r ∧
         SlotsSame th (L.mem s) (L.mem r.2.1) ⦄ := by
   have hok := hX.vc.at hDS.1.2.2.1 hA.isSlot hc (by simp)
   simp only [VCapOK] at hok
@@ -468,7 +471,8 @@ theorem fin_asid_pool (hH : VsHyps st A ar P th SR) (s : S) (a : A) (σ : Fl4Spe
 
 /-- The VSpace caps whose finalisation may work. -/
 def IsVsFin : capability.Cap → Prop
-  | .Frame .. | .PageTable .. | .PageDirectory .. | .Pdpt .. | .Pml4 .. | .AsidPool .. => True
+  | .Frame _ _ _ _ _ ep _ _ => ep = false
+  | .PageTable .. | .PageDirectory .. | .Pdpt .. | .Pml4 .. | .AsidPool .. => True
   | _ => False
 
 /-- The hypotheses of the VSpace finalisations. -/
@@ -491,12 +495,15 @@ theorem vs_fin (hH : VsFinHyps st A ar th P L4 L3 L2 L1 SR) (s : S) (a : A) (σ 
     objects.finalise_cap st ar s a c b false ⦃ r =>
       FinOKX (L := L) th s σ G sl c b (FinX st th P L4 L3 L2 L1 SR) r ∧ SlotsSame th (L.mem s) (L.mem r.2.1) ⦄ := by
   have hb : isFrame c = false → b = true := by
-    rintro hf; rcases hw with ⟨h, -⟩ | ⟨p, sz, r, d, asid, va, rfl⟩
-    · exact h
+    rintro hf; rcases hw with ⟨h, -⟩ | ⟨p, sz, r, d, ep, asid, va, rfl⟩
+    · rcases h with h | ⟨f, l, owner, rfl, -⟩
+      · exact h
+      · simp [IsVsFin] at hv
     · simp [isFrame] at hf
   cases c <;> simp only [IsVsFin] at hv
-  case Frame p sz rt d m asid va =>
-    rcases hw with ⟨-, hf, -⟩ | ⟨p', sz', r', d', asid', va', e⟩
+  case Frame p sz rt d m ept asid va =>
+    subst ept
+    rcases hw with ⟨-, hf, -⟩ | ⟨p', sz', r', d', ep', asid', va', e⟩
     · simp [isFrame] at hf
     · cases e
       exact fin_frame hH.pg s a σ G sl hDS hA hX p sz rt d asid va b hc
@@ -533,6 +540,7 @@ theorem vsHyps_top (hA : ArchRefines arI AR) : VsHyps st A arI P th (TopSR st th
   stable := fun s s' a σ σ' hS hw hc => vsStable_top s s' a σ σ' hS hw hc
   invalOK := fun asid vs σ => invalOK_top asid vs σ
   inval := fun s a σ asid vs _ hS => inval_top hA s a σ asid vs hS
+  invEpt := fun s a σ root mask hS => invEpt_top hA s a σ root mask hS
   curT := fun s a σ hS => curT_top s a σ hS
   root := vsRootHyps_top hA
 

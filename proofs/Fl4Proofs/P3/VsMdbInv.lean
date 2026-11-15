@@ -165,8 +165,8 @@ theorem VsMdbInv.rename (h : VsMdbInv ksb mem G) (e : U64 ≃ U64)
 /-- **`frameAlias`**: a 4 KiB alias of a page of `src`'s well-placed large
 RAM frame, inside the window and 4 KiB aligned. -/
 theorem VsMdbInv.frameAlias (h : VsMdbInv ksb mem G) {src dest : U64} (hsrc : src ∈ G.chains.flatten) (b : Bool)
-    {ptr rt fa fv q0 vm : U64} {mm : Bool} (hsC : capV mem src = .Frame ptr .Large rt false mm fa fv)
-    (hcd : capV mem' dest = .Frame q0 .Small vm false false 0#u64 0#u64)
+    {ptr rt fa fv q0 vm : U64} {mm : Bool} (hsC : capV mem src = .Frame ptr .Large rt false mm false fa fv)
+    (hcd : capV mem' dest = .Frame q0 .Small vm false false false 0#u64 0#u64)
     (hq1 : ptr.val ≤ q0.val) (hq2 : q0.val + 4096 ≤ ptr.val + 2 ^ 21) (hqal : q0.val % 4096 = 0)
     (hc : ∀ z ∈ G.chains.flatten, capV mem' z = capV mem z) : VsMdbInv ksb mem' (insG G src dest b) := by
   obtain ⟨⟨P, L4, L3, L2, L1, hV⟩, hU⟩ := h

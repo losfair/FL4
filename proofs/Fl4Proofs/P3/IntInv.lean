@@ -60,7 +60,7 @@ theorem handlersActive_of_spec {s : S} {kb : U64} {σ : Fl4Spec.State Unit} {G :
 theorem ioPortsAlloc_of_spec {s : S} {kb : U64} {σ : Fl4Spec.State Unit} {G : MdbGhost}
     (hR : StateRel th (L.mem s) σ) (hM : MdbLinks th (L.mem s) G) (hIo : IoRel (L.mem s) kb σ)
     (hS : SpecIoPorts σ) : IoPortsAlloc (L.mem s) kb G := by
-  intro y hy f l hfl
+  intro y hy f l owner hfl
   obtain ⟨ysl, hys, rfl⟩ := ((hM.members _).1 hy).1.abs
   obtain ⟨c, ac, hc, hca, hg⟩ := hR.abs_cap hys
   rw [capV_of_capAt hc] at hfl; subst hfl

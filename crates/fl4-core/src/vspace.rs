@@ -914,9 +914,9 @@ pub fn decode<S: Store, A: Arch>(
                 Some(x) => x,
                 None => return truncated(),
             };
-            let vroot = match vslot.cap(s) {
-                Cap::Pml4 { ptr, mapped: false, .. } => ptr,
-                Cap::Ept { ptr, level: 0, mapped: false, .. } => ptr | 1,
+            let (vroot, nested) = match vslot.cap(s) {
+                Cap::Pml4 { ptr, mapped: false, .. } => (ptr, false),
+                Cap::Ept { ptr, level: 0, mapped: false, .. } => (ptr | 1, true),
                 _ => return invalid_cap(1),
             };
             let pool = asid_table(s, asid_base >> ASID_LOW_BITS);
@@ -935,7 +935,7 @@ pub fn decode<S: Store, A: Arch>(
             }
             let asid = asid_base.wrapping_add(i);
             sched::set_thread_state(s, ct, sched::TS_RESTART);
-            let assigned = if vroot & 1 != 0 { Cap::Ept { ptr: vroot & !1, level: 0, mapped: true, asid, vaddr: 0 } } else { Cap::Pml4 { ptr: vroot, mapped: true, asid } };
+            let assigned = if nested { Cap::Ept { ptr: vroot & !1, level: 0, mapped: true, asid, vaddr: 0 } } else { Cap::Pml4 { ptr: vroot, mapped: true, asid } };
             vslot.set_cap(s, assigned);
             s.write(pool.wrapping_add((asid & 511) * 8), vroot);
             Ok(())

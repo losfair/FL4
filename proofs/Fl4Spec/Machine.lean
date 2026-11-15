@@ -538,6 +538,7 @@ deriving DecidableEq, Repr, Inhabited
 inductive VMMapType where
   | vmNoMap
   | vmVSpaceMap
+  | vmEptMap
 deriving DecidableEq, Repr, Inhabited
 
 /-- l4v: MachineTypes.X64.pageBits. -/

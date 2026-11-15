@@ -759,8 +759,8 @@ theorem mp_perform_rel {A : Type} {th : TypedHeap} {P L4 L3 L2 L1 : Set U64}
     (fun z hz hne => hco2 z ((RR2.M.members z).1 hz).1 hne)
   have FR3 : Vs.FrameInv (L.mem s3) G := FR2.of_caps (fun z hz => hSS3.capV ((RR2.M.members z).1 hz).1)
   have FR4 : Vs.FrameInv (L.mem s4) G' := FR3.insert_fresh hxm hvm true hctx.cd
-    (by rw [hctx.cz hxm]; exact MdbLike.refl _) (fun z hz _ => hctx.cz hz) (fun _ _ _ _ _ h => by cases h)
-    (fun y hy _ _ _ _ _ hc q h1 h2 => Vs.pool_out hc (hctx.hreg y hy)
+    (by rw [hctx.cz hxm]; exact MdbLike.refl _) (fun z hz _ => hctx.cz hz) (fun _ _ _ _ _ _ h => by cases h)
+    (fun y hy _ _ _ _ _ _ hc q h1 h2 => Vs.pool_out hc (hctx.hreg y hy)
       (fun h => (hctx.hno y hy h).imp id And.left) hctx.hcr q h1 h2)
   have FR5 : Vs.FrameInv (L.mem s5) G' := FR4.of_caps (fun z hz => hSS5.capV ((hM4.members z).1 hz).1)
   have VC : ∀ P' L4' L3' L2' L1' : Set U64, Vs.VsCapsIn P' L4' L3' L2' L1' (L.mem s) G →

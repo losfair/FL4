@@ -205,7 +205,7 @@ theorem tcb_set_tls_refines (th : TypedHeap) (hP : Placed th) (s : S) (ar : A) (
     lbl_tcbSetTimeoutEndpoint_val, lbl_tcbSetIPCBuffer_val, lbl_tcbSetSpace_val, lbl_tcbSuspend_val,
     lbl_tcbResume_val, lbl_tcbBindNotification_val, lbl_tcbUnbindNotification_val, lbl_tcbSetBreakpoint_val,
     lbl_tcbGetBreakpoint_val, lbl_tcbUnsetBreakpoint_val, lbl_tcbConfigureSingleStepping_val,
-    lbl_tcbSetTLSBase_val]
+    lbl_tcbSetTLSBase_val, lbl_tcbSetEPTRoot_val]
   simp only [Nat.reduceEqDiff, ↓reduceIte]
   refine let_pair_spec s ar (fun s1 => tcb.decode_set_tls_base st s1 p ⟨length, buf, call, slot, extra⟩) _ ?_
   unfold tcb.decode_set_tls_base

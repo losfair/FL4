@@ -78,11 +78,11 @@ theorem irqv_eq (y : U64) (hy : y.val ≤ 107) :
 theorem maxmin_eq : (Fl4Spec.ucast 64 (Fl4Spec.maxUserIRQ - Fl4Spec.minUserIRQ) : BitVec 64) = BitVec.ofNat 64 107 := by
   decide
 
-@[simp] theorem lbl_msi_val : fl4_abi.label.X86IRQIssueIRQHandlerMSI.val = 68 := by
+@[simp] theorem lbl_msi_val : fl4_abi.label.X86IRQIssueIRQHandlerMSI.val = 71 := by
   simp [fl4_abi.label.X86IRQIssueIRQHandlerMSI]
-@[simp] theorem lbl_ioapic_val : fl4_abi.label.X86IRQIssueIRQHandlerIOAPIC.val = 67 := by
+@[simp] theorem lbl_ioapic_val : fl4_abi.label.X86IRQIssueIRQHandlerIOAPIC.val = 70 := by
   simp [fl4_abi.label.X86IRQIssueIRQHandlerIOAPIC]
-@[simp] theorem lbl_remap_val : fl4_abi.label.X86IRQIssueIRQHandlerIOAPICRemapped.val = 69 := by
+@[simp] theorem lbl_remap_val : fl4_abi.label.X86IRQIssueIRQHandlerIOAPICRemapped.val = 72 := by
   simp [fl4_abi.label.X86IRQIssueIRQHandlerIOAPICRemapped]
 
 section
@@ -141,7 +141,7 @@ theorem sub_107 : (123#u64 - 16#u64 : Result U64) = ok 107#u64 := by
   obtain ⟨v, hv, hvv⟩ := spec_exists (U64.sub_spec (x := 123#u64) (y := 16#u64) (by decide))
   rw [hv]; congr 1; apply UScalar.eq_of_val_eq; rw [hvv.1]; rfl
 
-/-- **`X86IRQIssueIRQHandlerMSI`** (label 68). -/
+/-- **`X86IRQIssueIRQHandlerMSI`** (label 71). -/
 theorem irq_msi_refines (th : TypedHeap) (hP : Placed th) (s : S) (ar : A) (σ : Fl4Spec.State Unit) (G : MdbGhost)
     (hCR : CRel th (L.mem s) σ G) (hL : IntLayout th (L.ksb s)) (hIR : IrqRel (L.mem s) (L.ksb s) σ)
     (hHA : HandlersActive (L.mem s) (L.ksb s) G) (hFI : FinInv th (L.mem s) σ G) (hFR : MdbOKV (L.ksb s) (L.mem s) G)
@@ -352,7 +352,7 @@ end
 section
 variable {S : Type} {st : machine.Store S} [L : P1.LawfulStore st] {A : Type} (arI : machine.Arch A)
 
-/-- **`X86IRQIssueIRQHandlerIOAPIC`** (label 67). -/
+/-- **`X86IRQIssueIRQHandlerIOAPIC`** (label 70). -/
 theorem irq_ioapic_refines (th : TypedHeap) (hP : Placed th) (s : S) (ar : A) (σ : Fl4Spec.State Unit) (G : MdbGhost)
     (hCR : CRel th (L.mem s) σ G) (hL : IntLayout th (L.ksb s)) (hIR : IrqRel (L.mem s) (L.ksb s) σ)
     (hHA : HandlersActive (L.mem s) (L.ksb s) G) (hFI : FinInv th (L.mem s) σ G) (hFR : MdbOKV (L.ksb s) (L.mem s) G)
@@ -576,7 +576,7 @@ theorem irq_ioapic_refines (th : TypedHeap) (hP : Placed th) (s : S) (ar : A) (�
   exact hmem
 
 
-/-- **l4h `X86IRQIssueIRQHandlerIOAPICRemapped`** (label 69), against FL4's copy of the IOAPIC decode with
+/-- **l4h `X86IRQIssueIRQHandlerIOAPICRemapped`** (label 72), against FL4's copy of the IOAPIC decode with
 the remapping-table handle. -/
 theorem irq_remap_refines (th : TypedHeap) (hP : Placed th) (s : S) (ar : A) (σ : Fl4Spec.State Unit) (G : MdbGhost)
     (hCR : CRel th (L.mem s) σ G) (hL : IntLayout th (L.ksb s)) (hIR : IrqRel (L.mem s) (L.ksb s) σ)
@@ -842,7 +842,7 @@ variable {S : Type} {st : machine.Store S} [L : P1.LawfulStore st] {A : Type} (a
 
 /-- **Any other IRQControl label**: `IllegalOperation`. -/
 theorem irq_ctl_other_refines (th : TypedHeap) (s : S) (ar : A) (σ : Fl4Spec.State Unit)
-    (lbl : U64) (h1 : lbl.val ≠ 33) (h2 : lbl.val ≠ 67) (h3 : lbl.val ≠ 68) (h4 : lbl.val ≠ 69)
+    (lbl : U64) (h1 : lbl.val ≠ 33) (h2 : lbl.val ≠ 70) (h3 : lbl.val ≠ 71) (h4 : lbl.val ≠ 72)
     (slbl : Fl4Spec.Data) (hlbl : Fl4Spec.genInvocationType slbl ≠ .irqIssueIRQHandler ∧
       Fl4Spec.invocationType slbl ≠ .archInvocationLabel .x64IRQIssueIRQHandlerIOAPIC ∧
       Fl4Spec.invocationType slbl ≠ .archInvocationLabel .x64IRQIssueIRQHandlerMSI)

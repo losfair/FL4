@@ -93,6 +93,7 @@ def initKheap : KHeap :=
         tcbIpcframe := .nullCap,
         tcbFaultHandler := .nullCap,
         tcbTimeoutHandler := .nullCap,
+        tcbEpt := .nullCap,
         tcbState := .idleThreadState,
         tcbIpcBuffer := 0,
         tcbFault := none,

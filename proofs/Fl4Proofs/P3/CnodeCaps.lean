@@ -107,9 +107,9 @@ theorem mask_rel (r : capability.Rights) (c : capability.Cap) (hc : CapWf c) :
       (EncWf c → EncWf c') ∧ (∀ th, CapValid th c → CapValid th c') ∧ SameBadgeKind c' c ∧
       (c' = .Null ↔ c = .Null) := by
   cases c
-  case Frame p sz v dev m asid va =>
+  case Frame p sz v dev m ept asid va =>
     obtain ⟨mv, hm, h1, h2, hmv⟩ := vm_mask v hc r
-    refine ⟨.Frame p sz mv dev m asid va, by simp [capability.mask_cap_rights, hm],
+    refine ⟨.Frame p sz mv dev m ept asid va, by simp [capability.mask_cap_rights, hm],
       (show 1 ≤ mv.val ∧ mv.val ≤ 3 from ⟨h1, h2⟩), ?_, ?_, fun _ h => h, trivial, by simp⟩
     · simp [absCap, Fl4Spec.maskCap, Fl4Spec.capRights, Fl4Spec.capRightsUpdate, Fl4Spec.acapRightsUpdate,
         Fl4Spec.ArchCap.acapRights, hmv]
@@ -136,7 +136,7 @@ theorem mask_rel (r : capability.Rights) (c : capability.Cap) (hc : CapWf c) :
 theorem maskCap_all (c : capability.Cap) (hc : CapWf c) :
     Fl4Spec.maskCap Fl4Spec.allRights (absCap c) = absCap c := by
   cases c
-  case Frame p sz v dev m asid va =>
+  case Frame p sz v dev m ept asid va =>
     have h3 : v.val = 1 ∨ v.val = 2 ∨ v.val = 3 := by simp only [CapWf] at hc; omega
     simp only [absCap, Fl4Spec.maskCap, Fl4Spec.capRights, Fl4Spec.capRightsUpdate, Fl4Spec.acapRightsUpdate,
       Fl4Spec.ArchCap.acapRights, Fl4Spec.allRights, Set.inter_univ]
@@ -334,7 +334,7 @@ theorem derive_rel (s : S) (σ : Fl4Spec.State Z) (slot : obj.Slot) (sl : Fl4Spe
       exact ⟨.Err (.Sys .RevokeFirst), by simp, _, rfl, show SysErrRel (.Sys .RevokeFirst) .revokeFirst from trivial⟩
     · simp only [hx, ↓reduceIte, core.result.Result.Insts.CoreOpsTry.branch, bind_ok]
       exact ⟨_, rfl, _, rfl, hc, rfl, he, fun _ h => h, trivial⟩
-  case Frame p sz v dev m asid va =>
+  case Frame p sz v dev m ept asid va =>
     refine ⟨_, rfl, _, rfl, ?_⟩
     obtain ⟨h1, h2⟩ := hc
     obtain ⟨hcan, hv, -, -⟩ := he
@@ -353,6 +353,10 @@ theorem derive_rel (s : S) (σ : Fl4Spec.State Z) (slot : obj.Slot) (sl : Fl4Spe
     · exact ⟨_, rfl, _, rfl, trivial⟩
     · exact ⟨_, rfl, _, rfl, hc, rfl, he, fun _ h => h, trivial⟩
   case Pml4 p m asid =>
+    cases m
+    · exact ⟨_, rfl, _, rfl, trivial⟩
+    · exact ⟨_, rfl, _, rfl, hc, rfl, he, fun _ h => h, trivial⟩
+  case Ept p level m asid va =>
     cases m
     · exact ⟨_, rfl, _, rfl, trivial⟩
     · exact ⟨_, rfl, _, rfl, hc, rfl, he, fun _ h => h, trivial⟩

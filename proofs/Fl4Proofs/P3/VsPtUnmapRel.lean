@@ -2,7 +2,7 @@
 P3 (DESIGN.md §9), VSpace: **`unmap_page_table` refines l4v
 `unmap_page_table`**, and the zeroing of an unmapped page table.
 
-* `find_vspace_for_asid_L4`: under `PoolsIn` (every non-null pool entry
+* `find_vspace_for_asid_L4`: under `PoolsIn` (every non-null native pool entry
   is a PML4 of `L4`), the root `find_vspace_for_asid` finds is one of `L4`;
 * `PtRel.zero_l1`, `writes_zero`: the relation after zeroing a PT of `L1`;
 * `unmap_page_table_rel`: FL4's `unmap_page_table` either does nothing
@@ -27,9 +27,9 @@ open fl4_core Fl4Proofs.P1 Fl4Proofs.P3.Notif Fl4Proofs.P3.Endp Fl4Proofs.P3
 
 noncomputable section
 
-/-- Every non-null pool entry is a PML4 of `L4`. -/
+/-- Every non-null native pool entry is a PML4 of `L4`; guest tags remain occupied. -/
 def PoolsIn (P L4 : Set U64) (m : U64 → U64) : Prop :=
-  ∀ p ∈ P, ∀ lo : U64, lo.val < 512 → m (peA p lo) ≠ 0#u64 → m (peA p lo) ∈ L4
+  ∀ p ∈ P, ∀ lo : U64, lo.val < 512 → m (peA p lo) ≠ 0#u64 → m (peA p lo) &&& 1#u64 = 0#u64 → m (peA p lo) ∈ L4
 
 section Hyps
 variable {S : Type} (st : machine.Store S) [L : LawfulStore st]
@@ -160,10 +160,10 @@ theorem writes_zero {L1 : Set U64} {q : U64} (hq : q.val % 4096 = 0) (hq1 : q �
   · rfl
 
 /-- Under `PoolsIn`, the roots `find_vspace_for_asid` finds are PML4s of `L4`. -/
-theorem find_vspace_for_asid_L4 {P L4 : Set U64} (s : S) (σ : Fl4Spec.State Unit)
+theorem find_asid_native_L4 {P L4 : Set U64} (s : S) (σ : Fl4Spec.State Unit)
     (hR : VsRel P (L.mem s) (L.ksb s) σ) (hPI : PoolsIn P L4 (L.mem s)) (asid : U64) :
-    vspace.find_vspace_for_asid st s asid ⦃ r => ∀ r1, r = .Ok r1 → r1 ∈ L4 ⦄ := by
-  unfold vspace.find_vspace_for_asid
+    vspace.find_asid st s asid ⦃ r => ∀ r1, r = .Ok r1 → r1 &&& 1#u64 = 0#u64 → r1 ∈ L4 ⦄ := by
+  unfold vspace.find_asid
   have hL : vspace.ASID_LOW_BITS = 9#u64 := by unfold vspace.ASID_LOW_BITS; rfl
   rw [hL]
   step as ⟨i, _hi⟩
@@ -183,6 +183,29 @@ theorem find_vspace_for_asid_L4 {P L4 : Set U64} (s : S) (σ : Fl4Spec.State Uni
     · exact (WP.spec_ok _).2 fun e he => by cases he
     · rename_i h0
       exact (WP.spec_ok _).2 fun r1 hr1 => by cases hr1; exact hPI _ hpP _ hlo h0
+
+/-- Tagged guest entries are occupied, but native lookup never returns them. -/
+theorem find_vspace_for_asid_L4 {P L4 : Set U64} (s : S) (σ : Fl4Spec.State Unit)
+    (hR : VsRel P (L.mem s) (L.ksb s) σ) (hPI : PoolsIn P L4 (L.mem s)) (asid : U64) :
+    vspace.find_vspace_for_asid st s asid ⦃ r => ∀ r1, r = .Ok r1 → r1 ∈ L4 ⦄ := by
+  unfold vspace.find_vspace_for_asid
+  refine WP.spec_bind (find_asid_native_L4 s σ hR hPI asid) ?_
+  intro r hr
+  cases r with
+  | Err e =>
+    simp only [core.result.Result.Insts.CoreOpsTry.branch,
+      core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual,
+      core.convert.FromSame, core.convert.FromSame.from, lift, bind_ok, bind_tc_ok, WP.spec_ok]
+    intro r1 he
+    cases he
+  | Ok w =>
+    simp only [core.result.Result.Insts.CoreOpsTry.branch, lift, bind_ok]
+    by_cases ht : w &&& 1#u64 = 0#u64
+    · simp only [ht, bne_self_eq_false, Bool.false_eq_true, ↓reduceIte, WP.spec_ok]
+      intro r1 he
+      cases he
+      exact hr _ rfl ht
+    · simp [ht, WP.spec_ok]
 
 set_option maxRecDepth 8000 in
 /-- **`unmap_page_table`** refines l4v `unmap_page_table` (see the module

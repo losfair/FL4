@@ -1134,21 +1134,6 @@ open fl4_core
 @[simp, scalar_tac_simps] theorem capability.VM_READ_ONLY.val_eq : capability.VM_READ_ONLY.val = 2 := by
   unfold capability.VM_READ_ONLY; rfl
 
-@[simp, scalar_tac_simps] theorem vcpu.IO.val_eq : vcpu.IO.val = 24576 := by
-  unfold vcpu.IO; rfl
-
-@[simp, scalar_tac_simps] theorem vcpu.TCB.val_eq : vcpu.TCB.val = 20480 := by
-  unfold vcpu.TCB; rfl
-
-@[simp, scalar_tac_simps] theorem layout.node.IPI_PENDING.val_eq : layout.node.IPI_PENDING.val = 120 := by
-  unfold layout.node.IPI_PENDING; rfl
-
-@[simp, scalar_tac_simps] theorem vcpu.NEXT.val_eq : vcpu.NEXT.val = 20488 := by
-  unfold vcpu.NEXT; rfl
-
-@[simp, scalar_tac_simps] theorem layout.ks.VCPU_HEAD.val_eq : layout.ks.VCPU_HEAD.val = 80 := by
-  unfold layout.ks.VCPU_HEAD; rfl
-
 @[simp, scalar_tac_simps] theorem layout.node.CONSUMED.val_eq : layout.node.CONSUMED.val = 40 := by
   unfold layout.node.CONSUMED; rfl
 
@@ -1172,6 +1157,21 @@ open fl4_core
 
 @[simp, scalar_tac_simps] theorem vspace.PD_INDEX_OFFSET.val_eq : vspace.PD_INDEX_OFFSET.val = 21 := by
   unfold vspace.PD_INDEX_OFFSET; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.IO.val_eq : vcpu.IO.val = 24576 := by
+  unfold vcpu.IO; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.TCB.val_eq : vcpu.TCB.val = 20480 := by
+  unfold vcpu.TCB; rfl
+
+@[simp, scalar_tac_simps] theorem layout.node.IPI_PENDING.val_eq : layout.node.IPI_PENDING.val = 120 := by
+  unfold layout.node.IPI_PENDING; rfl
+
+@[simp, scalar_tac_simps] theorem vcpu.NEXT.val_eq : vcpu.NEXT.val = 20488 := by
+  unfold vcpu.NEXT; rfl
+
+@[simp, scalar_tac_simps] theorem layout.ks.VCPU_HEAD.val_eq : layout.ks.VCPU_HEAD.val = 80 := by
+  unfold layout.ks.VCPU_HEAD; rfl
 
 @[simp, scalar_tac_simps] theorem vcpu.SHADOW.val_eq : vcpu.SHADOW.val = 4096 := by
   unfold vcpu.SHADOW; rfl

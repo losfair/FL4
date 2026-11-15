@@ -22,7 +22,7 @@ theorem ioport_control_decode_refines (th : TypedHeap) (hP : Placed th) (s : S) 
     (G : MdbGhost) (hCR : CRel th (L.mem s) σ G) (hL : IoLayout th (L.ksb s)) (hIo : IoRel (L.mem s) (L.ksb s) σ)
     (hPA : IoPortsAlloc (L.mem s) (L.ksb s) G) (hFI : FinInv th (L.mem s) σ G) (hFR : MdbOKV (L.ksb s) (L.mem s) G)
     (lbl : U64) (slbl : Fl4Spec.Data)
-    (hlbl : lbl.val = 60 ↔ Fl4Spec.invocationType slbl = .archInvocationLabel .x64IOPortControlIssue)
+    (hlbl : lbl.val = 63 ↔ Fl4Spec.invocationType slbl = .archInvocationLabel .x64IOPortControlIssue)
     (length buf ct : U64) (hct : sched.cur_thread st s = ok ct) (args : List U64)
     (hlen : length.val = args.length)
     (hargs : ∀ (i : U64) x, args[i.val]? = some x → msg.syscall_arg st s ct buf i = ok x)
@@ -36,13 +36,13 @@ theorem ioport_control_decode_refines (th : TypedHeap) (hP : Placed th) (s : S) 
     ioport.decode_control st arI s ar lbl length (cslotAddr (ps.bv, idxs)) buf extra ⦃ res =>
       IoCPost (L := L) th (L.ksb s) σ
         (Fl4Spec.decodeIoportControlInvocation slbl (args.map UScalar.bv) (ps.bv, idxs) ac excaps) s res ⦄ := by
-  by_cases h60 : lbl.val = 60
+  by_cases h63 : lbl.val = 63
   · have e : lbl = fl4_abi.label.X86IOPortControlIssue :=
-      UScalar.eq_of_val_eq (by rw [h60]; simp [fl4_abi.label.X86IOPortControlIssue])
+      UScalar.eq_of_val_eq (by rw [h63]; simp [fl4_abi.label.X86IOPortControlIssue])
     subst e
-    exact ioport_control_refines arI th hP s ar σ G hCR hL hIo hPA hFI hFR slbl (hlbl.1 h60) length buf ct hct args hlen
+    exact ioport_control_refines arI th hP s ar σ G hCR hL hIo hPA hFI hFR slbl (hlbl.1 h63) length buf ct hct args hlen
       hargs hcur htcb hact hact3 extra x0 hx0 excaps hex hps hls hsrcC ac
-  exact ioport_control_other arI th s ar σ lbl h60 slbl (fun h => h60 (hlbl.2 h)) length _ buf extra _ _ ac excaps
+  exact ioport_control_other arI th s ar σ lbl h63 slbl (fun h => h63 (hlbl.2 h)) length _ buf extra _ _ ac excaps
 
 end
 

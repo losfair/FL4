@@ -1,5 +1,5 @@
 /-
-P3 (DESIGN.md §9), TCB invocations: **`tcb::decode`, every label**, against
+P3 (DESIGN.md §9), TCB invocations: **`tcb::decode`, native labels**, against
 l4v's `decode_tcb_invocation` and `invoke_tcb` (through FL4's dispatcher):
 `tcb_decode_refines` and the Thread cap's branch `decode_invocation_thread`,
 posted as `DecOK` (`TopPost`).
@@ -13,7 +13,8 @@ label is the spec's `IllegalOperation` (proved). The FL4 debug and l4h
 labels (breakpoints, single stepping, FPU, TCB timers) and FL4's SetFlags
 go to the dispatcher's extension decoders (`fl4DecodeTcbInvocation`,
 `Ext/Tcb`; the extension label of the message is `hext`), discharged in
-`TcbExt` (`tcb_decode_ext`). The cross-core stall of
+`TcbExt` (`tcb_decode_ext`).
+SetEPTRoot is outside these native refinement statements (`hNative`). The stall of
 the target (`smp::remote_tcb_stall`) is the hypothesis `hstall` (a no-op
 for a thread of the current core).
 -/
@@ -50,6 +51,7 @@ noncomputable section
 @[simp] theorem lbl_tcbSetFlags_val : fl4_abi.label.TCBSetFlags.val = 21 := by simp [fl4_abi.label.TCBSetFlags]
 @[simp] theorem lbl_tcbReadFPU_val : fl4_abi.label.TCBReadFPU.val = 22 := by simp [fl4_abi.label.TCBReadFPU]
 @[simp] theorem lbl_tcbWriteFPU_val : fl4_abi.label.TCBWriteFPU.val = 23 := by simp [fl4_abi.label.TCBWriteFPU]
+@[simp] theorem lbl_tcbSetEPTRoot_val : fl4_abi.label.TCBSetEPTRoot.val = 88 := by simp [fl4_abi.label.TCBSetEPTRoot]
 @[simp] theorem lbl_tcbSetTimer_val : fl4_abi.label.TCBSetTimer.val = 24 := by simp [fl4_abi.label.TCBSetTimer]
 
 /-- The spec's TCB label of an FL4 label (the FL4 debug and l4h labels, and
@@ -110,7 +112,7 @@ theorem TcbOKF.toTcbOK {s : S} {ar : A} {σ : Fl4Spec.State Unit} {lbl p : U64} 
     TcbOK (L := L) arI s ar σ lbl p c blk call don slbl args ci sl excaps buffer :=
   WP.spec_mono h (fun _ h => h.toF.top)
 
-/-- **`tcb::decode`, every label**: from one hypothesis per FL4 TCB label
+/-- **`tcb::decode`, native labels**: from one hypothesis per FL4 TCB label
 (see the module docstring), every other label being the spec's
 `IllegalOperation`. -/
 theorem tcb_decode_refines (s : S) (ar : A) (σ : Fl4Spec.State Unit) (lbl p : U64) (c : tcb.Ctx)
@@ -119,6 +121,7 @@ theorem tcb_decode_refines (s : S) (ar : A) (σ : Fl4Spec.State Unit) (lbl p : U
     (excaps : List (Fl4Spec.Cap × Fl4Spec.CslotPtr)) (buffer : Option Fl4Spec.ObjRef)
     (hext : Fl4Spec.genInvocationType slbl = .invalidInvocation → Fl4Spec.fl4TcbExtLabelOf slbl = tcbExtOf lbl)
     (hstall : smp.remote_tcb_stall st arI s ar p = ok (s, ar))
+    (hNative : lbl ≠ fl4_abi.label.TCBSetEPTRoot)
     (hReadRegisters : lbl = fl4_abi.label.TCBReadRegisters →
       TcbOK (L := L) arI s ar σ lbl p c blk call don slbl args ci sl excaps buffer)
     (hWriteRegisters : lbl = fl4_abi.label.TCBWriteRegisters →
@@ -216,6 +219,7 @@ theorem tcb_decode_refines (s : S) (ar : A) (σ : Fl4Spec.State Unit) (lbl p : U
     rw [hlbl]; simp [tcbLabelOf, h2, h3, h4, h5, h6, h7, h8, h9, h10, h11, h12, h13, h14, h15, h16, h17, h18, h19, h20, h21, h22, h23, h24]
   unfold TcbOK tcb.decode
   rw [hstall]
+  simp only [hNative, ↓reduceIte]
   simp only [bind_ok, u64_eq_iff, lbl_tcbReadRegisters_val, lbl_tcbWriteRegisters_val, lbl_tcbCopyRegisters_val, lbl_tcbConfigure_val, lbl_tcbSetPriority_val, lbl_tcbSetMCPriority_val, lbl_tcbSetSchedParams_val, lbl_tcbSetTimeoutEndpoint_val, lbl_tcbSetIPCBuffer_val, lbl_tcbSetSpace_val, lbl_tcbSuspend_val, lbl_tcbResume_val, lbl_tcbBindNotification_val, lbl_tcbUnbindNotification_val, lbl_tcbSetBreakpoint_val, lbl_tcbGetBreakpoint_val, lbl_tcbUnsetBreakpoint_val, lbl_tcbConfigureSingleStepping_val, lbl_tcbSetTLSBase_val, lbl_tcbSetFlags_val, lbl_tcbReadFPU_val, lbl_tcbWriteFPU_val, lbl_tcbSetTimer_val,
     h2, h3, h4, h5, h6, h7, h8, h9, h10, h11, h12, h13, h14, h15, h16, h17, h18, h19, h20, h21, h22, h23, h24, ↓reduceIte]
   refine (WP.spec_ok _).2 (Or.inl ⟨_, rfl, rfl, .illegalOperation, ?_, Or.inl trivial⟩)
@@ -233,6 +237,7 @@ theorem tcb_decode_refinesF (s : S) (ar : A) (σ : Fl4Spec.State Unit) (lbl p : 
     (excaps : List (Fl4Spec.Cap × Fl4Spec.CslotPtr)) (buffer : Option Fl4Spec.ObjRef)
     (hext : Fl4Spec.genInvocationType slbl = .invalidInvocation → Fl4Spec.fl4TcbExtLabelOf slbl = tcbExtOf lbl)
     (hstall : smp.remote_tcb_stall st arI s ar p = ok (s, ar))
+    (hNative : lbl ≠ fl4_abi.label.TCBSetEPTRoot)
     (hReadRegisters : lbl = fl4_abi.label.TCBReadRegisters →
       TcbOKF (L := L) arI s ar σ lbl p c blk call don slbl args ci sl excaps buffer)
     (hWriteRegisters : lbl = fl4_abi.label.TCBWriteRegisters →
@@ -330,6 +335,7 @@ theorem tcb_decode_refinesF (s : S) (ar : A) (σ : Fl4Spec.State Unit) (lbl p : 
     rw [hlbl]; simp [tcbLabelOf, h2, h3, h4, h5, h6, h7, h8, h9, h10, h11, h12, h13, h14, h15, h16, h17, h18, h19, h20, h21, h22, h23, h24]
   unfold TcbOKF tcb.decode
   rw [hstall]
+  simp only [hNative, ↓reduceIte]
   simp only [bind_ok, u64_eq_iff, lbl_tcbReadRegisters_val, lbl_tcbWriteRegisters_val, lbl_tcbCopyRegisters_val, lbl_tcbConfigure_val, lbl_tcbSetPriority_val, lbl_tcbSetMCPriority_val, lbl_tcbSetSchedParams_val, lbl_tcbSetTimeoutEndpoint_val, lbl_tcbSetIPCBuffer_val, lbl_tcbSetSpace_val, lbl_tcbSuspend_val, lbl_tcbResume_val, lbl_tcbBindNotification_val, lbl_tcbUnbindNotification_val, lbl_tcbSetBreakpoint_val, lbl_tcbGetBreakpoint_val, lbl_tcbUnsetBreakpoint_val, lbl_tcbConfigureSingleStepping_val, lbl_tcbSetTLSBase_val, lbl_tcbSetFlags_val, lbl_tcbReadFPU_val, lbl_tcbWriteFPU_val, lbl_tcbSetTimer_val,
     h2, h3, h4, h5, h6, h7, h8, h9, h10, h11, h12, h13, h14, h15, h16, h17, h18, h19, h20, h21, h22, h23, h24, ↓reduceIte]
   refine (WP.spec_ok _).2 (Or.inl ⟨_, rfl, rfl, .illegalOperation, ?_, Or.inl trivial⟩)

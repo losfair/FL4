@@ -1,6 +1,6 @@
 /-
 P3 (DESIGN.md §9), IO ports: **IOPort `In`/`Out`** (FL4 `ioport::decode`,
-labels 61..66) against l4v `decode_port_invocation`: the same error with the
+labels 64..69) against l4v `decode_port_invocation`: the same error with the
 state unchanged, or the spec's invocation `IOPortInvocation port data`, with
 FL4's port operation (`port_in` / `port_out`, arch operations) on that port,
 size and data, and (for `Out`, and `In` without a reply) the slots kept.
@@ -126,33 +126,33 @@ theorem allowed_eq (first last port size : U64) (hl : last.val < 65536) (hp : po
     · rw [if_pos h2, if_pos (Or.inr (by scalar_tac))]; rfl
     · rw [if_neg h2, if_neg (by scalar_tac)]
 
-theorem port_size_eq (lbl : U64) (h : 61 ≤ lbl.val ∧ lbl.val ≤ 66) :
-    ioport.port_size lbl = ok (if lbl.val = 61 ∨ lbl.val = 64 then 1#u64
-      else if lbl.val = 62 ∨ lbl.val = 65 then 2#u64 else 4#u64) := by
+theorem port_size_eq (lbl : U64) (h : 64 ≤ lbl.val ∧ lbl.val ≤ 69) :
+    ioport.port_size lbl = ok (if lbl.val = 64 ∨ lbl.val = 67 then 1#u64
+      else if lbl.val = 65 ∨ lbl.val = 68 then 2#u64 else 4#u64) := by
   unfold ioport.port_size
-  have : lbl.val = 61 ∨ lbl.val = 62 ∨ lbl.val = 63 ∨ lbl.val = 64 ∨ lbl.val = 65 ∨ lbl.val = 66 := by omega
+  have : lbl.val = 64 ∨ lbl.val = 65 ∨ lbl.val = 66 ∨ lbl.val = 67 ∨ lbl.val = 68 ∨ lbl.val = 69 := by omega
   rcases this with h | h | h | h | h | h <;>
     simp [u64_eq_iff, h, fl4_abi.label.X86IOPortIn8, fl4_abi.label.X86IOPortOut8, fl4_abi.label.X86IOPortIn16,
       fl4_abi.label.X86IOPortOut16, fl4_abi.label.X86IOPortIn32, fl4_abi.label.X86IOPortOut32]
 
-theorem is_port_in_eq (lbl : U64) (h : 61 ≤ lbl.val ∧ lbl.val ≤ 66) :
-    ioport.is_port_in lbl = ok (decide (lbl.val ≤ 63)) := by
+theorem is_port_in_eq (lbl : U64) (h : 64 ≤ lbl.val ∧ lbl.val ≤ 69) :
+    ioport.is_port_in lbl = ok (decide (lbl.val ≤ 66)) := by
   unfold ioport.is_port_in
-  have : lbl.val = 61 ∨ lbl.val = 62 ∨ lbl.val = 63 ∨ lbl.val = 64 ∨ lbl.val = 65 ∨ lbl.val = 66 := by omega
+  have : lbl.val = 64 ∨ lbl.val = 65 ∨ lbl.val = 66 ∨ lbl.val = 67 ∨ lbl.val = 68 ∨ lbl.val = 69 := by omega
   rcases this with h | h | h | h | h | h <;>
     simp [u64_eq_iff, h, fl4_abi.label.X86IOPortIn8, fl4_abi.label.X86IOPortIn16, fl4_abi.label.X86IOPortIn32]
 
 /-- The access size of an IO port label. -/
-def portSz (lbl : U64) : Nat := if lbl.val = 61 ∨ lbl.val = 64 then 1 else if lbl.val = 62 ∨ lbl.val = 65 then 2 else 4
+def portSz (lbl : U64) : Nat := if lbl.val = 64 ∨ lbl.val = 67 then 1 else if lbl.val = 65 ∨ lbl.val = 68 then 2 else 4
 
 theorem set_thread_state_cpu (s : S) (t v : U64) :
     sched.set_thread_state st s t v ⦃ s' => L.ksb s' = L.ksb s ∧ L.cpu s' = L.cpu s ⦄ :=
   WP.spec_mono (set_thread_state_cases s t v) (by rintro s' (rfl | rfl) <;> simp)
 
-/-- **IOPort `In`** (labels 61..63), without a reply (`call` false: the
+/-- **IOPort `In`** (labels 64..66), without a reply (`call` false: the
 reply is `handle_invocation`'s). -/
 theorem port_in_refines (th : TypedHeap) (hP : Placed th) (s : S) (ar : A) (σ : Fl4Spec.State Unit)
-    (lbl : U64) (hl : 61 ≤ lbl.val ∧ lbl.val ≤ 63)
+    (lbl : U64) (hl : 64 ≤ lbl.val ∧ lbl.val ≤ 66)
     (slbl : Fl4Spec.Data) (hlbl : Fl4Spec.invocationType slbl = .archInvocationLabel (inLabel (portSz lbl)))
     (length buf ct : U64) (hct : sched.cur_thread st s = ok ct) (args : List U64)
     (hlen : length.val = args.length)
@@ -161,7 +161,7 @@ theorem port_in_refines (th : TypedHeap) (hP : Placed th) (s : S) (ar : A) (σ :
     (hact : OutsideObjects th (L.nodeAt s (L.cpu s) layout.node.SCHED_ACTION))
     (first last : U64) (hfl : first.val ≤ last.val) (hl16 : last.val < 65536)
     (hin : ∀ (a : A) p z, ∃ v a', arI.port_in a p z = ok (v, a')) :
-    ioport.decode st arI s ar lbl length (.IoPort first last) false buf ⦃ res =>
+    ioport.decode st arI s ar lbl length (.IoPort first last 0#u64) false buf ⦃ res =>
       PortPost σ (Fl4Spec.decodePortInvocation slbl (args.map UScalar.bv)
         (.ioPortCap (BitVec.ofNat 16 first.val) (BitVec.ofNat 16 last.val))) s ar
         (fun inv s' a' => ∃ port : U64, port.val < 65536 ∧
@@ -174,14 +174,14 @@ theorem port_in_refines (th : TypedHeap) (hP : Placed th) (s : S) (ar : A) (σ :
   simp only
   rw [hct, port_size_eq lbl ⟨hl.1, by omega⟩, is_port_in_eq lbl ⟨hl.1, by omega⟩]
   simp only [bind_ok]
-  have hszU : (if lbl.val = 61 ∨ lbl.val = 64 then 1#u64 else if lbl.val = 62 ∨ lbl.val = 65 then 2#u64
+  have hszU : (if lbl.val = 64 ∨ lbl.val = 67 then 1#u64 else if lbl.val = 65 ∨ lbl.val = 68 then 2#u64
       else 4#u64) = ⟨BitVec.ofNat 64 (portSz lbl)⟩ := by
     unfold portSz; split_ifs <;> rfl
   rw [hszU]
   have hsz0 : ¬ (⟨BitVec.ofNat 64 (portSz lbl)⟩ : U64) = 0#u64 := by
     rw [u64_eq_iff]; show ¬ (BitVec.ofNat 64 (portSz lbl)).toNat = 0
     rcases hsz with h | h | h <;> rw [h] <;> decide
-  rw [if_neg hsz0, decide_eq_true (by omega : lbl.val ≤ 63)]
+  rw [if_neg hsz0, decide_eq_true (by omega : lbl.val ≤ 66)]
   simp only [↓reduceIte]
   -- the argument
   by_cases h1 : length < 1#u64
@@ -242,9 +242,9 @@ end
 section
 variable {S : Type} {st : machine.Store S} [L : P1.LawfulStore st] {A : Type} (arI : machine.Arch A)
 
-/-- **IOPort `Out`** (labels 64..66). -/
+/-- **IOPort `Out`** (labels 67..69). -/
 theorem port_out_refines (th : TypedHeap) (hP : Placed th) (s : S) (ar : A) (σ : Fl4Spec.State Unit)
-    (lbl : U64) (hl : 64 ≤ lbl.val ∧ lbl.val ≤ 66)
+    (lbl : U64) (hl : 67 ≤ lbl.val ∧ lbl.val ≤ 69)
     (slbl : Fl4Spec.Data) (hlbl : Fl4Spec.invocationType slbl = .archInvocationLabel (outLabel (portSz lbl)))
     (length buf ct : U64) (hct : sched.cur_thread st s = ok ct) (args : List U64)
     (hlen : length.val = args.length)
@@ -253,7 +253,7 @@ theorem port_out_refines (th : TypedHeap) (hP : Placed th) (s : S) (ar : A) (σ 
     (hact : OutsideObjects th (L.nodeAt s (L.cpu s) layout.node.SCHED_ACTION))
     (first last : U64) (hfl : first.val ≤ last.val) (hl16 : last.val < 65536) (call : Bool)
     (hout : ∀ (a : A) p z d, ∃ a', arI.port_out a p z d = ok a') :
-    ioport.decode st arI s ar lbl length (.IoPort first last) call buf ⦃ res =>
+    ioport.decode st arI s ar lbl length (.IoPort first last 0#u64) call buf ⦃ res =>
       PortPost σ (Fl4Spec.decodePortInvocation slbl (args.map UScalar.bv)
         (.ioPortCap (BitVec.ofNat 16 first.val) (BitVec.ofNat 16 last.val))) s ar
         (fun inv s' a' => ∃ port data raw : U64, port.val < 65536 ∧
@@ -267,14 +267,14 @@ theorem port_out_refines (th : TypedHeap) (hP : Placed th) (s : S) (ar : A) (σ 
   simp only
   rw [hct, port_size_eq lbl ⟨by omega, hl.2⟩, is_port_in_eq lbl ⟨by omega, hl.2⟩]
   simp only [bind_ok]
-  have hszU : (if lbl.val = 61 ∨ lbl.val = 64 then 1#u64 else if lbl.val = 62 ∨ lbl.val = 65 then 2#u64
+  have hszU : (if lbl.val = 64 ∨ lbl.val = 67 then 1#u64 else if lbl.val = 65 ∨ lbl.val = 68 then 2#u64
       else 4#u64) = ⟨BitVec.ofNat 64 (portSz lbl)⟩ := by
     unfold portSz; split_ifs <;> rfl
   rw [hszU]
   have hsz0 : ¬ (⟨BitVec.ofNat 64 (portSz lbl)⟩ : U64) = 0#u64 := by
     rw [u64_eq_iff]; show ¬ (BitVec.ofNat 64 (portSz lbl)).toNat = 0
     rcases hsz with h | h | h <;> rw [h] <;> decide
-  rw [if_neg hsz0, decide_eq_false (by omega : ¬ lbl.val ≤ 63)]
+  rw [if_neg hsz0, decide_eq_false (by omega : ¬ lbl.val ≤ 66)]
   simp only [Bool.false_eq_true, ↓reduceIte]
   by_cases h2 : length < 2#u64
   · rw [if_pos h2]; simp only [error.truncated, bind_ok, WP.spec_ok]
@@ -345,14 +345,14 @@ section
 variable {S : Type} {st : machine.Store S} [L : P1.LawfulStore st] {A : Type} (arI : machine.Arch A)
 
 /-- **Any other IOPort label**: `IllegalOperation`. -/
-theorem port_other_refines (s : S) (ar : A) (σ : Fl4Spec.State Unit) (lbl : U64) (hl : lbl.val < 61 ∨ 66 < lbl.val)
+theorem port_other_refines (s : S) (ar : A) (σ : Fl4Spec.State Unit) (lbl : U64) (hl : lbl.val < 64 ∨ 69 < lbl.val)
     (slbl : Fl4Spec.Data)
     (hlbl : ∀ l, Fl4Spec.invocationType slbl = .archInvocationLabel l →
       l ≠ .x64IOPortIn8 ∧ l ≠ .x64IOPortIn16 ∧ l ≠ .x64IOPortIn32 ∧ l ≠ .x64IOPortOut8 ∧ l ≠ .x64IOPortOut16 ∧
       l ≠ .x64IOPortOut32)
     (length buf ct : U64) (hct : sched.cur_thread st s = ok ct) (args : List Fl4Spec.Data)
     (first last : U64) (call : Bool) :
-    ioport.decode st arI s ar lbl length (.IoPort first last) call buf ⦃ res =>
+    ioport.decode st arI s ar lbl length (.IoPort first last 0#u64) call buf ⦃ res =>
       PortPost σ (Fl4Spec.decodePortInvocation slbl args
         (.ioPortCap (BitVec.ofNat 16 first.val) (BitVec.ofNat 16 last.val))) s ar (fun _ _ _ => False) res ⦄ := by
   have hz : ioport.port_size lbl = ok 0#u64 := by

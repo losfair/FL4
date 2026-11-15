@@ -267,6 +267,7 @@ deriving DecidableEq, Repr, Inhabited
 /-- l4v: Structures_A.thread_state. -/
 inductive ThreadState where
   | running
+  | runningVM
   | inactive
   | restart
   | blockedOnReceive (ep : ObjRef) (replyOpt : Option ObjRef) (data : ReceiverPayload)
@@ -321,6 +322,7 @@ structure Tcb where
   tcbIpcframe : Cap
   tcbFaultHandler : Cap
   tcbTimeoutHandler : Cap
+  tcbEpt : Cap
   tcbState : ThreadState
   tcbIpcBuffer : VSpaceRef
   tcbFault : Option Fault
@@ -339,6 +341,7 @@ deriving Inhabited
 scheduled. -/
 def runnable : ThreadState → Bool
   | .running => true
+  | .runningVM => true
   | .inactive => false
   | .restart => true
   | .blockedOnReceive _ _ _ => false
@@ -351,6 +354,7 @@ def runnable : ThreadState → Bool
 notification or endpoint queue. -/
 def ipcQueuedThreadState : ThreadState → Bool
   | .running => false
+  | .runningVM => false
   | .inactive => false
   | .restart => false
   | .blockedOnReceive _ _ _ => true
@@ -372,6 +376,7 @@ def defaultTcb (d : Domain) : Tcb :=
     tcbIpcframe := .nullCap,
     tcbFaultHandler := .nullCap,
     tcbTimeoutHandler := .nullCap,
+    tcbEpt := .nullCap,
     tcbState := .inactive,
     tcbIpcBuffer := 0,
     tcbFault := none,
@@ -692,13 +697,14 @@ def capBadge (cap : Cap) : Option Badge :=
 
 /-- l4v: Structures_A.tcb_cnode_map. -/
 def tcbCnodeMap (tcb : Tcb) : CnodeIndex → Option Cap :=
-  Function.update (Function.update (Function.update (Function.update (Function.update
+  Function.update (Function.update (Function.update (Function.update (Function.update (Function.update
     (fun _ => none)
     (tcbCnodeIndex 0) (some tcb.tcbCtable))
     (tcbCnodeIndex 1) (some tcb.tcbVtable))
     (tcbCnodeIndex 2) (some tcb.tcbIpcframe))
     (tcbCnodeIndex 3) (some tcb.tcbFaultHandler))
-    (tcbCnodeIndex 4) (some tcb.tcbTimeoutHandler)
+    (tcbCnodeIndex 4) (some tcb.tcbTimeoutHandler))
+    (tcbCnodeIndex 5) (some tcb.tcbEpt)
 
 /-- l4v: Structures_A.cap_of. -/
 def capOf (kobj : KernelObject) : CnodeIndex → Option Cap :=

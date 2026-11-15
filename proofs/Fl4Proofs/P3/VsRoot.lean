@@ -14,6 +14,7 @@ the kernel's root) with the spec's CR3 is a hypothesis on the arch relation
 * `set_vm_root_rel`: FL4's `set_vm_root t` keeps memory and is matched by it.
 -/
 import Fl4Proofs.P3.VsAssignRel
+import Fl4Proofs.P0.Auto
 open Aeneas Aeneas.Std Result
 
 namespace Fl4Proofs.P3.Vs
@@ -39,7 +40,7 @@ def rootCr3 (σ : State Unit) (p : ObjRef) (asid : Asid) : Except LookupFailure 
 theorem tcbCnodeMap_one (x : Tcb) : tcbCnodeMap x (tcbCnodeIndex 1) = some x.tcbVtable := by
   unfold tcbCnodeMap
   rw [Function.update_of_ne (by decide), Function.update_of_ne (by decide), Function.update_of_ne (by decide),
-    Function.update_self]
+    Function.update_of_ne (by decide), Function.update_self]
 
 theorem getCap_tcb_one {σ : State Unit} {t : ObjRef} {x : Tcb} (hk : σ.kheap t = some (.tcb x)) :
     getCap (Z := Unit) (t, tcbCnodeIndex 1) σ = ({(x.tcbVtable, σ)}, False) := by
@@ -146,56 +147,23 @@ end Spec
 section
 variable {S : Type} {st : machine.Store S} [L : LawfulStore st]
 
+unseal Aeneas.Std.Result
+
 /-- `find_vspace_for_asid`, against l4v in every state related to FL4's. -/
 theorem find_vspace_for_asid_all {P : Set U64} (s : S) (asid : U64) (h0 : asid ≠ 0#u64) :
     vspace.find_vspace_for_asid st s asid ⦃ r => ∀ σ : Fl4Spec.State Unit, VsRel P (L.mem s) (L.ksb s) σ →
       ExceptT.run (Fl4Spec.findVspaceForAsid (Z := Unit) asid.bv) σ = ({(fvRes r, σ)}, False) ⦄ := by
-  have hpos : asid.bv > 0 := by
-    have : asid.val ≠ 0 := fun h => h0 (UScalar.eq_of_val_eq (by simpa using h))
-    show 0 < asid.bv.toNat
-    exact Nat.pos_of_ne_zero this
-  unfold vspace.find_vspace_for_asid
-  have hL : vspace.ASID_LOW_BITS = 9#u64 := by unfold vspace.ASID_LOW_BITS; rfl
-  rw [hL]
-  step as ⟨i, hi⟩
-  refine WP.spec_bind (asid_table_spec s i) ?_
-  rintro pool rfl
-  have hiv : i.val = asid.val >>> 9 := by simpa using hi
-  have hlt := and_lt i 11 2047#u64 rfl (by decide)
-  by_cases hp : L.mem s (atA (L.ksb s) (i &&& 2047#u64)) = 0#u64
-  · simp only [hp, ↓reduceIte, WP.spec_ok]
-    intro σ hR
-    have htab := hR.table _ hlt
-    rw [hi_bv asid i hiv, hp, show optRef 0#u64 = none from optRef_zero] at htab
-    exact findVspaceForAsid_none hpos htab
-  · simp only [hp, ↓reduceIte]
-    have hlo := and_lt asid 9 511#u64 rfl (by decide)
-    unfold lift
-    apply ok_bind_spec
-    apply ok_bind_spec
-    apply ok_bind_spec
-    step as ⟨root, hroot⟩
-    have hra : root = L.mem s (peA (L.mem s (atA (L.ksb s) (i &&& 2047#u64))) (asid &&& 511#u64)) := hroot
-    subst hra
-    have key : ∀ σ : Fl4Spec.State Unit, VsRel P (L.mem s) (L.ksb s) σ →
-        ExceptT.run (Fl4Spec.findVspaceForAsid (Z := Unit) asid.bv) σ =
-          ({((match optRef (L.mem s (peA (L.mem s (atA (L.ksb s) (i &&& 2047#u64))) (asid &&& 511#u64))) with
-            | some r => .ok r | none => .error .invalidRoot), σ)}, False) := by
-      intro σ hR
-      have htab := hR.table _ hlt
-      rw [hi_bv asid i hiv] at htab
-      obtain ⟨f, hkf, hf⟩ := hR.pool _ (hR.tmem _ hlt hp)
-      rw [optRef, if_neg hp] at htab
-      have hfe := hf _ hlo
-      rw [lo_bv] at hfe
-      rw [findVspaceForAsid_some hpos htab hkf, hfe]
-      generalize optRef _ = o
-      cases o <;> rfl
-    by_cases h0 : L.mem s (peA (L.mem s (atA (L.ksb s) (i &&& 2047#u64))) (asid &&& 511#u64)) = 0#u64
-    · simp only [h0, ↓reduceIte, WP.spec_ok]
-      intro σ hR; rw [key σ hR, h0, optRef_zero]; rfl
-    · simp only [h0, ↓reduceIte, WP.spec_ok]
-      intro σ hR; rw [key σ hR]; unfold optRef; rw [if_neg h0]; rfl
+  have heq : ∃ r, vspace.find_vspace_for_asid st s asid = ok r := by
+    refine Aeneas.Data.Coinductive.DWP.induction (θ := WP.effectWP)
+      (P := fun (m : Result (core.result.Result U64 error.LookupFault)) (_ : Unit) => ∃ r, m = ok r) (fun v _ _ => ⟨v, rfl⟩) ?_
+      (P0.vspace.find_vspace_for_asid.p0 st s asid L.total)
+    intro effect k u hf
+    exact False.elim hf
+  obtain ⟨r, heq⟩ := heq
+  rw [heq, WP.spec_ok]
+  intro σ hR
+  have hr := find_vspace_for_asid_rel s σ hR asid h0
+  rwa [heq, WP.spec_ok] at hr
 
 end
 

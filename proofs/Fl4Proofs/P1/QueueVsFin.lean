@@ -5,7 +5,7 @@ P1's side of the rest of the P3 CSpace side's `FinWorkHyp`.
   `delete_asid_pool`, and `set_vm_root`, which writes no word): they write
   only page-table and ASID-pool/table words, given as a set `V` of aligned
   words of `Ω` outside `Sg` (`VsOK`); `blk_of_vs` then keeps `BlkOK` with
-  the `CaiFr` frame, every TCB field from offset 160, every node word and
+  the `CaiFr` frame, every TCB field from offset 192, every node word and
   every `Sg` word (so P1's invariant is untouched).
 * `deleting_irq_handler`: the IRQ slot's cap (null or a notification cap)
   is finalised with `fin_ntfn.blk`, writing no cap-slot word; then the slot
@@ -133,6 +133,48 @@ theorem vspace.unmap_page.vs {A : Type _} {ar : machine.Arch A} (hA : P0.ArchTot
       · exact (WP.spec_ok _).2 (WritesIn.refl _ _)
   · exact (WP.spec_ok _).2 (WritesIn.refl _ _)
 
+/-- Nested translation invalidation changes only the architecture state. -/
+theorem ept.invalidate.same {A : Type _} {ar : machine.Arch A} (hA : P0.ArchTotal ar) (s : S) (a : A)
+    (root : U64) : ept.invalidate st ar s a root ⦃ r => r.1 = s ⦄ := by
+  have hS : P0.StoreTotal st := L.total
+  have hInv := hA.invalidate_ept
+  unfold ept.invalidate
+  step* <;> simp_all
+
+set_option maxHeartbeats 1000000 in
+/-- Walking native and nested ASIDs changes no memory. -/
+theorem vspace.delete_asid_pool_loop.same {A : Type _} {ar : machine.Arch A} (hA : P0.ArchTotal ar)
+    (s : S) (a : A) (base pool i : U64) (hi : i.val ≤ 512) :
+    vspace.delete_asid_pool_loop st ar s a base pool i ⦃ r => r.1 = s ⦄ := by
+  unfold vspace.delete_asid_pool_loop
+  apply loop.spec_decr_nat (measure := fun x => 512 - x.2.2.val)
+    (inv := fun x => x.1 = s ∧ x.2.2.val ≤ 512)
+  · rintro ⟨s1, a1, j⟩ ⟨hs1, hj⟩
+    dsimp only at hs1
+    subst s1
+    unfold vspace.delete_asid_pool_loop.body
+    dsimp only at hj ⊢
+    by_cases hjl : j < 512#u64
+    · simp only [hjl, ↓reduceIte]
+      step as ⟨off, hoff⟩
+      simp only [lift, bind_ok]
+      step with LawfulStore.read_spec as ⟨v, hv⟩
+      refine WP.spec_bind (Pₘ := fun r : S × A => r.1 = s) ?_ ?_
+      · split
+        · exact ept.invalidate.same hA s a1 _
+        · split
+          · exact WP.spec_bind (hA.invalidate_asid a1 _) fun _ _ => (WP.spec_ok _).2 rfl
+          · simp only [bind_ok, WP.spec_ok]
+      · rintro ⟨s2, a2⟩ hs2
+        dsimp only at hs2
+        subst s2
+        try dsimp only
+        step as ⟨j1, hj1⟩
+        try simp only [WP.spec_ok]
+        exact ⟨by scalar_tac, by scalar_tac⟩
+    · simp only [hjl, ↓reduceIte, WP.spec_ok]
+  · exact ⟨rfl, hi⟩
+
 /-- **`delete_asid`** writes only the ASID-pool entry. -/
 theorem vspace.delete_asid.vs {A : Type _} {ar : machine.Arch A} (hA : P0.ArchTotal ar) (s : S) (a : A)
     (asid root : U64) {V : U64 → Prop} (hV : VsOK Ω Sg V)
@@ -150,7 +192,16 @@ theorem vspace.delete_asid.vs {A : Type _} {ar : machine.Arch A} (hA : P0.ArchTo
   simp only [lift, bind_ok]
   step with LawfulStore.read_spec as ⟨v, _⟩
   split
-  · refine WP.spec_bind (hA.invalidate_asid a asid) fun a1 _ => ?_
+  · split
+    · refine WP.spec_bind (ept.invalidate.same hA s a root) ?_
+      rintro ⟨s1, a1⟩ hs1
+      dsimp only at hs1
+      subst s1
+      try dsimp only
+      step with LawfulStore.write_spec as ⟨s2, e2⟩
+      try simp only [WP.spec_ok]
+      rw [e2]; exact writesIn_wr_V hV he
+    refine WP.spec_bind (hA.invalidate_asid a asid) fun a1 _ => ?_
     step with LawfulStore.write_spec as ⟨s1, e1⟩
     step with sched.cur_thread.spec as ⟨ct, _⟩
     refine WP.spec_mono (vspace.set_vm_root.same hA s1 a1 ct) fun r e => ?_
@@ -168,7 +219,11 @@ theorem vspace.delete_asid_pool.vs {A : Type _} {ar : machine.Arch A} (hA : P0.A
   refine WP.spec_bind (P0.vspace.asid_table.p0 st s i hS) fun p1 _ => ?_
   split
   · exact (WP.spec_ok _).2 (WritesIn.refl _ _)
-  refine WP.spec_bind (P0.vspace.delete_asid_pool_loop.p0 st ar s a base pool 0#u64 hS hA) fun a1 _ => ?_
+  refine WP.spec_bind (vspace.delete_asid_pool_loop.same hA s a base pool 0#u64 (by simp)) ?_
+  rintro ⟨s0, a1⟩ hs0
+  dsimp only at hs0
+  subst s0
+  try dsimp only
   step as ⟨i2, _⟩
   refine WP.spec_bind (hset i2) fun s1 w1 => ?_
   step with sched.cur_thread.spec as ⟨ct, _⟩

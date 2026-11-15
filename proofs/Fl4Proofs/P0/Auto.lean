@@ -973,52 +973,6 @@ theorem obj.Slot.Insts.CoreCmpPartialEqSlot.eq.p0 (self : obj.Slot) (other : obj
     cdt.insert_new_cap machineStoreInst s parent slot cap ⦃ _ => True ⦄ := by
   unfold cdt.insert_new_cap; p0_split
 
-@[step] theorem vcpu.ports_loop.p0 {S : Type _} (machineStoreInst : machine.Store S) (s : S) (v : Std.U64) (high : Std.U64) (disable : Bool) (port : Std.U64) (hS : StoreTotal machineStoreInst) :
-    vcpu.ports_loop machineStoreInst s v high disable port ⦃ _ => True ⦄ := by
-  unfold vcpu.ports_loop
-  apply loop.spec_decr_nat (measure := fun x => match x with | (x0, x1) => high.val + 1 - x1.val) (inv := fun _ => True)
-  · rintro ⟨x0, x1⟩ -
-    unfold vcpu.ports_loop.body
-    p0_body
-  · trivial
-
-@[step] theorem vcpu.ports.p0 {S : Type _} (machineStoreInst : machine.Store S) (s : S) (v : Std.U64) (low : Std.U64) (high : Std.U64) (disable : Bool) (hS : StoreTotal machineStoreInst) :
-    vcpu.ports machineStoreInst s v low high disable ⦃ _ => True ⦄ := by
-  unfold vcpu.ports; p0_auto
-
-@[step] theorem vcpu.get.p0 {S : Type _} (machineStoreInst : machine.Store S) (s : S) (v : Std.U64) (offset : Std.U64) (hS : StoreTotal machineStoreInst) :
-    vcpu.get machineStoreInst s v offset ⦃ _ => True ⦄ := by
-  unfold vcpu.get; p0_auto
-
-@[step] theorem smp.remote_reschedule.p0 {S : Type _} {A : Type _} (machineStoreInst : machine.Store S) (machineArchInst : machine.Arch A) (s : S) (a : A) (cpu : Std.U64) (hS : StoreTotal machineStoreInst) (hA : ArchTotal machineArchInst) :
-    smp.remote_reschedule machineStoreInst machineArchInst s a cpu ⦃ _ => True ⦄ := by
-  unfold smp.remote_reschedule; p0_auto
-
-@[step] theorem smp.remote_tcb_stall.p0 {S : Type _} {A : Type _} (machineStoreInst : machine.Store S) (machineArchInst : machine.Arch A) (s : S) (a : A) (t : obj.Tcb) (hS : StoreTotal machineStoreInst) (hA : ArchTotal machineArchInst) :
-    smp.remote_tcb_stall machineStoreInst machineArchInst s a t ⦃ _ => True ⦄ := by
-  unfold smp.remote_tcb_stall; p0_auto
-
-@[step] theorem obj.Tcb.is_null.p0 (self : obj.Tcb) :
-    obj.Tcb.is_null self ⦃ _ => True ⦄ := by
-  unfold obj.Tcb.is_null; p0_auto
-
-@[step] theorem vcpu.stall.p0 {S : Type _} {A : Type _} (machineStoreInst : machine.Store S) (machineArchInst : machine.Arch A) (s : S) (a : A) (v : Std.U64) (hS : StoreTotal machineStoreInst) (hA : ArchTotal machineArchInst) :
-    vcpu.stall machineStoreInst machineArchInst s a v ⦃ _ => True ⦄ := by
-  unfold vcpu.stall; p0_auto
-
-@[step] theorem vcpu.revoke_ports_loop.p0 {S : Type _} {A : Type _} (machineStoreInst : machine.Store S) (machineArchInst : machine.Arch A) (s : S) (a : A) (low : Std.U64) (high : Std.U64) (v : Std.U64) (fuel : Std.U64) (hS : StoreTotal machineStoreInst) (hA : ArchTotal machineArchInst) :
-    vcpu.revoke_ports_loop machineStoreInst machineArchInst s a low high v fuel ⦃ _ => True ⦄ := by
-  unfold vcpu.revoke_ports_loop
-  apply loop.spec_decr_nat (measure := fun x => match x with | (x0, x1, x2, x3) => x3.val) (inv := fun _ => True)
-  · rintro ⟨x0, x1, x2, x3⟩ -
-    unfold vcpu.revoke_ports_loop.body
-    p0_body
-  · trivial
-
-@[step] theorem vcpu.revoke_ports.p0 {S : Type _} {A : Type _} (machineStoreInst : machine.Store S) (machineArchInst : machine.Arch A) (s : S) (a : A) (low : Std.U64) (high : Std.U64) (hS : StoreTotal machineStoreInst) (hA : ArchTotal machineArchInst) :
-    vcpu.revoke_ports machineStoreInst machineArchInst s a low high ⦃ _ => True ⦄ := by
-  unfold vcpu.revoke_ports; p0_auto
-
 @[step] theorem ioport.word_off.p0 (w : Std.U64) :
     ioport.word_off w ⦃ _ => True ⦄ := by
   unfold ioport.word_off; p0_auto
@@ -1220,6 +1174,55 @@ theorem vspace.P_PS.p0  :
 @[step] theorem vspace.unmap_page.p0 {S : Type _} {A : Type _} (machineStoreInst : machine.Store S) (machineArchInst : machine.Arch A) (s : S) (a : A) (size : capability.FrameSize) (asid : Std.U64) (vaddr : Std.U64) (pptr : Std.U64) (hS : StoreTotal machineStoreInst) (hA : ArchTotal machineArchInst) :
     vspace.unmap_page machineStoreInst machineArchInst s a size asid vaddr pptr ⦃ _ => True ⦄ := by
   unfold vspace.unmap_page; p0_split
+
+@[step] theorem vcpu.ports_loop.p0 {S : Type _} (machineStoreInst : machine.Store S) (s : S) (v : Std.U64) (high : Std.U64) (disable : Bool) (port : Std.U64) (hS : StoreTotal machineStoreInst) :
+    vcpu.ports_loop machineStoreInst s v high disable port ⦃ _ => True ⦄ := by
+  unfold vcpu.ports_loop
+  apply loop.spec_decr_nat (measure := fun x => match x with | (x0, x1) => high.val + 1 - x1.val) (inv := fun _ => True)
+  · rintro ⟨x0, x1⟩ -
+    unfold vcpu.ports_loop.body
+    p0_body
+  · trivial
+
+@[step] theorem vcpu.ports.p0 {S : Type _} (machineStoreInst : machine.Store S) (s : S) (v : Std.U64) (low : Std.U64) (high : Std.U64) (disable : Bool) (hS : StoreTotal machineStoreInst) :
+    vcpu.ports machineStoreInst s v low high disable ⦃ _ => True ⦄ := by
+  unfold vcpu.ports; p0_auto
+
+@[step] theorem vcpu.get.p0 {S : Type _} (machineStoreInst : machine.Store S) (s : S) (v : Std.U64) (offset : Std.U64) (hS : StoreTotal machineStoreInst) :
+    vcpu.get machineStoreInst s v offset ⦃ _ => True ⦄ := by
+  unfold vcpu.get; p0_auto
+
+@[step] theorem smp.remote_reschedule.p0 {S : Type _} {A : Type _} (machineStoreInst : machine.Store S) (machineArchInst : machine.Arch A) (s : S) (a : A) (cpu : Std.U64) (hS : StoreTotal machineStoreInst) (hA : ArchTotal machineArchInst) :
+    smp.remote_reschedule machineStoreInst machineArchInst s a cpu ⦃ _ => True ⦄ := by
+  unfold smp.remote_reschedule; p0_auto
+
+@[step] theorem smp.remote_tcb_stall.p0 {S : Type _} {A : Type _} (machineStoreInst : machine.Store S) (machineArchInst : machine.Arch A) (s : S) (a : A) (t : obj.Tcb) (hS : StoreTotal machineStoreInst) (hA : ArchTotal machineArchInst) :
+    smp.remote_tcb_stall machineStoreInst machineArchInst s a t ⦃ _ => True ⦄ := by
+  unfold smp.remote_tcb_stall; p0_auto
+
+@[step] theorem obj.Tcb.is_null.p0 (self : obj.Tcb) :
+    obj.Tcb.is_null self ⦃ _ => True ⦄ := by
+  unfold obj.Tcb.is_null; p0_auto
+
+@[step] theorem vcpu.stall.p0 {S : Type _} {A : Type _} (machineStoreInst : machine.Store S) (machineArchInst : machine.Arch A) (s : S) (a : A) (v : Std.U64) (hS : StoreTotal machineStoreInst) (hA : ArchTotal machineArchInst) :
+    vcpu.stall machineStoreInst machineArchInst s a v ⦃ _ => True ⦄ := by
+  unfold vcpu.stall; p0_auto
+
+@[step] theorem vcpu.revoke_ports_loop.p0 {S : Type _} {A : Type _}
+    (machineStoreInst : machine.Store S) (machineArchInst : machine.Arch A)
+    (s : S) (a : A) (owner low high v fuel : U64)
+    (hS : StoreTotal machineStoreInst) (hA : ArchTotal machineArchInst) :
+    vcpu.revoke_ports_loop machineStoreInst machineArchInst s a owner low high v fuel ⦃ _ => True ⦄ := by
+  unfold vcpu.revoke_ports_loop
+  apply loop.spec_decr_nat (measure := fun x => x.2.2.2.val) (inv := fun _ => True)
+  · rintro ⟨s1, a1, v1, f1⟩ _
+    unfold vcpu.revoke_ports_loop.body
+    p0_body
+  · trivial
+
+@[step] theorem vcpu.revoke_ports.p0 {S : Type _} {A : Type _} (machineStoreInst : machine.Store S) (machineArchInst : machine.Arch A) (s : S) (a : A) (owner : Std.U64) (low : Std.U64) (high : Std.U64) (hS : StoreTotal machineStoreInst) (hA : ArchTotal machineArchInst) :
+    vcpu.revoke_ports machineStoreInst machineArchInst s a owner low high ⦃ _ => True ⦄ := by
+  unfold vcpu.revoke_ports; p0_auto
 
 @[step] theorem vcpu.vmcs_addr.p0 (v f : U64) : vcpu.vmcs_addr v f ⦃ _ => True ⦄ := by
   unfold vcpu.vmcs_addr
@@ -4578,6 +4581,9 @@ theorem vcpu.svm.RAX.p0  :
   set_option maxHeartbeats 4000000 in
   unfold syscall.handle_unknown_syscall
   p0_structural
+
+
+-- The cap owner is a lookup key, while the walk consumes its independent fuel.
 
 @[step] theorem syscall.dispatch_syscall.p0 {S : Type _} {A : Type _} (machineStoreInst : machine.Store S) (machineArchInst : machine.Arch A) (s : S) (a : A) (number : Std.I64) (hS : StoreTotal machineStoreInst) (hA : ArchTotal machineArchInst) :
     syscall.dispatch_syscall machineStoreInst machineArchInst s a number ⦃ _ => True ⦄ := by

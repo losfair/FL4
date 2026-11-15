@@ -23,10 +23,11 @@ theorem is_cur_domain_expired_eq (s : S) : sched.is_cur_domain_expired st s = ok
 
 theorem is_runnable_spec (s : S) (t : obj.Tcb) :
     sched.is_runnable st s t ⦃ b => b = decide (L.mem s (tStA t) = sched.TS_RUNNING ∨
-      L.mem s (tStA t) = sched.TS_RESTART) ⦄ := by
+      L.mem s (tStA t) = sched.TS_RESTART ∨ L.mem s (tStA t) = sched.TS_RUNNING_VM) ⦄ := by
   unfold sched.is_runnable
   step
-  split <;> simp_all [tStA, stA]
+  repeat' split
+  all_goals simp_all [tStA, stA]
 
 /-- A runnable thread is in no notification's queue. -/
 theorem not_in_ntfnQueue {N T : Set U64} {m : U64 → U64} {σ : Fl4Spec.State Unit} (hR : NtfnStateRel N T m σ)

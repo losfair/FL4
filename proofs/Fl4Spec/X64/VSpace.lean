@@ -134,6 +134,15 @@ def lookupIpcBuffer (isReceiver : Bool) (thread : ObjRef) : SMonad Z (Option Obj
       else return none
   | _ => return none
 
+/-- ASID pools retain nested-root tags so guest allocations occupy their
+slots. Native address-space operations select only untagged entries. -/
+def nativeAsidRoot : Option ObjRef → Option ObjRef
+  | none => none
+  | some ptr => if ptr &&& 1 = 0 then some ptr else none
+
+/-- Root pointer carried by an occupied native or nested ASID entry. -/
+def asidEntryRoot (entry : ObjRef) : ObjRef := entry &&& ~~~1
+
 /-- l4v: ArchVSpace_A.X64_A.find_vspace_for_asid: the PML4 of a virtual
 ASID. -/
 def findVspaceForAsid (asid : Asid) : LFMonad Z ObjRef := do
@@ -143,7 +152,7 @@ def findVspaceForAsid (asid : Asid) : LFMonad Z ObjRef := do
   let pool ← match poolPtr with
     | some ptr => NonDetE.liftE (getAsidPool ptr)
     | none => NonDetE.throwError .invalidRoot
-  let pml4 ← NonDetE.returnOk (pool (asidLowBitsOf asid))
+  let pml4 ← NonDetE.returnOk (nativeAsidRoot (pool (asidLowBitsOf asid)))
   match pml4 with
   | some ptr => NonDetE.returnOk ptr
   | none => NonDetE.throwError .invalidRoot
@@ -226,8 +235,8 @@ def deleteAsidPool (base : Asid) (ptr : ObjRef) : SMonad Z Unit := do
   NonDet.when (asidTable (asidHighBitsOf base) = some ptr) <| do
     let pool ← getAsidPool ptr
     let _ ← NonDet.mapM (fun offset : Asid =>
-        NonDet.when (pool (ucast asidLowLen offset) ≠ none) <|
-          hwAsidInvalidate (base + offset) (the (pool (ucast asidLowLen offset))))
+        NonDet.when (nativeAsidRoot (pool (ucast asidLowLen offset)) ≠ none) <|
+          hwAsidInvalidate (base + offset) (the (nativeAsidRoot (pool (ucast asidLowLen offset)))))
       (uptoEnum 0 (((1 : Asid) <<< asidLowBits) - 1))
     let asidTable' ← pure (Function.update asidTable (asidHighBitsOf base) none)
     NonDet.modify fun s => { s with archState := { s.archState with x64AsidTable := asidTable' } }
@@ -242,12 +251,18 @@ def deleteAsid (asid : Asid) (pml4 : ObjRef) : SMonad Z Unit := do
   | none => return ()
   | some poolPtr => do
     let pool ← getAsidPool poolPtr
-    NonDet.when (pool (asidLowBitsOf asid) = some pml4) <| do
-      hwAsidInvalidate asid pml4
-      let pool' ← pure (Function.update pool (asidLowBitsOf asid) none)
-      setAsidPool poolPtr pool'
-      let tcb ← NonDet.gets fun s : State Z => s.curThread
-      setVmRoot tcb
+    match pool (asidLowBitsOf asid) with
+    | none => return ()
+    | some entry =>
+      NonDet.when (asidEntryRoot entry = pml4) <| do
+        if entry &&& 1 = 0 then hwAsidInvalidate asid pml4 else pure ()
+        let pool' ← pure (Function.update pool (asidLowBitsOf asid) none)
+        setAsidPool poolPtr pool'
+        if entry &&& 1 = 0 then do
+          let tcb ← NonDet.gets fun s : State Z => s.curThread
+          setVmRoot tcb
+        else pure ()
+
 
 /-- l4v: ArchVSpace_A.X64_A.flush_all. -/
 def flushAll (vspace : ObjRef) (asid : Asid) : SMonad Z Unit :=
@@ -363,6 +378,9 @@ be copied until they have a virtual ASID and location. The IOSpace and IO
 page table cases are commented out in l4v (no IOMMU). -/
 def archDeriveCap (c : ArchCap) : SEMonad Z Cap :=
   match c with
+  | .vcpuCap _ => NonDetE.returnOk (.archObjectCap c)
+  | .eptCap _ _ (some _) => NonDetE.returnOk (.archObjectCap c)
+  | .eptCap _ _ none => NonDetE.throwError .illegalOperation
   | .pageTableCap _ (some _) => NonDetE.returnOk (.archObjectCap c)
   | .pageTableCap _ none => NonDetE.throwError .illegalOperation
   | .pageDirectoryCap _ (some _) => NonDetE.returnOk (.archObjectCap c)
@@ -479,6 +497,8 @@ def archIsPhysical (cap : ArchCap) : Bool :=
 the same object as, or an object inside the region of, the first. The IO
 page table and IOSpace cases are commented out in l4v (no IOMMU). -/
 def archSameRegionAs : ArchCap → ArchCap → Prop
+  | .vcpuCap r, c' => ∃ r', c' = .vcpuCap r' ∧ r = r'
+  | .eptCap r level _, c' => ∃ r' m', c' = .eptCap r' level m' ∧ r = r'
   | .pageCap _ r _ _ s _, c' =>
       ∃ dev' r' R' t' s' m', c' = .pageCap dev' r' R' t' s' m' ∧
         (let topA := r + ((1 : Word) <<< pageBitsForSize s) - 1

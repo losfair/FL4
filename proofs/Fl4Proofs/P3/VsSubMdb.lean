@@ -26,20 +26,20 @@ set_option linter.unusedSimpArgs false
 
 /-! ## Frame caps and `same_region_as` -/
 
-theorem frame_range (p : U64) (sz : capability.FrameSize) (r : U64) (d m : Bool) (a va : U64) :
-    baseF (.Frame p sz r d m a va) = p.val ∧
-      topF (.Frame p sz r d m a va) = (core.num.U64.wrapping_add p (maskF (fbitsF sz))).val := by
+theorem frame_range (p : U64) (sz : capability.FrameSize) (r : U64) (d m : Bool) (a va : U64) (ep : Bool) :
+    baseF (.Frame p sz r d m ep a va) = p.val ∧
+      topF (.Frame p sz r d m ep a va) = (core.num.U64.wrapping_add p (maskF (fbitsF sz))).val := by
   unfold baseF topF; rw [ptrF_frame, sizeF_frame]; exact ⟨rfl, rfl⟩
 
 /-- From a frame cap to a frame cap: range containment. -/
-theorem srB_frame_of {p : U64} {sz : capability.FrameSize} {r : U64} {d m : Bool} {a va : U64}
-    {p' : U64} {sz' : capability.FrameSize} {r' : U64} {d' m' : Bool} {a' va' : U64}
-    (hw : Within (.Frame p' sz' r' d' m' a' va') (.Frame p sz r d m a va))
-    (hr : baseF (.Frame p' sz' r' d' m' a' va') ≤ topF (.Frame p' sz' r' d' m' a' va')) :
-    srB (.Frame p sz r d m a va) (.Frame p' sz' r' d' m' a' va') = true := by
+theorem srB_frame_of {p : U64} {sz : capability.FrameSize} {r : U64} {d m ep : Bool} {a va : U64}
+    {p' : U64} {sz' : capability.FrameSize} {r' : U64} {d' m' ep' : Bool} {a' va' : U64}
+    (hw : Within (.Frame p' sz' r' d' m' ep' a' va') (.Frame p sz r d m ep a va))
+    (hr : baseF (.Frame p' sz' r' d' m' ep' a' va') ≤ topF (.Frame p' sz' r' d' m' ep' a' va')) :
+    srB (.Frame p sz r d m ep a va) (.Frame p' sz' r' d' m' ep' a' va') = true := by
   apply srB_of_eq
-  obtain ⟨b1, t1⟩ := frame_range p sz r d m a va
-  obtain ⟨b2, t2⟩ := frame_range p' sz' r' d' m' a' va'
+  obtain ⟨b1, t1⟩ := frame_range p sz r d m a va ep
+  obtain ⟨b2, t2⟩ := frame_range p' sz' r' d' m' a' va' ep'
   have hw1 := hw.1; have hw2 := hw.2
   rw [b1, b2] at hw1; rw [t1, t2] at hw2; rw [b2, t2] at hr
   simp only [objects.same_region_as, frame_bits_eq, mask_eq, lift, bind_ok]
@@ -49,7 +49,7 @@ theorem srB_frame_of {p : U64} {sz : capability.FrameSize} {r : U64} {d m : Bool
   have e3 : p' ≤ core.num.U64.wrapping_add p' (maskF (fbitsF sz')) := by show p'.val ≤ _; omega
   simp [e1, e2, e3]
 
-theorem isFrame_iff {c : capability.Cap} : isFrame c = true ↔ ∃ p sz r d m a va, c = .Frame p sz r d m a va := by
+theorem isFrame_iff {c : capability.Cap} : isFrame c = true ↔ ∃ p sz r d m ep a va, c = .Frame p sz r d m ep a va := by
   cases c <;> simp [isFrame]
 
 theorem isFr_isFrame {c : capability.Cap} : isFr c = isFrame c := by cases c <;> rfl
@@ -57,32 +57,32 @@ theorem isFr_isFrame {c : capability.Cap} : isFr c = isFrame c := by cases c <;>
 /-- `same_region_as` from a frame cap: a frame cap in its range. -/
 theorem srB_frame_iff {u : capability.Cap} (hu : isFrame u = true) (v : capability.Cap) :
     srB u v = true ↔ isFrame v = true ∧ Within v u ∧ baseF v ≤ topF v := by
-  obtain ⟨p, sz, r, d, m, a, va, rfl⟩ := isFrame_iff.1 hu
+  obtain ⟨p, sz, r, d, m, ep, a, va, rfl⟩ := isFrame_iff.1 hu
   constructor
   · intro h
     obtain ⟨h1, h2, h3, h4⟩ := srB_frame_in h
     exact ⟨by rw [← isFr_isFrame]; exact h1, ⟨h2, h3⟩, h4⟩
   · rintro ⟨h1, h2, h3⟩
-    obtain ⟨p', sz', r', d', m', a', va', rfl⟩ := isFrame_iff.1 h1
+    obtain ⟨p', sz', r', d', m', ep', a', va', rfl⟩ := isFrame_iff.1 h1
     exact srB_frame_of h2 h3
 
 /-- Into a frame cap from a cap neither untyped nor a frame: nothing. -/
 theorem srB_other_frame {u v : capability.Cap} (hu : isUt u = false) (hf : isFrame u = false)
     (hv : isFrame v = true) : srB u v = false := by
-  obtain ⟨p, sz, r, d, m, a, va, rfl⟩ := isFrame_iff.1 hv
-  cases e : srB u (.Frame p sz r d m a va)
+  obtain ⟨p, sz, r, d, m, ep, a, va, rfl⟩ := isFrame_iff.1 hv
+  cases e : srB u (.Frame p sz r d m ep a va)
   · rfl
   · obtain ⟨h1, -⟩ := srB_to_frame hu e
     rw [isFr_isFrame, hf] at h1; cases h1
 
 theorem physF_frame' {c : capability.Cap} (h : isFrame c = true) : physF c = true := by
-  obtain ⟨p, sz, r, d, m, a, va, rfl⟩ := isFrame_iff.1 h; exact physF_frame _ _ _ _ _ _ _
+  obtain ⟨p, sz, r, d, m, ep, a, va, rfl⟩ := isFrame_iff.1 h; exact physF_frame _ _ _ _ _ _ _ _
 
 theorem isUt_frame' {c : capability.Cap} (h : isFrame c = true) : isUt c = false := by
-  obtain ⟨p, sz, r, d, m, a, va, rfl⟩ := isFrame_iff.1 h; rfl
+  obtain ⟨p, sz, r, d, m, ep, a, va, rfl⟩ := isFrame_iff.1 h; rfl
 
 theorem isBadged_frame {c : capability.Cap} (h : isFrame c = true) : isBadged c = false := by
-  obtain ⟨p, sz, r, d, m, a, va, rfl⟩ := isFrame_iff.1 h; rfl
+  obtain ⟨p, sz, r, d, m, ep, a, va, rfl⟩ := isFrame_iff.1 h; rfl
 
 /-- A cap seeing a frame cap `s` sees a frame cap inside it. -/
 theorem srB_mono_frame {u s c : capability.Cap} (hs : isFrame s = true) (hc : isFrame c = true)

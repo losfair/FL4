@@ -66,10 +66,19 @@ cargo test -p fl4-core
 FL4_TESTS='^FL4VCPU' cargo xtask fl4test --smp 4 --setup kvm
 FL4_TESTS='^FL4VCPU' cargo xtask fl4test --smp 2 --setup kvm-no-vm
 FL4_TESTS='^FL4VCPU' cargo xtask fl4test --smp 1 --setup kvm-no-pmu
+FL4_P0_STRICT=1 cargo xtask gate
 ```
 
-The expanded core extracts and its generated Lean model type-checks.
-The existing refinement proofs describe the native-only capability and
-TCB layouts; porting them to virtualization remains unfinished. The strict
-proof gate does not pass yet. VMX execution also needs validation on an
-Intel host; guest execution was tested on AMD-V under QEMU/KVM.
+The strict extraction/proof gate passes. The proof project builds with the
+expanded capability and TCB layouts,
+VM thread state, and mixed native/nested ASID pools. All 1,041 extracted
+core functions have checked totality proofs with zero `sorry`s. Existing
+P1/P3 native proofs are ported; VMEnter, SetEPTRoot, EPT mapping, guest-root
+ASID assignment, and VCPU/EPT functional refinement remain outside their
+semantic scope. The entry/exit assembly and architecture backend remain
+trusted. See [DESIGN.md §9](DESIGN.md#9-proof-plan) for the exact claims.
+
+Real-guest execution passes on AMD-V under QEMU/KVM and on Intel VT-x
+through Hyper-V/KVM, including SMP, release, reduced-feature and no-PMU
+configurations. VMX performance-MSR switching is enabled only when CPUID
+exposes a suitable PMU; a PMU-present Intel runtime has not been tested.

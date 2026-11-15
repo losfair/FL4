@@ -94,7 +94,7 @@ structure SubRel {A : Type} (th : TypedHeap) (P L4 L3 L2 L1 : Set U64) (SR : S �
   /-- The caps of the MDB naming a page of the large frame are frame caps in
   its chain (the aliases, and copies of the large frame). -/
   fr : ∀ w ∈ G.chains.flatten, ∀ q vm : U64, baseF srcC ≤ q.val → q.val < baseF srcC + 2 ^ 21 →
-    Ovl (absCap (.Frame q .Small vm false false 0#u64 0#u64)) (absCap (capV (L.mem s) w)) →
+    Ovl (absCap (.Frame q .Small vm false false false 0#u64 0#u64)) (absCap (capV (L.mem s) w)) →
     isFrame (capV (L.mem s) w) = true ∧ ∃ ch ∈ G.chains, src ∈ ch ∧ w ∈ ch
   /-- The frame invariant (`Vs.FrameInv`). -/
   FR : Vs.FrameInv (L.mem s) G
@@ -280,17 +280,17 @@ theorem sub_step {A : Type} {th : TypedHeap} {P L4 L3 L2 L1 : Set U64} {SR : S �
     {ptr rt fa fv : U64} {mm : Bool} {rv : Bool} (s : S) (a : A) (σ : Fl4Spec.State Unit) (G : MdbGhost)
     (hVP : VsPlaced P (L.ksb s))
     (hVO : ∀ b, VsWrite P (L.ksb s) b → OutsideObjects th b) (hPO : ∀ b, PtWAll L4 L3 L2 L1 b → OutsideObjects th b)
-    (hS : SubRel st th P L4 L3 L2 L1 SR (cslotAddr (pp.bv, idx)) (.Frame ptr .Large rt false mm fa fv) rv s a σ G)
+    (hS : SubRel st th P L4 L3 L2 L1 SR (cslotAddr (pp.bv, idx)) (.Frame ptr .Large rt false mm false fa fv) rv s a σ G)
     (hal : ptr.val % 2 ^ 21 = 0)
     {dp : U64} {r : Nat} (hdp : th dp = some (.cnode r)) (hr : r < 64) {k : Nat} (hk : k < 2 ^ r)
     (hdst : capAt (L.mem s) (slotAddr dp.bv (BitVec.ofNat 64 k)) = ok .Null)
     {q vm : U64} (hq1 : ptr.val ≤ q.val) (hq2 : q.val + 4096 ≤ ptr.val + 2 ^ 21) (hvm : 1 ≤ vm.val ∧ vm.val ≤ 3)
     (hqal : q.val % 4096 = 0) :
-    cdt.insert st s (.Frame q .Small vm false false 0#u64 0#u64) (cslotAddr (pp.bv, idx))
+    cdt.insert st s (.Frame q .Small vm false false false 0#u64 0#u64) (cslotAddr (pp.bv, idx))
       (slotAddr dp.bv (BitVec.ofNat 64 k)) ⦃ s' => ∃ σ',
-        Fl4Spec.capInsert (Z := Unit) (absCap (.Frame q .Small vm false false 0#u64 0#u64)) (pp.bv, idx)
+        Fl4Spec.capInsert (Z := Unit) (absCap (.Frame q .Small vm false false false 0#u64 0#u64)) (pp.bv, idx)
           (dp.bv, Fl4Spec.natToCref r k) σ = ({((), σ')}, False) ∧
-        SubRel st th P L4 L3 L2 L1 SR (cslotAddr (pp.bv, idx)) (.Frame ptr .Large rt false mm fa fv) rv s' a σ'
+        SubRel st th P L4 L3 L2 L1 SR (cslotAddr (pp.bv, idx)) (.Frame ptr .Large rt false mm false fa fv) rv s' a σ'
           (insG G (cslotAddr (pp.bv, idx)) (slotAddr dp.bv (BitVec.ofNat 64 k)) rv) ∧
         L.ksb s' = L.ksb s ∧
         MdbStep (L.mem s) G (L.mem s') (insG G (cslotAddr (pp.bv, idx)) (slotAddr dp.bv (BitVec.ofNat 64 k)) rv) ∧
@@ -298,8 +298,8 @@ theorem sub_step {A : Type} {th : TypedHeap} {P L4 L3 L2 L1 : Set U64} {SR : S �
   obtain ⟨hR, hV, hM, hC, hI, hU, hvs, hpt, hsr, hcap, hrev, hno, hFI, hfr, hFR, hVC⟩ := hS
   set src := cslotAddr (pp.bv, idx) with hsrcdef
   set dest := slotAddr dp.bv (BitVec.ofNat 64 k) with hdestdef
-  set c : capability.Cap := .Frame q .Small vm false false 0#u64 0#u64 with hcdef
-  set srcC : capability.Cap := .Frame ptr .Large rt false mm fa fv with hsrcCdef
+  set c : capability.Cap := .Frame q .Small vm false false false 0#u64 0#u64 with hcdef
+  set srcC : capability.Cap := .Frame ptr .Large rt false mm false fa fv with hsrcCdef
   have hAs : AbsSlot th (pp.bv, idx) := ⟨pp, rfl, Or.inl (by simpa [hidx] using hpp)⟩
   have hs : IsSlot th src := hAs.isSlot
   have hd : IsSlot th dest := ⟨dp, k, Or.inl ⟨r, hdp, hk⟩, rfl⟩
@@ -340,7 +340,7 @@ theorem sub_step {A : Type} {th : TypedHeap} {P L4 L3 L2 L1 : Set U64} {SR : S �
   set A := absCap c with hAdef
   have hsetd := setCap_cnode (Z := Unit) A hkd hwfd hlen
   have hci := capInsert_eq hgs hgd (setUntyped_skip (by simp [Fl4Spec.isUntypedCap, hAdef, absCap])) hsetd rfl rfl
-  have hbs : baseF srcC = ptr.val := (frame_range ptr .Large rt false mm fa fv).1
+  have hbs : baseF srcC = ptr.val := (frame_range ptr .Large rt false mm fa fv false).1
   have hov : ∀ w ∈ G.chains.flatten, Ovl (absCap c) (absCap (capV (L.mem s) w)) →
       isFrame (capV (L.mem s) w) = true ∧ ∃ ch ∈ G.chains, src ∈ ch ∧ w ∈ ch :=
     fun w hw h => hfr w hw q vm (by rw [hbs]; exact hq1) (by rw [hbs]; omega) h
@@ -381,8 +381,8 @@ theorem sub_step {A : Type} {th : TypedHeap} {P L4 L3 L2 L1 : Set U64} {SR : S �
     exact this.symm
   -- the alias's range
   have hsF : isFrame (capV (L.mem s) src) = true := by rw [capV_of_capAt hcap]; rfl
-  obtain ⟨bs, ts⟩ := frame_range ptr .Large rt false mm fa fv
-  obtain ⟨bc, tc⟩ := frame_range q .Small vm false false 0#u64 0#u64
+  obtain ⟨bs, ts⟩ := frame_range ptr .Large rt false mm fa fv false
+  obtain ⟨bc, tc⟩ := frame_range q .Small vm false false 0#u64 0#u64 false
   have hmL : (maskF (fbitsF .Large)).val = 2 ^ 21 - 1 := by
     rw [maskF_val (by rw [fbitsF_val]; decide), fbitsF_val]; rfl
   have hmS : (maskF (fbitsF .Small)).val = 2 ^ 12 - 1 := by
@@ -444,7 +444,7 @@ theorem sub_step {A : Type} {th : TypedHeap} {P L4 L3 L2 L1 : Set U64} {SR : S �
   have hFI' : FinInv th (L.mem s') σ' (insG G src dest rv) := by rw [e1]; exact hFin rv
   have hfr' : ∀ w ∈ (insG G src dest rv).chains.flatten, ∀ q' vm' : U64, baseF srcC ≤ q'.val →
       q'.val < baseF srcC + 2 ^ 21 →
-      Ovl (absCap (.Frame q' .Small vm' false false 0#u64 0#u64)) (absCap (capV (L.mem s') w)) →
+      Ovl (absCap (.Frame q' .Small vm' false false false 0#u64 0#u64)) (absCap (capV (L.mem s') w)) →
       isFrame (capV (L.mem s') w) = true ∧ ∃ ch ∈ (insG G src dest rv).chains, src ∈ ch ∧ w ∈ ch := by
     intro w hw q' vm' h1 h2 hov'
     rcases (mem_flatten_ins hsrcm).1 hw with rfl | hw0
@@ -507,7 +507,7 @@ theorem insert_subframes_rel {A : Type} {th : TypedHeap} {P L4 L3 L2 L1 : Set U6
     {ptr rt fa fv : U64} {mm : Bool} {rv : Bool} (s : S) (a : A) (σ : Fl4Spec.State Unit) (G : MdbGhost)
     (hVP : VsPlaced P (L.ksb s))
     (hVO : ∀ b, VsWrite P (L.ksb s) b → OutsideObjects th b) (hPO : ∀ b, PtWAll L4 L3 L2 L1 b → OutsideObjects th b)
-    (hS : SubRel st th P L4 L3 L2 L1 SR (cslotAddr (pp.bv, idx)) (.Frame ptr .Large rt false mm fa fv) rv s a σ G)
+    (hS : SubRel st th P L4 L3 L2 L1 SR (cslotAddr (pp.bv, idx)) (.Frame ptr .Large rt false mm false fa fv) rv s a σ G)
     (hal : ptr.val % 2 ^ 21 = 0)
     {dp : U64} {r : Nat} (hdp : th dp = some (.cnode r)) (hr : r < 64) {first count base vm : U64}
     (hfc : first.val + count.val ≤ 2 ^ r) (hb1 : ptr.val ≤ base.val) (hb2 : base.val + count.val * 4096 ≤ ptr.val + 2 ^ 21)
@@ -517,7 +517,7 @@ theorem insert_subframes_rel {A : Type} {th : TypedHeap} {P L4 L3 L2 L1 : Set U6
     vspace.insert_subframes st s (cslotAddr (pp.bv, idx)) dp first base count vm ⦃ s' => ∃ σ' G',
       Fl4Spec.NonDet.mapMx (subIns (pp.bv, idx) base.bv (vmRightsOf vm)) (subList dp r first.val count.val) σ =
         ({((), σ')}, False) ∧
-      SubRel st th P L4 L3 L2 L1 SR (cslotAddr (pp.bv, idx)) (.Frame ptr .Large rt false mm fa fv) rv s' a σ' G' ∧
+      SubRel st th P L4 L3 L2 L1 SR (cslotAddr (pp.bv, idx)) (.Frame ptr .Large rt false mm false fa fv) rv s' a σ' G' ∧
       L.ksb s' = L.ksb s ∧ MdbStep (L.mem s) G (L.mem s') G' ⦄ := by
   have hfit : ptr.val + 2 ^ 21 ≤ 2 ^ 64 := by have : ptr.val < 2 ^ 64 := ptr.hBounds; omega
   set Lst := subList dp r first.val count.val with hLst
@@ -525,7 +525,7 @@ theorem insert_subframes_rel {A : Type} {th : TypedHeap} {P L4 L3 L2 L1 : Set U6
   unfold vspace.insert_subframes vspace.insert_subframes_loop
   apply loop.spec_decr_nat (measure := fun x : S × U64 => count.val - x.2.val)
     (inv := fun x : S × U64 => x.2.val ≤ count.val ∧ ∃ σi Gi,
-      SubRel st th P L4 L3 L2 L1 SR (cslotAddr (pp.bv, idx)) (.Frame ptr .Large rt false mm fa fv) rv x.1 a σi Gi ∧
+      SubRel st th P L4 L3 L2 L1 SR (cslotAddr (pp.bv, idx)) (.Frame ptr .Large rt false mm false fa fv) rv x.1 a σi Gi ∧
       MdbStep (L.mem s) G (L.mem x.1) Gi ∧ L.ksb x.1 = L.ksb s ∧
       (∀ j : Nat, first.val + x.2.val ≤ j → j < first.val + count.val →
         capAt (L.mem x.1) (slotAddr dp.bv (BitVec.ofNat 64 j)) = ok .Null) ∧
@@ -871,11 +871,11 @@ theorem derive_subframe_rel {A : Type} {ar : machine.Arch A} {th : TypedHeap} {P
     (hU : UtInv (L.mem s) G) (hR : VsRel P (L.mem s) (L.ksb s) σ) (hPt : PtRel L4 L3 L2 L1 (L.mem s) σ)
     (hS : SR s a σ) (hVP : VsPlaced P (L.ksb s))
     (hVO : ∀ b, VsWrite P (L.ksb s) b → OutsideObjects th b) (hPO : ∀ b, PtWAll L4 L3 L2 L1 b → OutsideObjects th b)
-    (hcap : capAt (L.mem s) (cslotAddr (pp.bv, idx)) = ok (.Frame ptr sz rt dev mm fa fv))
+    (hcap : capAt (L.mem s) (cslotAddr (pp.bv, idx)) = ok (.Frame ptr sz rt dev mm false fa fv))
     (hno : sz = .Large → dev = false → ∀ x ∈ G.chains.flatten,
-      Disj (capV (L.mem s) x) (.Frame ptr sz rt dev mm fa fv) ∨
+      Disj (capV (L.mem s) x) (.Frame ptr sz rt dev mm false fa fv) ∨
       (isFrame (capV (L.mem s) x) = true ∧ revOf (L.mem s) x = false) ∨
-      Within (.Frame ptr sz rt dev mm fa fv) (capV (L.mem s) x))
+      Within (.Frame ptr sz rt dev mm false fa fv) (capV (L.mem s) x))
     (hFI : FinInv th (L.mem s) σ G)
     (hFR : Vs.FrameInv (L.mem s) G) (hVC : VsCapsIn P L4 L3 L2 L1 (L.mem s) G)
     (ct : U64) (hct : sched.cur_thread st s = ok ct) (hcur : ct.bv = σ.curThread)
@@ -887,8 +887,8 @@ theorem derive_subframe_rel {A : Type} {ar : machine.Arch A} {th : TypedHeap} {P
     (ex : Array obj.Slot 3#usize) {y : obj.Slot} (hex0 : vspace.extra ex 0#usize = ok (some y))
     {nc : capability.Cap} (hcy : capAt (L.mem s) y = ok nc) {nc' : Fl4Spec.Cap} (hnr : CapRel nc nc')
     (hnv : CapValid th nc) (nsl : Fl4Spec.CslotPtr) (rest : List (Fl4Spec.Cap × Fl4Spec.CslotPtr)) :
-    vspace.derive_subframe st ar s a length (cslotAddr (pp.bv, idx)) (.Frame ptr sz rt dev mm fa fv) buf ex ⦃ res =>
-      SubDecPost (L := L) th P L4 L3 L2 L1 SR (cslotAddr (pp.bv, idx)) (.Frame ptr sz rt dev mm fa fv)
+    vspace.derive_subframe st ar s a length (cslotAddr (pp.bv, idx)) (.Frame ptr sz rt dev mm false fa fv) buf ex ⦃ res =>
+      SubDecPost (L := L) th P L4 L3 L2 L1 SR (cslotAddr (pp.bv, idx)) (.Frame ptr sz rt dev mm false fa fv)
         (revOf (L.mem s) (cslotAddr (pp.bv, idx))) G σ
         (ExceptT.run (Fl4Spec.decodeDeriveSubframe (Z := Unit) (args.map UScalar.bv) (pp.bv, idx)
           (.pageCap dev ptr.bv (vmRightsOf rt) (if mm then .vmVSpaceMap else .vmNoMap) (frameSizeOf sz)
@@ -1039,7 +1039,7 @@ theorem derive_subframe_rel {A : Type} {ar : machine.Arch A} {th : TypedHeap} {P
     clear e1 hst' σ1'
     have hAs : AbsSlot th (pp.bv, idx) := ⟨pp, rfl, Or.inl (by simpa [hidx] using hpp)⟩
     have hs : IsSlot th (cslotAddr (pp.bv, idx)) := hAs.isSlot
-    have hSub1 : SubRel st th P L4 L3 L2 L1 SR (cslotAddr (pp.bv, idx)) (.Frame ptr .Large rt false mm fa fv)
+    have hSub1 : SubRel st th P L4 L3 L2 L1 SR (cslotAddr (pp.bv, idx)) (.Frame ptr .Large rt false mm false fa fv)
         (revOf (L.mem s) (cslotAddr (pp.bv, idx))) s1 a σ1 G :=
       { R := hSt1, V := hSV1, M := hM1, C := hC1, I := MdbInv.of_same hM hI hSS, U := UtInv.of_same hM hU hSS
         vs := hR1, pt := hPt1, sr := hS1, cap := by rw [hSS.capAt hs]; exact hcap, rev := hSS.revOf hs
@@ -1050,7 +1050,7 @@ theorem derive_subframe_rel {A : Type} {ar : machine.Arch A} {th : TypedHeap} {P
         fr := fun w hw q vm h1 h2 hov => by
           have hws := ((hM.members w).1 hw).1
           rw [hSS.capV hws] at hov ⊢
-          rw [(frame_range ptr .Large rt false mm fa fv).1] at h1 h2
+          rw [(frame_range ptr .Large rt false mm fa fv false).1] at h1 h2
           exact hfr0' w hw q vm h1 h2 hov
         FR := hFR.of_caps (fun z hz => hSS.capV ((hM.members z).1 hz).1)
         VC := hVC.of_caps (fun z hz => hSS.capV ((hM.members z).1 hz).1) }

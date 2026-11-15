@@ -764,7 +764,7 @@ theorem bind_branch_refines {N T C : Set U64} {c : U64} (hT : TimeAgree ar) (th 
         | capability.Cap.SchedControl _ =>
           let r ← error.invalid_cap Unit 1#u64
           ok (r, s, a)
-        | capability.Cap.Frame _ _ _ _ _ _ _ =>
+        | capability.Cap.Frame _ _ _ _ _ _ _ _ =>
           let r ← error.invalid_cap Unit 1#u64
           ok (r, s, a)
         | capability.Cap.PageTable _ _ _ _ =>
@@ -779,6 +779,12 @@ theorem bind_branch_refines {N T C : Set U64} {c : U64} (hT : TimeAgree ar) (th 
         | capability.Cap.Pml4 _ _ _ =>
           let r ← error.invalid_cap Unit 1#u64
           ok (r, s, a)
+        | capability.Cap.Vcpu _ =>
+          let r ← error.invalid_cap Unit 1#u64
+          ok (r, s, a)
+        | capability.Cap.Ept _ _ _ _ _ =>
+          let r ← error.invalid_cap Unit 1#u64
+          ok (r, s, a)
         | capability.Cap.AsidControl =>
           let r ← error.invalid_cap Unit 1#u64
           ok (r, s, a)
@@ -788,7 +794,7 @@ theorem bind_branch_refines {N T C : Set U64} {c : U64} (hT : TimeAgree ar) (th 
         | capability.Cap.IoPortControl =>
           let r ← error.invalid_cap Unit 1#u64
           ok (r, s, a)
-        | capability.Cap.IoPort _ _ =>
+        | capability.Cap.IoPort _ _ _ =>
           let r ← error.invalid_cap Unit 1#u64
           ok (r, s, a)) : Result (core.result.Result Unit error.Exc × S × A)) ⦃ res =>
       CPost σ (Fl4Spec.decodeSchedContextBind (Z := Unit) sc.bv excaps) s a
@@ -1023,7 +1029,7 @@ theorem unbindobj_branch_refines {N T C : Set U64} {c : U64} (th : TypedHeap)
         | capability.Cap.SchedControl _ =>
           let r ← error.invalid_cap Unit 1#u64
           ok (r, s, a)
-        | capability.Cap.Frame _ _ _ _ _ _ _ =>
+        | capability.Cap.Frame _ _ _ _ _ _ _ _ =>
           let r ← error.invalid_cap Unit 1#u64
           ok (r, s, a)
         | capability.Cap.PageTable _ _ _ _ =>
@@ -1038,6 +1044,12 @@ theorem unbindobj_branch_refines {N T C : Set U64} {c : U64} (th : TypedHeap)
         | capability.Cap.Pml4 _ _ _ =>
           let r ← error.invalid_cap Unit 1#u64
           ok (r, s, a)
+        | capability.Cap.Vcpu _ =>
+          let r ← error.invalid_cap Unit 1#u64
+          ok (r, s, a)
+        | capability.Cap.Ept _ _ _ _ _ =>
+          let r ← error.invalid_cap Unit 1#u64
+          ok (r, s, a)
         | capability.Cap.AsidControl =>
           let r ← error.invalid_cap Unit 1#u64
           ok (r, s, a)
@@ -1047,7 +1059,7 @@ theorem unbindobj_branch_refines {N T C : Set U64} {c : U64} (th : TypedHeap)
         | capability.Cap.IoPortControl =>
           let r ← error.invalid_cap Unit 1#u64
           ok (r, s, a)
-        | capability.Cap.IoPort _ _ =>
+        | capability.Cap.IoPort _ _ _ =>
           let r ← error.invalid_cap Unit 1#u64
           ok (r, s, a)) : Result (core.result.Result Unit error.Exc × S × A)) ⦃ res =>
       CPost σ (Fl4Spec.decodeSchedContextUnbindObject (Z := Unit) sc.bv excaps) s a

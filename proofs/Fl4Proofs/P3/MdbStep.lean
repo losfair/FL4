@@ -67,11 +67,11 @@ structure CapAlike (c' c : capability.Cap) : Prop where
   ut : ∀ p sb fi d, c' = .Untyped p sb fi d ↔ c = .Untyped p sb fi d
   refs : Fl4Spec.objRefs (absCap c') = Fl4Spec.objRefs (absCap c)
   frame : isFrame c' = isFrame c
-  large : ∀ p r m a va, c' = .Frame p .Large r false m a va →
-    ∃ r0 m0 a0 v0, c = .Frame p .Large r0 false m0 a0 v0
+  large : ∀ p r m ep a va, c' = .Frame p .Large r false m ep a va →
+    ∃ r0 m0 ep0 a0 v0, c = .Frame p .Large r0 false m0 ep0 a0 v0
 
 theorem CapAlike.refl (c : capability.Cap) : CapAlike c c :=
-  ⟨rfl, rfl, rfl, fun _ _ _ _ => Iff.rfl, rfl, rfl, fun p r m a va h => ⟨r, m, a, va, h⟩⟩
+  ⟨rfl, rfl, rfl, fun _ _ _ _ => Iff.rfl, rfl, rfl, fun p r m ep a va h => ⟨r, m, ep, a, va, h⟩⟩
 
 theorem CapAlike.isUt' {c' c : capability.Cap} (h : CapAlike c' c) : isUt c' = isUt c := by
   cases hc : P3.isUt c with
@@ -96,7 +96,7 @@ theorem CapAlike.of_shape {c' c : capability.Cap} (hsh : shape c' = shape c) (ho
   · rw [hut (by rw [e]; rfl)]; exact e
   · ext q; rw [objRefs_gen, objRefs_gen, refs_of_shape hsh]
   · cases c' <;> cases c <;> simp_all [shape, isFrame]
-  · intro p r m a va e
+  · intro p r m ep a va e
     subst e
     cases c <;> simp_all [shape, okey]
 
@@ -112,7 +112,7 @@ theorem CapAlike.of_eqs {c' c : capability.Cap} (hp : capability.Cap.ptr c' = ca
   have e2 : sizeF c' = sizeF c := by rw [size_eq, size_eq] at hs; exact ok_inj hs
   have e3 : physF c' = physF c := by rw [phys_eq, phys_eq] at hph; exact ok_inj hph
   refine ⟨by unfold baseF; rw [e1], by unfold topF; rw [e1, e2], e3, fun p sb fi d => ⟨fun e => ?_, fun e => ?_⟩,
-    hr, by rw [hf', hf], fun p r m a va e => ?_⟩
+    hr, by rw [hf', hf], fun p r m ep a va e => ?_⟩
   · rw [e] at hu'; cases hu'
   · rw [e] at hu; cases hu
   · rw [e] at hf'; cases hf'
@@ -133,7 +133,7 @@ theorem capAlike_zombie_zombie {p zt n n' : U64} : CapAlike (.Zombie p zt n) (.Z
 theorem not_frame_of_phys {c : capability.Cap} (h : physF c = false) : isFrame c = false := by
   cases hc : c <;> simp [isFrame]
   subst hc
-  rw [show physF (.Frame _ _ _ _ _ _ _) = true from ok_inj (phys_eq _).symm] at h
+  rw [show physF (.Frame _ _ _ _ _ _ _ _) = true from ok_inj (phys_eq _).symm] at h
   cases h
 
 /-- **No overlap** (l4v `caps_no_overlap` and distinct objects, for the
@@ -187,7 +187,7 @@ def NewVPlaced : capability.Cap → Prop
   | .PageDirectory p mp _ _ => mp = false ∧ layout.PPTR_BASE.val ≤ p.val ∧ p.val % 2 ^ 12 = 0
   | .Pdpt p mp _ _ => mp = false ∧ layout.PPTR_BASE.val ≤ p.val ∧ p.val % 2 ^ 12 = 0
   | .Pml4 p mp _ => mp = false ∧ layout.PPTR_BASE.val ≤ p.val
-  | .Frame p sz _ _ m _ _ => m = false ∧ layout.PPTR_BASE.val ≤ p.val ∧ p.val % 2 ^ frameBitsN sz = 0
+  | .Frame p sz _ _ m _ _ _ => m = false ∧ layout.PPTR_BASE.val ≤ p.val ∧ p.val % 2 ^ frameBitsN sz = 0
   | .AsidPool _ _ => False
   | _ => True
 
@@ -261,11 +261,11 @@ inductive MdbStep : (U64 → U64) → MdbGhost → (U64 → U64) → MdbGhost �
   | frameAlias {th : TypedHeap} {mem mem' : U64 → U64} {G : MdbGhost} (hM : MdbLinks th mem G) (hI : MdbInv mem G)
       {src dest : U64} (b : Bool) (hsrc : src ∈ G.chains.flatten) (hdest : dest ∉ G.chains.flatten)
       {ptr rt fa fv q0 vm : U64} {mm : Bool}
-      (hsC : capV mem src = .Frame ptr .Large rt false mm fa fv)
-      (hcd : capV mem' dest = .Frame q0 .Small vm false false 0#u64 0#u64)
+      (hsC : capV mem src = .Frame ptr .Large rt false mm false fa fv)
+      (hcd : capV mem' dest = .Frame q0 .Small vm false false false 0#u64 0#u64)
       (hq1 : ptr.val ≤ q0.val) (hq2 : q0.val < ptr.val + 2 ^ 21)
       (hcin : Within (capV mem' dest) (capV mem src)) (hcr : baseF (capV mem' dest) ≤ topF (capV mem' dest))
-      (halg : ∀ x ∈ G.chains.flatten, ∀ p r m a va, capV mem x = .Frame p .Large r false m a va → p.val % 2 ^ 21 = 0)
+      (halg : ∀ x ∈ G.chains.flatten, ∀ p r m ep a va, capV mem x = .Frame p .Large r false m ep a va → p.val % 2 ^ 21 = 0)
       (hc : ∀ z ∈ G.chains.flatten, capV mem' z = capV mem z) (hrd : revOf mem' dest = false)
       (hr : ∀ z ∈ G.chains.flatten, revOf mem' z = revOf mem z)
       (hq4 : q0.val + 4096 ≤ ptr.val + 2 ^ 21) (hqal : q0.val % 4096 = 0) : MdbStep mem G mem' (insG G src dest b)

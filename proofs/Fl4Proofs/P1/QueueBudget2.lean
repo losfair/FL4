@@ -128,7 +128,11 @@ theorem sched.end_timeslice.all (hA : P0.ArchTotal ar) (s : S) (a : A) (cto : Bo
   have e2 : ct = L.curW s := ct_post
   subst e1 e2
   step with sporadic.is_round_robin.spec as ⟨rr⟩
-  step with P0.faults.valid_timeout_handler.p0 st s _ L.total as ⟨valid⟩
+  step with obj.Tcb.state.spec
+  refine WP.spec_bind (Pₘ := fun _ => True) ?_ fun valid _ => ?_
+  · split
+    · exact P0.faults.valid_timeout_handler.p0 st s _ L.total
+    · simp
   split
   · split
     · exact E
@@ -434,11 +438,10 @@ theorem sched.check_budget.all (hA : P0.ArchTotal ar) (s : S) (a : A)
 
 theorem sched.is_runnable.spec' (s : S) (t : obj.Tcb) :
     sched.is_runnable st s t ⦃ b => b = true → Runnable (L.mem s (stA t)) ⦄ := by
-  unfold sched.is_runnable
-  step with obj.Tcb.state.spec as ⟨v, v_post⟩
-  split
-  · rename_i e; simp only [WP.spec_ok]; intro _; left; rw [← v_post]; exact e
-  · simp only [WP.spec_ok]; intro e; right; rw [← v_post]; simpa using e
+  refine WP.spec_mono (sched.is_runnable.spec s t) ?_
+  intro b hb h
+  unfold Runnable
+  exact of_decide_eq_true (hb.symm.trans h)
 
 /-- seL4 `checkBudgetRestart`. -/
 theorem sched.check_budget_restart.all (hA : P0.ArchTotal ar) (s : S) (a : A)

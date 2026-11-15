@@ -232,8 +232,8 @@ macro "map_tail_L" : tactic => `(tactic| (
         rw [hσ1, stsAct_kheap]; simp [updK, hpct, hkc]
       set nc : Fl4Spec.Cap := .archObjectCap (.pageCap dev ptr.bv (vmRightsOf rt) .vmVSpaceMap .x64LargePage
         (some (as1.bv, a0.bv))) with hnc
-      have hca : CapRel (.Frame ptr .Large rt dev true as1 a0) nc := ⟨hfw, rfl⟩
-      have hew : EncWf (.Frame ptr .Large rt dev true as1 a0) := ⟨hfe.1, hfe.2.1, has2, hva⟩
+      have hca : CapRel (.Frame ptr .Large rt dev true false as1 a0) nc := ⟨hfw, rfl⟩
+      have hew : EncWf (.Frame ptr .Large rt dev true false as1 a0) := ⟨hfe.1, hfe.2.1, has2, hva⟩
       have hxsl : IsSlot th (cslotAddr (pc.bv, idx)) :=
         (show AbsSlot th (pc.bv, idx) from ⟨pc, rfl, Or.inl (by simpa [hidx] using hpc)⟩).isSlot
       refine WP.spec_bind (WP.spec_and (set_cap_refines th s1 σ1 hSt1 hSV1 hPl hpc hidx _ _ hca (by exact hfcv) hew)
@@ -330,11 +330,11 @@ theorem frame_map_large_rel {A : Type} {ar : machine.Arch A} {th : TypedHeap} {P
         VsRel P (L.mem res.2.1) (L.ksb res.2.1) σ' ∧ PtRel L4 L3 L2 L1 (L.mem res.2.1) σ' ∧ SR res.2.1 res.2.2 σ' ∧
         SlotFoot th (L.mem s) (L.mem res.2.1) (cslotAddr (pc.bv, idx)) ∧
         VsLike (capV (L.mem res.2.1) (cslotAddr (pc.bv, idx))) (frameCapOf f) ∧ KFoot σ σ') ⦄ := by
-  obtain ⟨ptr, sz, rt, dev, mp, fa, fv⟩ := f
+  obtain ⟨ptr, sz, rt, dev, mp, ep, fa, fv⟩ := f
   simp only at hsz hfm hpa ⊢
   subst hsz
   rw [show ∀ args' ex', Fl4Spec.archDecodeInvocation (Z := Unit) slbl args' xs (pc.bv, idx)
-      (frameACapG ⟨ptr, .Large, rt, dev, mp, fa, fv⟩) ex' =
+      (frameACapG ⟨ptr, .Large, rt, dev, mp, ep, fa, fv⟩) ex' =
     Fl4Spec.decodePageInvocation slbl args' (pc.bv, idx) (.pageCap dev ptr.bv (vmRightsOf rt)
       (if mp then .vmVSpaceMap else .vmNoMap) .x64LargePage (if mp then some (fa.bv, fv.bv) else none)) ex' from
     fun _ _ => rfl]
@@ -625,8 +625,8 @@ macro "map_tail_H" : tactic => `(tactic| (
         rw [hσ1, stsAct_kheap]; simp [updK, hpct, hkc]
       set nc : Fl4Spec.Cap := .archObjectCap (.pageCap dev ptr.bv (vmRightsOf rt) .vmVSpaceMap .x64HugePage
         (some (as1.bv, a0.bv))) with hnc
-      have hca : CapRel (.Frame ptr .Huge rt dev true as1 a0) nc := ⟨hfw, rfl⟩
-      have hew : EncWf (.Frame ptr .Huge rt dev true as1 a0) := ⟨hfe.1, hfe.2.1, has2, hva⟩
+      have hca : CapRel (.Frame ptr .Huge rt dev true false as1 a0) nc := ⟨hfw, rfl⟩
+      have hew : EncWf (.Frame ptr .Huge rt dev true false as1 a0) := ⟨hfe.1, hfe.2.1, has2, hva⟩
       have hxsl : IsSlot th (cslotAddr (pc.bv, idx)) :=
         (show AbsSlot th (pc.bv, idx) from ⟨pc, rfl, Or.inl (by simpa [hidx] using hpc)⟩).isSlot
       refine WP.spec_bind (WP.spec_and (set_cap_refines th s1 σ1 hSt1 hSV1 hPl hpc hidx _ _ hca (by exact hfcv) hew)
@@ -723,11 +723,11 @@ theorem frame_map_huge_rel {A : Type} {ar : machine.Arch A} {th : TypedHeap} {P 
         VsRel P (L.mem res.2.1) (L.ksb res.2.1) σ' ∧ PtRel L4 L3 L2 L1 (L.mem res.2.1) σ' ∧ SR res.2.1 res.2.2 σ' ∧
         SlotFoot th (L.mem s) (L.mem res.2.1) (cslotAddr (pc.bv, idx)) ∧
         VsLike (capV (L.mem res.2.1) (cslotAddr (pc.bv, idx))) (frameCapOf f) ∧ KFoot σ σ') ⦄ := by
-  obtain ⟨ptr, sz, rt, dev, mp, fa, fv⟩ := f
+  obtain ⟨ptr, sz, rt, dev, mp, ep, fa, fv⟩ := f
   simp only at hsz hfm hpa ⊢
   subst hsz
   rw [show ∀ args' ex', Fl4Spec.archDecodeInvocation (Z := Unit) slbl args' xs (pc.bv, idx)
-      (frameACapG ⟨ptr, .Huge, rt, dev, mp, fa, fv⟩) ex' =
+      (frameACapG ⟨ptr, .Huge, rt, dev, mp, ep, fa, fv⟩) ex' =
     Fl4Spec.decodePageInvocation slbl args' (pc.bv, idx) (.pageCap dev ptr.bv (vmRightsOf rt)
       (if mp then .vmVSpaceMap else .vmNoMap) .x64HugePage (if mp then some (fa.bv, fv.bv) else none)) ex' from
     fun _ _ => rfl]

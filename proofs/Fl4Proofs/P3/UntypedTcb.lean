@@ -348,7 +348,10 @@ theorem create_tcb_frame {A' : Type} (arI : machine.Arch A') (s : S) (ar : A') (
     objects.create_object st arI s ar nt base us dev ⦃ res =>
       res.1 = .Thread base ∧ res.2.2 = ar ∧ WFrame (L := L) s res.2.1 (TcbW (L := L) s base) ∧
       L.mem res.2.1 (dbgW (L := L) s base) = base ⦄ := by
+  have h14 : nt ≠ 14#u64 := by scalar_tac
+  have h15 : ¬ nt ≥ 15#u64 := by scalar_tac
   unfold objects.create_object
+  simp only [fl4_abi.consts.object.X86Vcpu, fl4_abi.consts.object.X86EptPml4, h14, h15, ↓reduceIte]
   have h1 : nt = fl4_abi.consts.object.Tcb := UScalar.eq_of_val_eq (by rw [hnt]; simp [fl4_abi.consts.object.Tcb])
   rw [if_pos h1]
   obtain ⟨s1, hs1, f1⟩ := spec_exists (init_context_frame (L := L) s base ht)

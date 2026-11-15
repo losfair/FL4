@@ -15,6 +15,7 @@ import Fl4Proofs.P3.MdbFull
 open Aeneas Aeneas.Std Result
 
 namespace Fl4Proofs.P3
+set_option maxRecDepth 4096
 open fl4_core Classical
 
 noncomputable section
@@ -32,20 +33,20 @@ section
 variable {sc c : capability.Cap}
 
 theorem CtlPair.cases (h : CtlPair sc c) :
-    (sc = .IrqControl ∧ ∃ i, c = .IrqHandler i) ∨ (sc = .IoPortControl ∧ ∃ f l, c = .IoPort f l) := by
+    (sc = .IrqControl ∧ ∃ i, c = .IrqHandler i) ∨ (sc = .IoPortControl ∧ ∃ f l vcpu, c = .IoPort f l vcpu) := by
   cases sc <;> cases c <;> simp_all [CtlPair]
 
 theorem CtlPair.sr (h : CtlPair sc c) : srB sc c = true := by
-  rcases h.cases with ⟨rfl, i, rfl⟩ | ⟨rfl, f, l, rfl⟩ <;> apply srB_of_eq <;> simp [objects.same_region_as]
+  rcases h.cases with ⟨rfl, i, rfl⟩ | ⟨rfl, f, l, vcpu, rfl⟩ <;> apply srB_of_eq <;> simp [objects.same_region_as]
 
 theorem CtlPair.self (h : CtlPair sc c) : srB c c = true := by
-  rcases h.cases with ⟨rfl, i, rfl⟩ | ⟨rfl, f, l, rfl⟩ <;> apply srB_of_eq <;> simp [objects.same_region_as]
+  rcases h.cases with ⟨rfl, i, rfl⟩ | ⟨rfl, f, l, vcpu, rfl⟩ <;> apply srB_of_eq <;> simp [objects.same_region_as]
 
 theorem CtlPair.facts (h : CtlPair sc c) :
     isBadged c = false ∧ isBadged sc = false ∧ isUt c = false ∧ isUt sc = false ∧ isZb c = false ∧
       isZb sc = false ∧ c ≠ .Null ∧ sc ≠ .Null ∧ revF c sc = true ∧ fullF sc c = none ∧
       SameBadgeKind c sc := by
-  rcases h.cases with ⟨rfl, i, rfl⟩ | ⟨rfl, f, l, rfl⟩ <;>
+  rcases h.cases with ⟨rfl, i, rfl⟩ | ⟨rfl, f, l, vcpu, rfl⟩ <;>
     simp [isBadged, isUt, isZb, revF, fullF, SameBadgeKind]
 
 theorem srB_irqH (a : capability.Cap) (i : U64) :
@@ -56,9 +57,9 @@ theorem srB_irqH (a : capability.Cap) (i : U64) :
 theorem srB_irqC (a : capability.Cap) : srB a .IrqControl = decide (a = .IrqControl) := by
   apply srB_of_eq; cases a <;> simp [objects.same_region_as, objects.cap_is_physical]
 
-theorem srB_ioP (a : capability.Cap) (f l : U64) :
-    srB a (.IoPort f l) = (decide (a = .IoPortControl) || decide (a = .IoPort f l)) := by
-  apply srB_of_eq; cases a <;> simp [objects.same_region_as, objects.cap_is_physical]
+theorem srB_ioP (a : capability.Cap) (f l vcpu : U64) :
+    srB a (.IoPort f l vcpu) = (decide (a = .IoPortControl) || decide (shape a = .IoPort f l 0#u64)) := by
+  apply srB_of_eq; cases a <;> simp [objects.same_region_as, objects.cap_is_physical, shape]
   split_ifs <;> simp_all [eq_comm]
 
 theorem srB_ioC (a : capability.Cap) : srB a .IoPortControl = decide (a = .IoPortControl) := by
@@ -67,14 +68,20 @@ theorem srB_ioC (a : capability.Cap) : srB a .IoPortControl = decide (a = .IoPor
 /-- The control cap's region test sees the fresh cap as the control cap. -/
 theorem CtlPair.left (h : CtlPair sc c) {a : capability.Cap} (ha : srB c a = false) : srB a c = srB a sc := by
   have hs := h.self
-  rcases h.cases with ⟨rfl, i, rfl⟩ | ⟨rfl, f, l, rfl⟩
+  rcases h.cases with ⟨rfl, i, rfl⟩ | ⟨rfl, f, l, vcpu, rfl⟩
   · rw [srB_irqH, srB_irqC]
     by_cases e : a = .IrqHandler i
     · subst e; rw [hs] at ha; cases ha
     · simp [e]
   · rw [srB_ioP, srB_ioC]
-    by_cases e : a = .IoPort f l
-    · subst e; rw [hs] at ha; cases ha
+    by_cases e : shape a = .IoPort f l 0#u64
+    · have ha' := srB_ok_true hs
+      have hsame : srB (.IoPort f l vcpu) a = true := by
+        apply srB_of_eq
+        cases a <;> simp [shape] at e
+        obtain ⟨rfl, rfl⟩ := e
+        simp [objects.same_region_as]
+      rw [hsame] at ha; cases ha
     · simp [e]
 
 /-- A passed parent test to the control cap passes to the fresh cap. -/
@@ -83,7 +90,7 @@ theorem CtlPair.pf_child (h : CtlPair sc c) {rv : Bool} {ca : capability.Cap} {f
   unfold Fl4Proofs.P3.isPF at hp ⊢
   simp only [Bool.and_eq_true] at hp ⊢
   obtain ⟨⟨h1, h2⟩, -⟩ := hp
-  rcases h.cases with ⟨rfl, i, rfl⟩ | ⟨rfl, f, l, rfl⟩
+  rcases h.cases with ⟨rfl, i, rfl⟩ | ⟨rfl, f, l, vcpu, rfl⟩
   · have e := srB_ok_true h2
     cases ca <;> simp [objects.same_region_as, objects.cap_is_physical] at e
     refine ⟨⟨h1, h.sr⟩, by simp [isBadged]⟩
@@ -99,7 +106,7 @@ theorem CtlPair.sbp (h : CtlPair sc c) (io : Bool) :
     decide (Fl4Spec.shouldBeParentOf (absCap sc) io (absCap c)
       (decide (Fl4Spec.isCapRevocable (absCap c) (absCap sc)))) = isPF io sc c (revF c sc) := by
   rw [h.pf_eq]
-  rcases h.cases with ⟨rfl, i, rfl⟩ | ⟨rfl, f, l, rfl⟩
+  rcases h.cases with ⟨rfl, i, rfl⟩ | ⟨rfl, f, l, vcpu, rfl⟩
   · cases io <;> simp [Fl4Spec.shouldBeParentOf, absCap, Fl4Spec.sameRegionAs]
   · cases io <;> simp [Fl4Spec.shouldBeParentOf, absCap, Fl4Spec.sameRegionAs, Fl4Spec.archSameRegionAs,
       Fl4Spec.shouldBeArchParentOf]
@@ -195,7 +202,7 @@ theorem sf {x y : U64} (hx : x ∈ G.chains.flatten) (hy : y ∈ G.chains.flatte
   srF_congr (h.sm hx hy) (by rw [h.cz hx]) (h.rz hx)
 
 theorem cnf : isFrame c = false := by
-  rcases h.hctl.cases with ⟨-, i, rfl⟩ | ⟨-, f, l, rfl⟩ <;> rfl
+  rcases h.hctl.cases with ⟨-, i, rfl⟩ | ⟨-, f, l, vcpu, rfl⟩ <;> rfl
 
 theorem nm (h0 : nextOf mem src ≠ 0#u64) : nextOf mem src ∈ G.chains.flatten ∧ nextOf mem src ≠ src := by
   rcases h.hM.next_mem h.hsrc with h1 | h1

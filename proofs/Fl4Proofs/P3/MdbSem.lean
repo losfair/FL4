@@ -27,11 +27,13 @@ def shape : capability.Cap → capability.Cap
   | .Reply p _ => .Reply p false
   | .CNode p r _ _ => .CNode p r 0#u64 0#u64
   | .SchedControl _ => .SchedControl 0#u64
-  | .Frame p sz _ _ _ _ _ => .Frame p sz 0#u64 false false 0#u64 0#u64
+  | .Frame p sz _ _ _ _ _ _ => .Frame p sz 0#u64 false false false 0#u64 0#u64
   | .PageTable p _ _ _ => .PageTable p false 0#u64 0#u64
   | .PageDirectory p _ _ _ => .PageDirectory p false 0#u64 0#u64
   | .Pdpt p _ _ _ => .Pdpt p false 0#u64 0#u64
   | .Pml4 p _ _ => .Pml4 p false 0#u64
+  | .Ept p level _ _ _ => .Ept p level false 0#u64 0#u64
+  | .IoPort f l _ => .IoPort f l 0#u64
   | .AsidPool p _ => .AsidPool p 0#u64
   | c => c
 

@@ -35,7 +35,8 @@ theorem updK_self {σ : State Z} {p : ObjRef} {o : KernelObject} (hk : σ.kheap 
 
 theorem tcbCnodeMap_two (x : Tcb) : tcbCnodeMap x (tcbCnodeIndex 2) = some x.tcbIpcframe := by
   unfold tcbCnodeMap
-  rw [Function.update_of_ne (by decide), Function.update_of_ne (by decide), Function.update_self]
+  rw [Function.update_of_ne (by decide), Function.update_of_ne (by decide),
+    Function.update_of_ne (by decide), Function.update_self]
 
 theorem getCap_tcb_two {σ : State Z} {t : ObjRef} {x : Tcb} (hk : σ.kheap t = some (.tcb x)) :
     getCap (Z := Z) (t, tcbCnodeIndex 2) σ = ({(x.tcbIpcframe, σ)}, False) := by

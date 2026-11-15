@@ -193,7 +193,7 @@ variable {S : Type} {st : machine.Store S} [L : P1.LawfulStore st] {A : Type} (a
 /-- The deletion hypotheses of `thread_control_caps_refines`. -/
 def TcHyps (th : TypedHeap) : Prop :=
   FinObjHyp (L := L) arI th ∧ PPHypD (L := L) arI th ∧ PostDelHyp (L := L) arI th ∧
-    ∃ K : Nat, (∀ p r, th p = some (.cnode r) → 2 ^ r ≤ K) ∧ 5 ≤ K ∧
+    ∃ K : Nat, (∀ p r, th p = some (.cnode r) → 2 ^ r ≤ K) ∧ 6 ≤ K ∧
       ∀ m G, MdbLinks th m G → psiD m G * (K + 1) + K < 2 ^ 64 - 1
 
 theorem tc_refines (th : TypedHeap) (hP : Placed th) (hT : TcHyps (L := L) arI th)
@@ -212,8 +212,8 @@ theorem tc_refines (th : TypedHeap) (hP : Placed th) (hT : TcHyps (L := L) arI t
     tcb.thread_control_caps st arI s a t (cslotAddr ssl) (fh.1, cslotAddr fh.2) (tmh.1, cslotAddr tmh.2)
       (cr.1, cslotAddr cr.2) (vr.1, cslotAddr vr.2) addr (bufArg bc0 bfr) flags ⦃ res =>
       InstPostQ (L := L) (MdbOKV (L.ksb s)) th t (tcCapsSpec t ssl flags fh tmh cr vr ptr bfr) s σ res ⦄ := by
-  obtain ⟨hO, hPP, hPD, K, hK, hK5, hB⟩ := hT
-  exact thread_control_caps_mdbOK arI th hP hO hPP hPD K hK hK5 hB s a σ G hDS hMO t ht ssl hAs flags fh tmh cr vr
+  obtain ⟨hO, hPP, hPD, K, hK, hK6, hB⟩ := hT
+  exact thread_control_caps_mdbOK arI th hP hO hPP hPD K hK hK6 hB s a σ G hDS hMO t ht ssl hAs flags fh tmh cr vr
     hfh htmh hcr hvr addr ptr hBuf bc0 bfr hbfr
 
 theorem decode_timeout_eq (s : S) (ar : A) (p : U64) (c : tcb.Ctx)
@@ -222,7 +222,7 @@ theorem decode_timeout_eq (s : S) (ar : A) (p : U64) (c : tcb.Ctx)
       tcb.decode_set_timeout_endpoint st arI s ar p c := by
   unfold tcb.decode
   rw [hstall]
-  simp only [bind_ok, u64_eq_iff, lbl_tcbReadRegisters_val, lbl_tcbWriteRegisters_val, lbl_tcbCopyRegisters_val,
+  simp only [bind_ok, u64_eq_iff, lbl_tcbSetEPTRoot_val, lbl_tcbReadRegisters_val, lbl_tcbWriteRegisters_val, lbl_tcbCopyRegisters_val,
     lbl_tcbConfigure_val, lbl_tcbSetPriority_val, lbl_tcbSetMCPriority_val, lbl_tcbSetSchedParams_val,
     lbl_tcbSetTimeoutEndpoint_val, lbl_tcbSetIPCBuffer_val, lbl_tcbSetSpace_val, lbl_tcbSuspend_val,
     lbl_tcbResume_val]
@@ -371,8 +371,8 @@ theorem bv_le_add_pow (x : BitVec 64) (n : Nat) (hn : n < 64) (h : x.toNat % 2 ^
 /-- An aligned frame cap is the same object as itself (its frame does not
 wrap). -/
 theorem frame_so_refl {th : TypedHeap} {p : U64} {sz : capability.FrameSize} {r : U64} {d m : Bool} {a va : U64}
-    (h : CapValid th (.Frame p sz r d m a va)) :
-    Fl4Spec.sameObjectAs (absCap (.Frame p sz r d m a va)) (absCap (.Frame p sz r d m a va)) := by
+    (h : CapValid th (.Frame p sz r d m false a va)) :
+    Fl4Spec.sameObjectAs (absCap (.Frame p sz r d m false a va)) (absCap (.Frame p sz r d m false a va)) := by
   have hal : p.val % 2 ^ frameBitsN sz = 0 := h
   rw [← UScalar.bv_toNat] at hal
   simp only [absCap, Fl4Spec.sameObjectAs, Fl4Spec.sameAobjectAs, true_and]
@@ -383,19 +383,19 @@ theorem frame_so_refl {th : TypedHeap} {p : U64} {sz : capability.FrameSize} {r 
 
 /-- A cap that passes `check_valid_ipc_buffer` is a non-device frame. -/
 theorem check_ok_frame {vptr : U64} {c : capability.Cap} (h : vspace.check_valid_ipc_buffer vptr c = ok (.Ok ())) :
-    ∃ p sz r m a va, c = .Frame p sz r false m a va := by
+    ∃ p sz r m ep a va, c = .Frame p sz r false m ep a va := by
   cases c <;> simp [vspace.check_valid_ipc_buffer, error.illegal] at h
-  case Frame p sz r d m a va =>
+  case Frame p sz r d m ept a va =>
     cases d
-    · exact ⟨p, sz, r, m, a, va, rfl⟩
+    · exact ⟨p, sz, r, m, ept, a, va, rfl⟩
     · simp at h
 
 /-- `derive_cap` to a frame cap: the frame of the source, unmapped. -/
 theorem derive_frame_inv {S : Type} {st : machine.Store S} {s : S} {slot : obj.Slot} {c : capability.Cap}
-    {p : U64} {sz : capability.FrameSize} {r : U64} {d m : Bool} {a va : U64}
+    {p : U64} {sz : capability.FrameSize} {r : U64} {d m ep : Bool} {a va : U64}
     (hnc : isUt c = true → ∃ x, cdt.ensure_no_children st s slot = ok x)
-    (h : objects.derive_cap st s slot c = ok (.Ok (.Frame p sz r d m a va))) :
-    ∃ m0 a0 va0, c = .Frame p sz r d m0 a0 va0 := by
+    (h : objects.derive_cap st s slot c = ok (.Ok (.Frame p sz r d m ep a va))) :
+    ep = false ∧ ∃ m0 ep0 a0 va0, c = .Frame p sz r d m0 ep0 a0 va0 := by
   cases c <;> simp [objects.derive_cap] at h
   case Untyped =>
     obtain ⟨x, hx⟩ := hnc rfl
@@ -403,8 +403,8 @@ theorem derive_frame_inv {S : Type} {st : machine.Store S} {s : S} {slot : obj.S
     cases x <;> simp [core.result.Result.Insts.CoreOpsTry.branch,
       core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual] at h
   case Frame =>
-    obtain ⟨rfl, rfl, rfl, rfl, -⟩ := h
-    exact ⟨_, _, _, rfl⟩
+    obtain ⟨rfl, rfl, rfl, rfl, -, hep, -⟩ := h
+    exact ⟨hep, _, _, _, _, rfl⟩
   all_goals (split at h <;> simp at h)
 
 
@@ -417,7 +417,7 @@ theorem decode_ipc_eq (s : S) (ar : A) (p : U64) (c : tcb.Ctx)
       tcb.decode_set_ipc_buffer st arI s ar p c := by
   unfold tcb.decode
   rw [hstall]
-  simp only [bind_ok, u64_eq_iff, lbl_tcbReadRegisters_val, lbl_tcbWriteRegisters_val, lbl_tcbCopyRegisters_val,
+  simp only [bind_ok, u64_eq_iff, lbl_tcbSetEPTRoot_val, lbl_tcbReadRegisters_val, lbl_tcbWriteRegisters_val, lbl_tcbCopyRegisters_val,
     lbl_tcbConfigure_val, lbl_tcbSetPriority_val, lbl_tcbSetMCPriority_val, lbl_tcbSetSchedParams_val,
     lbl_tcbSetTimeoutEndpoint_val, lbl_tcbSetIPCBuffer_val, lbl_tcbSetSpace_val, lbl_tcbSuspend_val,
     lbl_tcbResume_val]
@@ -583,10 +583,10 @@ theorem tcb_set_ipc_refines (th : TypedHeap) (hP : Placed th) (hT : TcHyps (L :=
       simp only [core.result.Result.Insts.CoreOpsTry.branch, bind_ok, hrc']
       rcases hcase with ⟨rfl, hck⟩ | ⟨er, er', rfl, hmer, hck⟩
       · simp only [bind_ok, hrc]
-        obtain ⟨q, sz, rr, m, aa, va, rfl⟩ := check_ok_frame hrc'
-        obtain ⟨m0, a0, va0, hc0⟩ := derive_frame_inv (fun h => ⟨_, hnc e2 rfl h⟩) hr
-        have hcvc : CapValid th (capability.Cap.Frame q sz rr false m aa va) := hcv' th hcv0
-        have hok : NewCapOK th (L.mem s1) (.Frame q sz rr false m aa va) e2 := by
+        obtain ⟨q, sz, rr, m, ep, aa, va, rfl⟩ := check_ok_frame hrc'
+        obtain ⟨rfl, m0, ep0, a0, va0, hc0⟩ := derive_frame_inv (fun h => ⟨_, hnc e2 rfl h⟩) hr
+        have hcvc : CapValid th (capability.Cap.Frame q sz rr false m false aa va) := hcv' th hcv0
+        have hok : NewCapOK th (L.mem s1) (.Frame q sz rr false m false aa va) e2 := by
           refine ⟨ps, _, hps, hps1, rfl, hwf', hcvc, hev', fun _ => frame_so_refl hcvc, ?_, ?_, ?_, ?_⟩
           · rw [hc1, hc0]; rfl
           · rw [hc1, hc0]; exact Or.inl rfl
@@ -596,14 +596,14 @@ theorem tcb_set_ipc_refines (th : TypedHeap) (hP : Placed th) (hT : TcHyps (L :=
             (Fl4Spec.decodeSetIpcBuffer (Z := Unit) ((y0 :: rest).map UScalar.bv) (.threadCap p.bv) ssl
               excaps)).run σ =
             ({(.ok (tcInv p ssl tcb.UPDATE_IPC_BUFFER (.Null, (0, [])) (.Null, (0, [])) (.Null, (0, []))
-              (.Null, (0, [])) y0.bv (some (.Frame q sz rr false m aa va, e2))), σ)}, False) := by
+              (.Null, (0, [])) y0.bv (some (.Frame q sz rr false m false aa va, e2))), σ)}, False) := by
           apply run_liftME_ok
           rw [← ha] at hr'
           have hin : ((do
               let bc ← Fl4Spec.deriveCap (Z := Unit) e2 (absCap c0)
               Fl4Spec.checkValidIpcBuffer y0.bv bc
               Fl4Spec.NonDetE.returnOk (some (bc, e2)) : Fl4Spec.SEMonad Unit _)).run σ =
-              ({(.ok (some (absCap (.Frame q sz rr false m aa va), e2)), σ)}, False) := by
+              ({(.ok (some (absCap (.Frame q sz rr false m false aa va), e2)), σ)}, False) := by
             rw [run_bind_ok hr', run_bind_ok hck]; rfl
           rw [hspec, if_neg hy', run_bind_ok hin]
           simp only [tcInv, optArg, flags_B, ↓reduceIte, frameOf]
@@ -612,7 +612,7 @@ theorem tcb_set_ipc_refines (th : TypedHeap) (hP : Placed th) (hT : TcHyps (L :=
           (.Null, (0, [])) (.Null, (0, [])) (.Null, (0, [])) (fun h => (Eq.mp flags_B.1 h).elim)
           (fun h => (Eq.mp flags_B.2.1 h).elim) (fun h => (Eq.mp flags_B.2.2.1 h).elim)
           (fun h => (Eq.mp flags_B.2.2.1 h).elim) y0 y0.bv (fun _ => hBuf y0) .Null
-          (some (.Frame q sz rr false m aa va, e2)) (fun c sl h => by cases h; exact hok)
+          (some (.Frame q sz rr false m false aa va, e2)) (fun c sl h => by cases h; exact hok)
         simp only [cslot_zero, bufArg] at hT'
         exact WP.spec_mono hT' (fun res h => top_of_inst hP (DecOut.of_eq hdec) hst1 hkb1 h)
       · simp only [core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual,
@@ -996,7 +996,7 @@ theorem decode_space_eq (s : S) (ar : A) (p : U64) (c : tcb.Ctx)
     tcb.decode st arI s ar fl4_abi.label.TCBSetSpace p c = tcb.decode_set_space st arI s ar p c := by
   unfold tcb.decode
   rw [hstall]
-  simp only [bind_ok, u64_eq_iff, lbl_tcbReadRegisters_val, lbl_tcbWriteRegisters_val, lbl_tcbCopyRegisters_val,
+  simp only [bind_ok, u64_eq_iff, lbl_tcbSetEPTRoot_val, lbl_tcbReadRegisters_val, lbl_tcbWriteRegisters_val, lbl_tcbCopyRegisters_val,
     lbl_tcbConfigure_val, lbl_tcbSetPriority_val, lbl_tcbSetMCPriority_val, lbl_tcbSetSchedParams_val,
     lbl_tcbSetTimeoutEndpoint_val, lbl_tcbSetIPCBuffer_val, lbl_tcbSetSpace_val, lbl_tcbSuspend_val,
     lbl_tcbResume_val]
@@ -1238,12 +1238,12 @@ theorem buf_rel (th : TypedHeap) (s : S) (σ : Fl4Spec.State Unit) (G : MdbGhost
       obtain ⟨rc, hrc', hcase⟩ := Vs.check_valid_ipc_buffer_rel y c' σ
       simp only [core.result.Result.Insts.CoreOpsTry.branch, bind_ok, hrc']
       rcases hcase with ⟨rfl, hck⟩ | ⟨er, er', rfl, hmer, hck⟩
-      · obtain ⟨q, sz, rr, m, aa, va, rfl⟩ := check_ok_frame hrc'
-        obtain ⟨m0, a0, va0, hc0⟩ := derive_frame_inv (fun h => ⟨_, hnc h⟩) hr
+      · obtain ⟨q, sz, rr, m, ep, aa, va, rfl⟩ := check_ok_frame hrc'
+        obtain ⟨rfl, m0, ep0, a0, va0, hc0⟩ := derive_frame_inv (fun h => ⟨_, hnc h⟩) hr
         subst hc0
-        have hcvc : CapValid th (capability.Cap.Frame q sz rr false m aa va) := hcv' th hcv0
-        refine ⟨.Ok (bufArg .Null (some (.Frame q sz rr false m aa va, e2))), by simp [bufArg],
-          Or.inl ⟨.Null, some (.Frame q sz rr false m aa va, e2), rfl, ?_, ?_⟩⟩
+        have hcvc : CapValid th (capability.Cap.Frame q sz rr false m false aa va) := hcv' th hcv0
+        refine ⟨.Ok (bufArg .Null (some (.Frame q sz rr false m false aa va, e2))), by simp [bufArg],
+          Or.inl ⟨.Null, some (.Frame q sz rr false m false aa va, e2), rfl, ?_, ?_⟩⟩
         · rw [run_bind_ok hr', run_bind_ok hck]; rfl
         · intro c sl h
           cases h
@@ -1264,7 +1264,7 @@ theorem decode_configure_eq (s : S) (ar : A) (p : U64) (c : tcb.Ctx)
     tcb.decode st arI s ar fl4_abi.label.TCBConfigure p c = tcb.decode_configure st arI s ar p c := by
   unfold tcb.decode
   rw [hstall]
-  simp only [bind_ok, u64_eq_iff, lbl_tcbReadRegisters_val, lbl_tcbWriteRegisters_val, lbl_tcbCopyRegisters_val,
+  simp only [bind_ok, u64_eq_iff, lbl_tcbSetEPTRoot_val, lbl_tcbReadRegisters_val, lbl_tcbWriteRegisters_val, lbl_tcbCopyRegisters_val,
     lbl_tcbConfigure_val, lbl_tcbSuspend_val, lbl_tcbResume_val]
   simp only [Nat.reduceEqDiff, ↓reduceIte]
   rfl
@@ -1494,7 +1494,7 @@ theorem decode_read_eq (s : S) (ar : A) (p : U64) (c : tcb.Ctx)
     tcb.decode st arI s ar fl4_abi.label.TCBReadRegisters p c = tcb.decode_read_registers st arI s ar p c := by
   unfold tcb.decode
   rw [hstall]
-  simp only [bind_ok, u64_eq_iff, lbl_tcbReadRegisters_val]
+  simp only [bind_ok, u64_eq_iff, lbl_tcbSetEPTRoot_val, lbl_tcbReadRegisters_val]
   simp only [↓reduceIte]
   rfl
 
@@ -1626,7 +1626,7 @@ theorem decode_write_eq (s : S) (ar : A) (p : U64) (c : tcb.Ctx)
     tcb.decode st arI s ar fl4_abi.label.TCBWriteRegisters p c = tcb.decode_write_registers st arI s ar p c := by
   unfold tcb.decode
   rw [hstall]
-  simp only [bind_ok, u64_eq_iff, lbl_tcbReadRegisters_val, lbl_tcbWriteRegisters_val]
+  simp only [bind_ok, u64_eq_iff, lbl_tcbSetEPTRoot_val, lbl_tcbReadRegisters_val, lbl_tcbWriteRegisters_val]
   simp only [Nat.reduceEqDiff, ↓reduceIte]
   rfl
 
@@ -1785,7 +1785,7 @@ theorem decode_copy_eq (s : S) (ar : A) (p : U64) (c : tcb.Ctx)
     tcb.decode st arI s ar fl4_abi.label.TCBCopyRegisters p c = tcb.decode_copy_registers st arI s ar p c := by
   unfold tcb.decode
   rw [hstall]
-  simp only [bind_ok, u64_eq_iff, lbl_tcbReadRegisters_val, lbl_tcbWriteRegisters_val, lbl_tcbCopyRegisters_val]
+  simp only [bind_ok, u64_eq_iff, lbl_tcbSetEPTRoot_val, lbl_tcbReadRegisters_val, lbl_tcbWriteRegisters_val, lbl_tcbCopyRegisters_val]
   simp only [Nat.reduceEqDiff, ↓reduceIte]
   rfl
 
@@ -1927,6 +1927,7 @@ theorem tcb_decode_cspace (th : TypedHeap) (hP : Placed th) (hT : TcHyps (L := L
     (s : S) (ar : A) (σ : Fl4Spec.State Unit) (G : MdbGhost) (hDS : DState (L := L) th s σ G) (hFR : MdbOKV (L.ksb s) (L.mem s) G)
     (lbl p : U64) (hp : th p = some .tcb) (slbl : Fl4Spec.Data)
     (hlbl : Fl4Spec.genInvocationType slbl = tcbLabelOf lbl)
+    (hNative : lbl ≠ fl4_abi.label.TCBSetEPTRoot)
     (hext : Fl4Spec.genInvocationType slbl = .invalidInvocation → Fl4Spec.fl4TcbExtLabelOf slbl = tcbExtOf lbl)
     (length buf ct : U64) (hct : sched.cur_thread st s = ok ct) (args : List U64)
     (hlen : length.val = args.length)
@@ -1981,7 +1982,7 @@ theorem tcb_decode_cspace (th : TypedHeap) (hP : Placed th) (hT : TcHyps (L := L
     TcbOKF (L := L) arI s ar σ lbl p ⟨length, buf, call, cslotAddr ssl, extra⟩ blk call don slbl
       (args.map UScalar.bv) ci ssl excaps buffer := by
   have hstall := hstall' p
-  refine tcb_decode_refinesF arI s ar σ lbl p _ blk call don slbl hlbl _ ci ssl excaps buffer hext hstall
+  refine tcb_decode_refinesF arI s ar σ lbl p _ blk call don slbl hlbl _ ci ssl excaps buffer hext hstall hNative
     ?_ ?_ ?_ ?_ hSetPriority hSetMCPriority hSetSchedParams ?_ ?_ ?_ hSuspend hResume hBindNotification
     hUnbindNotification hSetBreakpoint hGetBreakpoint hUnsetBreakpoint hConfigureSingleStepping ?_ hSetFlags
     hReadFPU hWriteFPU hSetTimer

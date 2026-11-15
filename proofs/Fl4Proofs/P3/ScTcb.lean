@@ -117,8 +117,8 @@ theorem SOK.ck {f : Bool × Bool} {σ σ' : State Unit} (h : SOK f σ σ') : CK 
   refine ⟨fun p r cs hp => ?_, fun p x hp => ?_, h.ksub, h.cdt, h.orig⟩
   · obtain ⟨o', h1, h2⟩ := h.fwd hp; rw [h2.cnode_inv] at h1; exact h1
   · obtain ⟨o', h1, h2⟩ := h.fwd hp
-    obtain ⟨y, rfl, e1, e2, e3, e4, e5, -, -⟩ := h2.tcb_inv
-    exact ⟨y, h1, tcbCnodeMap_congr e1 e2 e3 e4 e5⟩
+    obtain ⟨y, rfl, e1, e2, e3, e4, e5, e6, -, -⟩ := h2.tcb_inv
+    exact ⟨y, h1, tcbCnodeMap_congr e1 e2 e3 e4 e5 e6⟩
 
 /-- An update of an object that is neither a CNode nor a TCB, to another
 such object. -/
@@ -365,7 +365,7 @@ theorem decode_mcp_eq (s : S) (ar : A) (p : U64) (c : tcb.Ctx)
     tcb.decode st arI s ar fl4_abi.label.TCBSetMCPriority p c = tcb.decode_set_priority st arI s ar p c false := by
   unfold tcb.decode
   rw [hstall]
-  simp only [bind_ok, u64_eq_iff, lbl_tcbReadRegisters_val, lbl_tcbWriteRegisters_val, lbl_tcbCopyRegisters_val,
+  simp only [bind_ok, u64_eq_iff, lbl_tcbSetEPTRoot_val, lbl_tcbReadRegisters_val, lbl_tcbWriteRegisters_val, lbl_tcbCopyRegisters_val,
     lbl_tcbConfigure_val, lbl_tcbSetPriority_val, lbl_tcbSetMCPriority_val, lbl_tcbSuspend_val, lbl_tcbResume_val]
   simp only [Nat.reduceEqDiff, ↓reduceIte, decide_false]
   rfl
@@ -547,7 +547,7 @@ theorem decode_prio_eq (s : S) (ar : A) (p : U64) (c : tcb.Ctx)
     tcb.decode st arI s ar fl4_abi.label.TCBSetPriority p c = tcb.decode_set_priority st arI s ar p c true := by
   unfold tcb.decode
   rw [hstall]
-  simp only [bind_ok, u64_eq_iff, lbl_tcbReadRegisters_val, lbl_tcbWriteRegisters_val, lbl_tcbCopyRegisters_val,
+  simp only [bind_ok, u64_eq_iff, lbl_tcbSetEPTRoot_val, lbl_tcbReadRegisters_val, lbl_tcbWriteRegisters_val, lbl_tcbCopyRegisters_val,
     lbl_tcbConfigure_val, lbl_tcbSetPriority_val, lbl_tcbSetMCPriority_val, lbl_tcbSuspend_val, lbl_tcbResume_val]
   simp only [Nat.reduceEqDiff, ↓reduceIte, decide_false]
   rfl
@@ -758,7 +758,7 @@ theorem unbind_ntfn_eq (s : S) (t : U64) (h0 : L.mem s (P1.boundA t) ≠ 0#u64) 
 
 /-- **A write to a TCB word past the slots keeps the cap slots.** -/
 theorem tcbw_slots {th : TypedHeap} (hP : Placed th) (s : S) {t : U64} (v : U64) (ht : th t = some .tcb)
-    (K : U64) (hK1 : 160 ≤ K.val) (hK2 : K.val + 8 ≤ 4096) (hK8 : K.val % 8 = 0) :
+    (K : U64) (hK1 : 192 ≤ K.val) (hK2 : K.val + 8 ≤ 4096) (hK8 : K.val % 8 = 0) :
     SlotsSame th (L.mem s) (L.mem (L.wr s (core.num.U64.wrapping_add t K) v)) := by
   have htf := hP.fits t _ ht
   have hta := hP.align t _ ht
@@ -885,7 +885,7 @@ theorem tcb_bind_ntfn_refines (th : TypedHeap) (hP : Placed th)
     rw [hlbl]
   unfold TcbOKF tcb.decode
   rw [hstall, hdec0]
-  simp only [bind_ok, u64_eq_iff, lbl_tcbReadRegisters_val, lbl_tcbWriteRegisters_val, lbl_tcbCopyRegisters_val,
+  simp only [bind_ok, u64_eq_iff, lbl_tcbSetEPTRoot_val, lbl_tcbReadRegisters_val, lbl_tcbWriteRegisters_val, lbl_tcbCopyRegisters_val,
     lbl_tcbConfigure_val, lbl_tcbSetPriority_val, lbl_tcbSetMCPriority_val, lbl_tcbSetSchedParams_val,
     lbl_tcbSetTimeoutEndpoint_val, lbl_tcbSetIPCBuffer_val, lbl_tcbSetSpace_val, lbl_tcbSuspend_val,
     lbl_tcbResume_val, lbl_tcbBindNotification_val]
@@ -1118,7 +1118,7 @@ theorem tcb_unbind_ntfn_refines (th : TypedHeap) (hP : Placed th)
     rw [hlbl]
   unfold TcbOKF tcb.decode
   rw [hstall, hdec0]
-  simp only [bind_ok, u64_eq_iff, lbl_tcbReadRegisters_val, lbl_tcbWriteRegisters_val, lbl_tcbCopyRegisters_val,
+  simp only [bind_ok, u64_eq_iff, lbl_tcbSetEPTRoot_val, lbl_tcbReadRegisters_val, lbl_tcbWriteRegisters_val, lbl_tcbCopyRegisters_val,
     lbl_tcbConfigure_val, lbl_tcbSetPriority_val, lbl_tcbSetMCPriority_val, lbl_tcbSetSchedParams_val,
     lbl_tcbSetTimeoutEndpoint_val, lbl_tcbSetIPCBuffer_val, lbl_tcbSetSpace_val, lbl_tcbSuspend_val,
     lbl_tcbResume_val, lbl_tcbBindNotification_val, lbl_tcbUnbindNotification_val]
@@ -1463,10 +1463,10 @@ theorem ssp_tail (th : TypedHeap) (hP : Placed th) (hT : TcHyps (L := L) arI th)
   have hxs : IsSlot th x2 := by rw [hxe2]; exact AbsSlot.isSlot ⟨ps, hps1, Or.inl hps⟩
   have hc1 : capV (L.mem s1) x2 = capV (L.mem s) x2 := hS1.capV hxs
   have hnf := vfh_not_frame hv
-  obtain ⟨hO, hPP, hPD, K, hK, hK5, hB⟩ := hT
+  obtain ⟨hO, hPP, hPD, K, hK, hK6, hB⟩ := hT
   have hok : NewCapOK th (L.mem s1) (capV (L.mem s) x2) e2.2 := by
     rw [← hc1, hxe2]; exact newCapOK_self hDS1.1.1 hDS1.1.2.1 hps hps1 (by rw [← hxe2, hc1]; exact hnf)
-  have hI := install_okQ arI (Q := MdbOKV (L.ksb s)) (MdbOKV.step _) th hP hO hPP hPD K hK hK5 hB s1 s1 ar σ1 G
+  have hI := install_okQ arI (Q := MdbOKV (L.ksb s)) (MdbOKV.step _) th hP hO hPP hPD K hK hK6 hB s1 s1 ar σ1 G
     hDS1 (MdbOKV.of_same hDS.1.2.2.1 hS1 hFR) p hp 3 (by simp [tcbSlots])
     layout.tcb.SLOT_FAULT_HANDLER (by simp [layout.tcb.SLOT_FAULT_HANDLER]) (fun y _ _ => ChgZ.refl _ y) ssl hAs
     (capV (L.mem s) x2) e2.2 hok
@@ -1511,7 +1511,7 @@ theorem decode_ssp_eq (s : S) (ar : A) (p : U64) (c : tcb.Ctx)
     tcb.decode st arI s ar fl4_abi.label.TCBSetSchedParams p c = tcb.decode_set_sched_params st arI s ar p c := by
   unfold tcb.decode
   rw [hstall]
-  simp only [bind_ok, u64_eq_iff, lbl_tcbReadRegisters_val, lbl_tcbWriteRegisters_val, lbl_tcbCopyRegisters_val,
+  simp only [bind_ok, u64_eq_iff, lbl_tcbSetEPTRoot_val, lbl_tcbReadRegisters_val, lbl_tcbWriteRegisters_val, lbl_tcbCopyRegisters_val,
     lbl_tcbConfigure_val, lbl_tcbSetPriority_val, lbl_tcbSetMCPriority_val, lbl_tcbSetSchedParams_val,
     lbl_tcbSuspend_val, lbl_tcbResume_val]
   simp only [Nat.reduceEqDiff, ↓reduceIte]

@@ -24,7 +24,7 @@ variable {S : Type} {st : machine.Store S} [L : P1.LawfulStore st] {A : Type} (a
 /-- **`delete(slot, true)` refines `cap_delete`.** -/
 theorem delete_full (th : TypedHeap) (hP : Placed th) (hF : FinalHyp (L := L) th)
     (hO : FinObjHyp (L := L) arI th) (hPP : PPHypD (L := L) arI th) (hPD : PostDelHyp (L := L) arI th)
-    (K : Nat) (hK : ∀ p r, th p = some (.cnode r) → 2 ^ r ≤ K) (hK5 : 5 ≤ K)
+    (K : Nat) (hK : ∀ p r, th p = some (.cnode r) → 2 ^ r ≤ K) (hK6 : 6 ≤ K)
     (sl : Fl4Spec.CslotPtr) (hA : AbsSlot th sl) (s : S) (a : A) (σ : Fl4Spec.State Unit) (G : MdbGhost)
     (hDS : DState (L := L) th s σ G) (hxn : capV (L.mem s) (cslotAddr sl) ≠ .Null)
     (hbound : psiD (L.mem s) G * (K + 1) + K < 2 ^ 64 - 1) :
@@ -38,8 +38,8 @@ theorem delete_full (th : TypedHeap) (hP : Placed th) (hF : FinalHyp (L := L) th
   unfold cdt.delete cdt.finalise_slot_immediate
   simp only [↓reduceIte]
   have hW : layout.WALK_FUEL.val = 2 ^ 64 - 1 := by simp [layout.WALK_FUEL, U64.rMax]
-  have hnu := nuX_le hK hK5 hDS.2.1 hA.isSlot (K := K)
-  apply WP.spec_bind (immediate_loop arI th hP hF hO hPP hPD K hK hK5 sl hA s σ G s a layout.WALK_FUEL
+  have hnu := nuX_le hK hK6 hDS.2.1 hA.isSlot (K := K)
+  apply WP.spec_bind (immediate_loop arI th hP hF hO hPP hPD K hK hK6 sl hA s σ G s a layout.WALK_FUEL
     ⟨σ, G, hDS, by simp only; rw [hW]; omega, le_refl _, le_refl _, fun h => absurd h hxn, fun _ h => h,
       fun _ _ _ => ChgZ.refl _ _, MdbStep.refl hDS.1.2.2.1⟩
     (by rw [hW]))
@@ -92,11 +92,11 @@ from the hypotheses on finality, the object-specific finalisations, the
 preemption points and `post_cap_deletion`. -/
 theorem delHyp_full (th : TypedHeap) (hP : Placed th) (hF : FinalHyp (L := L) th)
     (hO : FinObjHyp (L := L) arI th) (hPP : PPHypD (L := L) arI th) (hPD : PostDelHyp (L := L) arI th)
-    (K : Nat) (hK : ∀ p r, th p = some (.cnode r) → 2 ^ r ≤ K) (hK5 : 5 ≤ K) :
+    (K : Nat) (hK : ∀ p r, th p = some (.cnode r) → 2 ^ r ≤ K) (hK6 : 6 ≤ K) :
     DelHyp (L := L) arI psiD th (DelE (L := L) th K) := by
   intro s a σ G c hCR ⟨hD, hB, hKT, hFM⟩ hA hxm
   have hxn : capV (L.mem s) (cslotAddr c) ≠ .Null := ((mem_nnS hCR.2.2.1 _).1 (List.mem_toFinset.2 hxm)).2
-  refine WP.spec_mono (delete_full arI th hP hF hO hPP hPD K hK hK5 c hA s a σ G
+  refine WP.spec_mono (delete_full arI th hP hF hO hPP hPD K hK hK6 c hA s a σ G
     ⟨hCR, hD, hKT, hFM G hCR.2.2.1⟩ hxn (hB G hCR.2.2.1)) ?_
   rintro r ⟨σ', G', ⟨hCR', hD', hFI'⟩, hps', -, hmS', hcase⟩
   refine ⟨σ', G', ?_, hCR', ⟨hD', fun G'' hM'' => ?_, hFI'.kt,

@@ -398,6 +398,8 @@ def decodePdptInvocation (label : Data) (args : List Data) (cte : CslotPtr) (cap
 def archDecodeInvocation (label : Data) (args : List Data) (_xSlot : CapRef) (cte : CslotPtr)
     (cap : ArchCap) (extraCaps : List (Cap × CslotPtr)) : SEMonad Z ArchInvocation :=
   match cap with
+  -- Virtualization decoder refinement is separate from the native x86 model.
+  | .vcpuCap .. | .eptCap .. => NonDetE.liftE NonDet.fail
   | .pdPointerTableCap _ _ => decodePdptInvocation label args cte cap extraCaps
   | .pageDirectoryCap _ _ => decodePageDirectoryInvocation label args cte cap extraCaps
   | .pageTableCap _ _ => decodePageTableInvocation label args cte cap extraCaps
@@ -463,6 +465,11 @@ def archDataToObjType (n : Nat) : Option AObjectType :=
   else if n = 4 then some .largePageObj
   else if n = 5 then some .pageTableObj
   else if n = 6 then some .pageDirectoryObj
+  else if n = 7 then some .vcpuObj
+  else if n = 8 then some .eptPml4Obj
+  else if n = 9 then some .eptPdptObj
+  else if n = 10 then some .eptPdObj
+  else if n = 11 then some .eptPtObj
   else none
 
 section

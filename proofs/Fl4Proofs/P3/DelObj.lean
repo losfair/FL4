@@ -1,15 +1,10 @@
 /-
 P3 (DESIGN.md §9), CSpace: **`FinObjHyp` from the finalisations that do
-work** (`finObjHyp_of`). An object cap's `finalise_cap` changes nothing when
-the cap is not final (frames aside), for an unmapped frame, and for a final
-IO port cap (whose cleanup is `post_cap_deletion`'s): those cases are proved
-here, with the state, the slots and the ghost tree unchanged
-(`MdbStep.refl`). What is left is `FinWorkHyp`: `FinObjHyp` for the final
-object caps but IO ports (`cancel_all_ipc`, the notification unbinds and
-`cancel_all_signals`, the reply's `reply_remove` / `cancel_ipc`, the
-thread's unbinds, `suspend` and `prepare_thread_delete`, the scheduling
-context's unbinds, `deleting_irq_handler`, the page-table unmaps and ASID
-deletes) and for mapped frames (the unmap).
+work** (`finObjHyp_of`). Finalisation leaves the state unchanged for non-final caps without a guest
+I/O grant, unmapped frames, and unbound IO-port caps. These cases are proved
+here with the slots and ghost tree unchanged (`MdbStep.refl`). `FinWorkHyp`
+covers the other final object caps, mapped frames, and IO-port caps carrying
+a VCPU grant, whose grant is revoked on every cap finalisation.
 -/
 import Fl4Proofs.P3.DelRound
 open Aeneas Aeneas.Std Result
@@ -20,10 +15,11 @@ open fl4_core Classical
 noncomputable section
 
 /-- The finalisations that do work: a final object cap but an IO port or a
-frame, or a mapped frame. -/
+frame, a mapped frame, or an IO port cap carrying a guest grant. -/
 def FinWork (c : capability.Cap) (b : Bool) : Prop :=
-  (b = true ∧ isFrame c = false ∧ ∀ f l, c ≠ .IoPort f l) ∨
-    ∃ p sz r d asid va, c = .Frame p sz r d true asid va
+  ((b = true ∨ ∃ f l owner, c = .IoPort f l owner ∧ owner ≠ 0#u64) ∧
+    isFrame c = false ∧ ∀ f l, c ≠ .IoPort f l 0#u64) ∨
+    ∃ p sz r d ep asid va, c = .Frame p sz r d true ep asid va
 
 section
 variable {S : Type} {st : machine.Store S} [L : P1.LawfulStore st] {A : Type} (arI : machine.Arch A)
@@ -48,26 +44,31 @@ theorem fin_idle (s : S) (a : A) (σ : Fl4Spec.State Unit) (c : capability.Cap) 
     (hn : ¬ FinWork c b) :
     ∃ cl, objects.finalise_cap st arI s a c b false = ok ((.Null, cl), s, a) ∧
       ((absCap .Null, absCap cl), σ) ∈ (Fl4Spec.finaliseCap (Z := Unit) (absCap c) b σ).1 ∧
-      (cl = .Null ∨ cl = c) ∧ finRem c b = .Null ∧ ((∀ f l, c ≠ .IoPort f l) → cl = .Null) := by
+      (cl = .Null ∨ cl = c) ∧ finRem c b = .Null ∧ ((∀ f l, c ≠ .IoPort f l 0#u64) → cl = .Null) := by
   unfold FinWork at hn
   cases c <;> simp only [FinObjKind] at hk
-  case Frame p sz r d m asid va =>
+  case Frame p sz r d m ept asid va =>
     cases m
     · refine ⟨.Null, ?_, ?_, Or.inl rfl, rfl, fun _ => rfl⟩
-      · simp [objects.finalise_cap, objects.finalise_cap_object]
+      · simp [objects.finalise_cap, objects.finalise_cap_object, fl4_core.vcpu.finalise]
       · cases b <;> exact Set.mem_singleton _
-    · exact absurd (Or.inr ⟨p, sz, r, d, asid, va, rfl⟩) hn
-  case IoPort f l =>
+    · exact absurd (Or.inr ⟨p, sz, r, d, ept, asid, va, rfl⟩) hn
+  case IoPort f l owner =>
+    have hv : owner = 0#u64 := by
+      by_contra hv
+      exact hn (Or.inl ⟨Or.inr ⟨f, l, owner, rfl, hv⟩, rfl,
+        fun f' l' he => by cases he; exact hv rfl⟩)
+    subst owner
     cases b
     · refine ⟨.Null, ?_, Set.mem_singleton _, Or.inl rfl, rfl, fun h => absurd rfl (h f l)⟩
-      simp [objects.finalise_cap, objects.finalise_cap_object]
-    · refine ⟨.IoPort f l, ?_, Set.mem_singleton _, Or.inr rfl, rfl, fun h => absurd rfl (h f l)⟩
-      simp [objects.finalise_cap, objects.finalise_cap_object]
+      simp [objects.finalise_cap, objects.finalise_cap_object, fl4_core.vcpu.revoke_ports]
+    · refine ⟨.IoPort f l 0#u64, ?_, Set.mem_singleton _, Or.inr rfl, rfl, fun h => absurd rfl (h f l)⟩
+      simp [objects.finalise_cap, objects.finalise_cap_object, fl4_core.vcpu.revoke_ports]
   all_goals
     cases b
-    case true => exact absurd (Or.inl ⟨rfl, rfl, fun _ _ h => by cases h⟩) hn
+    case true => exact absurd (Or.inl ⟨Or.inl rfl, rfl, fun _ _ h => by cases h⟩) hn
     refine ⟨.Null, ?_, ?_, Or.inl rfl, rfl, fun _ => rfl⟩
-    · simp [objects.finalise_cap, objects.finalise_cap_object]
+    · simp [objects.finalise_cap, objects.finalise_cap_object, fl4_core.vcpu.finalise]
     · first
         | exact Set.mem_singleton _
         | (simp only [absCap, Fl4Spec.finaliseCap, Fl4Spec.archFinaliseCap, Fl4Spec.NonDet.when,
@@ -92,7 +93,7 @@ theorem finObjHyp_of (th : TypedHeap) (hW : FinWorkHyp (L := L) arI th) : FinObj
     MdbStep.refl hDS.1.2.2.1⟩
   · rcases hcl with h | h
     · rw [h]; trivial
-    · by_cases hio : ∃ f l, c = .IoPort f l
+    · by_cases hio : ∃ f l, c = .IoPort f l 0#u64
       · obtain ⟨f, l, rfl⟩ := hio; rw [h]; trivial
       · rw [hnio (fun f l e => hio ⟨f, l, e⟩)]; trivial
   · rcases hcl with h | h

@@ -3552,7 +3552,7 @@ def obj.Tcb.affinity
 @[global_simps, irreducible] def layout.node.DEBUG_TCBS : Std.U64 := 88#u64
 
 /-- [fl4_core::objects::debug_append]:
-    Source: 'crates/fl4-core/src/objects.rs', lines 415:0-424:1
+    Source: 'crates/fl4-core/src/objects.rs', lines 416:0-425:1
     Visibility: public -/
 def objects.debug_append
   {S : Type _} (machineStoreInst : machine.Store S) (s : S) (t : obj.Tcb) :
@@ -7455,215 +7455,6 @@ def cdt.insert_new_cap
     else obj.Slot.set_prev machineStoreInst next s5 slot
   obj.Slot.set_next machineStoreInst parent s6 slot
 
-/-- [fl4_core::vcpu::IO]
-    Source: 'crates/fl4-core/src/vcpu.rs', lines 28:0-28:27
-    Visibility: public -/
-@[global_simps, irreducible] def vcpu.IO : Std.U64 := 24576#u64
-
-/-- [fl4_core::vcpu::ports]: loop body 0:
-    Source: 'crates/fl4-core/src/vcpu.rs', lines 703:4-709:5 -/
-@[rust_loop_body]
-def vcpu.ports_loop.body
-  {S : Type _} (machineStoreInst : machine.Store S) (v : Std.U64)
-  (high : Std.U64) (disable : Bool) (s : S) (port : Std.U64) :
-  Result (ControlFlow (S × Std.U64) S)
-  := do
-  if port <= high
-  then
-    if port < 65536#u64
-    then
-      let i ← lift (core.num.U64.wrapping_add v vcpu.IO)
-      let i1 ← port >>> 6#i32
-      let i2 ← i1 * 8#u64
-      let addr ← lift (core.num.U64.wrapping_add i i2)
-      let i3 ← lift (port &&& 63#u64)
-      let bit ← 1#u64 <<< i3
-      let old ← machineStoreInst.read s addr
-      if disable
-      then
-        let i4 ← lift (old ||| bit)
-        let s1 ← machineStoreInst.write s addr i4
-        let port1 ← port + 1#u64
-        ok (cont (s1, port1))
-      else
-        let i4 ← lift (~~~ bit)
-        let i5 ← lift (old &&& i4)
-        let s1 ← machineStoreInst.write s addr i5
-        let port1 ← port + 1#u64
-        ok (cont (s1, port1))
-    else ok (done s)
-  else ok (done s)
-
-/-- [fl4_core::vcpu::ports]: loop 0:
-    Source: 'crates/fl4-core/src/vcpu.rs', lines 703:4-709:5 -/
-@[rust_loop]
-def vcpu.ports_loop
-  {S : Type _} (machineStoreInst : machine.Store S) (s : S) (v : Std.U64)
-  (high : Std.U64) (disable : Bool) (port : Std.U64) :
-  Result S
-  := do
-  loop
-    (fun (s1, port1) => vcpu.ports_loop.body machineStoreInst v high disable s1
-      port1)
-    (s, port)
-
-/-- [fl4_core::vcpu::ports]:
-    Source: 'crates/fl4-core/src/vcpu.rs', lines 701:0-710:1 -/
-@[reducible]
-def vcpu.ports
-  {S : Type _} (machineStoreInst : machine.Store S) (s : S) (v : Std.U64)
-  (low : Std.U64) (high : Std.U64) (disable : Bool) :
-  Result S
-  := do
-  vcpu.ports_loop machineStoreInst s v high disable low
-
-/-- [fl4_core::vcpu::get]:
-    Source: 'crates/fl4-core/src/vcpu.rs', lines 422:0-424:1
-    Visibility: public -/
-def vcpu.get
-  {S : Type _} (machineStoreInst : machine.Store S) (s : S) (v : Std.U64)
-  (offset : Std.U64) :
-  Result Std.U64
-  := do
-  let i ← lift (core.num.U64.wrapping_add v offset)
-  machineStoreInst.read s i
-
-/-- [fl4_core::vcpu::TCB]
-    Source: 'crates/fl4-core/src/vcpu.rs', lines 18:0-18:28
-    Visibility: public -/
-@[global_simps, irreducible] def vcpu.TCB : Std.U64 := 20480#u64
-
-/-- [fl4_core::layout::node::IPI_PENDING]
-    Source: 'crates/fl4-core/src/layout.rs', lines 235:4-235:37
-    Visibility: public -/
-@[global_simps, irreducible] def layout.node.IPI_PENDING : Std.U64 := 120#u64
-
-/-- [fl4_core::smp::remote_reschedule]:
-    Source: 'crates/fl4-core/src/smp.rs', lines 51:0-58:1
-    Visibility: public -/
-def smp.remote_reschedule
-  {S : Type _} {A : Type _} (machineStoreInst : machine.Store S)
-  (machineArchInst : machine.Arch A) (s : S) (a : A) (cpu : Std.U64) :
-  Result (S × A)
-  := do
-  let i ← machineStoreInst.cur_cpu s
-  if cpu != i
-  then
-    let i1 ← obj.node_get machineStoreInst s i layout.node.IPI_PENDING
-    let i2 ← lift (cpu &&& 63#u64)
-    let i3 ← 1#u64 <<< i2
-    let m ← lift (i1 ||| i3)
-    let s1 ← obj.node_set machineStoreInst s i layout.node.IPI_PENDING m
-    ok (s1, a)
-  else ok (s, a)
-
-/-- [fl4_core::smp::remote_tcb_stall]:
-    Source: 'crates/fl4-core/src/smp.rs', lines 24:0-30:1
-    Visibility: public -/
-def smp.remote_tcb_stall
-  {S : Type _} {A : Type _} (machineStoreInst : machine.Store S)
-  (machineArchInst : machine.Arch A) (s : S) (a : A) (t : obj.Tcb) :
-  Result (S × A)
-  := do
-  let cpu ← obj.Tcb.affinity machineStoreInst t s
-  let i ← machineStoreInst.cur_cpu s
-  if cpu != i
-  then
-    let i1 ← obj.node_get machineStoreInst s cpu layout.node.CUR_THREAD
-    if i1 = t
-    then
-      let a1 ← machineArchInst.remote_stall a cpu
-      smp.remote_reschedule machineStoreInst machineArchInst s a1 cpu
-    else ok (s, a)
-  else ok (s, a)
-
-/-- [fl4_core::obj::{fl4_core::obj::Tcb}::is_null]:
-    Source: 'crates/fl4-core/src/obj.rs', lines 99:4-101:5
-    Visibility: public -/
-def obj.Tcb.is_null (self : obj.Tcb) : Result Bool := do
-  ok (self = 0#u64)
-
-/-- [fl4_core::vcpu::stall]:
-    Source: 'crates/fl4-core/src/vcpu.rs', lines 655:0-661:1
-    Visibility: public -/
-def vcpu.stall
-  {S : Type _} {A : Type _} (machineStoreInst : machine.Store S)
-  (machineArchInst : machine.Arch A) (s : S) (a : A) (v : Std.U64) :
-  Result (S × A)
-  := do
-  let a1 ← machineArchInst.vcpu_barrier a
-  let i ← vcpu.get machineStoreInst s v vcpu.TCB
-  let b ← obj.Tcb.is_null i
-  if b
-  then ok (s, a1)
-  else smp.remote_tcb_stall machineStoreInst machineArchInst s a1 i
-
-/-- [fl4_core::vcpu::NEXT]
-    Source: 'crates/fl4-core/src/vcpu.rs', lines 19:0-19:29
-    Visibility: public -/
-@[global_simps, irreducible] def vcpu.NEXT : Std.U64 := 20488#u64
-
-/-- [fl4_core::layout::ks::VCPU_HEAD]
-    Source: 'crates/fl4-core/src/layout.rs', lines 260:4-260:34
-    Visibility: public -/
-@[global_simps, irreducible] def layout.ks.VCPU_HEAD : Std.U64 := 80#u64
-
-/-- [fl4_core::layout::WALK_FUEL]
-    Source: 'crates/fl4-core/src/layout.rs', lines 11:0-11:36
-    Visibility: public -/
-@[global_simps, irreducible] def layout.WALK_FUEL : Std.U64 := core.num.U64.MAX
-
-/-- [fl4_core::vcpu::revoke_ports]: loop body 0:
-    Source: 'crates/fl4-core/src/vcpu.rs', lines 715:4-720:5
-    Visibility: public -/
-@[rust_loop_body]
-def vcpu.revoke_ports_loop.body
-  {S : Type _} {A : Type _} (machineStoreInst : machine.Store S)
-  (machineArchInst : machine.Arch A) (low : Std.U64) (high : Std.U64)
-  (s : S) (a : A) (v : Std.U64) (fuel : Std.U64) :
-  Result (ControlFlow (S × A × Std.U64 × Std.U64) (S × A))
-  := do
-  if v != 0#u64
-  then
-    if fuel > 0#u64
-    then
-      let fuel1 ← fuel - 1#u64
-      let (s1, a1) ← vcpu.stall machineStoreInst machineArchInst s a v
-      let s2 ← vcpu.ports machineStoreInst s1 v low high true
-      let v1 ← vcpu.get machineStoreInst s2 v vcpu.NEXT
-      ok (cont (s2, a1, v1, fuel1))
-    else ok (done (s, a))
-  else ok (done (s, a))
-
-/-- [fl4_core::vcpu::revoke_ports]: loop 0:
-    Source: 'crates/fl4-core/src/vcpu.rs', lines 715:4-720:5
-    Visibility: public -/
-@[rust_loop]
-def vcpu.revoke_ports_loop
-  {S : Type _} {A : Type _} (machineStoreInst : machine.Store S)
-  (machineArchInst : machine.Arch A) (s : S) (a : A) (low : Std.U64)
-  (high : Std.U64) (v : Std.U64) (fuel : Std.U64) :
-  Result (S × A)
-  := do
-  loop
-    (fun (s1, a1, v1, fuel1) => vcpu.revoke_ports_loop.body machineStoreInst
-      machineArchInst low high s1 a1 v1 fuel1)
-    (s, a, v, fuel)
-
-/-- [fl4_core::vcpu::revoke_ports]:
-    Source: 'crates/fl4-core/src/vcpu.rs', lines 711:0-721:1
-    Visibility: public -/
-def vcpu.revoke_ports
-  {S : Type _} {A : Type _} (machineStoreInst : machine.Store S)
-  (machineArchInst : machine.Arch A) (s : S) (a : A) (low : Std.U64)
-  (high : Std.U64) :
-  Result (S × A)
-  := do
-  let a1 ← machineArchInst.vcpu_barrier a
-  let v ← obj.ks_get machineStoreInst s layout.ks.VCPU_HEAD
-  vcpu.revoke_ports_loop machineStoreInst machineArchInst s a1 low high v
-    layout.WALK_FUEL
-
 /-- [fl4_core::ioport::word_off]:
     Source: 'crates/fl4-core/src/ioport.rs', lines 24:0-26:1 -/
 def ioport.word_off (w : Std.U64) : Result Std.U64 := do
@@ -7799,7 +7590,7 @@ def interrupt.deleted_irq_handler
     interrupt.IRQ_INACTIVE irq
 
 /-- [fl4_core::objects::post_cap_deletion]:
-    Source: 'crates/fl4-core/src/objects.rs', lines 405:0-411:1
+    Source: 'crates/fl4-core/src/objects.rs', lines 406:0-412:1
     Visibility: public -/
 def objects.post_cap_deletion
   {S : Type _} {A : Type _} (machineStoreInst : machine.Store S)
@@ -7833,10 +7624,8 @@ def objects.post_cap_deletion
   | capability.Cap.AsidPool _ _ => ok (s, a)
   | capability.Cap.IoPortControl => ok (s, a)
   | capability.Cap.IoPort first last _ =>
-    let (s1, a1) ←
-      vcpu.revoke_ports machineStoreInst machineArchInst s a first last
-    let s2 ← ioport.free_ioports machineStoreInst s1 first last
-    ok (s2, a1)
+    let s1 ← ioport.free_ioports machineStoreInst s first last
+    ok (s1, a)
 
 /-- [fl4_core::cdt::empty_slot]:
     Source: 'crates/fl4-core/src/cdt.rs', lines 198:0-215:1 -/
@@ -8785,6 +8574,224 @@ def vspace.unmap_page
       | core.result.Result.Err _ => ok (s, a)
   | core.result.Result.Err _ => ok (s, a)
 
+/-- [fl4_core::vcpu::IO]
+    Source: 'crates/fl4-core/src/vcpu.rs', lines 28:0-28:27
+    Visibility: public -/
+@[global_simps, irreducible] def vcpu.IO : Std.U64 := 24576#u64
+
+/-- [fl4_core::vcpu::ports]: loop body 0:
+    Source: 'crates/fl4-core/src/vcpu.rs', lines 703:4-709:5 -/
+@[rust_loop_body]
+def vcpu.ports_loop.body
+  {S : Type _} (machineStoreInst : machine.Store S) (v : Std.U64)
+  (high : Std.U64) (disable : Bool) (s : S) (port : Std.U64) :
+  Result (ControlFlow (S × Std.U64) S)
+  := do
+  if port <= high
+  then
+    if port < 65536#u64
+    then
+      let i ← lift (core.num.U64.wrapping_add v vcpu.IO)
+      let i1 ← port >>> 6#i32
+      let i2 ← i1 * 8#u64
+      let addr ← lift (core.num.U64.wrapping_add i i2)
+      let i3 ← lift (port &&& 63#u64)
+      let bit ← 1#u64 <<< i3
+      let old ← machineStoreInst.read s addr
+      if disable
+      then
+        let i4 ← lift (old ||| bit)
+        let s1 ← machineStoreInst.write s addr i4
+        let port1 ← port + 1#u64
+        ok (cont (s1, port1))
+      else
+        let i4 ← lift (~~~ bit)
+        let i5 ← lift (old &&& i4)
+        let s1 ← machineStoreInst.write s addr i5
+        let port1 ← port + 1#u64
+        ok (cont (s1, port1))
+    else ok (done s)
+  else ok (done s)
+
+/-- [fl4_core::vcpu::ports]: loop 0:
+    Source: 'crates/fl4-core/src/vcpu.rs', lines 703:4-709:5 -/
+@[rust_loop]
+def vcpu.ports_loop
+  {S : Type _} (machineStoreInst : machine.Store S) (s : S) (v : Std.U64)
+  (high : Std.U64) (disable : Bool) (port : Std.U64) :
+  Result S
+  := do
+  loop
+    (fun (s1, port1) => vcpu.ports_loop.body machineStoreInst v high disable s1
+      port1)
+    (s, port)
+
+/-- [fl4_core::vcpu::ports]:
+    Source: 'crates/fl4-core/src/vcpu.rs', lines 701:0-710:1 -/
+@[reducible]
+def vcpu.ports
+  {S : Type _} (machineStoreInst : machine.Store S) (s : S) (v : Std.U64)
+  (low : Std.U64) (high : Std.U64) (disable : Bool) :
+  Result S
+  := do
+  vcpu.ports_loop machineStoreInst s v high disable low
+
+/-- [fl4_core::vcpu::get]:
+    Source: 'crates/fl4-core/src/vcpu.rs', lines 422:0-424:1
+    Visibility: public -/
+def vcpu.get
+  {S : Type _} (machineStoreInst : machine.Store S) (s : S) (v : Std.U64)
+  (offset : Std.U64) :
+  Result Std.U64
+  := do
+  let i ← lift (core.num.U64.wrapping_add v offset)
+  machineStoreInst.read s i
+
+/-- [fl4_core::vcpu::TCB]
+    Source: 'crates/fl4-core/src/vcpu.rs', lines 18:0-18:28
+    Visibility: public -/
+@[global_simps, irreducible] def vcpu.TCB : Std.U64 := 20480#u64
+
+/-- [fl4_core::layout::node::IPI_PENDING]
+    Source: 'crates/fl4-core/src/layout.rs', lines 235:4-235:37
+    Visibility: public -/
+@[global_simps, irreducible] def layout.node.IPI_PENDING : Std.U64 := 120#u64
+
+/-- [fl4_core::smp::remote_reschedule]:
+    Source: 'crates/fl4-core/src/smp.rs', lines 51:0-58:1
+    Visibility: public -/
+def smp.remote_reschedule
+  {S : Type _} {A : Type _} (machineStoreInst : machine.Store S)
+  (machineArchInst : machine.Arch A) (s : S) (a : A) (cpu : Std.U64) :
+  Result (S × A)
+  := do
+  let i ← machineStoreInst.cur_cpu s
+  if cpu != i
+  then
+    let i1 ← obj.node_get machineStoreInst s i layout.node.IPI_PENDING
+    let i2 ← lift (cpu &&& 63#u64)
+    let i3 ← 1#u64 <<< i2
+    let m ← lift (i1 ||| i3)
+    let s1 ← obj.node_set machineStoreInst s i layout.node.IPI_PENDING m
+    ok (s1, a)
+  else ok (s, a)
+
+/-- [fl4_core::smp::remote_tcb_stall]:
+    Source: 'crates/fl4-core/src/smp.rs', lines 24:0-30:1
+    Visibility: public -/
+def smp.remote_tcb_stall
+  {S : Type _} {A : Type _} (machineStoreInst : machine.Store S)
+  (machineArchInst : machine.Arch A) (s : S) (a : A) (t : obj.Tcb) :
+  Result (S × A)
+  := do
+  let cpu ← obj.Tcb.affinity machineStoreInst t s
+  let i ← machineStoreInst.cur_cpu s
+  if cpu != i
+  then
+    let i1 ← obj.node_get machineStoreInst s cpu layout.node.CUR_THREAD
+    if i1 = t
+    then
+      let a1 ← machineArchInst.remote_stall a cpu
+      smp.remote_reschedule machineStoreInst machineArchInst s a1 cpu
+    else ok (s, a)
+  else ok (s, a)
+
+/-- [fl4_core::obj::{fl4_core::obj::Tcb}::is_null]:
+    Source: 'crates/fl4-core/src/obj.rs', lines 99:4-101:5
+    Visibility: public -/
+def obj.Tcb.is_null (self : obj.Tcb) : Result Bool := do
+  ok (self = 0#u64)
+
+/-- [fl4_core::vcpu::stall]:
+    Source: 'crates/fl4-core/src/vcpu.rs', lines 655:0-661:1
+    Visibility: public -/
+def vcpu.stall
+  {S : Type _} {A : Type _} (machineStoreInst : machine.Store S)
+  (machineArchInst : machine.Arch A) (s : S) (a : A) (v : Std.U64) :
+  Result (S × A)
+  := do
+  let a1 ← machineArchInst.vcpu_barrier a
+  let i ← vcpu.get machineStoreInst s v vcpu.TCB
+  let b ← obj.Tcb.is_null i
+  if b
+  then ok (s, a1)
+  else smp.remote_tcb_stall machineStoreInst machineArchInst s a1 i
+
+/-- [fl4_core::vcpu::NEXT]
+    Source: 'crates/fl4-core/src/vcpu.rs', lines 19:0-19:29
+    Visibility: public -/
+@[global_simps, irreducible] def vcpu.NEXT : Std.U64 := 20488#u64
+
+/-- [fl4_core::layout::ks::VCPU_HEAD]
+    Source: 'crates/fl4-core/src/layout.rs', lines 260:4-260:34
+    Visibility: public -/
+@[global_simps, irreducible] def layout.ks.VCPU_HEAD : Std.U64 := 80#u64
+
+/-- [fl4_core::layout::WALK_FUEL]
+    Source: 'crates/fl4-core/src/layout.rs', lines 11:0-11:36
+    Visibility: public -/
+@[global_simps, irreducible] def layout.WALK_FUEL : Std.U64 := core.num.U64.MAX
+
+/-- [fl4_core::vcpu::revoke_ports]: loop body 0:
+    Source: 'crates/fl4-core/src/vcpu.rs', lines 720:4-727:5
+    Visibility: public -/
+@[rust_loop_body]
+def vcpu.revoke_ports_loop.body
+  {S : Type _} {A : Type _} (machineStoreInst : machine.Store S)
+  (machineArchInst : machine.Arch A) (owner : Std.U64) (low : Std.U64)
+  (high : Std.U64) (s : S) (a : A) (v : Std.U64) (fuel : Std.U64) :
+  Result (ControlFlow (S × A × Std.U64 × Std.U64) (S × A))
+  := do
+  if v != 0#u64
+  then
+    if fuel > 0#u64
+    then
+      let fuel1 ← fuel - 1#u64
+      let (s1, a1) ←
+        if v = owner
+        then
+          do
+          let (s2, a2) ← vcpu.stall machineStoreInst machineArchInst s a v
+          let s3 ← vcpu.ports machineStoreInst s2 v low high true
+          ok (s3, a2)
+        else ok (s, a)
+      let v1 ← vcpu.get machineStoreInst s1 v vcpu.NEXT
+      ok (cont (s1, a1, v1, fuel1))
+    else ok (done (s, a))
+  else ok (done (s, a))
+
+/-- [fl4_core::vcpu::revoke_ports]: loop 0:
+    Source: 'crates/fl4-core/src/vcpu.rs', lines 720:4-727:5
+    Visibility: public -/
+@[rust_loop]
+def vcpu.revoke_ports_loop
+  {S : Type _} {A : Type _} (machineStoreInst : machine.Store S)
+  (machineArchInst : machine.Arch A) (s : S) (a : A) (owner : Std.U64)
+  (low : Std.U64) (high : Std.U64) (v : Std.U64) (fuel : Std.U64) :
+  Result (S × A)
+  := do
+  loop
+    (fun (s1, a1, v1, fuel1) => vcpu.revoke_ports_loop.body machineStoreInst
+      machineArchInst owner low high s1 a1 v1 fuel1)
+    (s, a, v, fuel)
+
+/-- [fl4_core::vcpu::revoke_ports]:
+    Source: 'crates/fl4-core/src/vcpu.rs', lines 713:0-728:1
+    Visibility: public -/
+def vcpu.revoke_ports
+  {S : Type _} {A : Type _} (machineStoreInst : machine.Store S)
+  (machineArchInst : machine.Arch A) (s : S) (a : A) (owner : Std.U64)
+  (low : Std.U64) (high : Std.U64) :
+  Result (S × A)
+  := do
+  if owner = 0#u64
+  then ok (s, a)
+  else
+    let a1 ← machineArchInst.vcpu_barrier a
+    let v ← obj.ks_get machineStoreInst s layout.ks.VCPU_HEAD
+    vcpu.revoke_ports_loop machineStoreInst machineArchInst s a1 owner low high
+      v layout.WALK_FUEL
+
 /-- [fl4_core::vcpu::SHADOW]
     Source: 'crates/fl4-core/src/vcpu.rs', lines 17:0-17:31
     Visibility: public -/
@@ -9287,7 +9294,7 @@ def layout.reg.MSG_INFO : Std.U64 := layout.reg.RSI
 @[global_simps, irreducible] def layout.reg.BADGE : Std.U64 := layout.reg.RDI
 
 /-- [fl4_core::vcpu::report]: loop body 0:
-    Source: 'crates/fl4-core/src/vcpu.rs', lines 1027:4-1035:5
+    Source: 'crates/fl4-core/src/vcpu.rs', lines 1035:4-1043:5
     Visibility: public -/
 @[rust_loop_body]
 def vcpu.report_loop0.body
@@ -9322,7 +9329,7 @@ def vcpu.report_loop0.body
   else ok (done s)
 
 /-- [fl4_core::vcpu::report]: loop 0:
-    Source: 'crates/fl4-core/src/vcpu.rs', lines 1027:4-1035:5
+    Source: 'crates/fl4-core/src/vcpu.rs', lines 1035:4-1043:5
     Visibility: public -/
 @[rust_loop]
 def vcpu.report_loop0
@@ -9336,7 +9343,7 @@ def vcpu.report_loop0
     (s, i)
 
 /-- [fl4_core::vcpu::report]: loop body 1:
-    Source: 'crates/fl4-core/src/vcpu.rs', lines 1058:8-1061:9
+    Source: 'crates/fl4-core/src/vcpu.rs', lines 1066:8-1069:9
     Visibility: public -/
 @[rust_loop_body]
 def vcpu.report_loop1.body
@@ -9356,7 +9363,7 @@ def vcpu.report_loop1.body
   else ok (done s)
 
 /-- [fl4_core::vcpu::report]: loop 1:
-    Source: 'crates/fl4-core/src/vcpu.rs', lines 1058:8-1061:9
+    Source: 'crates/fl4-core/src/vcpu.rs', lines 1066:8-1069:9
     Visibility: public -/
 @[rust_loop]
 def vcpu.report_loop1
@@ -9369,7 +9376,7 @@ def vcpu.report_loop1
     (s, j)
 
 /-- [fl4_core::vcpu::report]:
-    Source: 'crates/fl4-core/src/vcpu.rs', lines 1022:0-1096:1
+    Source: 'crates/fl4-core/src/vcpu.rs', lines 1030:0-1104:1
     Visibility: public -/
 def vcpu.report
   {S : Type _} {A : Type _} (machineStoreInst : machine.Store S)
@@ -12313,7 +12320,7 @@ def obj.Tcb.debug_next
   machineStoreInst.read s i1
 
 /-- [fl4_core::objects::debug_remove]:
-    Source: 'crates/fl4-core/src/objects.rs', lines 426:0-441:1
+    Source: 'crates/fl4-core/src/objects.rs', lines 427:0-442:1
     Visibility: public -/
 def objects.debug_remove
   {S : Type _} (machineStoreInst : machine.Store S) (s : S) (t : obj.Tcb) :
@@ -13198,7 +13205,7 @@ def endpoint.cancel_all_ipc
     sched.reschedule_required machineStoreInst s1
 
 /-- [fl4_core::objects::finalise_cap_object]:
-    Source: 'crates/fl4-core/src/objects.rs', lines 269:0-402:1
+    Source: 'crates/fl4-core/src/objects.rs', lines 269:0-403:1
     Visibility: public -/
 def objects.finalise_cap_object
   {S : Type _} {A : Type _} (machineStoreInst : machine.Store S)
@@ -13399,10 +13406,12 @@ def objects.finalise_cap_object
     else ok ((capability.Cap.Null, capability.Cap.Null), s, a)
   | capability.Cap.IoPortControl =>
     ok ((capability.Cap.Null, capability.Cap.Null), s, a)
-  | capability.Cap.IoPort _ _ _ =>
+  | capability.Cap.IoPort first last owner =>
+    let (s1, a1) ←
+      vcpu.revoke_ports machineStoreInst machineArchInst s a owner first last
     if fin
-    then ok ((capability.Cap.Null, c), s, a)
-    else ok ((capability.Cap.Null, capability.Cap.Null), s, a)
+    then ok ((capability.Cap.Null, c), s1, a1)
+    else ok ((capability.Cap.Null, capability.Cap.Null), s1, a1)
 
 /-- [fl4_core::interrupt::irq_slot]:
     Source: 'crates/fl4-core/src/interrupt.rs', lines 30:0-32:1
@@ -21322,7 +21331,7 @@ def objects.mask_rights
   capability.mask_cap_rights r c
 
 /-- [fl4_core::objects::init_fpu]:
-    Source: 'crates/fl4-core/src/objects.rs', lines 445:0-449:1 -/
+    Source: 'crates/fl4-core/src/objects.rs', lines 446:0-450:1 -/
 def objects.init_fpu
   {S : Type _} (machineStoreInst : machine.Store S) (s : S) (t : obj.Tcb) :
   Result S
@@ -22395,7 +22404,7 @@ def vcpu.init
       1974748653749254#u64
 
 /-- [fl4_core::objects::name_byte]:
-    Source: 'crates/fl4-core/src/objects.rs', lines 513:0-515:1 -/
+    Source: 'crates/fl4-core/src/objects.rs', lines 514:0-516:1 -/
 def objects.name_byte
   {S : Type _} (machineStoreInst : machine.Store S) (s : S) (t : obj.Tcb)
   (i : Std.U64) :
@@ -22413,20 +22422,20 @@ def objects.name_byte
   ok (i9 &&& 255#u64)
 
 /-- [fl4_core::objects::CHILD_PREFIX_LEN]
-    Source: 'crates/fl4-core/src/objects.rs', lines 508:0-508:33 -/
+    Source: 'crates/fl4-core/src/objects.rs', lines 509:0-509:33 -/
 @[global_simps, irreducible] def objects.CHILD_PREFIX_LEN : Std.U64 := 11#u64
 
 /-- [fl4_core::objects::CHILD_PREFIX1]
-    Source: 'crates/fl4-core/src/objects.rs', lines 507:0-507:39 -/
+    Source: 'crates/fl4-core/src/objects.rs', lines 508:0-508:39 -/
 @[global_simps, irreducible] def objects.CHILD_PREFIX1 : Std.U64 := 2564154#u64
 
 /-- [fl4_core::objects::CHILD_PREFIX0]
-    Source: 'crates/fl4-core/src/objects.rs', lines 506:0-506:49 -/
+    Source: 'crates/fl4-core/src/objects.rs', lines 507:0-507:49 -/
 @[global_simps, irreducible]
 def objects.CHILD_PREFIX0 : Std.U64 := 7381153929971198051#u64
 
 /-- [fl4_core::objects::child_name_byte]:
-    Source: 'crates/fl4-core/src/objects.rs', lines 518:0-530:1 -/
+    Source: 'crates/fl4-core/src/objects.rs', lines 519:0-531:1 -/
 def objects.child_name_byte
   {S : Type _} (machineStoreInst : machine.Store S) (s : S) (parent : obj.Tcb)
   (len : Std.U64) (i : Std.U64) :
@@ -22453,11 +22462,11 @@ def objects.child_name_byte
            else ok 0#u64
 
 /-- [fl4_core::objects::CHILD_NAME_MAX]
-    Source: 'crates/fl4-core/src/objects.rs', lines 511:0-511:31 -/
+    Source: 'crates/fl4-core/src/objects.rs', lines 512:0-512:31 -/
 @[global_simps, irreducible] def objects.CHILD_NAME_MAX : Std.U64 := 51#u64
 
 /-- [fl4_core::objects::set_child_name]: loop body 0:
-    Source: 'crates/fl4-core/src/objects.rs', lines 539:4-541:5 -/
+    Source: 'crates/fl4-core/src/objects.rs', lines 540:4-542:5 -/
 @[rust_loop_body]
 def objects.set_child_name_loop0.body
   {S : Type _} (machineStoreInst : machine.Store S) (s : S) (parent : obj.Tcb)
@@ -22474,7 +22483,7 @@ def objects.set_child_name_loop0.body
   else ok (done len)
 
 /-- [fl4_core::objects::set_child_name]: loop 0:
-    Source: 'crates/fl4-core/src/objects.rs', lines 539:4-541:5 -/
+    Source: 'crates/fl4-core/src/objects.rs', lines 540:4-542:5 -/
 @[rust_loop]
 def objects.set_child_name_loop0
   {S : Type _} (machineStoreInst : machine.Store S) (s : S) (parent : obj.Tcb)
@@ -22487,7 +22496,7 @@ def objects.set_child_name_loop0
     len
 
 /-- [fl4_core::objects::set_child_name]: loop body 2:
-    Source: 'crates/fl4-core/src/objects.rs', lines 546:8-549:9 -/
+    Source: 'crates/fl4-core/src/objects.rs', lines 547:8-550:9 -/
 @[rust_loop_body]
 def objects.set_child_name_loop1_loop0.body
   {S : Type _} (machineStoreInst : machine.Store S) (s : S) (parent : obj.Tcb)
@@ -22508,7 +22517,7 @@ def objects.set_child_name_loop1_loop0.body
   else ok (done v)
 
 /-- [fl4_core::objects::set_child_name]: loop 2:
-    Source: 'crates/fl4-core/src/objects.rs', lines 546:8-549:9 -/
+    Source: 'crates/fl4-core/src/objects.rs', lines 547:8-550:9 -/
 @[rust_loop]
 def objects.set_child_name_loop1_loop0
   {S : Type _} (machineStoreInst : machine.Store S) (s : S) (parent : obj.Tcb)
@@ -22521,7 +22530,7 @@ def objects.set_child_name_loop1_loop0
     (v, k)
 
 /-- [fl4_core::objects::set_child_name]: loop body 1:
-    Source: 'crates/fl4-core/src/objects.rs', lines 543:4-552:5 -/
+    Source: 'crates/fl4-core/src/objects.rs', lines 544:4-553:5 -/
 @[rust_loop_body]
 def objects.set_child_name_loop1.body
   {S : Type _} (machineStoreInst : machine.Store S) (child : obj.Tcb)
@@ -22542,7 +22551,7 @@ def objects.set_child_name_loop1.body
   else ok (done s)
 
 /-- [fl4_core::objects::set_child_name]: loop 1:
-    Source: 'crates/fl4-core/src/objects.rs', lines 543:4-552:5 -/
+    Source: 'crates/fl4-core/src/objects.rs', lines 544:4-553:5 -/
 @[rust_loop]
 def objects.set_child_name_loop1
   {S : Type _} (machineStoreInst : machine.Store S) (s : S) (child : obj.Tcb)
@@ -22555,7 +22564,7 @@ def objects.set_child_name_loop1
     (s, w)
 
 /-- [fl4_core::objects::set_child_name]:
-    Source: 'crates/fl4-core/src/objects.rs', lines 534:0-553:1 -/
+    Source: 'crates/fl4-core/src/objects.rs', lines 535:0-554:1 -/
 def objects.set_child_name
   {S : Type _} (machineStoreInst : machine.Store S) (s : S) (child : obj.Tcb)
   (parent : obj.Tcb) :
@@ -22572,7 +22581,7 @@ def objects.set_child_name
   else ok s
 
 /-- [fl4_core::objects::create_object]:
-    Source: 'crates/fl4-core/src/objects.rs', lines 452:0-503:1
+    Source: 'crates/fl4-core/src/objects.rs', lines 453:0-504:1
     Visibility: public -/
 def objects.create_object
   {S : Type _} {A : Type _} (machineStoreInst : machine.Store S)
@@ -22826,7 +22835,7 @@ def objects.create_object
                                   a)
 
 /-- [fl4_core::objects::create_new_objects]: loop body 0:
-    Source: 'crates/fl4-core/src/objects.rs', lines 574:4-578:5
+    Source: 'crates/fl4-core/src/objects.rs', lines 575:4-579:5
     Visibility: public -/
 @[rust_loop_body]
 def objects.create_new_objects_loop.body
@@ -22853,7 +22862,7 @@ def objects.create_new_objects_loop.body
   else ok (done (s, a))
 
 /-- [fl4_core::objects::create_new_objects]: loop 0:
-    Source: 'crates/fl4-core/src/objects.rs', lines 574:4-578:5
+    Source: 'crates/fl4-core/src/objects.rs', lines 575:4-579:5
     Visibility: public -/
 @[rust_loop]
 def objects.create_new_objects_loop
@@ -22871,7 +22880,7 @@ def objects.create_new_objects_loop
     (s, a, i)
 
 /-- [fl4_core::objects::create_new_objects]:
-    Source: 'crates/fl4-core/src/objects.rs', lines 557:0-579:1
+    Source: 'crates/fl4-core/src/objects.rs', lines 558:0-580:1
     Visibility: public -/
 def objects.create_new_objects
   {S : Type _} {A : Type _} (machineStoreInst : machine.Store S)
@@ -26925,20 +26934,13 @@ def vspace.decode
                   let s1 ←
                     sched.set_thread_state machineStoreInst s ct
                       sched.TS_RESTART
-                  let i2 ← lift (ptr1 &&& 1#u64)
-                  let assigned ←
-                    if i2 != 0#u64
-                    then
-                      do
-                      let i3 ← lift (~~~ 1#u64)
-                      let i4 ← lift (ptr1 &&& i3)
-                      ok (capability.Cap.Ept i4 0#u64 true asid 0#u64)
-                    else ok (capability.Cap.Pml4 ptr1 true asid)
-                  let s2 ← obj.Slot.set_cap machineStoreInst x s1 assigned
-                  let i3 ← lift (asid &&& 511#u64)
-                  let i4 ← i3 * 8#u64
-                  let i5 ← lift (core.num.U64.wrapping_add pool i4)
-                  let s3 ← machineStoreInst.write s2 i5 ptr1
+                  let s2 ←
+                    obj.Slot.set_cap machineStoreInst x s1 (capability.Cap.Pml4
+                      ptr1 true asid)
+                  let i2 ← lift (asid &&& 511#u64)
+                  let i3 ← i2 * 8#u64
+                  let i4 ← lift (core.num.U64.wrapping_add pool i3)
+                  let s3 ← machineStoreInst.write s2 i4 ptr1
                   ok (core.result.Result.Ok (), s3, a)
         | capability.Cap.Vcpu _ =>
           let r ← error.invalid_cap Unit 1#u64
@@ -26974,20 +26976,15 @@ def vspace.decode
                     let s1 ←
                       sched.set_thread_state machineStoreInst s ct
                         sched.TS_RESTART
-                    let i3 ← lift (vroot &&& 1#u64)
-                    let assigned ←
-                      if i3 != 0#u64
-                      then
-                        do
-                        let i4 ← lift (~~~ 1#u64)
-                        let i5 ← lift (vroot &&& i4)
-                        ok (capability.Cap.Ept i5 0#u64 true asid 0#u64)
-                      else ok (capability.Cap.Pml4 vroot true asid)
-                    let s2 ← obj.Slot.set_cap machineStoreInst x s1 assigned
-                    let i4 ← lift (asid &&& 511#u64)
-                    let i5 ← i4 * 8#u64
-                    let i6 ← lift (core.num.U64.wrapping_add pool i5)
-                    let s3 ← machineStoreInst.write s2 i6 vroot
+                    let i3 ← lift (~~~ 1#u64)
+                    let i4 ← lift (vroot &&& i3)
+                    let s2 ←
+                      obj.Slot.set_cap machineStoreInst x s1
+                        (capability.Cap.Ept i4 0#u64 true asid 0#u64)
+                    let i5 ← lift (asid &&& 511#u64)
+                    let i6 ← i5 * 8#u64
+                    let i7 ← lift (core.num.U64.wrapping_add pool i6)
+                    let s3 ← machineStoreInst.write s2 i7 vroot
                     ok (core.result.Result.Ok (), s3, a)
           | _ => let r ← error.invalid_cap Unit 1#u64
                  ok (r, s, a)
@@ -27137,7 +27134,7 @@ def vcpu.READ_FIELDS : Array Std.U64 84#usize :=
 @[global_simps, irreducible] def vcpu.MSRS : Std.U64 := 20864#u64
 
 /-- [fl4_core::vcpu::msr_addr::{impl core::ops::function::FnOnce<(u64,), u64> for fl4_core::vcpu::msr_addr::{closure#1}<'_0>}::call_once]:
-    Source: 'crates/fl4-core/src/vcpu.rs', lines 753:20-753:76 -/
+    Source: 'crates/fl4-core/src/vcpu.rs', lines 761:20-761:76 -/
 def vcpu.msr_addr.closure_1.Insts.CoreOpsFunctionFnOnceTupleU64U64.call_once
   (c : vcpu.msr_addr.closure_1) (tupled_args : Std.U64) : Result Std.U64 := do
   let i ← lift (core.num.U64.wrapping_add c vcpu.MSRS)
@@ -27145,7 +27142,7 @@ def vcpu.msr_addr.closure_1.Insts.CoreOpsFunctionFnOnceTupleU64U64.call_once
   ok (core.num.U64.wrapping_add i i1)
 
 /-- Trait implementation: [fl4_core::vcpu::msr_addr::{impl core::ops::function::FnOnce<(u64,), u64> for fl4_core::vcpu::msr_addr::{closure#1}<'_0>}]
-    Source: 'crates/fl4-core/src/vcpu.rs', lines 753:20-753:76 -/
+    Source: 'crates/fl4-core/src/vcpu.rs', lines 761:20-761:76 -/
 @[reducible]
 def vcpu.msr_addr.closure_1.Insts.CoreOpsFunctionFnOnceTupleU64U64 :
   core.ops.function.FnOnce vcpu.msr_addr.closure_1 Std.U64 Std.U64 := {
@@ -27154,13 +27151,13 @@ def vcpu.msr_addr.closure_1.Insts.CoreOpsFunctionFnOnceTupleU64U64 :
 }
 
 /-- [fl4_core::vcpu::msr_addr::{impl core::ops::function::FnOnce<(u64,), u64> for fl4_core::vcpu::msr_addr::{closure}<'_0>}::call_once]:
-    Source: 'crates/fl4-core/src/vcpu.rs', lines 748:30-748:55 -/
+    Source: 'crates/fl4-core/src/vcpu.rs', lines 756:30-756:55 -/
 def vcpu.msr_addr.closure.Insts.CoreOpsFunctionFnOnceTupleU64U64.call_once
   (c : vcpu.msr_addr.closure) (tupled_args : Std.U64) : Result Std.U64 := do
   ok (core.num.U64.wrapping_add c tupled_args)
 
 /-- Trait implementation: [fl4_core::vcpu::msr_addr::{impl core::ops::function::FnOnce<(u64,), u64> for fl4_core::vcpu::msr_addr::{closure}<'_0>}]
-    Source: 'crates/fl4-core/src/vcpu.rs', lines 748:30-748:55 -/
+    Source: 'crates/fl4-core/src/vcpu.rs', lines 756:30-756:55 -/
 @[reducible]
 def vcpu.msr_addr.closure.Insts.CoreOpsFunctionFnOnceTupleU64U64 :
   core.ops.function.FnOnce vcpu.msr_addr.closure Std.U64 Std.U64 := {
@@ -27199,7 +27196,7 @@ def vcpu.svm.LSTAR : Result Std.U64 := vcpu.svm.SAVE + 520#u64
 def vcpu.svm.STAR : Result Std.U64 := vcpu.svm.SAVE + 512#u64
 
 /-- [fl4_core::vcpu::svm_msr]:
-    Source: 'crates/fl4-core/src/vcpu.rs', lines 732:0-742:1 -/
+    Source: 'crates/fl4-core/src/vcpu.rs', lines 740:0-750:1 -/
 def vcpu.svm_msr (f : Std.U64) : Result (Option Std.U64) := do
   match f with
   | 3221225601#uscalar => let i ← vcpu.svm.STAR
@@ -27217,7 +27214,7 @@ def vcpu.svm_msr (f : Std.U64) : Result (Option Std.U64) := do
   | _ => ok none
 
 /-- [fl4_core::vcpu::msr_slot]:
-    Source: 'crates/fl4-core/src/vcpu.rs', lines 722:0-731:1 -/
+    Source: 'crates/fl4-core/src/vcpu.rs', lines 730:0-739:1 -/
 def vcpu.msr_slot (f : Std.U64) : Result (Option Std.U64) := do
   match f with
   | 3221225601#uscalar => ok (some 0#u64)
@@ -27228,7 +27225,7 @@ def vcpu.msr_slot (f : Std.U64) : Result (Option Std.U64) := do
   | _ => ok none
 
 /-- [fl4_core::vcpu::msr_addr]:
-    Source: 'crates/fl4-core/src/vcpu.rs', lines 743:0-754:1 -/
+    Source: 'crates/fl4-core/src/vcpu.rs', lines 751:0-762:1 -/
 def vcpu.msr_addr
   (v : Std.U64) (f : Std.U64) (amd : Bool) : Result (Option Std.U64) := do
   if f = 4294967294#u64
@@ -28621,7 +28618,7 @@ def vcpu.valid_xcr0 (x : Std.U64) (host : Std.U64) : Result Bool := do
 def vcpu.svm.RAX : Result Std.U64 := vcpu.svm.SAVE + 504#u64
 
 /-- [fl4_core::vcpu::decode]: loop body 0:
-    Source: 'crates/fl4-core/src/vcpu.rs', lines 801:8-805:9
+    Source: 'crates/fl4-core/src/vcpu.rs', lines 809:8-813:9
     Visibility: public -/
 @[rust_loop_body]
 def vcpu.decode_loop0.body
@@ -28640,7 +28637,7 @@ def vcpu.decode_loop0.body
   else ok (done s)
 
 /-- [fl4_core::vcpu::decode]: loop 0:
-    Source: 'crates/fl4-core/src/vcpu.rs', lines 801:8-805:9
+    Source: 'crates/fl4-core/src/vcpu.rs', lines 809:8-813:9
     Visibility: public -/
 @[rust_loop]
 def vcpu.decode_loop0
@@ -28653,7 +28650,7 @@ def vcpu.decode_loop0
     (s, i)
 
 /-- [fl4_core::vcpu::decode]: loop body 1:
-    Source: 'crates/fl4-core/src/vcpu.rs', lines 869:16-880:17
+    Source: 'crates/fl4-core/src/vcpu.rs', lines 877:16-888:17
     Visibility: public -/
 @[rust_loop_body]
 def vcpu.decode_loop1.body
@@ -28682,7 +28679,7 @@ def vcpu.decode_loop1.body
   else ok (done (s, n))
 
 /-- [fl4_core::vcpu::decode]: loop 1:
-    Source: 'crates/fl4-core/src/vcpu.rs', lines 869:16-880:17
+    Source: 'crates/fl4-core/src/vcpu.rs', lines 877:16-888:17
     Visibility: public -/
 @[rust_loop]
 def vcpu.decode_loop1
@@ -28697,7 +28694,7 @@ def vcpu.decode_loop1
     (s, i, n)
 
 /-- [fl4_core::vcpu::decode]: loop body 2:
-    Source: 'crates/fl4-core/src/vcpu.rs', lines 869:16-880:17
+    Source: 'crates/fl4-core/src/vcpu.rs', lines 877:16-888:17
     Visibility: public -/
 @[rust_loop_body]
 def vcpu.decode_loop2.body
@@ -28726,7 +28723,7 @@ def vcpu.decode_loop2.body
   else ok (done (s, n))
 
 /-- [fl4_core::vcpu::decode]: loop 2:
-    Source: 'crates/fl4-core/src/vcpu.rs', lines 869:16-880:17
+    Source: 'crates/fl4-core/src/vcpu.rs', lines 877:16-888:17
     Visibility: public -/
 @[rust_loop]
 def vcpu.decode_loop2
@@ -28741,7 +28738,7 @@ def vcpu.decode_loop2
     (s, i, n)
 
 /-- [fl4_core::vcpu::decode]: loop body 3:
-    Source: 'crates/fl4-core/src/vcpu.rs', lines 944:20-951:21
+    Source: 'crates/fl4-core/src/vcpu.rs', lines 952:20-959:21
     Visibility: public -/
 @[rust_loop_body]
 def vcpu.decode_loop3.body
@@ -28769,7 +28766,7 @@ def vcpu.decode_loop3.body
   else ok (done (s, a))
 
 /-- [fl4_core::vcpu::decode]: loop 3:
-    Source: 'crates/fl4-core/src/vcpu.rs', lines 944:20-951:21
+    Source: 'crates/fl4-core/src/vcpu.rs', lines 952:20-959:21
     Visibility: public -/
 @[rust_loop]
 def vcpu.decode_loop3
@@ -28784,7 +28781,7 @@ def vcpu.decode_loop3
     (s, a, old, fuel)
 
 /-- [fl4_core::vcpu::decode]: loop body 4:
-    Source: 'crates/fl4-core/src/vcpu.rs', lines 944:20-951:21
+    Source: 'crates/fl4-core/src/vcpu.rs', lines 952:20-959:21
     Visibility: public -/
 @[rust_loop_body]
 def vcpu.decode_loop4.body
@@ -28812,7 +28809,7 @@ def vcpu.decode_loop4.body
   else ok (done (s, a))
 
 /-- [fl4_core::vcpu::decode]: loop 4:
-    Source: 'crates/fl4-core/src/vcpu.rs', lines 944:20-951:21
+    Source: 'crates/fl4-core/src/vcpu.rs', lines 952:20-959:21
     Visibility: public -/
 @[rust_loop]
 def vcpu.decode_loop4
@@ -28827,7 +28824,7 @@ def vcpu.decode_loop4
     (s, a, old, fuel)
 
 /-- [fl4_core::vcpu::decode]:
-    Source: 'crates/fl4-core/src/vcpu.rs', lines 757:0-970:1
+    Source: 'crates/fl4-core/src/vcpu.rs', lines 765:0-978:1
     Visibility: public -/
 def vcpu.decode
   {S : Type _} {A : Type _} (machineStoreInst : machine.Store S)
@@ -37887,7 +37884,7 @@ def syscall.after_invocation
     ok (false, s2, a3)
 
 /-- [fl4_core::vcpu::check]:
-    Source: 'crates/fl4-core/src/vcpu.rs', lines 1003:0-1020:1
+    Source: 'crates/fl4-core/src/vcpu.rs', lines 1011:0-1028:1
     Visibility: public -/
 def vcpu.check
   {S : Type _} {A : Type _} (machineStoreInst : machine.Store S)
@@ -37956,7 +37953,7 @@ def vcpu.check
         else ok (s, a)
 
 /-- [fl4_core::vcpu::enter]:
-    Source: 'crates/fl4-core/src/vcpu.rs', lines 973:0-1001:1
+    Source: 'crates/fl4-core/src/vcpu.rs', lines 981:0-1009:1
     Visibility: public -/
 def vcpu.enter
   {S : Type _} {A : Type _} (machineStoreInst : machine.Store S)

@@ -23,6 +23,8 @@ open fl4_core Fl4Proofs.P1 Fl4Proofs.P3.Notif Fl4Proofs.P3.Endp
 
 noncomputable section
 
+attribute [local instance_reducible] UScalar.cMax UScalar.rMax U64.rMax
+
 @[step] theorem layout.ks.ASID_TABLE.spec : layout.ks.ASID_TABLE ⦃ v => v = 288000#u64 ⦄ := by
   unfold layout.ks.ASID_TABLE layout.MAX_NODES fl4_abi.config.MAX_NUM_NODES
   simp only [show ¬ ((64#u64 : U64) > 64#u64) by decide, ↓reduceIte]
@@ -34,6 +36,28 @@ def atA (ksb hi : U64) : U64 :=
 
 /-- The address of word `lo` of the ASID pool at `p`. -/
 def peA (p lo : U64) : U64 := core.num.U64.wrapping_add p (core.num.U64.wrapping_mul lo 8#u64)
+
+/-- The native view excludes ASID entries tagged as nested roots. -/
+def nativeRef (w : U64) : Option Fl4Spec.ObjRef :=
+  if w &&& 1#u64 = 0#u64 then optRef w else none
+
+@[simp] theorem nativeRef_zero : nativeRef 0#u64 = none := by
+  simp [nativeRef, optRef]
+
+theorem tag_bv_iff (w : U64) : w.bv &&& 1#64 = 0#64 ↔ w &&& 1#u64 = 0#u64 := by
+  change (w &&& 1#u64).bv = (0#u64).bv ↔ w &&& 1#u64 = 0#u64
+  exact (UScalar.eq_equiv_bv_eq _ _).symm
+
+@[simp] theorem nativeAsidRoot_optRef (w : U64) :
+    Fl4Spec.nativeAsidRoot (optRef w) = nativeRef w := by
+  by_cases h0 : w = 0#u64
+  · subst w; simp [Fl4Spec.nativeAsidRoot, nativeRef, optRef]
+  · simp only [optRef, if_neg h0, Fl4Spec.nativeAsidRoot, nativeRef]
+    change (if w.bv &&& 1#64 = 0#64 then some w.bv else none) =
+      (if w &&& 1#u64 = 0#u64 then some w.bv else none)
+    by_cases ht : w &&& 1#u64 = 0#u64
+    · rw [if_pos ((tag_bv_iff w).mpr ht), if_pos ht]
+    · rw [if_neg (fun h => ht ((tag_bv_iff w).mp h)), if_neg ht]
 
 /-- The ASID table and pools (see the module docstring). -/
 structure VsRel (P : Set U64) (m : U64 → U64) (ksb : U64) (σ : Fl4Spec.State Unit) : Prop where
@@ -127,7 +151,7 @@ def fvSpec (σ : State Unit) (asid : Asid) : Except LookupFailure ObjRef :=
   match σ.archState.x64AsidTable (asidHighBitsOf asid) with
   | none => .error .invalidRoot
   | some p => match σ.kheap p with
-    | some (.archObj (.asidPool f)) => match f (asidLowBitsOf asid) with
+    | some (.archObj (.asidPool f)) => match nativeAsidRoot (f (asidLowBitsOf asid)) with
       | some r => .ok r
       | none => .error .invalidRoot
     | _ => .error .invalidRoot
@@ -147,21 +171,25 @@ theorem findVspaceForAsid_some {σ : State Unit} {asid : Asid} (h0 : asid > 0) {
     (ht : σ.archState.x64AsidTable (asidHighBitsOf asid) = some p) {f : AsidLowIndex → Option ObjRef}
     (hk : σ.kheap p = some (.archObj (.asidPool f))) :
     ExceptT.run (findVspaceForAsid (Z := Unit) asid) σ =
-      ({((match f (asidLowBitsOf asid) with | some r => .ok r | none => .error .invalidRoot), σ)}, False) := by
+      ({((match nativeAsidRoot (f (asidLowBitsOf asid)) with | some r => .ok r | none => .error .invalidRoot), σ)}, False) := by
   unfold findVspaceForAsid NonDetE.assertE
   rw [runE_bind_ok (runE_liftE (assert_true' h0 σ)), runE_bind_ok (runE_liftE (show NonDet.gets _ σ = _ from rfl))]
   simp only [ht]
   rw [runE_bind_ok (show ExceptT.run (NonDetE.returnOk (some p)) σ = _ from rfl)]
   dsimp only
   rw [runE_bind_ok (runE_liftE (getAsidPool_eq hk))]
-  rw [runE_bind_ok (show ExceptT.run (NonDetE.returnOk (f (asidLowBitsOf asid))) σ = _ from rfl)]
-  cases f (asidLowBitsOf asid) <;> rfl
+  rw [runE_bind_ok (show ExceptT.run (NonDetE.returnOk (nativeAsidRoot (f (asidLowBitsOf asid)))) σ = _ from rfl)]
+  cases nativeAsidRoot (f (asidLowBitsOf asid)) <;> rfl
 
 end Spec
 
 /-- FL4's lookup result as the spec's. -/
 def fvRes : core.result.Result U64 error.LookupFault → Except Fl4Spec.LookupFailure Fl4Spec.ObjRef
   | .Ok w => .ok w.bv
+  | .Err _ => .error .invalidRoot
+
+def nativeFvRes : core.result.Result U64 error.LookupFault → Except Fl4Spec.LookupFailure Fl4Spec.ObjRef
+  | .Ok w => if w &&& 1#u64 = 0#u64 then .ok w.bv else .error .invalidRoot
   | .Err _ => .error .invalidRoot
 
 section
@@ -172,15 +200,15 @@ theorem optRef_eq_none {w : U64} : optRef w = none ↔ w = 0#u64 := by
 
 /-- **`find_vspace_for_asid` refines l4v `find_vspace_for_asid`** (for a
 non-zero ASID, which l4v asserts). -/
-theorem find_vspace_for_asid_rel {P : Set U64} (s : S) (σ : Fl4Spec.State Unit) (hR : VsRel P (L.mem s) (L.ksb s) σ)
+theorem find_asid_native_rel {P : Set U64} (s : S) (σ : Fl4Spec.State Unit) (hR : VsRel P (L.mem s) (L.ksb s) σ)
     (asid : U64) (h0 : asid ≠ 0#u64) :
-    vspace.find_vspace_for_asid st s asid ⦃ r =>
-      ExceptT.run (Fl4Spec.findVspaceForAsid (Z := Unit) asid.bv) σ = ({(fvRes r, σ)}, False) ⦄ := by
+    vspace.find_asid st s asid ⦃ r =>
+      ExceptT.run (Fl4Spec.findVspaceForAsid (Z := Unit) asid.bv) σ = ({(nativeFvRes r, σ)}, False) ⦄ := by
   have hpos : asid.bv > 0 := by
     have : asid.val ≠ 0 := fun h => h0 (UScalar.eq_of_val_eq (by simpa using h))
     show 0 < asid.bv.toNat
     exact Nat.pos_of_ne_zero this
-  unfold vspace.find_vspace_for_asid
+  unfold vspace.find_asid
   have hL : vspace.ASID_LOW_BITS = 9#u64 := by unfold vspace.ASID_LOW_BITS; rfl
   rw [hL]
   step as ⟨i, hi⟩
@@ -206,12 +234,32 @@ theorem find_vspace_for_asid_rel {P : Set U64} (s : S) (σ : Fl4Spec.State Unit)
     apply ok_bind_spec
     apply ok_bind_spec
     step as ⟨root, hroot⟩
-    rw [hsp, hfe]
+    rw [hsp, hfe, nativeAsidRoot_optRef]
     have hra : root = L.mem s (peA (L.mem s (atA (L.ksb s) (i &&& 2047#u64))) (asid &&& 511#u64)) := hroot
     subst hra
     by_cases h0 : L.mem s (peA (L.mem s (atA (L.ksb s) (i &&& 2047#u64))) (asid &&& 511#u64)) = 0#u64
-    · simp only [h0, ↓reduceIte, WP.spec_ok, optRef_zero]; rfl
-    · simp only [h0, ↓reduceIte, WP.spec_ok, optRef]; rfl
+    · simp only [h0, ↓reduceIte, WP.spec_ok, nativeRef_zero]; rfl
+    · simp only [h0, ↓reduceIte, WP.spec_ok, nativeRef, optRef, nativeFvRes]
+      split_ifs <;> rfl
+
+
+/-- Native lookup rejects a nested root even when its ASID is allocated. -/
+theorem find_vspace_for_asid_rel {P : Set U64} (s : S) (σ : Fl4Spec.State Unit)
+    (hR : VsRel P (L.mem s) (L.ksb s) σ) (asid : U64) (h0 : asid ≠ 0#u64) :
+    vspace.find_vspace_for_asid st s asid ⦃ r =>
+      ExceptT.run (Fl4Spec.findVspaceForAsid (Z := Unit) asid.bv) σ = ({(fvRes r, σ)}, False) ⦄ := by
+  unfold vspace.find_vspace_for_asid
+  refine WP.spec_bind (find_asid_native_rel s σ hR asid h0) ?_
+  intro r hr
+  cases r with
+  | Err e =>
+    simpa only [core.result.Result.Insts.CoreOpsTry.branch,
+      core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual,
+      core.convert.FromSame, core.convert.FromSame.from, lift, bind_tc_ok, bind_ok, WP.spec_ok, fvRes, nativeFvRes] using hr
+  | Ok w =>
+    simp only [core.result.Result.Insts.CoreOpsTry.branch, lift, bind_ok]
+    by_cases htag : w &&& 1#u64 = 0#u64 <;>
+      simpa [htag, nativeFvRes, fvRes] using hr
 
 end
 

@@ -221,26 +221,27 @@ theorem sched.set_priority.all (s : S) (t : obj.Tcb) (prio : U64) (Q : U64 → U
   split
   · exact running_bx s t prio Q R h ht hv (Or.inl ‹_›) hcur hbcur hacur hB hX hSg hS
   · split
-    · exact running_bx s t prio Q R h ht hv (Or.inr ‹_›) hcur hbcur hacur hB hX hSg hS
-    · have hnr : ¬ Runnable (L.mem s (stA t)) := by rintro (e | e) <;> contradiction
-      have hq0 := notQ_of_not_runnable h ht hnr
-      have fe := fun (s : S) ep xs hT hE hq hm => endpoint.reorder_ep.foot (st := st) (T := T) s ep t xs hT hE hq hm
-      have fn := fun (s : S) ep xs hT hE hq hm =>
-        notification.reorder_ntfn.foot (st := st) (T := T) s ep t xs hT hE hq hm
-      split
-      · exact blocked_bx s t prio Q R h ht hv hq0 (Or.inr (Or.inl ‹_›)) hB hX hSg hS _ fe
-      · split
-        · exact blocked_bx s t prio Q R h ht hv hq0 (Or.inl ‹_›) hB hX hSg hS _ fe
+    · exact running_bx s t prio Q R h ht hv (Or.inr (Or.inl ‹_›)) hcur hbcur hacur hB hX hSg hS
+    · split
+      · exact running_bx s t prio Q R h ht hv (Or.inr (Or.inr ‹_›)) hcur hbcur hacur hB hX hSg hS
+      · have hnr : ¬ Runnable (L.mem s (stA t)) := by rintro (e | e | e) <;> contradiction
+        have hq0 := notQ_of_not_runnable h ht hnr
+        have fe := fun (s : S) ep xs hT hE hq hm => endpoint.reorder_ep.foot (st := st) (T := T) s ep t xs hT hE hq hm
+        have fn := fun (s : S) ep xs hT hE hq hm =>
+          notification.reorder_ntfn.foot (st := st) (T := T) s ep t xs hT hE hq hm
+        split
+        · exact blocked_bx s t prio Q R h ht hv hq0 (Or.inr (Or.inl ‹_›)) hB hX hSg hS _ fe
         · split
-          · exact blocked_bx s t prio Q R h ht hv hq0 (Or.inr (Or.inr ‹_›)) hB hX hSg hS _ fn
-          · step as ⟨s1, s1_post⟩
-            subst s1_post
-            obtain ⟨b1, b2⟩ := bx_field (K := 3448#u64) (v := prio) h hB hX hSg.sub ht (by simp) (by simp) (by simp) (by simp)
-            exact ⟨b1, b2, SCsOK.field (K := 3448#u64) h hS hX ht (by simp) (by simp) (by simp),
-              ⟨hSg.sub, fun b hb => by rw [L.ksb_wr]; exact hSg.ks b hb, fun o h1 h2 => by rw [L.ksb_wr]; exact hSg.ksΩ o h1 h2⟩,
-              PFr.of_fr (fr_field (K := 3448#u64) h hSg ht (by simp) (by simp) (by simp))
-                (Or.inl (act_wr_field (h.nodes _ h.cur) ht (h.tcbs t ht) rfl (by simp) (by simp)))⟩
-
+          · exact blocked_bx s t prio Q R h ht hv hq0 (Or.inl ‹_›) hB hX hSg hS _ fe
+          · split
+            · exact blocked_bx s t prio Q R h ht hv hq0 (Or.inr (Or.inr ‹_›)) hB hX hSg hS _ fn
+            · step as ⟨s1, s1_post⟩
+              subst s1_post
+              obtain ⟨b1, b2⟩ := bx_field (K := 3448#u64) (v := prio) h hB hX hSg.sub ht (by simp) (by simp) (by simp) (by simp)
+              exact ⟨b1, b2, SCsOK.field (K := 3448#u64) h hS hX ht (by simp) (by simp) (by simp),
+                ⟨hSg.sub, fun b hb => by rw [L.ksb_wr]; exact hSg.ks b hb, fun o h1 h2 => by rw [L.ksb_wr]; exact hSg.ksΩ o h1 h2⟩,
+                PFr.of_fr (fr_field (K := 3448#u64) h hSg ht (by simp) (by simp) (by simp))
+                  (Or.inl (act_wr_field (h.nodes _ h.cur) ht (h.tcbs t ht) rfl (by simp) (by simp)))⟩
 end
 
 end Fl4Proofs.P1

@@ -86,25 +86,25 @@ theorem ioport_decode_refinesM (th : TypedHeap) (hP : Placed th) (s : S) (ar : A
     (hcur : σ.curThread = ct.bv) (htcb : th ct = some .tcb)
     (hact : OutsideObjects th (L.nodeAt s (L.cpu s) layout.node.SCHED_ACTION))
     (first last : U64) (hfl : first.val ≤ last.val) (hl16 : last.val < 65536) (call : Bool)
-    (hcall : 61 ≤ lbl.val ∧ lbl.val ≤ 63 → call = false)
+    (hcall : 64 ≤ lbl.val ∧ lbl.val ≤ 66 → call = false)
     (hin : ∀ (a : A) p z, ∃ v a', arI.port_in a p z = ok (v, a'))
     (hout : ∀ (a : A) p z d, ∃ a', arI.port_out a p z d = ok a') :
-    ioport.decode st arI s ar lbl length (.IoPort first last) call buf ⦃ res =>
+    ioport.decode st arI s ar lbl length (.IoPort first last 0#u64) call buf ⦃ res =>
       PortCPostM (L := L) th σ (Fl4Spec.decodePortInvocation slbl (args.map UScalar.bv)
         (.ioPortCap (BitVec.ofNat 16 first.val) (BitVec.ofNat 16 last.val))) s res ⦄ := by
   obtain ⟨hlI, hlO, hlX⟩ := hlbl
-  by_cases hI : 61 ≤ lbl.val ∧ lbl.val ≤ 63
+  by_cases hI : 64 ≤ lbl.val ∧ lbl.val ≤ 66
   · rw [hcall hI]
     refine WP.spec_mono (port_in_refines arI th hP s ar σ lbl hI slbl (hlI hI) length buf ct hct args hlen hargs
       htcb hact first last hfl hl16 hin) (fun res h => PortPost.toCM hCR hFI hFR hcur htcb ?_ h)
     rintro inv s' a' ⟨port, -, rfl, -, hS⟩
     exact ⟨hS, _, _, rfl⟩
-  by_cases hO : 64 ≤ lbl.val ∧ lbl.val ≤ 66
+  by_cases hO : 67 ≤ lbl.val ∧ lbl.val ≤ 69
   · refine WP.spec_mono (port_out_refines arI th hP s ar σ lbl hO slbl (hlO hO) length buf ct hct args hlen hargs
       htcb hact first last hfl hl16 call hout) (fun res h => PortPost.toCM hCR hFI hFR hcur htcb ?_ h)
     rintro inv s' a' ⟨port, data, raw, -, -, rfl, -, hS⟩
     exact ⟨hS, _, _, rfl⟩
-  have hX : lbl.val < 61 ∨ 66 < lbl.val := by omega
+  have hX : lbl.val < 64 ∨ 69 < lbl.val := by omega
   exact WP.spec_mono (port_other_refines arI s ar σ lbl hX slbl (hlX hX) length buf ct hct _ first last call)
     (fun res h => PortPost.toCM hCR hFI hFR hcur htcb (fun _ _ _ h => h.elim) h)
 
@@ -118,12 +118,12 @@ theorem decode_invocation_ioportM (th : TypedHeap) (hP : Placed th) (s : S) (ar 
     (hcur : σ.curThread = ct.bv) (htcb : th ct = some .tcb)
     (hact : OutsideObjects th (L.nodeAt s (L.cpu s) layout.node.SCHED_ACTION))
     (first last : U64) (hfl : first.val ≤ last.val) (hl16 : last.val < 65536) (call : Bool)
-    (hcall : 61 ≤ lbl.val ∧ lbl.val ≤ 63 → call = false)
+    (hcall : 64 ≤ lbl.val ∧ lbl.val ≤ 66 → call = false)
     (hin : ∀ (a : A) p z, ∃ v a', arI.port_in a p z = ok (v, a'))
     (hout : ∀ (a : A) p z d, ∃ a', arI.port_out a p z d = ok a')
     (slot : U64) (blk don fp : Bool) (extra : Aeneas.Std.Array obj.Slot 3#usize) (ci : Fl4Spec.CapRef)
     (sl : Fl4Spec.CslotPtr) (excaps : List (Fl4Spec.Cap × Fl4Spec.CslotPtr)) (buffer : Option Fl4Spec.ObjRef) :
-    DecOKM (L := L) arI s ar σ lbl length slot (.IoPort first last) blk call don fp buf extra slbl
+    DecOKM (L := L) arI s ar σ lbl length slot (.IoPort first last 0#u64) blk call don fp buf extra slbl
       (args.map UScalar.bv) ci sl excaps buffer := by
   unfold DecOKM syscall.decode_invocation
   rw [hct]; simp only [bind_ok]
@@ -183,7 +183,7 @@ theorem decode_invocation_ioport_controlM (th : TypedHeap) (hP : Placed th) (s :
     (hIo : IoRel (L.mem s) (L.ksb s) σ) (hPA : IoPortsAlloc (L.mem s) (L.ksb s) G) (hFI : FinInv th (L.mem s) σ G)
     (hFR : MdbOKV (L.ksb s) (L.mem s) G)
     (lbl : U64) (slbl : Fl4Spec.Data)
-    (hlbl : lbl.val = 60 ↔ Fl4Spec.invocationType slbl = .archInvocationLabel .x64IOPortControlIssue)
+    (hlbl : lbl.val = 63 ↔ Fl4Spec.invocationType slbl = .archInvocationLabel .x64IOPortControlIssue)
     (length buf ct : U64) (hct : sched.cur_thread st s = ok ct) (args : List U64)
     (hlen : length.val = args.length)
     (hargs : ∀ (i : U64) x, args[i.val]? = some x → msg.syscall_arg st s ct buf i = ok x)
@@ -216,7 +216,7 @@ theorem decode_invocation_irq_controlM (th : TypedHeap) (hP : Placed th) (s : S)
     (hHA : HandlersActive (L.mem s) (L.ksb s) G) (hFI : FinInv th (L.mem s) σ G)
     (hFR : MdbOKV (L.ksb s) (L.mem s) G)
     (lbl : U64) (slbl : Fl4Spec.Data) (hlbl : IrqCLabel lbl slbl)
-    (hrm : decide (lbl.val = 69) = Fl4Spec.isFl4RemappedLabel slbl)
+    (hrm : decide (lbl.val = 72) = Fl4Spec.isFl4RemappedLabel slbl)
     (length buf ct : U64) (hct : sched.cur_thread st s = ok ct) (args : List U64)
     (hlen : length.val = args.length)
     (hargs : ∀ (i : U64) x, args[i.val]? = some x → msg.syscall_arg st s ct buf i = ok x)
@@ -236,7 +236,7 @@ theorem decode_invocation_irq_controlM (th : TypedHeap) (hP : Placed th) (s : S)
   rw [hct]; simp only [bind_ok]
   have e : specDec fp slbl (args.map UScalar.bv) ci (ps.bv, idxs) .IrqControl excaps buffer =
       Fl4Spec.NonDetE.liftME Fl4Spec.Fl4Invocation.invokeIRQControl
-        (Fl4Spec.decodeFl4IrqControl (decide (lbl.val = 69)) slbl (args.map UScalar.bv) (ps.bv, idxs)
+        (Fl4Spec.decodeFl4IrqControl (decide (lbl.val = 72)) slbl (args.map UScalar.bv) (ps.bv, idxs)
           (excaps.map Prod.fst)) := by
     rw [hrm]; rfl
   rw [e]

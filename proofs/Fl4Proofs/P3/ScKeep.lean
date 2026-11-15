@@ -51,7 +51,7 @@ theorem SOK.none {f : Bool × Bool} {σ σ' : State Unit} (h : SOK f σ σ') {p 
 
 theorem PK.tcb_inv {f : Bool × Bool} {x : Tcb} {o : KernelObject} (h : PK f (.tcb x) o) :
     ∃ y, o = .tcb y ∧ y.tcbCtable = x.tcbCtable ∧ y.tcbVtable = x.tcbVtable ∧ y.tcbIpcframe = x.tcbIpcframe ∧
-      y.tcbFaultHandler = x.tcbFaultHandler ∧ y.tcbTimeoutHandler = x.tcbTimeoutHandler ∧
+      y.tcbFaultHandler = x.tcbFaultHandler ∧ y.tcbTimeoutHandler = x.tcbTimeoutHandler ∧ y.tcbEpt = x.tcbEpt ∧
       y.tcbMcpriority = x.tcbMcpriority ∧ (f.1 = true → y.tcbYieldTo = x.tcbYieldTo) := by
   cases o <;> simp only [PK] at h
   exact ⟨_, rfl, h⟩
@@ -92,7 +92,7 @@ theorem PK.tcb_back {f : Bool × Bool} {y : Tcb} {o : KernelObject} (h : PK f o 
 theorem SOK.ykeep {f : Bool × Bool} {σ σ' : State Unit} (h : SOK f σ σ') (hf : f.1 = true) : YKeep σ σ' := by
   refine ⟨fun p x hp => ?_, fun p x n hp => ?_, fun p y n hp => ?_⟩
   · obtain ⟨o', h1, h2⟩ := h.fwd hp
-    obtain ⟨y, rfl, -, -, -, -, -, -, e⟩ := h2.tcb_inv
+    obtain ⟨y, rfl, -, -, -, -, -, -, -, e⟩ := h2.tcb_inv
     exact ⟨y, h1, e hf⟩
   · obtain ⟨o', h1, h2⟩ := h.fwd hp
     obtain ⟨y, rfl, e, -⟩ := h2.sc_inv
@@ -104,7 +104,7 @@ theorem SOK.ykeep {f : Bool × Bool} {σ σ' : State Unit} (h : SOK f σ σ') (h
 theorem SOK.mcpKeep {f : Bool × Bool} {σ σ' : State Unit} (h : SOK f σ σ') : McpKeep σ σ' := by
   intro p x hp
   obtain ⟨o', h1, h2⟩ := h.fwd hp
-  obtain ⟨y, rfl, -, -, -, -, -, e, -⟩ := h2.tcb_inv
+  obtain ⟨y, rfl, -, -, -, -, -, -, e, -⟩ := h2.tcb_inv
   exact ⟨y, h1, e⟩
 
 theorem SOK.ckeep {f : Bool × Bool} {σ σ' : State Unit} (h : SOK f σ σ') (hf : f.2 = true) : CKeep σ σ' := by
@@ -137,8 +137,8 @@ theorem SOK.ksub {f : Bool × Bool} {σ σ' : State Unit} (h : SOK f σ σ') : K
 
 theorem tcbCnodeMap_congr {x y : Tcb} (h1 : y.tcbCtable = x.tcbCtable) (h2 : y.tcbVtable = x.tcbVtable)
     (h3 : y.tcbIpcframe = x.tcbIpcframe) (h4 : y.tcbFaultHandler = x.tcbFaultHandler)
-    (h5 : y.tcbTimeoutHandler = x.tcbTimeoutHandler) : tcbCnodeMap y = tcbCnodeMap x := by
-  unfold tcbCnodeMap; rw [h1, h2, h3, h4, h5]
+    (h5 : y.tcbTimeoutHandler = x.tcbTimeoutHandler) (h6 : y.tcbEpt = x.tcbEpt) : tcbCnodeMap y = tcbCnodeMap x := by
+  unfold tcbCnodeMap; rw [h1, h2, h3, h4, h5, h6]
 
 end Spec
 
@@ -151,8 +151,8 @@ theorem SOK.stateRel {f : Bool × Bool} {th : TypedHeap} {m : U64 → U64} {σ �
     exact ⟨cs, h1, hwf, hs⟩
   · obtain ⟨x, hk, hs⟩ := hR.tcb t ht
     obtain ⟨o', h1, h2⟩ := h.fwd hk
-    obtain ⟨y, rfl, e1, e2, e3, e4, e5, -, -⟩ := h2.tcb_inv
-    exact ⟨y, h1, fun i hi => by rw [tcbCnodeMap_congr e1 e2 e3 e4 e5]; exact hs i hi⟩
+    obtain ⟨y, rfl, e1, e2, e3, e4, e5, e6, -, -⟩ := h2.tcb_inv
+    exact ⟨y, h1, fun i hi => by rw [tcbCnodeMap_congr e1 e2 e3 e4 e5 e6]; exact hs i hi⟩
 
 /-! ## The FL4 side -/
 

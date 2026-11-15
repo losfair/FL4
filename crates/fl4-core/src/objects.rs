@@ -306,7 +306,8 @@ pub fn finalise_cap_object<S: Store, A: Arch>(s: &mut S, a: &mut A, c: Cap, fin:
             }
             (Cap::Null, Cap::Null)
         }
-        Cap::IoPort { .. } => {
+        Cap::IoPort { first, last, vcpu: owner } => {
+            crate::vcpu::revoke_ports(s, a, owner, first, last);
             if fin {
                 (Cap::Null, c)
             } else {
@@ -405,7 +406,7 @@ pub fn finalise_cap_object<S: Store, A: Arch>(s: &mut S, a: &mut A, c: Cap, fin:
 pub fn post_cap_deletion<S: Store, A: Arch>(s: &mut S, a: &mut A, cleanup: Cap) {
     match cleanup {
         Cap::IrqHandler { irq } => interrupt::deleted_irq_handler(s, a, irq),
-        Cap::IoPort { first, last, .. } => { crate::vcpu::revoke_ports(s, a, first, last); crate::ioport::free_ioports(s, first, last); }
+        Cap::IoPort { first, last, .. } => crate::ioport::free_ioports(s, first, last),
         _ => {}
     }
 }

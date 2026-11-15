@@ -37,9 +37,9 @@ def newCapOf (n : Nat) (base us : U64) (dev : Bool) : capability.Cap :=
   else if n = 1 then .Thread base
   else if n = 7 then .Pdpt base false 0#u64 0#u64
   else if n = 8 then .Pml4 base false 0#u64
-  else if n = 9 then .Frame base .Huge 3#u64 dev false 0#u64 0#u64
-  else if n = 10 then .Frame base .Small 3#u64 dev false 0#u64 0#u64
-  else if n = 11 then .Frame base .Large 3#u64 dev false 0#u64 0#u64
+  else if n = 9 then .Frame base .Huge 3#u64 dev false false 0#u64 0#u64
+  else if n = 10 then .Frame base .Small 3#u64 dev false false 0#u64 0#u64
+  else if n = 11 then .Frame base .Large 3#u64 dev false false 0#u64 0#u64
   else if n = 12 then .PageTable base false 0#u64 0#u64
   else if n = 13 then .PageDirectory base false 0#u64 0#u64
   else .Reply base true
@@ -56,9 +56,9 @@ theorem newCapOf_ind (P : capability.Cap → Prop) (n : Nat) (base us : U64) (de
     (h4 : n = 4 → P (.CNode base us 0#u64 0#u64)) (h0 : n = 0 → P (.Untyped base us 0#u64 dev))
     (h5 : n = 5 → P (.SchedContext base us)) (h1 : n = 1 → P (.Thread base))
     (h7 : n = 7 → P (.Pdpt base false 0#u64 0#u64)) (h8 : n = 8 → P (.Pml4 base false 0#u64))
-    (h9 : n = 9 → P (.Frame base .Huge 3#u64 dev false 0#u64 0#u64))
-    (h10 : n = 10 → P (.Frame base .Small 3#u64 dev false 0#u64 0#u64))
-    (h11 : n = 11 → P (.Frame base .Large 3#u64 dev false 0#u64 0#u64))
+    (h9 : n = 9 → P (.Frame base .Huge 3#u64 dev false false 0#u64 0#u64))
+    (h10 : n = 10 → P (.Frame base .Small 3#u64 dev false false 0#u64 0#u64))
+    (h11 : n = 11 → P (.Frame base .Large 3#u64 dev false false 0#u64 0#u64))
     (h12 : n = 12 → P (.PageTable base false 0#u64 0#u64)) (h13 : n = 13 → P (.PageDirectory base false 0#u64 0#u64))
     (h6 : P (.Reply base true)) : P (newCapOf n base us dev) := by
   unfold newCapOf
@@ -74,7 +74,10 @@ PML4s) writes nothing and returns `newCapOf`. -/
 theorem create_object_eq {A : Type} (arI : machine.Arch A) (s : S) (ar : A) (nt base us : U64) (dev : Bool)
     (hn : nt.val = 0 ∨ (2 ≤ nt.val ∧ nt.val ≤ 13 ∧ nt.val ≠ 8)) :
     objects.create_object st arI s ar nt base us dev = ok (newCapOf nt.val base us dev, s, ar) := by
+  have h14 : nt ≠ 14#u64 := by rcases hn with h | ⟨h, h', h''⟩ <;> scalar_tac
+  have h15 : ¬ nt ≥ 15#u64 := by rcases hn with h | ⟨h, h', h''⟩ <;> scalar_tac
   unfold objects.create_object newCapOf
+  simp only [fl4_abi.consts.object.X86Vcpu, fl4_abi.consts.object.X86EptPml4, h14, h15, ↓reduceIte]
   simp only [fl4_abi.consts.object.Tcb, fl4_abi.consts.object.Endpoint, fl4_abi.consts.object.Notification,
     fl4_abi.consts.object.CapTable, fl4_abi.consts.object.Untyped, fl4_abi.consts.object.SchedContext,
     fl4_abi.consts.object.Reply, fl4_abi.consts.object.X86Pdpt, fl4_abi.consts.object.X64Pml4,
@@ -130,7 +133,11 @@ theorem newCap_ne_null (n : Nat) (base us : U64) (dev : Bool) : newCapOf n base 
 /-- `object_size` is `zOf` for the type numbers below 14. -/
 theorem object_size_eq (nt us : U64) (hn : nt.val < 14) (hus : us.val < 64) :
     objects.object_size nt us = ok (some ⟨BitVec.ofNat 64 (zOf nt.val us.val)⟩) := by
-  simp only [objects.object_size, fl4_abi.consts.object.Tcb, fl4_abi.consts.object.Endpoint,
+  have h14 : nt ≠ 14#u64 := by scalar_tac
+  have h15 : ¬ nt ≥ 15#u64 := by scalar_tac
+  unfold objects.object_size
+  simp only [fl4_abi.consts.object.X86Vcpu, fl4_abi.consts.object.X86EptPml4, h14, h15, ↓reduceIte]
+  simp only [fl4_abi.consts.object.Tcb, fl4_abi.consts.object.Endpoint,
     fl4_abi.consts.object.Notification, fl4_abi.consts.object.CapTable, fl4_abi.consts.object.Untyped,
     fl4_abi.consts.object.SchedContext, fl4_abi.consts.object.Reply, fl4_abi.consts.object.X86Page4K,
     fl4_abi.consts.object.X86LargePage, fl4_abi.consts.object.X64HugePage, fl4_abi.consts.object.X86PageTable,

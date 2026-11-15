@@ -13,12 +13,14 @@ The TLB invalidation and the address-space switch are hypotheses (`VsHypsR`):
 `VsPlaced` places the ghost pools: 4K-aligned, not overlapping the table.
 -/
 import Fl4Proofs.P3.VsRel
+import Fl4Proofs.P3.CapRel
 open Aeneas Aeneas.Std Result
 
 namespace Fl4Proofs.P3.Vs
 open fl4_core Fl4Proofs.P1 Fl4Proofs.P3.Notif Fl4Proofs.P3.Endp
 
 noncomputable section
+attribute [local instance_reducible] UScalar.cMax UScalar.rMax U64.rMax
 
 /-- Placement of the ASID table and the ghost pools. -/
 structure VsPlaced (P : Set U64) (ksb : U64) : Prop where
@@ -56,6 +58,17 @@ open Fl4Spec
 def specVmRootCur : SMonad Unit Unit := do
   let tcb ← NonDet.gets fun s : State Unit => s.curThread
   setVmRoot tcb
+
+/-- Deleting either kind of ASID entry; guest cache state is outside the
+native machine-state relation, while its pool slot remains observable. -/
+def daBody (asid : Asid) (root poolPtr : ObjRef) (pool : AsidLowIndex → Option ObjRef) : SMonad Unit Unit :=
+  match pool (asidLowBitsOf asid) with
+  | none => pure ()
+  | some entry => NonDet.when (asidEntryRoot entry = root) <| do
+      if entry &&& 1 = 0 then hwAsidInvalidate asid root else pure ()
+      let pool' ← pure (Function.update pool (asidLowBitsOf asid) none)
+      setAsidPool poolPtr pool'
+      if entry &&& 1 = 0 then specVmRootCur else pure ()
 
 theorem nd_mem_bind {σ' α β : Type} {m : NonDet σ' α} {f : α → NonDet σ' β} {s s1 s2 : σ'} {a : α} {b : β}
     (h1 : (a, s1) ∈ (m s).1) (h2 : (b, s2) ∈ (f a s1).1) : (b, s2) ∈ ((m >>= f) s).1 := by
@@ -105,6 +118,8 @@ structure VsHypsR (A : Type) (ar : machine.Arch A) (P : Set U64) (SR : S → A �
   inval : ∀ s a σ (asid : U64) (vs : Fl4Spec.ObjRef), VsRel P (L.mem s) (L.ksb s) σ → SR s a σ →
     ar.invalidate_asid a asid ⦃ a' => ∃ σ', ((), σ') ∈ (Fl4Spec.hwAsidInvalidate (Z := Unit) asid.bv vs σ).1 ∧
       SR s a' σ' ⦄
+  invEpt : ∀ s a σ (root mask : U64), SR s a σ →
+    ar.invalidate_ept a root mask ⦃ a' => SR s a' σ ⦄
   vmRoot : ∀ s a σ, VsRel P (L.mem s) (L.ksb s) σ → SR s a σ →
     (do
       let ct ← sched.cur_thread st s
@@ -191,6 +206,76 @@ theorem optRef_eq_some {w r : U64} (hr : r ≠ 0#u64) : optRef w = some r.bv ↔
     · injection h with h; exact UScalar.eq_of_val_eq (by have := congrArg BitVec.toNat h; exact this)
   · rintro rfl; rw [if_neg hr]
 
+/-- Clearing the tag leaves every native root unchanged. -/
+theorem clear_native_tag (w : U64) (h : w &&& 1#u64 = 0#u64) :
+    w &&& ~~~1#u64 = w := by
+  have hb := congrArg UScalar.bv h
+  change w.bv &&& 1#64 = 0#64 at hb
+  apply (UScalar.eq_equiv_bv_eq _ _).mpr
+  change w.bv &&& ~~~1#64 = w.bv
+  bv_decide
+
+theorem daBody_native {σ : Fl4Spec.State Unit} (asid root pool : U64)
+    (f : Fl4Spec.AsidLowIndex → Option Fl4Spec.ObjRef) (v : U64)
+    (hfe : f (Fl4Spec.asidLowBitsOf asid.bv) = optRef v) (htag : v &&& 1#u64 = 0#u64) :
+    daBody asid.bv root.bv pool.bv f σ =
+      Fl4Spec.NonDet.when (f (Fl4Spec.asidLowBitsOf asid.bv) = some root.bv) (do
+        Fl4Spec.hwAsidInvalidate asid.bv root.bv
+        let pool' ← pure (Function.update f (Fl4Spec.asidLowBitsOf asid.bv) none)
+        Fl4Spec.setAsidPool pool.bv pool'
+        specVmRootCur) σ := by
+  unfold daBody
+  rw [hfe]
+  by_cases h0 : v = 0#u64
+  · subst v; simp [optRef, Fl4Spec.NonDet.when, Fl4Spec.NonDet.pure]
+  · have ht : (v.bv : Fl4Spec.ObjRef) &&& 1 = 0 := by
+      change v.bv &&& 1#64 = 0#64
+      exact (tag_bv_iff v).mpr htag
+    have hm : Fl4Spec.asidEntryRoot v.bv = v.bv := by
+      have h := congrArg UScalar.bv (clear_native_tag v htag)
+      exact h
+    simp only [optRef, if_neg h0, hm, if_pos ht, Option.some.injEq]
+
+theorem daBody_nested {σ : Fl4Spec.State Unit} (asid root pool : U64)
+    (f : Fl4Spec.AsidLowIndex → Option Fl4Spec.ObjRef) (v : U64)
+    (hk : σ.kheap pool.bv = some (.archObj (.asidPool f)))
+    (hfe : f (Fl4Spec.asidLowBitsOf asid.bv) = optRef v) (htag : v &&& 1#u64 ≠ 0#u64) :
+    daBody asid.bv root.bv pool.bv f σ =
+      (if v &&& ~~~1#u64 = root then
+        ({((), updK σ pool.bv (.archObj (.asidPool
+          (Function.update f (Fl4Spec.asidLowBitsOf asid.bv) none))))}, False)
+      else ({((), σ)}, False)) := by
+  have h0 : v ≠ 0#u64 := by intro h; subst v; simp at htag
+  have ht : ¬ (v.bv : Fl4Spec.ObjRef) &&& 1 = 0 := by
+    change ¬ v.bv &&& 1#64 = 0#64
+    exact fun h => htag ((tag_bv_iff v).mp h)
+  have hm : Fl4Spec.asidEntryRoot v.bv = root.bv ↔ v &&& ~~~1#u64 = root := by
+    change (v &&& ~~~1#u64).bv = root.bv ↔ v &&& ~~~1#u64 = root
+    exact (UScalar.eq_equiv_bv_eq _ _).symm
+  unfold daBody
+  rw [hfe]
+  simp only [optRef, if_neg h0, if_neg ht, hm, Fl4Spec.NonDet.when]
+  split_ifs
+  · rw [nd_pure_bind', nd_bind_one (setAsidPool_eq hk _)]
+    simp [Fl4Spec.NonDet.pure]
+  · simp [Fl4Spec.NonDet.pure]
+
+/-- The nested TLB operation preserves memory and the native view. -/
+theorem ept_invalidate_native {A : Type} {ar : machine.Arch A} {P : Set U64}
+    {SR : S → A → Fl4Spec.State Unit → Prop} (hH : VsHypsR st A ar P SR)
+    (s : S) (a : A) (σ : Fl4Spec.State Unit) (hS : SR s a σ) (root : U64) :
+    ept.invalidate st ar s a root ⦃ r => r.1 = s ∧ SR s r.2 σ ⦄ := by
+  have hC : ept.CORES = ok 4080#u64 := by unfold ept.CORES; rfl
+  unfold ept.invalidate
+  simp only [hC, lift, bind_ok,
+    shr_eq _ 32#i32 (by decide) (by decide),
+    show (4080#u64 + 8#u64 : Result U64) = ok 4088#u64 from rfl]
+  step with LawfulStore.read_spec
+  step with LawfulStore.read_spec
+  refine WP.spec_bind (hH.invEpt s a σ _ _ hS) ?_
+  intro a' hS'
+  exact (WP.spec_ok _).2 ⟨rfl, hS'⟩
+
 /-- **`delete_asid`** (FL4 `vspace::delete_asid asid root`, `root ≠ 0`)
 refines l4v `delete_asid asid root`: the spec does not fail, and FL4's outcome
 is matched by one of the spec's. -/
@@ -216,11 +301,7 @@ theorem delete_asid_relR {A : Type} {ar : machine.Arch A} {P : Set U64} {SR : S 
        | none => return ()
        | some poolPtr => do
           let pool ← Fl4Spec.getAsidPool poolPtr
-          Fl4Spec.NonDet.when (pool (Fl4Spec.asidLowBitsOf asid.bv) = some root.bv) <| do
-            Fl4Spec.hwAsidInvalidate asid.bv root.bv
-            let pool' ← pure (Function.update pool (Fl4Spec.asidLowBitsOf asid.bv) none)
-            Fl4Spec.setAsidPool poolPtr pool'
-            specVmRootCur) σ := by
+          daBody asid.bv root.bv poolPtr pool) σ := by
     unfold Fl4Spec.deleteAsid
     rw [nd_bind_one (show Fl4Spec.NonDet.gets _ σ = ({(σ.archState.x64AsidTable, σ)}, False) from rfl)]
     rfl
@@ -238,11 +319,7 @@ theorem delete_asid_relR {A : Type} {ar : machine.Arch A} {P : Set U64} {SR : S 
     have hfe := hf _ hlo
     rw [lo_bv] at hfe
     have hspec1 : Fl4Spec.deleteAsid (Z := Unit) asid.bv root.bv σ =
-        Fl4Spec.NonDet.when (f (Fl4Spec.asidLowBitsOf asid.bv) = some root.bv) (do
-            Fl4Spec.hwAsidInvalidate asid.bv root.bv
-            let pool' ← pure (Function.update f (Fl4Spec.asidLowBitsOf asid.bv) none)
-            Fl4Spec.setAsidPool w.bv pool'
-            specVmRootCur) σ := by
+        daBody asid.bv root.bv w.bv f σ := by
       rw [hspec0, htab]
       dsimp only
       rw [nd_bind_one (getAsidPool_eq hkf)]
@@ -254,46 +331,80 @@ theorem delete_asid_relR {A : Type} {ar : machine.Arch A} {P : Set U64} {SR : S 
     step as ⟨v, hv⟩
     have hv' : v = L.mem s (peA w (asid &&& 511#u64)) := hv
     subst hv'
-    by_cases hvr : L.mem s (peA w (asid &&& 511#u64)) = root
-    · have hc : f (Fl4Spec.asidLowBitsOf asid.bv) = some root.bv := by rw [hfe, optRef_eq_some hr0]; exact hvr
-      simp only [hvr, ↓reduceIte, Fl4Spec.NonDet.when, hc]
-      refine WP.spec_bind (hH.inval s a σ asid root.bv hR hS) ?_
-      rintro a1 ⟨σ1, hm1, hS1⟩
-      obtain ⟨ms1, rfl⟩ := doMachineOp_mem hm1
-      step as ⟨s1, hs1⟩
-      subst hs1
-      obtain ⟨wa, wf⟩ := hP.pal w hwP
-      have hea : Aligned (peA w (asid &&& 511#u64)) := by show _ % 8 = 0; rw [peA_val wf hlo]; omega
-      set σ2 := updK { σ with machineState := ms1 } w.bv
-        (.archObj (.asidPool (Function.update f (Fl4Spec.asidLowBitsOf asid.bv) none)))
-      have hR2 : VsRel P (L.mem (L.wr s (peA w (asid &&& 511#u64)) 0#u64)) (L.ksb s) σ2 := by
-        have := (hR.ms ms1).upd_entry hP hwP (show ({ σ with machineState := ms1 } : Fl4Spec.State Unit).kheap w.bv = _
-          from hkf) hlo 0#u64 (fun b hb hne => L.mem_wr_ne hea hb (fun h => hne (UScalar.eq_of_val_eq h).symm)) (L.mem_wr_same hea)
-        rw [lo_bv, optRef_zero] at this
-        exact this
-      have hW : WritesIn st s (L.wr s (peA w (asid &&& 511#u64)) 0#u64) (VsWrite P (L.ksb s)) :=
-        ⟨by simp, by simp, fun b hb hn => L.mem_wr_ne hea hb (fun e => hn (Or.inr ⟨w, hwP, _, hlo, (UScalar.eq_of_val_eq e).symm⟩))⟩
-      have hS2 := hH.stable _ _ a1 _ σ2 hS1 hW (Or.inl ⟨w.bv, f, _, hkf, rfl⟩)
-      refine WP.spec_mono (hH.vmRoot _ a1 σ2 (by rw [LawfulStore.ksb_wr]; exact hR2) hS2) ?_
-      rintro ⟨s3, a3⟩ ⟨e3, hnf, σ3, hm3, hR3, hS3⟩
-      simp only at e3
-      subst e3
-      refine ⟨?_, σ3, ?_, hR3, hS3, VsZeroW.wr s hea (Or.inr ⟨w, hwP, _, hlo, rfl⟩)⟩
-      · refine nd_nofail_bind (hH.invalOK _ _ σ) fun x hx => ?_
-        obtain ⟨r, σ''⟩ := x
-        obtain ⟨ms, rfl⟩ := doMachineOp_mem hx
-        dsimp only
-        rw [ndpure_bind, nd_bind_one (setAsidPool_eq (show ({ σ with machineState := ms } : Fl4Spec.State Unit).kheap
-          w.bv = _ from hkf) _)]
-        exact hnf ms
-      · refine nd_mem_bind hm1 ?_
-        rw [ndpure_bind, nd_bind_one (setAsidPool_eq (show ({ σ with machineState := ms1 } : Fl4Spec.State Unit).kheap
-          w.bv = _ from hkf) _)]
-        exact hm3
-    · simp only [hvr, ↓reduceIte, WP.spec_ok]
-      have hc : ¬ f (Fl4Spec.asidLowBitsOf asid.bv) = some root.bv := by rw [hfe, optRef_eq_some hr0]; exact hvr
-      rw [nd_when_false hc]
-      exact ⟨by simp [pure, Fl4Spec.NonDet.pure], σ, by simp [pure, Fl4Spec.NonDet.pure], hR, hS, VsZeroW.refl P s⟩
+    change f (Fl4Spec.asidLowBitsOf asid.bv) = optRef (L.mem s (peA w (asid &&& 511#u64))) at hfe
+    by_cases htag : L.mem s (peA w (asid &&& 511#u64)) &&& 1#u64 = 0#u64
+    · rw [daBody_native asid root w f _ hfe htag]
+      have hclear := clear_native_tag (L.mem s (peA w (asid &&& 511#u64))) htag
+      simp only [lift, bind_ok, hclear, htag, bne_iff_ne, ne_eq, not_true_eq_false, Bool.false_eq_true, ↓reduceIte]
+      by_cases hvr : L.mem s (peA w (asid &&& 511#u64)) = root
+      · have hc : f (Fl4Spec.asidLowBitsOf asid.bv) = some root.bv := by rw [hfe, optRef_eq_some hr0]; exact hvr
+        simp only [hvr, ↓reduceIte, Fl4Spec.NonDet.when, hc]
+        refine WP.spec_bind (hH.inval s a σ asid root.bv hR hS) ?_
+        rintro a1 ⟨σ1, hm1, hS1⟩
+        obtain ⟨ms1, rfl⟩ := doMachineOp_mem hm1
+        step as ⟨s1, hs1⟩
+        subst hs1
+        obtain ⟨wa, wf⟩ := hP.pal w hwP
+        have hea : Aligned (peA w (asid &&& 511#u64)) := by show _ % 8 = 0; rw [peA_val wf hlo]; omega
+        set σ2 := updK { σ with machineState := ms1 } w.bv
+          (.archObj (.asidPool (Function.update f (Fl4Spec.asidLowBitsOf asid.bv) none)))
+        have hR2 : VsRel P (L.mem (L.wr s (peA w (asid &&& 511#u64)) 0#u64)) (L.ksb s) σ2 := by
+          have := (hR.ms ms1).upd_entry hP hwP (show ({ σ with machineState := ms1 } : Fl4Spec.State Unit).kheap w.bv = _
+            from hkf) hlo 0#u64 (fun b hb hne => L.mem_wr_ne hea hb (fun h => hne (UScalar.eq_of_val_eq h).symm)) (L.mem_wr_same hea)
+          rw [lo_bv, optRef_zero] at this
+          exact this
+        have hW : WritesIn st s (L.wr s (peA w (asid &&& 511#u64)) 0#u64) (VsWrite P (L.ksb s)) :=
+          ⟨by simp, by simp, fun b hb hn => L.mem_wr_ne hea hb (fun e => hn (Or.inr ⟨w, hwP, _, hlo, (UScalar.eq_of_val_eq e).symm⟩))⟩
+        have hS2 := hH.stable _ _ a1 _ σ2 hS1 hW (Or.inl ⟨w.bv, f, _, hkf, rfl⟩)
+        refine WP.spec_mono (hH.vmRoot _ a1 σ2 (by rw [LawfulStore.ksb_wr]; exact hR2) hS2) ?_
+        rintro ⟨s3, a3⟩ ⟨e3, hnf, σ3, hm3, hR3, hS3⟩
+        simp only at e3
+        subst e3
+        refine ⟨?_, σ3, ?_, hR3, hS3, VsZeroW.wr s hea (Or.inr ⟨w, hwP, _, hlo, rfl⟩)⟩
+        · refine nd_nofail_bind (hH.invalOK _ _ σ) fun x hx => ?_
+          obtain ⟨r, σ''⟩ := x
+          obtain ⟨ms, rfl⟩ := doMachineOp_mem hx
+          dsimp only
+          rw [ndpure_bind, nd_bind_one (setAsidPool_eq (show ({ σ with machineState := ms } : Fl4Spec.State Unit).kheap
+            w.bv = _ from hkf) _)]
+          exact hnf ms
+        · refine nd_mem_bind hm1 ?_
+          rw [ndpure_bind, nd_bind_one (setAsidPool_eq (show ({ σ with machineState := ms1 } : Fl4Spec.State Unit).kheap
+            w.bv = _ from hkf) _)]
+          exact hm3
+      · simp only [hvr, ↓reduceIte, WP.spec_ok]
+        have hc : ¬ f (Fl4Spec.asidLowBitsOf asid.bv) = some root.bv := by rw [hfe, optRef_eq_some hr0]; exact hvr
+        rw [nd_when_false hc]
+        exact ⟨by simp [pure, Fl4Spec.NonDet.pure], σ, by simp [pure, Fl4Spec.NonDet.pure], hR, hS, VsZeroW.refl P s⟩
+
+    · rw [daBody_nested asid root w f _ hkf hfe htag]
+      by_cases hvr : L.mem s (peA w (asid &&& 511#u64)) &&& ~~~1#u64 = root
+      · simp only [hvr, ↓reduceIte, bne_iff_ne]
+        rw [if_pos htag]
+        refine WP.spec_bind (ept_invalidate_native hH s a σ hS root) ?_
+        rintro ⟨s1, a1⟩ ⟨hs1, hS1⟩
+        dsimp only at hs1
+        subst s1
+        step as ⟨s2, hs2⟩
+        subst hs2
+        obtain ⟨wa, wf⟩ := hP.pal w hwP
+        have hea : Aligned (peA w (asid &&& 511#u64)) := by
+          show _ % 8 = 0; rw [peA_val wf hlo]; omega
+        have hew := VsZeroW.wr (st := st) (P := P) s hea (Or.inr ⟨w, hwP, asid &&& 511#u64, hlo, rfl⟩)
+        set σG := updK σ w.bv (.archObj (.asidPool
+          (Function.update f (Fl4Spec.asidLowBitsOf asid.bv) none)))
+        have hR' : VsRel P (L.mem (L.wr s (peA w (asid &&& 511#u64)) 0#u64)) (L.ksb s) σG := by
+          have h := hR.upd_entry hP hwP hkf hlo 0#u64
+            (fun b hb hne => L.mem_wr_ne hea hb (fun e => hne (UScalar.eq_of_val_eq e).symm))
+            (L.mem_wr_same hea)
+          rw [lo_bv, optRef_zero] at h
+          exact h
+        have hS' := hH.stable s (L.wr s (peA w (asid &&& 511#u64)) 0#u64) a1 σ σG hS1
+          ((writesIn_wr hea).mono fun b hb => Or.inr ⟨w, hwP, asid &&& 511#u64, hlo, hb⟩)
+          (Or.inl ⟨w.bv, f, _, hkf, rfl⟩)
+        exact ⟨by simp, σG, by simp [σG], by simpa only [L.ksb_wr, peA] using hR', hS', hew⟩
+      · simp only [hvr, ↓reduceIte, WP.spec_ok]
+        exact ⟨by simp, σ, by simp, hR, hS, VsZeroW.refl P s⟩
 
 end
 

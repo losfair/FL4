@@ -424,7 +424,7 @@ domain, SC and priority. -/
 theorem SchedRel.set_tw {N T C : Set U64} {c : U64} {s : S} {σ : Fl4Spec.State Unit}
     (hS : SchedRel st N T C c s σ) {t : U64} (ht : t ∈ T) {x : Fl4Spec.Tcb} (hk : σ.kheap t.bv = some (.tcb x))
     {K : U64} (hK : K.val < 4096) (h8 : K.val % 8 = 0) (hKs : ¬ SchedField K)
-    (hK1 : K ≠ 3328#u64) (hK2 : K ≠ 3336#u64) (hK3 : K ≠ 256#u64) (hK4 : K ≠ 3496#u64) (hK5 : K ≠ 3504#u64)
+    (hK1 : K ≠ 3328#u64) (hK2 : K ≠ 3336#u64) (hK3 : K ≠ 256#u64) (hK4 : K ≠ 3496#u64) (hK6 : K ≠ 3504#u64)
     (x' : Fl4Spec.Tcb) (est : x'.tcbState = x.tcbState) (eb : badgeOf x' = badgeOf x)
     (ed : x'.tcbDomain = x.tcbDomain) (esc : x'.tcbSchedContext = x.tcbSchedContext)
     (ep : x'.tcbPriority = x.tcbPriority) (v : U64) :
@@ -523,7 +523,7 @@ theorem SchedRel.set_tw {N T C : Set U64} {c : U64} {s : S} {σ : Fl4Spec.State 
       | (rw [prevEp_eq] at e)
     all_goals (rw [tt_eq_iff hta (hc.tcbs y hy) hK (by simp)] at e; obtain ⟨-, e⟩ := e)
     all_goals first
-      | exact hK1 e | exact hK2 e | exact hK3 e | exact hK4 e | exact hK5 e
+      | exact hK1 e | exact hK2 e | exact hK3 e | exact hK4 e | exact hK6 e
       | exact hns _ (by simp [SchedField]) e.symm
   · refine ⟨fun p z hp => ?_, fun p z hp => ?_⟩
     · have : p ≠ t.bv := by rintro rfl; rw [hk] at hp; cases hp

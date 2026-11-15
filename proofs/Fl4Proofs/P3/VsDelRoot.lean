@@ -41,6 +41,8 @@ structure VsHyps (A : Type) (ar : machine.Arch A) (P : Set U64) (th : TypedHeap)
   inval : ∀ s a σ (asid : U64) (vs : Fl4Spec.ObjRef), VsRel P (L.mem s) (L.ksb s) σ → SR s a σ →
     ar.invalidate_asid a asid ⦃ a' => ∃ σ', ((), σ') ∈ (Fl4Spec.hwAsidInvalidate (Z := Unit) asid.bv vs σ).1 ∧
       SR s a' σ' ⦄
+  invEpt : ∀ s a σ (root mask : U64), SR s a σ →
+    ar.invalidate_ept a root mask ⦃ a' => SR s a' σ ⦄
   curT : ∀ s a σ, SR s a σ → sched.cur_thread st s ⦃ ct => ct.bv = σ.curThread ⦄
   root : VsRootHyps st A ar SR
 
@@ -94,6 +96,10 @@ theorem VsHyps.toR {A : Type} {ar : machine.Arch A} {P : Set U64} {th : TypedHea
     rintro a' ⟨σ', hm, hS'⟩
     obtain ⟨ms, rfl⟩ := doMachineOp_mem hm
     exact ⟨_, hm, hS', Vs.StateRel.ms hSt ms, hPl, hD, hC⟩
+  invEpt s a σ root mask := by
+    rintro ⟨hS, hSt, hPl, hD, hC⟩
+    exact WP.spec_mono (hH.invEpt s a σ root mask hS)
+      (fun _ hS' => ⟨hS', hSt, hPl, hD, hC⟩)
   vmRoot s a σ hR := by
     rintro ⟨hS, hSt, hPl, hD, t, ht1, ht2, ht3⟩
     refine WP.spec_bind (hH.curT s a σ hS) ?_

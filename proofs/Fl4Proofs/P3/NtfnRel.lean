@@ -252,6 +252,7 @@ def tsCode : ThreadState → Nat
   | .blockedOnReply _ => 5
   | .blockedOnNotification _ => 6
   | .idleThreadState => 7
+  | .runningVM => 8
 
 /-- The badge register of a spec TCB's saved user context. -/
 def badgeOf (x : Tcb) : Word := x.tcbArch.tcbContext.userRegs badge_register

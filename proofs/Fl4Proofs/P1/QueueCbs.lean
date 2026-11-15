@@ -387,7 +387,7 @@ theorem timer.insert.foot (s : S) (t d bd : U64) (h : TInv st T Cs Ω H Sg Rp Sc
   have hT := h2.tcbs
   have hN2 := h2.nodes _ h2.1.1.choose_spec.choose_spec.cur
   have FA : ∀ {sa : S} (K v : U64), Foot st T Cs Sg Scs Z ∅ s sa → ANI st s sa → NodePlaced st T sa (L.cpu sa) →
-      160 ≤ K.val → K.val < 4096 → K.val % 8 = 0 → K.val ≠ 3576 → K.val ≠ 3584 →
+      192 ≤ K.val → K.val < 4096 → K.val % 8 = 0 → K.val ≠ 3576 → K.val ≠ 3584 →
       Foot st T Cs Sg Scs Z ∅ s (L.wr sa (core.num.U64.wrapping_add t K) v) ∧
         ANI st s (L.wr sa (core.num.U64.wrapping_add t K) v) ∧
         NodePlaced st T (L.wr sa (core.num.U64.wrapping_add t K) v)

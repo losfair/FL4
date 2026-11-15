@@ -127,9 +127,9 @@ theorem push_donate_refines {N T C R : Set U64} {c : U64} (s : S) (a : A) (σ : 
     -- `REPLY` of `sc`
     refine WP.spec_bind (obj.Sc.set_reply.spec _ sc r) ?_
     rintro s5 rfl
-    obtain ⟨hS5, hf5, hK5, -⟩ := hS4.set_sc_reply hsc hk3 r (r.bv :: y.scReplies)
+    obtain ⟨hS5, hf5, hK6, -⟩ := hS4.set_sc_reply hsc hk3 r (r.bv :: y.scReplies)
     set σB1 := updSc σA sc.bv { y with scReplies := r.bv :: y.scReplies } n with hσB1
-    have hR5 := hR4.frame hS4.placed hf5 hK5
+    have hR5 := hR4.frame hS4.placed hf5 hK6
     have hkB1 : ∀ q, q ≠ sc.bv → σB1.kheap q = σA.kheap q := fun q hq => by simp [σB1, updK, hq]
     have hk3B1 : σB1.kheap sc.bv = some (.schedContext { y with scReplies := r.bv :: y.scReplies } n) := by
       simp [σB1, updK]

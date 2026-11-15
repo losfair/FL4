@@ -35,6 +35,7 @@ structure ArchRefines {A : Type} (ar : machine.Arch A) (AR : A → Fl4Spec.Cr3 �
     ar.set_vspace a ptr asid ⦃ a' => AR a' (Fl4Spec.makeCr3 (Fl4Spec.addrFromPPtr ptr.bv) asid.bv) ⦄
   invPage : ∀ a c (asid vaddr : U64), AR a c → ar.invalidate_page a asid vaddr ⦃ a' => AR a' c ⦄
   invAsid : ∀ a c (asid : U64), AR a c → ar.invalidate_asid a asid ⦃ a' => AR a' c ⦄
+  invEpt : ∀ a c (root mask : U64), AR a c → ar.invalidate_ept a root mask ⦃ a' => AR a' c ⦄
   invPS : ∀ a c (asid : U64), AR a c → ar.invalidate_page_structures a asid ⦃ a' => AR a' c ⦄
 
 /-! ## The spec's machine operations -/
@@ -274,6 +275,14 @@ theorem inval_top (s : S) (a : A) (σ : Fl4Spec.State Unit) (asid : U64) (vs : F
     ar.invalidate_asid a asid ⦃ a' => ∃ σ', ((), σ') ∈ (Fl4Spec.hwAsidInvalidate (Z := Unit) asid.bv vs σ).1 ∧
       TopSR st th P L4 L3 L2 L1 N T C E R B c AR s a' σ' ⦄ :=
   WP.spec_mono (hA.invAsid a _ asid hS.1.2.2.2.2.2.2) fun _ h => flush_of_sok (hwAsidInvalidate_ok _ _) hS h
+
+/-- Nested TLB invalidation preserves the native machine view. -/
+theorem invEpt_top (s : S) (a : A) (σ : Fl4Spec.State Unit) (root mask : U64)
+    (hS : TopSR st th P L4 L3 L2 L1 N T C E R B c AR s a σ) :
+    ar.invalidate_ept a root mask ⦃ a' => TopSR st th P L4 L3 L2 L1 N T C E R B c AR s a' σ ⦄ := by
+  rcases hS with ⟨⟨hs, he, hn, hi, ho, hk, har⟩, hp⟩
+  exact WP.spec_mono (hA.invEpt a _ root mask har)
+    (fun _ har' => ⟨⟨hs, he, hn, hi, ho, hk, har'⟩, hp⟩)
 
 omit hA in
 theorem flushTblOK_top (σ : Fl4Spec.State Unit) (vs : Fl4Spec.ObjRef) (v : Fl4Spec.VSpaceRef) (pt : Fl4Spec.ObjRef)

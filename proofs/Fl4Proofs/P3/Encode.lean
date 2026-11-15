@@ -12,6 +12,7 @@ import Fl4Proofs.P3.CapRel
 open Aeneas Aeneas.Std Result
 open fl4_core
 namespace Fl4Proofs.P3
+set_option maxHeartbeats 1000000
 set_option linter.unusedSimpArgs false
 set_option linter.unusedTactic false
 set_option linter.unreachableTactic false
@@ -54,7 +55,7 @@ def decodeF (w0 w1 : BitVec 64) : capability.Cap :=
   | 10 => .Domain
   | 11 => .SchedContext p ⟨(w0 >>> 48) &&& 63#64⟩
   | 12 => .SchedControl ⟨w1⟩
-  | 13 => .Frame p (frameSizeF ⟨(w0 >>> 48) &&& 3#64⟩) ⟨(w0 >>> 50) &&& 3#64⟩ (w0.getLsbD 52) (w0.getLsbD 53)
+  | 13 => .Frame p (frameSizeF ⟨(w0 >>> 48) &&& 3#64⟩) ⟨(w0 >>> 50) &&& 3#64⟩ (w0.getLsbD 52) (w0.getLsbD 53) (w0.getLsbD 58)
       ⟨asidF w0 54 w1⟩ ⟨w1 &&& M48⟩
   | 14 => .PageTable p (w0.getLsbD 48) ⟨asidF w0 49 w1⟩ ⟨w1 &&& M48⟩
   | 15 => .PageDirectory p (w0.getLsbD 48) ⟨asidF w0 49 w1⟩ ⟨w1 &&& M48⟩
@@ -62,8 +63,11 @@ def decodeF (w0 w1 : BitVec 64) : capability.Cap :=
   | 17 => .Pml4 p (w0.getLsbD 48) ⟨w1⟩
   | 18 => .AsidControl
   | 19 => .AsidPool p ⟨w1⟩
+  | 22 => .Vcpu p
+  | 23 => .Ept p ⟨(w0 >>> 53) &&& 63#64⟩ (w0.getLsbD 48) ⟨asidF w0 49 w1⟩ ⟨w1 &&& M48⟩
   | 20 => .IoPortControl
   | 21 => .IoPort ⟨w1 &&& 0xffff#64⟩ ⟨(w1 >>> 16) &&& 0xffff#64⟩
+      (if w0 &&& M48 = 0#64 then 0#u64 else p)
   | _ => .Null
 
 theorem decode_eq (w0 w1 : U64) : capability.Cap.decode w0 w1 = ok (decodeF w0.bv w1.bv) := by
@@ -72,110 +76,260 @@ theorem decode_eq (w0 w1 : U64) : capability.Cap.decode w0 w1 = ok (decodeF w0.b
   split <;> rename_i heq
   case h_1 =>
     have htk : (w0.bv >>> 59).toNat = 1 := congrArg UScalar.val heq
-    simp only [decodeF, htk]
-    try simp only [shr_eq _ 48#i32 (by decide) (by decide), shr_eq _ 50#i32 (by decide) (by decide), shr_eq _ 58#i32 (by decide) (by decide), shr_eq _ 16#i32 (by decide) (by decide), lift, bind_ok, capability.PTR_MASK, bit_val _ 48#u64 (by decide), bit_val _ 49#u64 (by decide), bit_val _ 50#u64 (by decide), bit_val _ 51#u64 (by decide), bit_val _ 52#u64 (by decide), bit_val _ 53#u64 (by decide), bit_val _ 54#u64 (by decide), from_code_eq, unpack_asid_eq _ 54#u64 _ (by decide), unpack_asid_eq _ 49#u64 _ (by decide)]
+    try simp only [decodeF, htk]
+    try simp only [shr_eq _ 48#i32 (by decide) (by decide), shr_eq _ 50#i32 (by decide) (by decide),
+      shr_eq _ 53#i32 (by decide) (by decide), shr_eq _ 58#i32 (by decide) (by decide),
+      shr_eq _ 16#i32 (by decide) (by decide), lift, bind_ok, capability.PTR_MASK,
+      bit_val _ 48#u64 (by decide), bit_val _ 49#u64 (by decide), bit_val _ 50#u64 (by decide),
+      bit_val _ 51#u64 (by decide), bit_val _ 52#u64 (by decide), bit_val _ 53#u64 (by decide),
+      bit_val _ 54#u64 (by decide), bit_val _ 58#u64 (by decide), from_code_eq,
+      unpack_asid_eq _ 54#u64 _ (by decide), unpack_asid_eq _ 49#u64 _ (by decide)]
     all_goals rfl
   case h_2 =>
     have htk : (w0.bv >>> 59).toNat = 2 := congrArg UScalar.val heq
-    simp only [decodeF, htk]
-    try simp only [shr_eq _ 48#i32 (by decide) (by decide), shr_eq _ 50#i32 (by decide) (by decide), shr_eq _ 58#i32 (by decide) (by decide), shr_eq _ 16#i32 (by decide) (by decide), lift, bind_ok, capability.PTR_MASK, bit_val _ 48#u64 (by decide), bit_val _ 49#u64 (by decide), bit_val _ 50#u64 (by decide), bit_val _ 51#u64 (by decide), bit_val _ 52#u64 (by decide), bit_val _ 53#u64 (by decide), bit_val _ 54#u64 (by decide), from_code_eq, unpack_asid_eq _ 54#u64 _ (by decide), unpack_asid_eq _ 49#u64 _ (by decide)]
+    try simp only [decodeF, htk]
+    try simp only [shr_eq _ 48#i32 (by decide) (by decide), shr_eq _ 50#i32 (by decide) (by decide),
+      shr_eq _ 53#i32 (by decide) (by decide), shr_eq _ 58#i32 (by decide) (by decide),
+      shr_eq _ 16#i32 (by decide) (by decide), lift, bind_ok, capability.PTR_MASK,
+      bit_val _ 48#u64 (by decide), bit_val _ 49#u64 (by decide), bit_val _ 50#u64 (by decide),
+      bit_val _ 51#u64 (by decide), bit_val _ 52#u64 (by decide), bit_val _ 53#u64 (by decide),
+      bit_val _ 54#u64 (by decide), bit_val _ 58#u64 (by decide), from_code_eq,
+      unpack_asid_eq _ 54#u64 _ (by decide), unpack_asid_eq _ 49#u64 _ (by decide)]
     all_goals rfl
   case h_3 =>
     have htk : (w0.bv >>> 59).toNat = 3 := congrArg UScalar.val heq
-    simp only [decodeF, htk]
-    try simp only [shr_eq _ 48#i32 (by decide) (by decide), shr_eq _ 50#i32 (by decide) (by decide), shr_eq _ 58#i32 (by decide) (by decide), shr_eq _ 16#i32 (by decide) (by decide), lift, bind_ok, capability.PTR_MASK, bit_val _ 48#u64 (by decide), bit_val _ 49#u64 (by decide), bit_val _ 50#u64 (by decide), bit_val _ 51#u64 (by decide), bit_val _ 52#u64 (by decide), bit_val _ 53#u64 (by decide), bit_val _ 54#u64 (by decide), from_code_eq, unpack_asid_eq _ 54#u64 _ (by decide), unpack_asid_eq _ 49#u64 _ (by decide)]
+    try simp only [decodeF, htk]
+    try simp only [shr_eq _ 48#i32 (by decide) (by decide), shr_eq _ 50#i32 (by decide) (by decide),
+      shr_eq _ 53#i32 (by decide) (by decide), shr_eq _ 58#i32 (by decide) (by decide),
+      shr_eq _ 16#i32 (by decide) (by decide), lift, bind_ok, capability.PTR_MASK,
+      bit_val _ 48#u64 (by decide), bit_val _ 49#u64 (by decide), bit_val _ 50#u64 (by decide),
+      bit_val _ 51#u64 (by decide), bit_val _ 52#u64 (by decide), bit_val _ 53#u64 (by decide),
+      bit_val _ 54#u64 (by decide), bit_val _ 58#u64 (by decide), from_code_eq,
+      unpack_asid_eq _ 54#u64 _ (by decide), unpack_asid_eq _ 49#u64 _ (by decide)]
     all_goals rfl
   case h_4 =>
     have htk : (w0.bv >>> 59).toNat = 4 := congrArg UScalar.val heq
-    simp only [decodeF, htk]
-    try simp only [shr_eq _ 48#i32 (by decide) (by decide), shr_eq _ 50#i32 (by decide) (by decide), shr_eq _ 58#i32 (by decide) (by decide), shr_eq _ 16#i32 (by decide) (by decide), lift, bind_ok, capability.PTR_MASK, bit_val _ 48#u64 (by decide), bit_val _ 49#u64 (by decide), bit_val _ 50#u64 (by decide), bit_val _ 51#u64 (by decide), bit_val _ 52#u64 (by decide), bit_val _ 53#u64 (by decide), bit_val _ 54#u64 (by decide), from_code_eq, unpack_asid_eq _ 54#u64 _ (by decide), unpack_asid_eq _ 49#u64 _ (by decide)]
+    try simp only [decodeF, htk]
+    try simp only [shr_eq _ 48#i32 (by decide) (by decide), shr_eq _ 50#i32 (by decide) (by decide),
+      shr_eq _ 53#i32 (by decide) (by decide), shr_eq _ 58#i32 (by decide) (by decide),
+      shr_eq _ 16#i32 (by decide) (by decide), lift, bind_ok, capability.PTR_MASK,
+      bit_val _ 48#u64 (by decide), bit_val _ 49#u64 (by decide), bit_val _ 50#u64 (by decide),
+      bit_val _ 51#u64 (by decide), bit_val _ 52#u64 (by decide), bit_val _ 53#u64 (by decide),
+      bit_val _ 54#u64 (by decide), bit_val _ 58#u64 (by decide), from_code_eq,
+      unpack_asid_eq _ 54#u64 _ (by decide), unpack_asid_eq _ 49#u64 _ (by decide)]
     all_goals rfl
   case h_5 =>
     have htk : (w0.bv >>> 59).toNat = 5 := congrArg UScalar.val heq
-    simp only [decodeF, htk]
-    try simp only [shr_eq _ 48#i32 (by decide) (by decide), shr_eq _ 50#i32 (by decide) (by decide), shr_eq _ 58#i32 (by decide) (by decide), shr_eq _ 16#i32 (by decide) (by decide), lift, bind_ok, capability.PTR_MASK, bit_val _ 48#u64 (by decide), bit_val _ 49#u64 (by decide), bit_val _ 50#u64 (by decide), bit_val _ 51#u64 (by decide), bit_val _ 52#u64 (by decide), bit_val _ 53#u64 (by decide), bit_val _ 54#u64 (by decide), from_code_eq, unpack_asid_eq _ 54#u64 _ (by decide), unpack_asid_eq _ 49#u64 _ (by decide)]
+    try simp only [decodeF, htk]
+    try simp only [shr_eq _ 48#i32 (by decide) (by decide), shr_eq _ 50#i32 (by decide) (by decide),
+      shr_eq _ 53#i32 (by decide) (by decide), shr_eq _ 58#i32 (by decide) (by decide),
+      shr_eq _ 16#i32 (by decide) (by decide), lift, bind_ok, capability.PTR_MASK,
+      bit_val _ 48#u64 (by decide), bit_val _ 49#u64 (by decide), bit_val _ 50#u64 (by decide),
+      bit_val _ 51#u64 (by decide), bit_val _ 52#u64 (by decide), bit_val _ 53#u64 (by decide),
+      bit_val _ 54#u64 (by decide), bit_val _ 58#u64 (by decide), from_code_eq,
+      unpack_asid_eq _ 54#u64 _ (by decide), unpack_asid_eq _ 49#u64 _ (by decide)]
     all_goals rfl
   case h_6 =>
     have htk : (w0.bv >>> 59).toNat = 6 := congrArg UScalar.val heq
-    simp only [decodeF, htk]
-    try simp only [shr_eq _ 48#i32 (by decide) (by decide), shr_eq _ 50#i32 (by decide) (by decide), shr_eq _ 58#i32 (by decide) (by decide), shr_eq _ 16#i32 (by decide) (by decide), lift, bind_ok, capability.PTR_MASK, bit_val _ 48#u64 (by decide), bit_val _ 49#u64 (by decide), bit_val _ 50#u64 (by decide), bit_val _ 51#u64 (by decide), bit_val _ 52#u64 (by decide), bit_val _ 53#u64 (by decide), bit_val _ 54#u64 (by decide), from_code_eq, unpack_asid_eq _ 54#u64 _ (by decide), unpack_asid_eq _ 49#u64 _ (by decide)]
+    try simp only [decodeF, htk]
+    try simp only [shr_eq _ 48#i32 (by decide) (by decide), shr_eq _ 50#i32 (by decide) (by decide),
+      shr_eq _ 53#i32 (by decide) (by decide), shr_eq _ 58#i32 (by decide) (by decide),
+      shr_eq _ 16#i32 (by decide) (by decide), lift, bind_ok, capability.PTR_MASK,
+      bit_val _ 48#u64 (by decide), bit_val _ 49#u64 (by decide), bit_val _ 50#u64 (by decide),
+      bit_val _ 51#u64 (by decide), bit_val _ 52#u64 (by decide), bit_val _ 53#u64 (by decide),
+      bit_val _ 54#u64 (by decide), bit_val _ 58#u64 (by decide), from_code_eq,
+      unpack_asid_eq _ 54#u64 _ (by decide), unpack_asid_eq _ 49#u64 _ (by decide)]
     all_goals rfl
   case h_7 =>
     have htk : (w0.bv >>> 59).toNat = 7 := congrArg UScalar.val heq
-    simp only [decodeF, htk]
-    try simp only [shr_eq _ 48#i32 (by decide) (by decide), shr_eq _ 50#i32 (by decide) (by decide), shr_eq _ 58#i32 (by decide) (by decide), shr_eq _ 16#i32 (by decide) (by decide), lift, bind_ok, capability.PTR_MASK, bit_val _ 48#u64 (by decide), bit_val _ 49#u64 (by decide), bit_val _ 50#u64 (by decide), bit_val _ 51#u64 (by decide), bit_val _ 52#u64 (by decide), bit_val _ 53#u64 (by decide), bit_val _ 54#u64 (by decide), from_code_eq, unpack_asid_eq _ 54#u64 _ (by decide), unpack_asid_eq _ 49#u64 _ (by decide)]
+    try simp only [decodeF, htk]
+    try simp only [shr_eq _ 48#i32 (by decide) (by decide), shr_eq _ 50#i32 (by decide) (by decide),
+      shr_eq _ 53#i32 (by decide) (by decide), shr_eq _ 58#i32 (by decide) (by decide),
+      shr_eq _ 16#i32 (by decide) (by decide), lift, bind_ok, capability.PTR_MASK,
+      bit_val _ 48#u64 (by decide), bit_val _ 49#u64 (by decide), bit_val _ 50#u64 (by decide),
+      bit_val _ 51#u64 (by decide), bit_val _ 52#u64 (by decide), bit_val _ 53#u64 (by decide),
+      bit_val _ 54#u64 (by decide), bit_val _ 58#u64 (by decide), from_code_eq,
+      unpack_asid_eq _ 54#u64 _ (by decide), unpack_asid_eq _ 49#u64 _ (by decide)]
     all_goals rfl
   case h_8 =>
     have htk : (w0.bv >>> 59).toNat = 8 := congrArg UScalar.val heq
-    simp only [decodeF, htk]
-    try simp only [shr_eq _ 48#i32 (by decide) (by decide), shr_eq _ 50#i32 (by decide) (by decide), shr_eq _ 58#i32 (by decide) (by decide), shr_eq _ 16#i32 (by decide) (by decide), lift, bind_ok, capability.PTR_MASK, bit_val _ 48#u64 (by decide), bit_val _ 49#u64 (by decide), bit_val _ 50#u64 (by decide), bit_val _ 51#u64 (by decide), bit_val _ 52#u64 (by decide), bit_val _ 53#u64 (by decide), bit_val _ 54#u64 (by decide), from_code_eq, unpack_asid_eq _ 54#u64 _ (by decide), unpack_asid_eq _ 49#u64 _ (by decide)]
+    try simp only [decodeF, htk]
+    try simp only [shr_eq _ 48#i32 (by decide) (by decide), shr_eq _ 50#i32 (by decide) (by decide),
+      shr_eq _ 53#i32 (by decide) (by decide), shr_eq _ 58#i32 (by decide) (by decide),
+      shr_eq _ 16#i32 (by decide) (by decide), lift, bind_ok, capability.PTR_MASK,
+      bit_val _ 48#u64 (by decide), bit_val _ 49#u64 (by decide), bit_val _ 50#u64 (by decide),
+      bit_val _ 51#u64 (by decide), bit_val _ 52#u64 (by decide), bit_val _ 53#u64 (by decide),
+      bit_val _ 54#u64 (by decide), bit_val _ 58#u64 (by decide), from_code_eq,
+      unpack_asid_eq _ 54#u64 _ (by decide), unpack_asid_eq _ 49#u64 _ (by decide)]
     all_goals rfl
   case h_9 =>
     have htk : (w0.bv >>> 59).toNat = 9 := congrArg UScalar.val heq
-    simp only [decodeF, htk]
-    try simp only [shr_eq _ 48#i32 (by decide) (by decide), shr_eq _ 50#i32 (by decide) (by decide), shr_eq _ 58#i32 (by decide) (by decide), shr_eq _ 16#i32 (by decide) (by decide), lift, bind_ok, capability.PTR_MASK, bit_val _ 48#u64 (by decide), bit_val _ 49#u64 (by decide), bit_val _ 50#u64 (by decide), bit_val _ 51#u64 (by decide), bit_val _ 52#u64 (by decide), bit_val _ 53#u64 (by decide), bit_val _ 54#u64 (by decide), from_code_eq, unpack_asid_eq _ 54#u64 _ (by decide), unpack_asid_eq _ 49#u64 _ (by decide)]
+    try simp only [decodeF, htk]
+    try simp only [shr_eq _ 48#i32 (by decide) (by decide), shr_eq _ 50#i32 (by decide) (by decide),
+      shr_eq _ 53#i32 (by decide) (by decide), shr_eq _ 58#i32 (by decide) (by decide),
+      shr_eq _ 16#i32 (by decide) (by decide), lift, bind_ok, capability.PTR_MASK,
+      bit_val _ 48#u64 (by decide), bit_val _ 49#u64 (by decide), bit_val _ 50#u64 (by decide),
+      bit_val _ 51#u64 (by decide), bit_val _ 52#u64 (by decide), bit_val _ 53#u64 (by decide),
+      bit_val _ 54#u64 (by decide), bit_val _ 58#u64 (by decide), from_code_eq,
+      unpack_asid_eq _ 54#u64 _ (by decide), unpack_asid_eq _ 49#u64 _ (by decide)]
     all_goals rfl
   case h_10 =>
     have htk : (w0.bv >>> 59).toNat = 10 := congrArg UScalar.val heq
-    simp only [decodeF, htk]
-    try simp only [shr_eq _ 48#i32 (by decide) (by decide), shr_eq _ 50#i32 (by decide) (by decide), shr_eq _ 58#i32 (by decide) (by decide), shr_eq _ 16#i32 (by decide) (by decide), lift, bind_ok, capability.PTR_MASK, bit_val _ 48#u64 (by decide), bit_val _ 49#u64 (by decide), bit_val _ 50#u64 (by decide), bit_val _ 51#u64 (by decide), bit_val _ 52#u64 (by decide), bit_val _ 53#u64 (by decide), bit_val _ 54#u64 (by decide), from_code_eq, unpack_asid_eq _ 54#u64 _ (by decide), unpack_asid_eq _ 49#u64 _ (by decide)]
+    try simp only [decodeF, htk]
+    try simp only [shr_eq _ 48#i32 (by decide) (by decide), shr_eq _ 50#i32 (by decide) (by decide),
+      shr_eq _ 53#i32 (by decide) (by decide), shr_eq _ 58#i32 (by decide) (by decide),
+      shr_eq _ 16#i32 (by decide) (by decide), lift, bind_ok, capability.PTR_MASK,
+      bit_val _ 48#u64 (by decide), bit_val _ 49#u64 (by decide), bit_val _ 50#u64 (by decide),
+      bit_val _ 51#u64 (by decide), bit_val _ 52#u64 (by decide), bit_val _ 53#u64 (by decide),
+      bit_val _ 54#u64 (by decide), bit_val _ 58#u64 (by decide), from_code_eq,
+      unpack_asid_eq _ 54#u64 _ (by decide), unpack_asid_eq _ 49#u64 _ (by decide)]
     all_goals rfl
   case h_11 =>
     have htk : (w0.bv >>> 59).toNat = 11 := congrArg UScalar.val heq
-    simp only [decodeF, htk]
-    try simp only [shr_eq _ 48#i32 (by decide) (by decide), shr_eq _ 50#i32 (by decide) (by decide), shr_eq _ 58#i32 (by decide) (by decide), shr_eq _ 16#i32 (by decide) (by decide), lift, bind_ok, capability.PTR_MASK, bit_val _ 48#u64 (by decide), bit_val _ 49#u64 (by decide), bit_val _ 50#u64 (by decide), bit_val _ 51#u64 (by decide), bit_val _ 52#u64 (by decide), bit_val _ 53#u64 (by decide), bit_val _ 54#u64 (by decide), from_code_eq, unpack_asid_eq _ 54#u64 _ (by decide), unpack_asid_eq _ 49#u64 _ (by decide)]
+    try simp only [decodeF, htk]
+    try simp only [shr_eq _ 48#i32 (by decide) (by decide), shr_eq _ 50#i32 (by decide) (by decide),
+      shr_eq _ 53#i32 (by decide) (by decide), shr_eq _ 58#i32 (by decide) (by decide),
+      shr_eq _ 16#i32 (by decide) (by decide), lift, bind_ok, capability.PTR_MASK,
+      bit_val _ 48#u64 (by decide), bit_val _ 49#u64 (by decide), bit_val _ 50#u64 (by decide),
+      bit_val _ 51#u64 (by decide), bit_val _ 52#u64 (by decide), bit_val _ 53#u64 (by decide),
+      bit_val _ 54#u64 (by decide), bit_val _ 58#u64 (by decide), from_code_eq,
+      unpack_asid_eq _ 54#u64 _ (by decide), unpack_asid_eq _ 49#u64 _ (by decide)]
     all_goals rfl
   case h_12 =>
     have htk : (w0.bv >>> 59).toNat = 12 := congrArg UScalar.val heq
-    simp only [decodeF, htk]
-    try simp only [shr_eq _ 48#i32 (by decide) (by decide), shr_eq _ 50#i32 (by decide) (by decide), shr_eq _ 58#i32 (by decide) (by decide), shr_eq _ 16#i32 (by decide) (by decide), lift, bind_ok, capability.PTR_MASK, bit_val _ 48#u64 (by decide), bit_val _ 49#u64 (by decide), bit_val _ 50#u64 (by decide), bit_val _ 51#u64 (by decide), bit_val _ 52#u64 (by decide), bit_val _ 53#u64 (by decide), bit_val _ 54#u64 (by decide), from_code_eq, unpack_asid_eq _ 54#u64 _ (by decide), unpack_asid_eq _ 49#u64 _ (by decide)]
+    try simp only [decodeF, htk]
+    try simp only [shr_eq _ 48#i32 (by decide) (by decide), shr_eq _ 50#i32 (by decide) (by decide),
+      shr_eq _ 53#i32 (by decide) (by decide), shr_eq _ 58#i32 (by decide) (by decide),
+      shr_eq _ 16#i32 (by decide) (by decide), lift, bind_ok, capability.PTR_MASK,
+      bit_val _ 48#u64 (by decide), bit_val _ 49#u64 (by decide), bit_val _ 50#u64 (by decide),
+      bit_val _ 51#u64 (by decide), bit_val _ 52#u64 (by decide), bit_val _ 53#u64 (by decide),
+      bit_val _ 54#u64 (by decide), bit_val _ 58#u64 (by decide), from_code_eq,
+      unpack_asid_eq _ 54#u64 _ (by decide), unpack_asid_eq _ 49#u64 _ (by decide)]
     all_goals rfl
   case h_13 =>
     have htk : (w0.bv >>> 59).toNat = 13 := congrArg UScalar.val heq
-    simp only [decodeF, htk]
-    try simp only [shr_eq _ 48#i32 (by decide) (by decide), shr_eq _ 50#i32 (by decide) (by decide), shr_eq _ 58#i32 (by decide) (by decide), shr_eq _ 16#i32 (by decide) (by decide), lift, bind_ok, capability.PTR_MASK, bit_val _ 48#u64 (by decide), bit_val _ 49#u64 (by decide), bit_val _ 50#u64 (by decide), bit_val _ 51#u64 (by decide), bit_val _ 52#u64 (by decide), bit_val _ 53#u64 (by decide), bit_val _ 54#u64 (by decide), from_code_eq, unpack_asid_eq _ 54#u64 _ (by decide), unpack_asid_eq _ 49#u64 _ (by decide)]
+    try simp only [decodeF, htk]
+    try simp only [shr_eq _ 48#i32 (by decide) (by decide), shr_eq _ 50#i32 (by decide) (by decide),
+      shr_eq _ 53#i32 (by decide) (by decide), shr_eq _ 58#i32 (by decide) (by decide),
+      shr_eq _ 16#i32 (by decide) (by decide), lift, bind_ok, capability.PTR_MASK,
+      bit_val _ 48#u64 (by decide), bit_val _ 49#u64 (by decide), bit_val _ 50#u64 (by decide),
+      bit_val _ 51#u64 (by decide), bit_val _ 52#u64 (by decide), bit_val _ 53#u64 (by decide),
+      bit_val _ 54#u64 (by decide), bit_val _ 58#u64 (by decide), from_code_eq,
+      unpack_asid_eq _ 54#u64 _ (by decide), unpack_asid_eq _ 49#u64 _ (by decide)]
     all_goals rfl
   case h_14 =>
     have htk : (w0.bv >>> 59).toNat = 14 := congrArg UScalar.val heq
-    simp only [decodeF, htk]
-    try simp only [shr_eq _ 48#i32 (by decide) (by decide), shr_eq _ 50#i32 (by decide) (by decide), shr_eq _ 58#i32 (by decide) (by decide), shr_eq _ 16#i32 (by decide) (by decide), lift, bind_ok, capability.PTR_MASK, bit_val _ 48#u64 (by decide), bit_val _ 49#u64 (by decide), bit_val _ 50#u64 (by decide), bit_val _ 51#u64 (by decide), bit_val _ 52#u64 (by decide), bit_val _ 53#u64 (by decide), bit_val _ 54#u64 (by decide), from_code_eq, unpack_asid_eq _ 54#u64 _ (by decide), unpack_asid_eq _ 49#u64 _ (by decide)]
+    try simp only [decodeF, htk]
+    try simp only [shr_eq _ 48#i32 (by decide) (by decide), shr_eq _ 50#i32 (by decide) (by decide),
+      shr_eq _ 53#i32 (by decide) (by decide), shr_eq _ 58#i32 (by decide) (by decide),
+      shr_eq _ 16#i32 (by decide) (by decide), lift, bind_ok, capability.PTR_MASK,
+      bit_val _ 48#u64 (by decide), bit_val _ 49#u64 (by decide), bit_val _ 50#u64 (by decide),
+      bit_val _ 51#u64 (by decide), bit_val _ 52#u64 (by decide), bit_val _ 53#u64 (by decide),
+      bit_val _ 54#u64 (by decide), bit_val _ 58#u64 (by decide), from_code_eq,
+      unpack_asid_eq _ 54#u64 _ (by decide), unpack_asid_eq _ 49#u64 _ (by decide)]
     all_goals rfl
   case h_15 =>
     have htk : (w0.bv >>> 59).toNat = 15 := congrArg UScalar.val heq
-    simp only [decodeF, htk]
-    try simp only [shr_eq _ 48#i32 (by decide) (by decide), shr_eq _ 50#i32 (by decide) (by decide), shr_eq _ 58#i32 (by decide) (by decide), shr_eq _ 16#i32 (by decide) (by decide), lift, bind_ok, capability.PTR_MASK, bit_val _ 48#u64 (by decide), bit_val _ 49#u64 (by decide), bit_val _ 50#u64 (by decide), bit_val _ 51#u64 (by decide), bit_val _ 52#u64 (by decide), bit_val _ 53#u64 (by decide), bit_val _ 54#u64 (by decide), from_code_eq, unpack_asid_eq _ 54#u64 _ (by decide), unpack_asid_eq _ 49#u64 _ (by decide)]
+    try simp only [decodeF, htk]
+    try simp only [shr_eq _ 48#i32 (by decide) (by decide), shr_eq _ 50#i32 (by decide) (by decide),
+      shr_eq _ 53#i32 (by decide) (by decide), shr_eq _ 58#i32 (by decide) (by decide),
+      shr_eq _ 16#i32 (by decide) (by decide), lift, bind_ok, capability.PTR_MASK,
+      bit_val _ 48#u64 (by decide), bit_val _ 49#u64 (by decide), bit_val _ 50#u64 (by decide),
+      bit_val _ 51#u64 (by decide), bit_val _ 52#u64 (by decide), bit_val _ 53#u64 (by decide),
+      bit_val _ 54#u64 (by decide), bit_val _ 58#u64 (by decide), from_code_eq,
+      unpack_asid_eq _ 54#u64 _ (by decide), unpack_asid_eq _ 49#u64 _ (by decide)]
     all_goals rfl
   case h_16 =>
     have htk : (w0.bv >>> 59).toNat = 16 := congrArg UScalar.val heq
-    simp only [decodeF, htk]
-    try simp only [shr_eq _ 48#i32 (by decide) (by decide), shr_eq _ 50#i32 (by decide) (by decide), shr_eq _ 58#i32 (by decide) (by decide), shr_eq _ 16#i32 (by decide) (by decide), lift, bind_ok, capability.PTR_MASK, bit_val _ 48#u64 (by decide), bit_val _ 49#u64 (by decide), bit_val _ 50#u64 (by decide), bit_val _ 51#u64 (by decide), bit_val _ 52#u64 (by decide), bit_val _ 53#u64 (by decide), bit_val _ 54#u64 (by decide), from_code_eq, unpack_asid_eq _ 54#u64 _ (by decide), unpack_asid_eq _ 49#u64 _ (by decide)]
+    try simp only [decodeF, htk]
+    try simp only [shr_eq _ 48#i32 (by decide) (by decide), shr_eq _ 50#i32 (by decide) (by decide),
+      shr_eq _ 53#i32 (by decide) (by decide), shr_eq _ 58#i32 (by decide) (by decide),
+      shr_eq _ 16#i32 (by decide) (by decide), lift, bind_ok, capability.PTR_MASK,
+      bit_val _ 48#u64 (by decide), bit_val _ 49#u64 (by decide), bit_val _ 50#u64 (by decide),
+      bit_val _ 51#u64 (by decide), bit_val _ 52#u64 (by decide), bit_val _ 53#u64 (by decide),
+      bit_val _ 54#u64 (by decide), bit_val _ 58#u64 (by decide), from_code_eq,
+      unpack_asid_eq _ 54#u64 _ (by decide), unpack_asid_eq _ 49#u64 _ (by decide)]
     all_goals rfl
   case h_17 =>
     have htk : (w0.bv >>> 59).toNat = 17 := congrArg UScalar.val heq
-    simp only [decodeF, htk]
-    try simp only [shr_eq _ 48#i32 (by decide) (by decide), shr_eq _ 50#i32 (by decide) (by decide), shr_eq _ 58#i32 (by decide) (by decide), shr_eq _ 16#i32 (by decide) (by decide), lift, bind_ok, capability.PTR_MASK, bit_val _ 48#u64 (by decide), bit_val _ 49#u64 (by decide), bit_val _ 50#u64 (by decide), bit_val _ 51#u64 (by decide), bit_val _ 52#u64 (by decide), bit_val _ 53#u64 (by decide), bit_val _ 54#u64 (by decide), from_code_eq, unpack_asid_eq _ 54#u64 _ (by decide), unpack_asid_eq _ 49#u64 _ (by decide)]
+    try simp only [decodeF, htk]
+    try simp only [shr_eq _ 48#i32 (by decide) (by decide), shr_eq _ 50#i32 (by decide) (by decide),
+      shr_eq _ 53#i32 (by decide) (by decide), shr_eq _ 58#i32 (by decide) (by decide),
+      shr_eq _ 16#i32 (by decide) (by decide), lift, bind_ok, capability.PTR_MASK,
+      bit_val _ 48#u64 (by decide), bit_val _ 49#u64 (by decide), bit_val _ 50#u64 (by decide),
+      bit_val _ 51#u64 (by decide), bit_val _ 52#u64 (by decide), bit_val _ 53#u64 (by decide),
+      bit_val _ 54#u64 (by decide), bit_val _ 58#u64 (by decide), from_code_eq,
+      unpack_asid_eq _ 54#u64 _ (by decide), unpack_asid_eq _ 49#u64 _ (by decide)]
     all_goals rfl
   case h_18 =>
     have htk : (w0.bv >>> 59).toNat = 18 := congrArg UScalar.val heq
-    simp only [decodeF, htk]
-    try simp only [shr_eq _ 48#i32 (by decide) (by decide), shr_eq _ 50#i32 (by decide) (by decide), shr_eq _ 58#i32 (by decide) (by decide), shr_eq _ 16#i32 (by decide) (by decide), lift, bind_ok, capability.PTR_MASK, bit_val _ 48#u64 (by decide), bit_val _ 49#u64 (by decide), bit_val _ 50#u64 (by decide), bit_val _ 51#u64 (by decide), bit_val _ 52#u64 (by decide), bit_val _ 53#u64 (by decide), bit_val _ 54#u64 (by decide), from_code_eq, unpack_asid_eq _ 54#u64 _ (by decide), unpack_asid_eq _ 49#u64 _ (by decide)]
+    try simp only [decodeF, htk]
+    try simp only [shr_eq _ 48#i32 (by decide) (by decide), shr_eq _ 50#i32 (by decide) (by decide),
+      shr_eq _ 53#i32 (by decide) (by decide), shr_eq _ 58#i32 (by decide) (by decide),
+      shr_eq _ 16#i32 (by decide) (by decide), lift, bind_ok, capability.PTR_MASK,
+      bit_val _ 48#u64 (by decide), bit_val _ 49#u64 (by decide), bit_val _ 50#u64 (by decide),
+      bit_val _ 51#u64 (by decide), bit_val _ 52#u64 (by decide), bit_val _ 53#u64 (by decide),
+      bit_val _ 54#u64 (by decide), bit_val _ 58#u64 (by decide), from_code_eq,
+      unpack_asid_eq _ 54#u64 _ (by decide), unpack_asid_eq _ 49#u64 _ (by decide)]
     all_goals rfl
   case h_19 =>
     have htk : (w0.bv >>> 59).toNat = 19 := congrArg UScalar.val heq
-    simp only [decodeF, htk]
-    try simp only [shr_eq _ 48#i32 (by decide) (by decide), shr_eq _ 50#i32 (by decide) (by decide), shr_eq _ 58#i32 (by decide) (by decide), shr_eq _ 16#i32 (by decide) (by decide), lift, bind_ok, capability.PTR_MASK, bit_val _ 48#u64 (by decide), bit_val _ 49#u64 (by decide), bit_val _ 50#u64 (by decide), bit_val _ 51#u64 (by decide), bit_val _ 52#u64 (by decide), bit_val _ 53#u64 (by decide), bit_val _ 54#u64 (by decide), from_code_eq, unpack_asid_eq _ 54#u64 _ (by decide), unpack_asid_eq _ 49#u64 _ (by decide)]
+    try simp only [decodeF, htk]
+    try simp only [shr_eq _ 48#i32 (by decide) (by decide), shr_eq _ 50#i32 (by decide) (by decide),
+      shr_eq _ 53#i32 (by decide) (by decide), shr_eq _ 58#i32 (by decide) (by decide),
+      shr_eq _ 16#i32 (by decide) (by decide), lift, bind_ok, capability.PTR_MASK,
+      bit_val _ 48#u64 (by decide), bit_val _ 49#u64 (by decide), bit_val _ 50#u64 (by decide),
+      bit_val _ 51#u64 (by decide), bit_val _ 52#u64 (by decide), bit_val _ 53#u64 (by decide),
+      bit_val _ 54#u64 (by decide), bit_val _ 58#u64 (by decide), from_code_eq,
+      unpack_asid_eq _ 54#u64 _ (by decide), unpack_asid_eq _ 49#u64 _ (by decide)]
     all_goals rfl
   case h_20 =>
-    have htk : (w0.bv >>> 59).toNat = 20 := congrArg UScalar.val heq
-    simp only [decodeF, htk]
-    try simp only [shr_eq _ 48#i32 (by decide) (by decide), shr_eq _ 50#i32 (by decide) (by decide), shr_eq _ 58#i32 (by decide) (by decide), shr_eq _ 16#i32 (by decide) (by decide), lift, bind_ok, capability.PTR_MASK, bit_val _ 48#u64 (by decide), bit_val _ 49#u64 (by decide), bit_val _ 50#u64 (by decide), bit_val _ 51#u64 (by decide), bit_val _ 52#u64 (by decide), bit_val _ 53#u64 (by decide), bit_val _ 54#u64 (by decide), from_code_eq, unpack_asid_eq _ 54#u64 _ (by decide), unpack_asid_eq _ 49#u64 _ (by decide)]
+    have htk : (w0.bv >>> 59).toNat = 22 := congrArg UScalar.val heq
+    try simp only [decodeF, htk]
+    try simp only [shr_eq _ 48#i32 (by decide) (by decide), shr_eq _ 50#i32 (by decide) (by decide),
+      shr_eq _ 53#i32 (by decide) (by decide), shr_eq _ 58#i32 (by decide) (by decide),
+      shr_eq _ 16#i32 (by decide) (by decide), lift, bind_ok, capability.PTR_MASK,
+      bit_val _ 48#u64 (by decide), bit_val _ 49#u64 (by decide), bit_val _ 50#u64 (by decide),
+      bit_val _ 51#u64 (by decide), bit_val _ 52#u64 (by decide), bit_val _ 53#u64 (by decide),
+      bit_val _ 54#u64 (by decide), bit_val _ 58#u64 (by decide), from_code_eq,
+      unpack_asid_eq _ 54#u64 _ (by decide), unpack_asid_eq _ 49#u64 _ (by decide)]
     all_goals rfl
   case h_21 =>
-    have htk : (w0.bv >>> 59).toNat = 21 := congrArg UScalar.val heq
-    simp only [decodeF, htk]
-    try simp only [shr_eq _ 48#i32 (by decide) (by decide), shr_eq _ 50#i32 (by decide) (by decide), shr_eq _ 58#i32 (by decide) (by decide), shr_eq _ 16#i32 (by decide) (by decide), lift, bind_ok, capability.PTR_MASK, bit_val _ 48#u64 (by decide), bit_val _ 49#u64 (by decide), bit_val _ 50#u64 (by decide), bit_val _ 51#u64 (by decide), bit_val _ 52#u64 (by decide), bit_val _ 53#u64 (by decide), bit_val _ 54#u64 (by decide), from_code_eq, unpack_asid_eq _ 54#u64 _ (by decide), unpack_asid_eq _ 49#u64 _ (by decide)]
+    have htk : (w0.bv >>> 59).toNat = 23 := congrArg UScalar.val heq
+    try simp only [decodeF, htk]
+    try simp only [shr_eq _ 48#i32 (by decide) (by decide), shr_eq _ 50#i32 (by decide) (by decide),
+      shr_eq _ 53#i32 (by decide) (by decide), shr_eq _ 58#i32 (by decide) (by decide),
+      shr_eq _ 16#i32 (by decide) (by decide), lift, bind_ok, capability.PTR_MASK,
+      bit_val _ 48#u64 (by decide), bit_val _ 49#u64 (by decide), bit_val _ 50#u64 (by decide),
+      bit_val _ 51#u64 (by decide), bit_val _ 52#u64 (by decide), bit_val _ 53#u64 (by decide),
+      bit_val _ 54#u64 (by decide), bit_val _ 58#u64 (by decide), from_code_eq,
+      unpack_asid_eq _ 54#u64 _ (by decide), unpack_asid_eq _ 49#u64 _ (by decide)]
     all_goals rfl
   case h_22 =>
+    have htk : (w0.bv >>> 59).toNat = 20 := congrArg UScalar.val heq
+    try simp only [decodeF, htk]
+    try simp only [shr_eq _ 48#i32 (by decide) (by decide), shr_eq _ 50#i32 (by decide) (by decide),
+      shr_eq _ 53#i32 (by decide) (by decide), shr_eq _ 58#i32 (by decide) (by decide),
+      shr_eq _ 16#i32 (by decide) (by decide), lift, bind_ok, capability.PTR_MASK,
+      bit_val _ 48#u64 (by decide), bit_val _ 49#u64 (by decide), bit_val _ 50#u64 (by decide),
+      bit_val _ 51#u64 (by decide), bit_val _ 52#u64 (by decide), bit_val _ 53#u64 (by decide),
+      bit_val _ 54#u64 (by decide), bit_val _ 58#u64 (by decide), from_code_eq,
+      unpack_asid_eq _ 54#u64 _ (by decide), unpack_asid_eq _ 49#u64 _ (by decide)]
+    all_goals rfl
+  case h_23 =>
+    have htk : (w0.bv >>> 59).toNat = 21 := congrArg UScalar.val heq
+    try simp only [decodeF, htk]
+    try simp only [shr_eq _ 48#i32 (by decide) (by decide), shr_eq _ 50#i32 (by decide) (by decide),
+      shr_eq _ 53#i32 (by decide) (by decide), shr_eq _ 58#i32 (by decide) (by decide),
+      shr_eq _ 16#i32 (by decide) (by decide), lift, bind_ok, capability.PTR_MASK,
+      bit_val _ 48#u64 (by decide), bit_val _ 49#u64 (by decide), bit_val _ 50#u64 (by decide),
+      bit_val _ 51#u64 (by decide), bit_val _ 52#u64 (by decide), bit_val _ 53#u64 (by decide),
+      bit_val _ 54#u64 (by decide), bit_val _ 58#u64 (by decide), from_code_eq,
+      unpack_asid_eq _ 54#u64 _ (by decide), unpack_asid_eq _ 49#u64 _ (by decide)]
+    simp only [UScalar.eq_equiv_bv_eq]
+    change (if w0.bv &&& M48 = 0#64 then _ else _) = _
+    split <;> rfl
+  case h_24 =>
     simp only [decodeF]
     split <;> rename_i hk
     · exact absurd (UScalar.eq_of_val_eq (i := (⟨w0.bv >>> I32.toNat 59#i32⟩ : U64)) (j := 1#u64) hk) (by assumption)
@@ -197,6 +351,8 @@ theorem decode_eq (w0 w1 : U64) : capability.Cap.decode w0 w1 = ok (decodeF w0.b
     · exact absurd (UScalar.eq_of_val_eq (i := (⟨w0.bv >>> I32.toNat 59#i32⟩ : U64)) (j := 17#u64) hk) (by assumption)
     · exact absurd (UScalar.eq_of_val_eq (i := (⟨w0.bv >>> I32.toNat 59#i32⟩ : U64)) (j := 18#u64) hk) (by assumption)
     · exact absurd (UScalar.eq_of_val_eq (i := (⟨w0.bv >>> I32.toNat 59#i32⟩ : U64)) (j := 19#u64) hk) (by assumption)
+    · exact absurd (UScalar.eq_of_val_eq (i := (⟨w0.bv >>> I32.toNat 59#i32⟩ : U64)) (j := 22#u64) hk) (by assumption)
+    · exact absurd (UScalar.eq_of_val_eq (i := (⟨w0.bv >>> I32.toNat 59#i32⟩ : U64)) (j := 23#u64) hk) (by assumption)
     · exact absurd (UScalar.eq_of_val_eq (i := (⟨w0.bv >>> I32.toNat 59#i32⟩ : U64)) (j := 20#u64) hk) (by assumption)
     · exact absurd (UScalar.eq_of_val_eq (i := (⟨w0.bv >>> I32.toNat 59#i32⟩ : U64)) (j := 21#u64) hk) (by assumption)
     · rfl
@@ -257,8 +413,8 @@ def encodeF : capability.Cap → BitVec 64 × BitVec 64
   | .Domain => (tagF 10, 0#64)
   | .SchedContext p sb => (tagF 11 ||| packF p ||| ((sb.bv &&& 63#64) <<< 48), 0#64)
   | .SchedControl cpu => (tagF 12, cpu.bv)
-  | .Frame p sz r dev m asid va =>
-    (tagF 13 ||| packF p ||| (codeF sz <<< 48) ||| ((r.bv &&& 3#64) <<< 50) ||| bF dev 52 ||| bF m 53 ||| asidHiF asid 54,
+  | .Frame p sz r dev m ept asid va =>
+    (tagF 13 ||| packF p ||| (codeF sz <<< 48) ||| ((r.bv &&& 3#64) <<< 50) ||| bF dev 52 ||| bF m 53 ||| bF ept 58 ||| asidHiF asid 54,
       ((asid.bv &&& 0xffff#64) <<< 48) ||| (va.bv &&& 0xffffffffffff#64))
   | .PageTable p m asid va => (tagF 14 ||| packF p ||| bF m 48 ||| asidHiF asid 49,
       ((asid.bv &&& 0xffff#64) <<< 48) ||| (va.bv &&& 0xffffffffffff#64))
@@ -270,18 +426,22 @@ def encodeF : capability.Cap → BitVec 64 × BitVec 64
   | .AsidControl => (tagF 18, 0#64)
   | .AsidPool p base => (tagF 19 ||| packF p, base.bv)
   | .IoPortControl => (tagF 20, 0#64)
-  | .IoPort f l => (tagF 21, (f.bv &&& 0xffff#64) ||| ((l.bv &&& 0xffff#64) <<< 16))
+  | .Vcpu p => (tagF 22 ||| packF p, 0#64)
+  | .Ept p level m asid va =>
+      (tagF 23 ||| packF p ||| bF m 48 ||| asidHiF asid 49 ||| ((level.bv &&& 63#64) <<< 53),
+        ((asid.bv &&& 0xffff#64) <<< 48) ||| (va.bv &&& M48))
+  | .IoPort f l vcpu => (tagF 21 ||| packF vcpu, (f.bv &&& 0xffff#64) ||| ((l.bv &&& 0xffff#64) <<< 16))
 
 theorem encode_eq (c : capability.Cap) :
     capability.Cap.encode c = ok (⟨(encodeF c).1⟩, ⟨(encodeF c).2⟩) := by
   cases c <;>
-    simp only [capability.Cap.encode, capability.tag, capability.pack_ptr, lift, bind_ok, capability.PTR_MASK,
+    simp only [capability.Cap.encode, encodeF, tagF, packF, bF, codeF, asidHiF, M48, capability.tag, capability.pack_ptr, lift, bind_ok, capability.PTR_MASK,
       shl_eq _ 59#i32 (by decide) (by decide), shl_eq _ 48#i32 (by decide) (by decide),
-      shl_eq _ 50#i32 (by decide) (by decide), shl_eq _ 58#i32 (by decide) (by decide),
+      shl_eq _ 50#i32 (by decide) (by decide), shl_eq _ 53#i32 (by decide) (by decide), shl_eq _ 58#i32 (by decide) (by decide),
       shl_eq _ 16#i32 (by decide) (by decide),
       b_eq _ 48#u64 (by decide), b_eq _ 49#u64 (by decide), b_eq _ 50#u64 (by decide),
       b_eq _ 51#u64 (by decide), b_eq _ 52#u64 (by decide), b_eq _ 53#u64 (by decide),
-      b_eq _ 54#u64 (by decide), code_eq, asid_high_eq _ 54#u64 (by decide), asid_high_eq _ 49#u64 (by decide)] <;> rfl
+      b_eq _ 54#u64 (by decide), b_eq _ 58#u64 (by decide), code_eq, asid_high_eq _ 54#u64 (by decide), asid_high_eq _ 49#u64 (by decide)] <;> rfl
 
 @[simp] theorem getElem_bF (v : Bool) (n i : Nat) (h : i < 64) :
     (bF v n)[i] = (v && decide (i = n)) := by
@@ -334,13 +494,15 @@ def EncWf : capability.Cap → Prop
   | .Thread p => Canonical p
   | .Zombie p zt _ => Canonical p ∧ zt.val < 256
   | .SchedContext p sb => Canonical p ∧ sb.val < 64
-  | .Frame p _ r _ _ asid va => Canonical p ∧ r.val < 4 ∧ asid.val < 2 ^ 20 ∧ va.val < 2 ^ 48
+  | .Frame p _ r _ _ _ asid va => Canonical p ∧ r.val < 4 ∧ asid.val < 2 ^ 20 ∧ va.val < 2 ^ 48
   | .PageTable p _ asid va => Canonical p ∧ asid.val < 2 ^ 20 ∧ va.val < 2 ^ 48
   | .PageDirectory p _ asid va => Canonical p ∧ asid.val < 2 ^ 20 ∧ va.val < 2 ^ 48
   | .Pdpt p _ asid va => Canonical p ∧ asid.val < 2 ^ 20 ∧ va.val < 2 ^ 48
   | .Pml4 p _ _ => Canonical p
   | .AsidPool p _ => Canonical p
-  | .IoPort f l => f.val < 2 ^ 16 ∧ l.val < 2 ^ 16
+  | .Vcpu p => Canonical p
+  | .Ept p level _ asid va => Canonical p ∧ level.val < 64 ∧ asid.val < 2 ^ 20 ∧ va.val < 2 ^ 48
+  | .IoPort f l vcpu => f.val < 2 ^ 16 ∧ l.val < 2 ^ 16 ∧ Canonical vcpu
   | _ => True
 
 theorem hb {x : U64} {k : Nat} (h : x.val < 2 ^ k) : ∀ j (hj : j < 64), k ≤ j → x.bv[j] = false :=
@@ -505,12 +667,12 @@ theorem rt_SchedControl (cpu : _) (hc : EncWf (.SchedControl cpu)) :
   all_goals (try congr 1)
   all_goals fields
 
-theorem rt_Frame (p : _) (sz : _) (r : _) (dev : _) (m : _) (asid : _) (va : _) (hc : EncWf (.Frame p sz r dev m asid va)) :
-    decodeF (encodeF (.Frame p sz r dev m asid va)).1 (encodeF (.Frame p sz r dev m asid va)).2 = (.Frame p sz r dev m asid va) := by
+theorem rt_Frame (p : _) (sz : _) (r : _) (dev : _) (m : _) (ept : _) (asid : _) (va : _) (hc : EncWf (.Frame p sz r dev m ept asid va)) :
+    decodeF (encodeF (.Frame p sz r dev m ept asid va)).1 (encodeF (.Frame p sz r dev m ept asid va)).2 = (.Frame p sz r dev m ept asid va) := by
   obtain ⟨hp, h1, h2, h3⟩ := hc; have h1 := hb (k := 2) h1; have h2 := hb (k := 20) h2; have h3 := hb (k := 48) h3
   have h4 := codeF_hb sz
-  have htag := tag_gen (w := (encodeF (.Frame p sz r dev m asid va)).1) (k := 13) (by bvext) (by decide)
-  have hun := unpack_gen (encodeF (.Frame p sz r dev m asid va)).1 p hp (by
+  have htag := tag_gen (w := (encodeF (.Frame p sz r dev m ept asid va)).1) (k := 13) (by bvext) (by decide)
+  have hun := unpack_gen (encodeF (.Frame p sz r dev m ept asid va)).1 p hp (by
     intro j hj hj'; simp only [encodeF, BitVec.getElem_or, tagF, packF, getElem_bF, BitVec.getElem_and, BitVec.getElem_shiftLeft, asidHiF]
     interval_cases j <;> simp [h4])
   simp only [decodeF, htag, hun]
@@ -603,15 +765,46 @@ theorem rt_IoPortControl  (hc : EncWf .IoPortControl) :
   all_goals (try congr 1)
   all_goals fields
 
-theorem rt_IoPort (f : _) (l : _) (hc : EncWf (.IoPort f l)) :
-    decodeF (encodeF (.IoPort f l)).1 (encodeF (.IoPort f l)).2 = (.IoPort f l) := by
-  obtain ⟨h1, h2⟩ := hc; have h1 := hb (k := 16) h1; have h2 := hb (k := 16) h2
-  have htag := tag_gen (w := (encodeF (.IoPort f l)).1) (k := 21) (by bvext) (by decide)
-  simp only [decodeF, htag]
-  all_goals clear htag
-  try simp only [encodeF]
-  all_goals (try congr 1)
-  all_goals fields
+theorem rt_Vcpu (p : U64) (hc : EncWf (.Vcpu p)) :
+    decodeF (encodeF (.Vcpu p)).1 (encodeF (.Vcpu p)).2 = .Vcpu p := by
+  have htag := tag_gen (w := (encodeF (.Vcpu p)).1) (k := 22) (by bvext) (by decide)
+  have hun := unpack_gen (encodeF (.Vcpu p)).1 p hc (by
+    intro j hj hj'; simp only [encodeF, BitVec.getElem_or, tagF, packF, BitVec.getElem_and, BitVec.getElem_shiftLeft]
+    interval_cases j <;> simp)
+  simp only [decodeF, htag, hun]
+
+theorem rt_Ept (p level : U64) (m : Bool) (asid va : U64) (hc : EncWf (.Ept p level m asid va)) :
+    decodeF (encodeF (.Ept p level m asid va)).1 (encodeF (.Ept p level m asid va)).2 = .Ept p level m asid va := by
+  obtain ⟨hp, h1, h2, h3⟩ := hc
+  have h1 := hb (k := 6) h1; have h2 := hb (k := 20) h2; have h3 := hb (k := 48) h3
+  have htag := tag_gen (w := (encodeF (.Ept p level m asid va)).1) (k := 23) (by bvext) (by decide)
+  have hun := unpack_gen (encodeF (.Ept p level m asid va)).1 p hp (by
+    intro j hj hj'; simp only [encodeF, BitVec.getElem_or, tagF, packF, getElem_bF, BitVec.getElem_and, BitVec.getElem_shiftLeft, asidHiF, M48]
+    interval_cases j <;> simp)
+  simp only [decodeF, htag, hun]
+  clear htag hun
+  simp only [encodeF]
+  congr 1 <;> fields
+
+theorem rt_IoPort (f l vcpu : U64) (hc : EncWf (.IoPort f l vcpu)) :
+    decodeF (encodeF (.IoPort f l vcpu)).1 (encodeF (.IoPort f l vcpu)).2 = .IoPort f l vcpu := by
+  obtain ⟨h1, h2, hp⟩ := hc; have h1 := hb (k := 16) h1; have h2 := hb (k := 16) h2
+  have htag := tag_gen (w := (encodeF (.IoPort f l vcpu)).1) (k := 21) (by bvext) (by decide)
+  have hun := unpack_gen (encodeF (.IoPort f l vcpu)).1 vcpu hp (by
+    intro j hj hj'; simp only [encodeF, BitVec.getElem_or, tagF, packF, BitVec.getElem_and, BitVec.getElem_shiftLeft]
+    interval_cases j <;> simp)
+  simp only [decodeF, htag, hun]
+  have hv : (if (encodeF (.IoPort f l vcpu)).1 &&& M48 = 0#64 then 0#u64 else vcpu) = vcpu := by
+    split <;> rename_i h
+    · have hz : unpackF (encodeF (.IoPort f l vcpu)).1 = 0#64 := by
+        unfold unpackF
+        simp [h]
+      rw [hun] at hz
+      exact (by rw [UScalar.eq_equiv_bv_eq]; exact hz.symm)
+    · rfl
+  rw [hv]
+  simp only [encodeF]
+  congr 1 <;> fields
 
 /-- `Cap::decode` after `Cap::encode`, on words, is the identity on caps whose
 fields fit (`EncWf`). -/
@@ -631,7 +824,7 @@ theorem decodeF_encodeF (c : capability.Cap) (hc : EncWf c) :
   | Domain  => exact rt_Domain  hc
   | SchedContext p sb => exact rt_SchedContext p sb hc
   | SchedControl cpu => exact rt_SchedControl cpu hc
-  | Frame p sz r dev m asid va => exact rt_Frame p sz r dev m asid va hc
+  | Frame p sz r dev m ept asid va => exact rt_Frame p sz r dev m ept asid va hc
   | PageTable p m asid va => exact rt_PageTable p m asid va hc
   | PageDirectory p m asid va => exact rt_PageDirectory p m asid va hc
   | Pdpt p m asid va => exact rt_Pdpt p m asid va hc
@@ -639,7 +832,9 @@ theorem decodeF_encodeF (c : capability.Cap) (hc : EncWf c) :
   | AsidControl  => exact rt_AsidControl  hc
   | AsidPool p base => exact rt_AsidPool p base hc
   | IoPortControl  => exact rt_IoPortControl  hc
-  | IoPort f l => exact rt_IoPort f l hc
+  | Vcpu p => exact rt_Vcpu p hc
+  | Ept p level m asid va => exact rt_Ept p level m asid va hc
+  | IoPort f l vcpu => exact rt_IoPort f l vcpu hc
 
 /-- **`Cap::decode` after `Cap::encode` is the identity** on caps whose fields
 fit their encoding. -/
@@ -715,9 +910,15 @@ theorem decodeF_encWf (w0 w1 : BitVec 64) : EncWf (decodeF w0 w1) := by
   case h_17 => exact hp
   case h_18 => trivial
   case h_19 => exact hp
-  case h_20 => trivial
-  case h_21 => exact ⟨lt_and _ _ 16 (by decide), lt_and _ _ 16 (by decide)⟩
+  case h_20 => exact hp
+  case h_21 => exact ⟨hp, lt_and _ _ 6 (by decide), lt_asidF _ _ _, lt_and _ _ 48 (by decide)⟩
   case h_22 => trivial
+  case h_23 =>
+    refine ⟨lt_and _ _ 16 (by decide), lt_and _ _ 16 (by decide), ?_⟩
+    split
+    · left; intro j hj hj'; simp
+    · exact hp
+  case h_24 => trivial
 
 theorem decode_encWf {w0 w1 : U64} {c : capability.Cap} (h : capability.Cap.decode w0 w1 = ok c) : EncWf c := by
   rw [decode_eq] at h

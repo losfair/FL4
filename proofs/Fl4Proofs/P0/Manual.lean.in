@@ -131,3 +131,17 @@
   set_option maxHeartbeats 4000000 in
   unfold syscall.handle_unknown_syscall
   p0_structural
+
+
+-- The cap owner is a lookup key, while the walk consumes its independent fuel.
+@[step] theorem vcpu.revoke_ports_loop.p0 {S : Type _} {A : Type _}
+    (machineStoreInst : machine.Store S) (machineArchInst : machine.Arch A)
+    (s : S) (a : A) (owner low high v fuel : U64)
+    (hS : StoreTotal machineStoreInst) (hA : ArchTotal machineArchInst) :
+    vcpu.revoke_ports_loop machineStoreInst machineArchInst s a owner low high v fuel ⦃ _ => True ⦄ := by
+  unfold vcpu.revoke_ports_loop
+  apply loop.spec_decr_nat (measure := fun x => x.2.2.2.val) (inv := fun _ => True)
+  · rintro ⟨s1, a1, v1, f1⟩ _
+    unfold vcpu.revoke_ports_loop.body
+    p0_body
+  · trivial

@@ -21,8 +21,8 @@ The relation itself:
   in the spec's heap at the same pointer, well formed, and slot `idx`
   (a list of `r` bits) is the 32-byte slot at `ptr + 32 * of_bl idx` whose
   decoded cap is `CapRel`-related to `cs idx`; every TCB in `th` is a `tcb`
-  in the spec's heap whose five cap slots (`tcb_cnode_map`) are related to
-  FL4's five TCB slots (layout.rs `tcb::SLOT_*`, at `t + 32 * i`).
+  in the spec's heap whose six cap slots (`tcb_cnode_map`) are related to
+  FL4's six TCB slots (layout.rs `tcb::SLOT_*`, at `t + 32 * i`).
 
 Pointers are the identity (`U64.bv`): FL4's object handles are kernel
 virtual addresses and so are l4v `obj_ref`s.
@@ -85,12 +85,12 @@ frame cap's frame is aligned to its size (l4v `cap_aligned`). -/
 def CapValid (th : TypedHeap) : capability.Cap → Prop
   | .CNode p r _ _ => th p = some (.cnode r.val) ∧ r.val ≠ 0
   | .Thread p => th p = some .tcb
-  | .Frame p sz _ _ _ _ _ => p.val % 2 ^ frameBitsN sz = 0
+  | .Frame p sz _ _ _ _ _ _ => p.val % 2 ^ frameBitsN sz = 0
   | _ => True
 
 /-- Number of cap slots of a TCB (layout.rs `tcb::SLOT_CTABLE` ..
-`SLOT_TIMEOUT_HANDLER`; l4v `tcb_cnode_map`). -/
-def tcbSlots : Nat := 5
+`SLOT_EPT`; l4v `tcb_cnode_map`). -/
+def tcbSlots : Nat := 6
 
 /-- Hypothesis: every cap in a slot of a CNode or TCB is `CapValid`. -/
 structure SlotsValid (th : TypedHeap) (mem : U64 → U64) : Prop where

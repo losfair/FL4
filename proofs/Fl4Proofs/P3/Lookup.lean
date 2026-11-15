@@ -471,7 +471,8 @@ theorem tcbCnodeMap_ctable (tcb : Tcb) : tcbCnodeMap tcb (tcbCnodeIndex 0) = som
   have h2 : tcbCnodeIndex 0 ≠ tcbCnodeIndex 2 := by decide
   have h3 : tcbCnodeIndex 0 ≠ tcbCnodeIndex 3 := by decide
   have h4 : tcbCnodeIndex 0 ≠ tcbCnodeIndex 4 := by decide
-  simp [tcbCnodeMap, h1, h2, h3, h4]
+  have h5 : tcbCnodeIndex 0 ≠ tcbCnodeIndex 5 := by decide
+  simp [tcbCnodeMap, h1, h2, h3, h4, h5]
 
 theorem lookupSlotForThread_eq {σ : State Z} {t : ObjRef} {tcb : Tcb} (hk : σ.kheap t = some (.tcb tcb))
     (cref : CapRef) :

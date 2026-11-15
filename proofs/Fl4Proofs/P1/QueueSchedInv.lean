@@ -143,7 +143,7 @@ theorem stA_eq (t : U64) : stA t = core.num.U64.wrapping_add t 3328#u64 := by
   unfold stA layout.tcb.STATE layout.tcb.F; rfl
 
 /-- A runnable thread state (seL4 `runnable`). -/
-def Runnable (v : U64) : Prop := v = sched.TS_RUNNING ∨ v = sched.TS_RESTART
+def Runnable (v : U64) : Prop := v = sched.TS_RUNNING ∨ v = sched.TS_RESTART ∨ v = sched.TS_RUNNING_VM
 /-- A state blocked on an endpoint or notification queue. -/
 def Blocked (v : U64) : Prop :=
   v = sched.TS_BLOCKED_ON_SEND ∨ v = sched.TS_BLOCKED_ON_RECV ∨ v = sched.TS_BLOCKED_ON_NTFN

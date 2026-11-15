@@ -287,7 +287,7 @@ theorem assign_rel {A : Type} {ar : machine.Arch A} {th : TypedHeap} {P : Set U6
         set nc : Fl4Spec.Cap := .archObjectCap (.pml4Cap ptr1.bv (some asid.bv))
         have hca : CapRel (.Pml4 ptr1 true asid) nc := ⟨trivial, rfl⟩
         refine WP.spec_bind (WP.spec_and (set_cap_refines th s1 σ1 hSt1 hSV1 hPl hpc hidx _ _ hca trivial hcan)
-          (WP.spec_and (set_cap_spec (L := L) _ s1 (.Pml4 ptr1 true asid)) (set_cap_foot hPl hxsl s1 _ hcan))) ?_
+          (WP.spec_and (set_cap_spec (L := L) _ s1 (.Pml4 ptr1 true asid)) (set_cap_foot hPl hxsl s1 (.Pml4 ptr1 true asid) hcan))) ?_
         rintro s2 ⟨⟨σ2, hsc, hSt2, hSV2, -, -, -, hfr2⟩, hs2, hF2, hcv2⟩
         have hσ2 : σ2 = setCnodeSlot σ1 pc.bv r cs idx nc := by
           rw [setCap_cnode nc hkc1 hwf hidx] at hsc

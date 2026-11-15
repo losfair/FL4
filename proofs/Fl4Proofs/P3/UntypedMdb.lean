@@ -80,22 +80,22 @@ theorem srB_nk_right {u c : capability.Cap} (hk : NewKind c) (hc : isUt c = fals
     exact UScalar.eq_of_val_eq h'
 
 
-theorem sizeF_frame (p : U64) (sz : capability.FrameSize) (r : U64) (d m : Bool) (a va : U64) :
-    sizeF (.Frame p sz r d m a va) = fbitsF sz :=
+theorem sizeF_frame (p : U64) (sz : capability.FrameSize) (r : U64) (d m : Bool) (a va : U64) (ep : Bool) :
+    sizeF (.Frame p sz r d m ep a va) = fbitsF sz :=
   ok_inj ((size_eq _).symm.trans (by simp [objects.cap_size_bits, frame_bits_eq]))
 
-theorem ptrF_frame (p : U64) (sz : capability.FrameSize) (r : U64) (d m : Bool) (a va : U64) :
-    ptrF (.Frame p sz r d m a va) = p := ok_inj (ptr_eq _).symm
+theorem ptrF_frame (p : U64) (sz : capability.FrameSize) (r : U64) (d m : Bool) (a va : U64) (ep : Bool) :
+    ptrF (.Frame p sz r d m ep a va) = p := ok_inj (ptr_eq _).symm
 
 /-- `same_region_as` from a frame cap: a frame cap in its range. -/
-theorem srB_frame_in {p : U64} {sz : capability.FrameSize} {r : U64} {d m : Bool} {a va : U64} {v : capability.Cap}
-    (h : srB (.Frame p sz r d m a va) v = true) :
-    isFr v = true ∧ baseF (.Frame p sz r d m a va) ≤ baseF v ∧ topF v ≤ topF (.Frame p sz r d m a va) ∧
+theorem srB_frame_in {p : U64} {sz : capability.FrameSize} {r : U64} {d m ep : Bool} {a va : U64} {v : capability.Cap}
+    (h : srB (.Frame p sz r d m ep a va) v = true) :
+    isFr v = true ∧ baseF (.Frame p sz r d m ep a va) ≤ baseF v ∧ topF v ≤ topF (.Frame p sz r d m ep a va) ∧
       baseF v ≤ topF v := by
-  have h' := srB_eq (.Frame p sz r d m a va) v
+  have h' := srB_eq (.Frame p sz r d m ep a va) v
   rw [h] at h'
   cases v <;> simp [objects.same_region_as, frame_bits_eq, mask_eq, lift] at h'
-  case Frame pb sb rb db mb ab vb =>
+  case Frame pb sb rb db mb ept ab vb =>
     unfold baseF topF
     rw [ptrF_frame, ptrF_frame, sizeF_frame, sizeF_frame]
     simp only [core.num.U64.wrapping_add_val_eq]
@@ -107,21 +107,21 @@ theorem srB_frame_in {p : U64} {sz : capability.FrameSize} {r : U64} {d m : Bool
 
 /-- `same_region_as` into a frame cap: from a frame cap holding it, or an
 untyped one. -/
-theorem srB_to_frame {u : capability.Cap} {p : U64} {sz : capability.FrameSize} {r : U64} {d m : Bool} {a va : U64}
-    (hu : isUt u = false) (h : srB u (.Frame p sz r d m a va) = true) :
-    isFr u = true ∧ baseF u ≤ baseF (.Frame p sz r d m a va) ∧ topF (.Frame p sz r d m a va) ≤ topF u := by
-  have h' := srB_eq u (.Frame p sz r d m a va)
+theorem srB_to_frame {u : capability.Cap} {p : U64} {sz : capability.FrameSize} {r : U64} {d m ep : Bool} {a va : U64}
+    (hu : isUt u = false) (h : srB u (.Frame p sz r d m ep a va) = true) :
+    isFr u = true ∧ baseF u ≤ baseF (.Frame p sz r d m ep a va) ∧ topF (.Frame p sz r d m ep a va) ≤ topF u := by
+  have h' := srB_eq u (.Frame p sz r d m ep a va)
   rw [h] at h'
   cases u <;> simp [isUt] at hu <;> simp [objects.same_region_as] at h'
-  case Frame pb sb rb db mb ab vb =>
-    obtain ⟨-, h2, h3, -⟩ := srB_frame_in (show srB (.Frame pb sb rb db mb ab vb) (.Frame p sz r d m a va) = true from h)
+  case Frame pb sb rb db mb ept ab vb =>
+    obtain ⟨-, h2, h3, -⟩ := srB_frame_in (show srB (.Frame pb sb rb db mb ept ab vb) (.Frame p sz r d m ep a va) = true from h)
     exact ⟨rfl, h2, h3⟩
 
-theorem physF_frame (p : U64) (sz : capability.FrameSize) (r : U64) (d m : Bool) (a va : U64) :
-    physF (.Frame p sz r d m a va) = true := ok_inj (phys_eq _).symm
+theorem physF_frame (p : U64) (sz : capability.FrameSize) (r : U64) (d m : Bool) (a va : U64) (ep : Bool) :
+    physF (.Frame p sz r d m ep a va) = true := ok_inj (phys_eq _).symm
 
 theorem isUt_frame {v : capability.Cap} (h : isFr v = true) : isUt v = false ∧ physF v = true := by
-  cases v <;> simp [isFr] at h; exact ⟨rfl, physF_frame _ _ _ _ _ _ _⟩
+  cases v <;> simp [isFr] at h; exact ⟨rfl, physF_frame _ _ _ _ _ _ _ _⟩
 
 /-- **From a new cap, `same_region_as` gives a non-untyped physical cap in
 its range** (non-empty). -/

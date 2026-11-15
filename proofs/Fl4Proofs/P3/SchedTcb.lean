@@ -10,6 +10,7 @@ active (`REFILL_MAX` > 0 ↔ `sc_refill_max` > 0), and is not in the release
 queue (`IN_QUEUES` release bit ↔ membership of `R` ↔ of `release_queue`).
 -/
 import Fl4Proofs.P3.SchedRel
+import Fl4Proofs.P1.QueueCallers
 open Aeneas Aeneas.Std Result
 
 namespace Fl4Proofs.P3.Sched
@@ -41,14 +42,22 @@ theorem rel_bit_iff (x : U64) : (x &&& sched.Q_RELEASE = 0#u64) ↔ x.val &&& 2 
 @[step] theorem obj.Sc.is_null.spec' (sc : obj.Sc) : obj.Sc.is_null sc ⦃ b => b = decide (sc = 0#u64) ⦄ := by
   unfold obj.Sc.is_null; simp
 
+@[step] theorem sporadic.sc_active.spec' (s : S) (sc : obj.Sc) :
+    sporadic.sc_active st s sc ⦃ b => b = decide (L.rmax s sc > 0#u64) ⦄ := by
+  unfold sporadic.sc_active
+  step* <;> simp_all
+
 /-- `is_schedulable`: runnable, with an active SC, not released. -/
 @[step] theorem sched.is_schedulable.spec' (s : S) (t : obj.Tcb) :
     sched.is_schedulable st s t ⦃ b => b = decide ((L.mem s (tStA t) = sched.TS_RUNNING ∨
-      L.mem s (tStA t) = sched.TS_RESTART) ∧ L.mem s (scA t) ≠ 0#u64 ∧ L.rmax s (L.mem s (scA t)) > 0#u64 ∧
+      L.mem s (tStA t) = sched.TS_RESTART ∨ L.mem s (tStA t) = sched.TS_RUNNING_VM) ∧ L.mem s (scA t) ≠ 0#u64 ∧ L.rmax s (L.mem s (scA t)) > 0#u64 ∧
       (L.mem s (inqA t) &&& sched.Q_RELEASE) = 0#u64) ⦄ := by
-  unfold sched.is_schedulable sched.is_runnable sporadic.sc_active
-  step
-  split <;> simp only [bind_ok] <;> step* <;> simp_all [rel_bit_iff]
+  unfold sched.is_schedulable
+  step with Fl4Proofs.P1.sched.is_runnable.spec
+  split <;> (try simp only [bind_ok]) <;> step* <;> try simp_all [rel_bit_iff, stA, tStA]
+  all_goals first
+    | exact fun _ => of_decide_eq_true b_post
+    | (intro hr; exact False.elim ((of_decide_eq_false b_post) hr))
 
 /-! ## `is_schedulable` is `schedulable` -/
 
@@ -58,17 +67,18 @@ theorem mem_map_bv {xs : List U64} {t : U64} : t.bv ∈ xs.map UScalar.bv ↔ t 
   · exact List.mem_map_of_mem
 
 theorem runnable_iff {w : U64} {ts : Fl4Spec.ThreadState} (h : w.val = tsCode ts) :
-    (w = sched.TS_RUNNING ∨ w = sched.TS_RESTART) ↔ Fl4Spec.runnable ts = true := by
+    (w = sched.TS_RUNNING ∨ w = sched.TS_RESTART ∨ w = sched.TS_RUNNING_VM) ↔ Fl4Spec.runnable ts = true := by
   have e1 : sched.TS_RUNNING = 1#u64 := tsVals.1
   have e2 : sched.TS_RESTART = 2#u64 := tsVals.2.1
-  rw [e1, e2]
+  have e8 : sched.TS_RUNNING_VM = 8#u64 := by unfold sched.TS_RUNNING_VM; rfl
+  rw [e1, e2, e8]
   have v : ∀ k : U64, w = k ↔ w.val = k.val := fun k => ⟨fun h => h ▸ rfl, UScalar.eq_of_val_eq⟩
-  rw [v, v, h]
+  rw [v, v, v, h]
   cases ts <;> simp [tsCode, Fl4Spec.runnable]
 
 theorem schedulable_eq {N T C : Set U64} {c : U64} {s : S} {σ : Fl4Spec.State Unit}
     (hR : NtfnStateRel N T (L.mem s) σ) (hS : SchedRel st N T C c s σ) {t : U64} (ht : t ∈ T) :
-    decide ((L.mem s (tStA t) = sched.TS_RUNNING ∨ L.mem s (tStA t) = sched.TS_RESTART) ∧
+    decide ((L.mem s (tStA t) = sched.TS_RUNNING ∨ L.mem s (tStA t) = sched.TS_RESTART ∨ L.mem s (tStA t) = sched.TS_RUNNING_VM) ∧
       L.mem s (scA t) ≠ 0#u64 ∧ L.rmax s (L.mem s (scA t)) > 0#u64 ∧
       (L.mem s (inqA t) &&& sched.Q_RELEASE) = 0#u64) = Fl4Spec.schedulable t.bv σ := by
   obtain ⟨Q, R, hc, hs⟩ := hS.lists

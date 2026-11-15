@@ -227,6 +227,7 @@ theorem untyped_retype_refines_fl4 {A' : Type} (arI : machine.Arch A') (th : Typ
         (absCap (.Untyped p sb fi dev)) excaps) s ar (RetPost (L := L) th (L.mem s) G σ ar Fl4Spec.fl4ObjBitsApi) res ⦄ := by
   have hAs : AbsSlot th (pp.bv, idx) := ⟨pp, rfl, Or.inl (by simpa [hidx] using hpp)⟩
   refine untyped_decode_refines_fl4 arI th s ar σ G hR hV hP hM hC hI lbl slbl hlbl length buf ct hct args hlen hargs
+    (fun x hx => Or.inl (by have := hnt x hx; omega))
     _ (pp.bv, idx) rfl hAs p sb fi dev hcap extra x0 hx0 excaps hex hfan _ ?_
   intro nt us dest off win t r reset fiv hnt0 hctx
   have hn := hnt nt hnt0
