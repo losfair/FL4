@@ -23,7 +23,7 @@
 #define MSI_MIN VECTOR_MIN
 #define MSI_MAX VECTOR_MAX
 
-#define seL4_VCPUBits 14
+#define seL4_VCPUBits 15
 #define seL4_X86_VCPUBits    seL4_VCPUBits
 
 #define seL4_X86_EPTPML4EntryBits 3

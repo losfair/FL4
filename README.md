@@ -32,3 +32,43 @@ cargo xtask extract                              # Charon + Aeneas -> proofs/Fl4
 
 Host dependencies live in `$FL4_DEPS` (default `~/Projects/fl4-deps`):
 `venv/` with `sel4-deps`, and an `aeneas/` checkout with Charon built.
+
+## x86 virtualization
+
+FL4 exposes the seL4 VCPU/EPT API and the l4h extensions from patches
+0038–0043. One image selects Intel VT-x or AMD-V at boot. On unsupported
+CPUs, firmware-disabled virtualization, or the SKIM path, boot continues
+and retyping VCPU/EPT objects returns `seL4_InvalidArgument` for the type.
+`KernelVTX` and `KernelX86_64VTX64BitGuests` are always enabled in the ABI.
+
+Use `seL4_X86_ASIDPool_Assign` for an EPT root and
+`seL4_TCB_SetEPTRoot`/`seL4_X86_VCPU_SetTCB` to bind it to a thread.
+`seL4_VMEnter` and the MR layout in `sel4/arch/vmenter.h` are shared by
+both backends. Intel uses `ReadVMCS`/`WriteVMCS`; AMD uses
+`ReadVMCB`/`WriteVMCB`, with byte offsets from the AMD VMCB layout.
+The other backend's field operations return `seL4_IllegalOperation`.
+VCPU objects occupy 32 KiB (`seL4_VCPUBits = 15`).
+
+The first implementation rebuilds a per-core VMCS on each entry, uses no
+VMX VPID, and flushes SVM's ASID on every entry. This favors simple
+ownership and migration over entry/exit performance. Nested unmaps and
+root/ASID-pool deletion synchronously invalidate every core recorded in
+the root before memory can be reused. Guest FPU state is the bound TCB's;
+XCR0, CR2, syscall MSRs, descriptor-table limits, and host state are
+restored on successful and failed entries.
+
+Virtualization regression tests run real guests and cover field restrictions,
+CPUID/HLT exits, GPRs, notifications, cross-core rebinding, migration,
+revocation, and deletion of a running VCPU:
+
+```
+cargo test -p fl4-core
+FL4_TESTS='^FL4VCPU' cargo xtask fl4test --smp 4 --setup kvm
+FL4_TESTS='^FL4VCPU' cargo xtask fl4test --smp 2 --setup kvm-no-vm
+```
+
+The expanded core extracts and its generated Lean model type-checks.
+The existing refinement proofs describe the native-only capability and
+TCB layouts; porting them to virtualization remains unfinished. The strict
+proof gate does not pass yet. VMX execution also needs validation on an
+Intel host; guest execution was tested on AMD-V under QEMU/KVM.

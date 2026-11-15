@@ -20,6 +20,8 @@ fn default_config(debug: bool) -> Config {
     let mut c = Config::new();
     let b = |v: bool| serde_json::Value::Bool(v);
     c.insert("KERNEL_MCS".into(), b(true));
+    c.insert("VTX".into(), b(true));
+    c.insert("X86_64_VTX_64BIT_GUESTS".into(), b(true));
     c.insert("DEBUG_BUILD".into(), b(debug));
     c.insert("PRINTING".into(), b(debug));
     c.insert("HARDWARE_DEBUG_API".into(), b(debug));

@@ -149,6 +149,8 @@ fn decode_invocation<S: Store, A: Arch>(
             }
             schedcontext::decode(s, a, lbl, crate::obj::Sc(ptr), call, extra)
         }
+        Cap::Vcpu { ptr } => crate::vcpu::decode(s, a, lbl, length, ptr, call, buf, extra),
+        Cap::Ept { .. } => crate::ept::decode(s, a, lbl, length, cap, slot, buf, extra),
         Cap::IoPortControl => ioport::decode_control(s, a, lbl, length, slot, buf, extra),
         Cap::IoPort { .. } => ioport::decode(s, a, lbl, length, cap, call, buf),
         Cap::Frame { .. }
@@ -405,6 +407,11 @@ fn handle_unknown_syscall<S: Store, A: Arch>(s: &mut S, a: &mut A, number: i64) 
         set_tls_base_self(s, a);
         return;
     }
+    if number == sc::SysVMEnter && a.virtualization() != 0 && crate::vcpu::bound(s, t) != 0 {
+        if budget_ok(s, a) { crate::vcpu::enter(s, a, t); }
+        finish(s, a);
+        return;
+    }
     unknown_syscall_fault(s, a, number as u64);
 }
 
@@ -491,6 +498,8 @@ fn cap_type_code(c: Cap) -> u64 {
         Cap::AsidPool { .. } => 13,
         Cap::IoPort { .. } => 19,
         Cap::IoPortControl => 31,
+        Cap::Vcpu { .. } => 17,
+        Cap::Ept { level, .. } => if level == 0 { 19 } else if level == 39 { 21 } else if level == 30 { 23 } else { 25 },
     }
 }
 
@@ -582,4 +591,16 @@ pub fn handle_debug_exception<S: Store, A: Arch>(s: &mut S, a: &mut A, vector: u
         }
         None => {}
     }
+}
+
+/// A VM exit has saved its results before remote calls could stall its
+/// thread. Charge guest time, handle host IRQs, and complete pending exits
+/// before delivering bound notifications.
+pub fn handle_vcpu_exit<S: Store, A: Arch>(s: &mut S, a: &mut A, irq: u64) {
+    sched::update_timestamp(s, a);
+    let ct = sched::cur_thread(s);
+    crate::vcpu::check(s, a, ct);
+    sched::check_budget(s, a);
+    if irq != NO_IRQ { interrupt::handle_interrupt(s, a, irq); }
+    finish(s, a);
 }

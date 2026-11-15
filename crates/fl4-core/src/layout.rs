@@ -44,7 +44,8 @@ pub mod tcb {
     pub const SLOT_BUFFER: u64 = 2;
     pub const SLOT_FAULT_HANDLER: u64 = 3;
     pub const SLOT_TIMEOUT_HANDLER: u64 = 4;
-    pub const NUM_SLOTS: u64 = 5;
+    pub const SLOT_EPT: u64 = 5;
+    pub const NUM_SLOTS: u64 = 6;
 
     /// User registers, in the order of `reg::*`. The entry code saves
     /// straight into this array.
@@ -100,7 +101,8 @@ pub mod tcb {
     /// Thread name for debugging, NUL-terminated, 64 bytes.
     pub const NAME: u64 = F + 272;
     pub const NAME_LEN: u64 = 64;
-    pub const END: u64 = NAME + NAME_LEN;
+    pub const VCPU: u64 = NAME + NAME_LEN;
+    pub const END: u64 = VCPU + 8;
 }
 
 /// Register indices into `tcb::REGS` (seL4's x86_64 `enum _register`).
@@ -255,7 +257,8 @@ pub mod ks {
     /// CPU features the core needs to know (set at boot).
     pub const FEATURES: u64 = 72;
     pub const FEATURE_NX: u64 = 1;
-    // Bytes 80..192 are free.
+    pub const VCPU_HEAD: u64 = 80;
+    // Bytes 88..192 are free.
     /// Domain schedule: (domain, duration) pairs.
     pub const DOM_SCHEDULE: u64 = 24 * WORD;
     pub const IRQ_STATE: u64 = DOM_SCHEDULE + NUM_DOMAIN_SCHEDULES * 2 * WORD;

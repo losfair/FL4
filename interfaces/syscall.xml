@@ -64,5 +64,9 @@
             <syscall name="X86DangerousWRMSR"/>
             <syscall name="X86DangerousRDMSR"/>
         </config>
+        <config>
+            <condition><config var="CONFIG_VTX"/></condition>
+            <syscall name="VMEnter"/>
+        </config>
     </debug>
 </syscalls>

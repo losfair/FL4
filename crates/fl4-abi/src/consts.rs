@@ -34,7 +34,12 @@ pub mod object {
     pub const X86LargePage: u64 = 11;
     pub const X86PageTable: u64 = 12;
     pub const X86PageDirectory: u64 = 13;
-    pub const Count: u64 = 14;
+    pub const X86Vcpu: u64 = 14;
+    pub const X86EptPml4: u64 = 15;
+    pub const X86EptPdpt: u64 = 16;
+    pub const X86EptPd: u64 = 17;
+    pub const X86EptPt: u64 = 18;
+    pub const Count: u64 = 19;
 }
 
 /// Object sizes (`seL4_*Bits`).
@@ -47,6 +52,7 @@ pub mod bits {
     pub const SLOT: u64 = 5;
     /// FL4: 4 KiB, to hold the AVX-512 XSAVE image (DESIGN.md §2).
     pub const TCB: u64 = 12;
+    pub const VCPU: u64 = 15;
     pub const ENDPOINT: u64 = 4;
     pub const NOTIFICATION: u64 = 6;
     pub const REPLY: u64 = 5;

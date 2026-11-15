@@ -18,6 +18,10 @@ structure StoreTotal {S : Type _} (st : machine.Store S) : Prop where
   cur_cpu : ∀ s, st.cur_cpu s ⦃ _ => True ⦄
 
 structure ArchTotal {A : Type _} (ar : machine.Arch A) : Prop where
+  virtualization : ∀ a, ar.virtualization a ⦃ _ => True ⦄
+  vcpu_capability : ∀ a f, ar.vcpu_capability a f ⦃ _ => True ⦄
+  vcpu_barrier : ∀ a, ar.vcpu_barrier a ⦃ _ => True ⦄
+  invalidate_ept : ∀ a r m, ar.invalidate_ept a r m ⦃ _ => True ⦄
   now : ∀ a, ar.now a ⦃ _ => True ⦄
   set_deadline : ∀ a t, ar.set_deadline a t ⦃ _ => True ⦄
   us_to_ticks : ∀ a x, ar.us_to_ticks a x ⦃ _ => True ⦄
@@ -62,6 +66,10 @@ end
 
 section
 variable {A : Type _} {ar : machine.Arch A}
+@[step] theorem ArchTotal.virtualization_spec (h : ArchTotal ar) a : ar.virtualization a ⦃ _ => True ⦄ := h.virtualization a
+@[step] theorem ArchTotal.vcpu_capability_spec (h : ArchTotal ar) a f : ar.vcpu_capability a f ⦃ _ => True ⦄ := h.vcpu_capability a f
+@[step] theorem ArchTotal.vcpu_barrier_spec (h : ArchTotal ar) a : ar.vcpu_barrier a ⦃ _ => True ⦄ := h.vcpu_barrier a
+@[step] theorem ArchTotal.invalidate_ept_spec (h : ArchTotal ar) a r m : ar.invalidate_ept a r m ⦃ _ => True ⦄ := h.invalidate_ept a r m
 @[step] theorem ArchTotal.now_spec (h : ArchTotal ar) a : ar.now a ⦃ _ => True ⦄ := h.now a
 @[step] theorem ArchTotal.set_deadline_spec (h : ArchTotal ar) a t : ar.set_deadline a t ⦃ _ => True ⦄ := h.set_deadline a t
 @[step] theorem ArchTotal.us_to_ticks_spec (h : ArchTotal ar) a x : ar.us_to_ticks a x ⦃ _ => True ⦄ := h.us_to_ticks a x

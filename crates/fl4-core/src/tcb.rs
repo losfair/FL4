@@ -411,6 +411,18 @@ fn set_breakpoint_checked<S: Store>(s: &mut S, t: Tcb, c: &Ctx) -> KResult<()> {
 /// seL4 `decodeTCBInvocation`: one decoder per invocation, as in seL4.
 pub fn decode<S: Store, A: Arch>(s: &mut S, a: &mut A, lbl: u64, target: Tcb, c: &Ctx) -> KResult<()> {
     crate::smp::remote_tcb_stall(s, a, target);
+    if lbl == label::TCBSetEPTRoot {
+        if c.extra[0].is_null() { return truncated(); }
+        let src = c.extra[0];
+        let cap = src.cap(s);
+        if !matches!(cap, Cap::Ept { level: 0, mapped: true, .. }) { return illegal(); }
+        let derived = crate::objects::derive_cap(s, src, cap)?;
+        crate::cdt::delete(s, a, target.slot(tl::SLOT_EPT), true)?;
+        crate::cdt::insert(s, derived, src, target.slot(tl::SLOT_EPT));
+        let ct = sched::cur_thread(s);
+        sched::set_thread_state(s, ct, sched::TS_RESTART);
+        return Ok(());
+    }
     if lbl == label::TCBReadRegisters {
         decode_read_registers(s, a, target, c)
     } else if lbl == label::TCBWriteRegisters {

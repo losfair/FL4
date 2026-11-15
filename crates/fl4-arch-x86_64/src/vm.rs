@@ -1,0 +1,748 @@
+//! Trusted VMX/SVM instruction boundary. Policy lives in fl4-core::vcpu.
+//!
+//! A per-core VMCS is rebuilt from the VCPU's software image for each entry
+//! and cleared before remote calls can move/delete the VCPU. No VMCS can
+//! be active on two cores. VMX uses no VPID; SVM flushes ASID 1 on each run.
+//! These conservative flushes make migration and FlushTLB independent of
+//! cached identifier ownership. EPT unmaps still synchronously stop every
+//! core that could be using the root before memory can be reused.
+use crate::{cpu, fpu, percpu, tlb};
+use core::arch::asm;
+use core::cell::UnsafeCell;
+use core::sync::atomic::{AtomicU64, Ordering};
+use fl4_core::layout;
+use fl4_core::machine::Store;
+use fl4_core::vcpu::{self, svm, vmx::*};
+
+core::arch::global_asm!(include_str!("vm.S"), options(att_syntax));
+extern "C" {
+    fn fl4_vmx_run(run: *mut Run);
+    fn fl4_svm_run(run: *mut Run);
+}
+
+#[repr(C, align(4096))]
+struct Page([u8; 4096]);
+#[repr(C, align(4096))]
+struct Core {
+    enable: Page,
+    host: Page,
+    vmcs: Page,
+}
+struct Cores(UnsafeCell<[Core; percpu::MAX_CPUS]>);
+// Each core alone accesses its pages, after BSP initialization.
+unsafe impl Sync for Cores {}
+static CORES: Cores = Cores(UnsafeCell::new(
+    [const {
+        Core {
+            enable: Page([0; 4096]),
+            host: Page([0; 4096]),
+            vmcs: Page([0; 4096]),
+        }
+    }; percpu::MAX_CPUS],
+));
+#[repr(C, align(4096))]
+struct Maps {
+    io: [u8; 12288],
+    msr: [u8; 8192],
+    empty: Page,
+}
+struct Shared(UnsafeCell<Maps>);
+// Written on the BSP before AP startup; read-only thereafter.
+unsafe impl Sync for Shared {}
+static MAPS: Shared = Shared(UnsafeCell::new(Maps {
+    io: [255; 12288],
+    msr: [255; 8192],
+    empty: Page([0; 4096]),
+}));
+static BACKEND: AtomicU64 = AtomicU64::new(0);
+static BASIC: AtomicU64 = AtomicU64::new(0);
+static EPT_CAP: AtomicU64 = AtomicU64::new(0);
+static CAPS: [AtomicU64; 32] = [const { AtomicU64::new(0) }; 32];
+
+#[repr(C)]
+struct Run {
+    regs: [u64; 15],
+    reserved: u64,
+    vmcb: u64,
+    host: u64,
+    host_cr2: u64,
+    host_xcr0: u64,
+    guest_xcr0: u64,
+    guest_cr2: u64,
+    failed: u64,
+}
+const _: () =
+    assert!(core::mem::offset_of!(Run, vmcb) == 128 && core::mem::offset_of!(Run, failed) == 176);
+#[repr(C, align(16))]
+struct Msr {
+    number: u32,
+    reserved: u32,
+    value: u64,
+}
+
+fn physical(ptr: u64) -> u64 {
+    if ptr >= layout::PPTR_TOP {
+        ptr.wrapping_sub(0xffff_ffff_8000_0000)
+    } else {
+        layout::paddr(ptr)
+    }
+}
+fn local() -> &'static mut Core {
+    unsafe { &mut (*CORES.0.get())[percpu::cpu_index()] }
+}
+fn maps() -> &'static Maps {
+    unsafe { &*MAPS.0.get() }
+}
+pub fn backend() -> u64 {
+    BACKEND.load(Ordering::Acquire)
+}
+pub fn capability(field: u64) -> u64 {
+    if field == 0 {
+        return fpu::xcr0();
+    }
+    if field == 1 {
+        return if cpu::cpuid(7, 0).ecx & (1 << 16) != 0 {
+            57
+        } else {
+            48
+        };
+    }
+    if backend() != 1 || !(0x480..0x4a0).contains(&field) {
+        return 0;
+    }
+    CAPS[(field - 0x480) as usize].load(Ordering::Relaxed)
+}
+fn vmread(f: u64) -> u64 {
+    let mut value = 0;
+    unsafe {
+        asm!("vmread {value}, {field}", value=inout(reg) value, field=in(reg) f, options(nostack));
+    }
+    value
+}
+fn vmwrite(f: u64, value: u64) {
+    unsafe {
+        asm!("vmwrite {field}, {value}", field=in(reg) f, value=in(reg) value, options(nostack));
+    }
+}
+fn vmclear(pa: u64) -> bool {
+    let fail: u8;
+    unsafe {
+        asm!("vmclear [{pa}]", "setna {fail}", pa=in(reg) &pa, fail=out(reg_byte) fail, options(nostack));
+    }
+    fail == 0
+}
+fn vmptrld(pa: u64) -> bool {
+    let fail: u8;
+    unsafe {
+        asm!("vmptrld [{pa}]", "setna {fail}", pa=in(reg) &pa, fail=out(reg_byte) fail, options(nostack));
+    }
+    fail == 0
+}
+fn pass_msr(bitmap: &mut [u8], msr: u32, amd: bool) {
+    if amd {
+        let (base, index) = if msr < 0x2000 {
+            (0, msr)
+        } else {
+            (0x800, msr - 0xc000_0000)
+        };
+        bitmap[base + (index / 4) as usize] &= !(3 << ((index % 4) * 2));
+    } else {
+        let (base, index) = if msr < 0x2000 {
+            (0, msr)
+        } else {
+            (1024, msr - 0xc000_0000)
+        };
+        bitmap[base + (index / 8) as usize] &= !(1 << (index % 8));
+        bitmap[base + 2048 + (index / 8) as usize] &= !(1 << (index % 8));
+    }
+}
+fn init_svm(bsp: bool) -> bool {
+    if cpu::cpuid(0x8000_0000, 0).eax < 0x8000_000a || cpu::cpuid(0x8000_0001, 0).ecx & 4 == 0 {
+        return false;
+    }
+    let c = cpu::cpuid(0x8000_000a, 0);
+    if c.edx & 9 != 9 || c.ebx < 2 || cpu::rdmsr(0xc001_0114) & 16 != 0 {
+        return false;
+    }
+    if bsp {
+        let m = unsafe { &mut *MAPS.0.get() };
+        for msr in [
+            0x174,
+            0x175,
+            0x176,
+            0xc000_0081,
+            0xc000_0082,
+            0xc000_0083,
+            0xc000_0084,
+            0xc000_0100,
+            0xc000_0101,
+            0xc000_0102,
+        ] {
+            pass_msr(&mut m.msr, msr, true);
+        }
+    }
+    cpu::wrmsr(cpu::msr::EFER, cpu::rdmsr(cpu::msr::EFER) | (1 << 12));
+    cpu::wrmsr(0xc001_0117, physical(local().enable.0.as_ptr() as u64));
+    true
+}
+fn control_msr(field: u32, true_controls: bool) -> u32 {
+    if true_controls {
+        match field {
+            0x481 => 0x48d,
+            0x482 => 0x48e,
+            0x483 => 0x48f,
+            0x484 => 0x490,
+            _ => field,
+        }
+    } else {
+        field
+    }
+}
+fn init_vmx(bsp: bool) -> bool {
+    if cpu::cpuid(1, 0).ecx & (1 << 5) == 0 {
+        return false;
+    }
+    let basic = cpu::rdmsr(0x480);
+    if (basic >> 32) & 0x1fff > 4096 || (basic >> 50) & 15 != 6 {
+        return false;
+    }
+    let true_controls = basic & (1 << 55) != 0;
+    for f in [
+        0x481u32, 0x482, 0x483, 0x484, 0x485, 0x486, 0x487, 0x488, 0x489, 0x48b,
+    ] {
+        let value = cpu::rdmsr(control_msr(f, true_controls));
+        if bsp {
+            CAPS[(f - 0x480) as usize].store(value, Ordering::Relaxed);
+        } else if CAPS[(f - 0x480) as usize].load(Ordering::Relaxed) != value {
+            return false;
+        }
+    }
+    let cap = |f: u64| CAPS[(f - 0x480) as usize].load(Ordering::Relaxed);
+    for (f, required) in [
+        (0x481, vcpu::PIN_ALLOWED),
+        (0x482, vcpu::PRIMARY_FORCED),
+        (0x483, vcpu::EXIT_FORCED),
+        (0x48b, 2),
+        (0x484, 1 << 9),
+    ] {
+        if (cap(f) >> 32) & required != required {
+            return false;
+        }
+    }
+    // Reading EPT_VPID_CAP is safe only after verifying EPT support.
+    let ept = cpu::rdmsr(0x48c);
+    let required = (1 << 6) | (1 << 14) | (1 << 16) | (1 << 20);
+    if ept & required != required || ept & ((1 << 25) | (1 << 26)) == 0 {
+        return false;
+    }
+    if bsp {
+        BASIC.store(basic, Ordering::Relaxed);
+        EPT_CAP.store(ept, Ordering::Relaxed);
+    } else if BASIC.load(Ordering::Relaxed) != basic || EPT_CAP.load(Ordering::Relaxed) != ept {
+        return false;
+    }
+    let cr0 = cpu::read_cr0();
+    let cr4 = cpu::read_cr4() | (1 << 13);
+    if cr0 & cap(0x486) != cap(0x486)
+        || cr0 & !cap(0x487) != 0
+        || cr4 & cap(0x488) != cap(0x488)
+        || cr4 & !cap(0x489) != 0
+    {
+        return false;
+    }
+    let feature = cpu::rdmsr(0x3a);
+    if feature & 1 != 0 && feature & 4 == 0 {
+        return false;
+    }
+    if feature & 1 == 0 {
+        cpu::wrmsr(0x3a, feature | 5);
+    }
+    let c = local();
+    c.enable.0[..4].copy_from_slice(&(basic as u32 & 0x7fff_ffff).to_le_bytes());
+    c.vmcs.0[..4].copy_from_slice(&(basic as u32 & 0x7fff_ffff).to_le_bytes());
+    cpu::write_cr4(cr4);
+    let pa = physical(c.enable.0.as_ptr() as u64);
+    let fail: u8;
+    unsafe {
+        asm!("vmxon [{pa}]", "setna {fail}", pa=in(reg) &pa, fail=out(reg_byte) fail, options(nostack));
+    }
+    if fail != 0 {
+        cpu::write_cr4(cr4 & !(1 << 13));
+        return false;
+    }
+    if bsp {
+        let m = unsafe { &mut *MAPS.0.get() };
+        for msr in [0x174, 0x175, 0x176, 0xc000_0100, 0xc000_0101, 0xc000_0102] {
+            pass_msr(&mut m.msr, msr, false);
+        }
+    }
+    true
+}
+/// BSP picks the backend, APs must be able to provide the same interface.
+pub fn init(bsp: bool) -> bool {
+    if tlb::skim() {
+        return true;
+    }
+    if !bsp && backend() == 0 {
+        return true;
+    }
+    let chosen = if cpu::cpuid(1, 0).ecx & (1 << 5) != 0 {
+        1
+    } else {
+        2
+    };
+    if !bsp && chosen != backend() {
+        return false;
+    }
+    let ok = if chosen == 1 {
+        init_vmx(bsp)
+    } else {
+        init_svm(bsp)
+    };
+    if bsp {
+        BACKEND.store(if ok { chosen } else { 0 }, Ordering::Release);
+        true
+    } else {
+        ok
+    }
+}
+
+pub fn invalidate_local(root: u64) {
+    if backend() != 1 {
+        return;
+    }
+    let eptp = physical(root) | 6 | (3 << 3);
+    let descriptor = [eptp, 0];
+    let kind: u64 = if EPT_CAP.load(Ordering::Relaxed) & (1 << 25) != 0 {
+        1
+    } else {
+        2
+    };
+    unsafe {
+        asm!("invept {kind}, [{ptr}]", kind=in(reg) kind, ptr=in(reg) descriptor.as_ptr(), options(nostack));
+    }
+}
+
+#[repr(C, packed)]
+struct Table {
+    limit: u16,
+    base: u64,
+}
+fn host_tables() -> (Table, Table, u64) {
+    let mut gdt = Table { limit: 0, base: 0 };
+    let mut idt = Table { limit: 0, base: 0 };
+    unsafe {
+        asm!("sgdt [{}]", "sidt [{}]", in(reg) &mut gdt, in(reg) &mut idt, options(nostack));
+    }
+    let low = unsafe { ((gdt.base + 0x40) as *const u64).read() };
+    let high = unsafe { ((gdt.base + 0x48) as *const u64).read() };
+    let tr = ((low >> 16) & 0xff_ffff) | ((low >> 32) & 0xff00_0000) | (high << 32);
+    (gdt, idt, tr)
+}
+fn host_vmcs(gdt: &Table, idt: &Table, tr: u64) {
+    for (field, value) in [
+        (HOST_CR0, cpu::read_cr0()),
+        (HOST_CR3, cpu::read_cr3()),
+        (HOST_CR4, cpu::read_cr4()),
+        (HOST_ES_SELECTOR, 0x18),
+        (HOST_CS_SELECTOR, 0x10),
+        (HOST_SS_SELECTOR, 0x18),
+        (HOST_DS_SELECTOR, 0x18),
+        (HOST_FS_SELECTOR, 0),
+        (HOST_GS_SELECTOR, 0),
+        (HOST_TR_SELECTOR, 0x40),
+        (HOST_FS_BASE, cpu::fs_base()),
+        (HOST_GS_BASE, cpu::gs_base()),
+        (HOST_TR_BASE, tr),
+        (HOST_GDTR_BASE, gdt.base),
+        (HOST_IDTR_BASE, idt.base),
+        (HOST_SYSENTER_CS, 0),
+        (HOST_SYSENTER_ESP, 0),
+        (HOST_SYSENTER_EIP, 0),
+        (HOST_EFER, cpu::rdmsr(cpu::msr::EFER)),
+        (HOST_PAT, cpu::rdmsr(0x277)),
+    ] {
+        vmwrite(field, value);
+    }
+    if capability(0x483) >> 32 & (1 << 12) != 0 {
+        vmwrite(HOST_PERF_GLOBAL_CTRL, cpu::rdmsr(0x38f));
+    }
+}
+
+/// Run after the core registered the EPT root and current TCB under the
+/// serial gate. Save every result before the caller services a remote IPI.
+pub fn run<S: Store>(s: &mut S, v: u64, tcb: u64, root: u64) -> u64 {
+    let amd = backend() == 2;
+    fpu::lazy_load(tcb);
+    cpu::write_dr7(0x400);
+    for i in 0..4 {
+        cpu::write_dr(i, 0);
+    }
+    percpu::get().dr_loaded = false;
+    let mut run = Run {
+        regs: [0; 15],
+        reserved: 0,
+        vmcb: physical(v),
+        host: physical(local().host.0.as_ptr() as u64),
+        host_cr2: cpu::read_cr2(),
+        host_xcr0: fpu::xcr0(),
+        guest_xcr0: vcpu::get(s, v, vcpu::XCR0),
+        guest_cr2: vcpu::get(s, v, vcpu::CR2),
+        failed: 0,
+    };
+    for i in 0..15 {
+        run.regs[i] = vcpu::get(s, v, vcpu::REGS + i as u64 * 8);
+    }
+    let (gdt, idt, tr) = host_tables();
+    let msrs = [
+        0xc000_0081u32,
+        0xc000_0082,
+        0xc000_0083,
+        0xc000_0084,
+        0xc000_0102,
+    ];
+    let mut guest_list: [Msr; 5] = core::array::from_fn(|i| Msr {
+        number: msrs[i],
+        reserved: 0,
+        value: vcpu::get(s, v, vcpu::MSRS + i as u64 * 8),
+    });
+    let host_list: [Msr; 5] = core::array::from_fn(|i| Msr {
+        number: msrs[i],
+        reserved: 0,
+        value: cpu::rdmsr(msrs[i]),
+    });
+    if amd {
+        vcpu::set(s, v, svm::IOPM_BASE, physical(maps().io.as_ptr() as u64));
+        vcpu::set(s, v, svm::MSRPM_BASE, physical(maps().msr.as_ptr() as u64));
+        vcpu::set(s, v, svm::NESTED_CR3, physical(root));
+        vcpu::set(s, v, svm::ASID, 1 | (1 << 32)); // ASID 1; flush all.
+        vcpu::set(s, v, svm::CLEAN, 0);
+        vcpu::set(s, v, svm::RAX, run.regs[0]);
+        unsafe {
+            asm!("vmsave rax", in("rax") run.host, options(nostack));
+        }
+    } else {
+        let pa = physical(local().vmcs.0.as_ptr() as u64);
+        assert!(vmclear(pa) && vmptrld(pa));
+        for field in vcpu::WRITE_FIELDS {
+            vmwrite(field, vcpu::read_vmcs(s, v, field));
+        }
+        vmwrite(GUEST_VMCS_LINK_POINTER, u64::MAX);
+        vmwrite(CONTROL_IOA_ADDRESS, physical(v + vcpu::IO));
+        vmwrite(CONTROL_IOB_ADDRESS, physical(v + vcpu::IO + 4096));
+        vmwrite(CONTROL_MSR_ADDRESS, physical(maps().msr.as_ptr() as u64));
+        vmwrite(CONTROL_EPT_POINTER, physical(root) | 6 | (3 << 3));
+        vmwrite(
+            CONTROL_EXIT_MSR_STORE_ADDRESS,
+            physical(guest_list.as_mut_ptr() as u64),
+        );
+        vmwrite(
+            CONTROL_EXIT_MSR_LOAD_ADDRESS,
+            physical(host_list.as_ptr() as u64),
+        );
+        vmwrite(
+            CONTROL_ENTRY_MSR_LOAD_ADDRESS,
+            physical(guest_list.as_ptr() as u64),
+        );
+        vmwrite(CONTROL_EXIT_MSR_STORE_COUNT, 5);
+        vmwrite(CONTROL_EXIT_MSR_LOAD_COUNT, 5);
+        vmwrite(CONTROL_ENTRY_MSR_LOAD_COUNT, 5);
+        host_vmcs(&gdt, &idt, tr);
+        invalidate_local(root);
+    }
+    if run.host_xcr0 != 0 && run.guest_xcr0 != run.host_xcr0 {
+        cpu::xsetbv(0, run.guest_xcr0);
+    }
+    if !amd {
+        unsafe {
+            asm!("mov cr2, {}", in(reg) run.guest_cr2, options(nostack));
+        }
+    }
+    unsafe {
+        if amd {
+            fl4_svm_run(&mut run)
+        } else {
+            fl4_vmx_run(&mut run)
+        }
+    }
+    // Restore host-only state even if entry failed its checks.
+    if run.host_xcr0 != 0 && run.guest_xcr0 != run.host_xcr0 {
+        cpu::xsetbv(0, run.host_xcr0);
+    }
+    run.guest_cr2 = if amd {
+        vcpu::get(s, v, svm::CR2)
+    } else {
+        cpu::read_cr2()
+    };
+    unsafe {
+        asm!("mov cr2, {}", in(reg) run.host_cr2, options(nostack));
+        asm!("lgdt [{}]", "lidt [{}]", in(reg) &gdt, in(reg) &idt, options(nostack));
+    }
+    cpu::write_dr6(0xffff_0ff0);
+    cpu::write_dr7(0x400);
+    let reason;
+    let mut interrupt = u64::MAX;
+    let mut exit = [0u64; 30];
+    let valid;
+    if amd {
+        reason = vcpu::get(s, v, svm::EXIT_CODE);
+        valid = reason != u64::MAX && reason != 0xffff_ffff;
+        run.regs[0] = vcpu::get(s, v, svm::RAX);
+        exit[0] = vcpu::get(s, v, svm::RIP);
+        exit[1] = vcpu::get(s, v, svm::INTERCEPT_EXC) >> 32;
+        exit[2] = if valid {
+            vcpu::get(s, v, svm::EVENT_INJ) & !(1 << 31)
+        } else {
+            vcpu::get(s, v, svm::EVENT_INJ)
+        };
+        exit[3] = if valid { reason } else { 0xffff_ffff };
+        exit[4] = if valid {
+            vcpu::get(s, v, svm::EXIT_INFO1)
+        } else {
+            0
+        };
+        let next = vcpu::get(s, v, svm::NEXT_RIP);
+        exit[5] = if valid && next != 0 {
+            next.wrapping_sub(exit[0])
+        } else {
+            0
+        };
+        exit[6] = if valid {
+            vcpu::get(s, v, svm::EXIT_INFO2)
+        } else {
+            0
+        };
+        exit[7] = vcpu::get(s, v, svm::RFLAGS);
+        exit[8] = vcpu::get(s, v, svm::INT_STATE);
+        exit[9] = vcpu::get(s, v, svm::CR3);
+        let vector = if valid {
+            vcpu::get(s, v, svm::EXIT_INT_INFO)
+        } else {
+            0
+        };
+        exit[27] = vector & 0xffff_ffff;
+        exit[28] = if vector & (1 << 11) != 0 {
+            vector >> 32
+        } else {
+            0
+        };
+        if valid {
+            vcpu::set(s, v, svm::EVENT_INJ, 0);
+        }
+        vcpu::set(s, v, svm::NEXT_RIP, 0);
+        // Reinject events interrupted by exits invisible to userspace.
+        if (0x60..=0x63).contains(&reason) && vector & (1 << 31) != 0 {
+            let ty = (vector >> 8) & 7;
+            if ty != 4 && !(ty == 3 && matches!(vector & 255, 3 | 4)) {
+                vcpu::set(s, v, svm::EVENT_INJ, vector & vcpu::SVM_EVENT);
+            }
+        }
+        if reason == 0x7f {
+            vcpu::reset_svm(s, v);
+            run.regs[0] = 0;
+            exit[0] = 0xfff0;
+            exit[7] = 2;
+            exit[8] = 0;
+            exit[9] = 0;
+            run.guest_cr2 = 0;
+        }
+    } else {
+        let raw = vmread(DATA_EXIT_REASON);
+        reason = if run.failed != 0 {
+            0xffff_ffff
+        } else {
+            raw & 0xffff
+        };
+        valid = run.failed == 0 && raw & (1 << 31) == 0;
+        for field in vcpu::READ_FIELDS {
+            // Undefined exit fields must not expose another VCPU's last
+            // exit from this core's reusable VMCS.
+            let value = if field & 0xc00 == 0x400 {
+                0
+            } else {
+                vmread(field)
+            };
+            vcpu::write_vmcs(s, v, field, value);
+        }
+        for (i, msr) in guest_list.iter().enumerate() {
+            vcpu::set(s, v, vcpu::MSRS + i as u64 * 8, msr.value);
+        }
+        exit[0] = vmread(GUEST_RIP);
+        exit[1] = vcpu::read_vmcs(s, v, CONTROL_PRIMARY_PROCESSOR_CONTROLS);
+        exit[2] = vmread(CONTROL_ENTRY_INTERRUPTION_INFO);
+        if valid {
+            exit[2] &= !(1 << 31);
+            vcpu::write_vmcs(s, v, CONTROL_ENTRY_INTERRUPTION_INFO, exit[2]);
+        }
+        exit[3] = reason;
+        if run.failed != 0 {
+            exit[4] = u64::MAX;
+        } else if matches!(reason, 0 | 4 | 9 | 14 | 19 | 21..=23 | 25 | 27..=30 | 33 | 34 | 36 | 43 | 44 | 46..=48 | 50 | 53 | 58)
+        {
+            exit[4] = vmread(DATA_EXIT_QUALIFICATION);
+        }
+        let vector = if valid {
+            vmread(DATA_IDT_VECTOR_INFO)
+        } else {
+            0
+        };
+        if valid
+            && (vector & (1 << 31) != 0
+                || !matches!(
+                    reason,
+                    1..=4 | 7 | 8 | 33 | 34 | 37 | 41 | 43 | 48 | 49 | 52
+                ))
+        {
+            exit[5] = vmread(DATA_EXIT_INSTRUCTION_LENGTH);
+        }
+        if valid && matches!(reason, 48 | 49) {
+            exit[6] = vmread(DATA_GUEST_PHYSICAL);
+        }
+        exit[7] = vmread(GUEST_RFLAGS);
+        exit[8] = vmread(GUEST_INTERRUPTABILITY);
+        exit[25] = if valid && reason == 0 {
+            vmread(DATA_EXIT_INTERRUPT_INFO)
+        } else {
+            0
+        };
+        exit[26] = if exit[25] & (1 << 11) != 0 {
+            vmread(DATA_EXIT_INTERRUPT_ERROR)
+        } else {
+            0
+        };
+        exit[27] = vector;
+        exit[28] = if vector & (1 << 11) != 0 {
+            vmread(DATA_IDT_VECTOR_ERROR)
+        } else {
+            0
+        };
+        if reason == 1 && capability(0x483) >> 32 & (1 << 15) != 0 {
+            interrupt = vmread(DATA_EXIT_INTERRUPT_INFO) & 255;
+        }
+        if reason == 1 && vector & (1 << 31) != 0 {
+            vcpu::write_vmcs(s, v, CONTROL_ENTRY_INTERRUPTION_INFO, vector & !(1 << 12));
+            vcpu::write_vmcs(s, v, CONTROL_ENTRY_EXCEPTION_ERROR_CODE, exit[28]);
+            if (vector >> 8) & 7 == 2 {
+                vcpu::write_vmcs(s, v, GUEST_INTERRUPTABILITY, exit[8] & !(1 << 3));
+            }
+        }
+        if valid
+            && matches!(
+                reason,
+                19 | 21..=23 | 25 | 27 | 30 | 46 | 47 | 50 | 53 | 54 | 57 | 58 | 61 | 63 | 64
+            )
+        {
+            vcpu::write_vmcs(
+                s,
+                v,
+                DATA_EXIT_INSTRUCTION_INFO,
+                vmread(DATA_EXIT_INSTRUCTION_INFO),
+            );
+        }
+        if valid && reason == 30 {
+            for (field, value) in [
+                (DATA_IO_RCX, run.regs[2]),
+                (DATA_IO_RSI, run.regs[4]),
+                (DATA_IO_RDI, run.regs[5]),
+                (DATA_IO_RIP, exit[0]),
+            ] {
+                vcpu::write_vmcs(s, v, field, value);
+            }
+        }
+        for (field, value) in [
+            (
+                DATA_INSTRUCTION_ERROR,
+                if run.failed != 0 {
+                    vmread(DATA_INSTRUCTION_ERROR)
+                } else {
+                    0
+                },
+            ),
+            (DATA_EXIT_INTERRUPT_INFO, exit[25]),
+            (DATA_EXIT_INTERRUPT_ERROR, exit[26]),
+            (DATA_IDT_VECTOR_INFO, exit[27]),
+            (DATA_IDT_VECTOR_ERROR, exit[28]),
+            (DATA_EXIT_INSTRUCTION_LENGTH, exit[5]),
+            (DATA_GUEST_PHYSICAL, exit[6]),
+            (
+                DATA_GUEST_LINEAR_ADDRESS,
+                if reason == 48 && exit[4] & (1 << 7) != 0 {
+                    vmread(DATA_GUEST_LINEAR_ADDRESS)
+                } else {
+                    0
+                },
+            ),
+        ] {
+            vcpu::write_vmcs(s, v, field, value);
+        }
+        assert!(vmclear(physical(local().vmcs.0.as_ptr() as u64)));
+    }
+    exit[10..25].copy_from_slice(&run.regs);
+    exit[29] = run.guest_cr2;
+    for (i, val) in run.regs.iter().enumerate() {
+        vcpu::set(s, v, vcpu::REGS + i as u64 * 8, *val);
+    }
+    for (i, val) in exit.iter().enumerate() {
+        vcpu::set(s, v, vcpu::EXIT + i as u64 * 8, *val);
+    }
+    vcpu::set(s, v, vcpu::CR2, run.guest_cr2);
+    vcpu::set(s, v, vcpu::VALID, if valid { 1 } else { 0 });
+    let host_exit = if amd {
+        matches!(reason, 0x60..=0x63)
+    } else {
+        reason == 1 || (reason == 0 && (exit[25] >> 8) & 7 == 2)
+    };
+    vcpu::set(s, v, vcpu::PENDING, if host_exit { 0 } else { 1 });
+    // 0x100 means poll the local APIC; 0xff is spurious/no IRQ.
+    if host_exit {
+        if (amd && reason == 0x60) || (!amd && reason == 1) {
+            if interrupt == u64::MAX {
+                0x100
+            } else {
+                interrupt
+            }
+        } else {
+            0xff
+        }
+    } else {
+        0xff
+    }
+}
+pub fn empty_root() -> u64 {
+    maps().empty.0.as_ptr() as u64
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn vmx_true_control_msr_addresses() {
+        for (base, address) in [
+            (0x481, 0x48d),
+            (0x482, 0x48e),
+            (0x483, 0x48f),
+            (0x484, 0x490),
+            (0x48b, 0x48b),
+        ] {
+            assert_eq!(control_msr(base, true), address);
+            assert_eq!(control_msr(base, false), base);
+        }
+    }
+    #[test]
+    fn physical_addresses_cover_both_kernel_mappings() {
+        assert_eq!(physical(layout::pptr(0x123000)), 0x123000);
+        assert_eq!(physical(0xffffffff80123000), 0x123000);
+    }
+    #[test]
+    fn msr_bitmaps_grant_only_the_requested_register() {
+        let mut bitmap = [255u8; 8192];
+        pass_msr(&mut bitmap, 0xc0000102, false);
+        assert_eq!(bitmap[1024 + 32], 255 & !4);
+        assert_eq!(bitmap[3072 + 32], 255 & !4);
+        assert_eq!(bitmap.iter().filter(|&&v| v != 255).count(), 2);
+        let mut bitmap = [255u8; 8192];
+        pass_msr(&mut bitmap, 0xc0000102, true);
+        assert_eq!(bitmap[0x800 + 64], 255 & !(3 << 4));
+        assert_eq!(bitmap.iter().filter(|&&v| v != 255).count(), 1);
+    }
+}

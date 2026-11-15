@@ -186,6 +186,7 @@ fn it_frame_cap(pptr: u64, vaddr: u64, mapped: bool) -> Cap {
         rights: VM_READ_WRITE,
         is_device: false,
         mapped,
+        is_ept: false,
         asid: if mapped { IT_ASID } else { 0 },
         vaddr: if mapped { vaddr } else { 0 },
     }

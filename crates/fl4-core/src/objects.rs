@@ -16,7 +16,11 @@ use fl4_abi::consts::{bits, object as ot};
 
 /// seL4 `getObjectSize`, or None for an invalid type.
 pub fn object_size(t: u64, user_size: u64) -> Option<u64> {
-    if t == ot::Tcb {
+    if t == ot::X86Vcpu {
+        Some(bits::VCPU)
+    } else if t >= ot::X86EptPml4 && t <= ot::X86EptPt {
+        Some(12)
+    } else if t == ot::Tcb {
         Some(bits::TCB)
     } else if t == ot::Endpoint {
         Some(bits::ENDPOINT)
@@ -64,6 +68,8 @@ pub fn cap_size_bits(c: Cap) -> u64 {
         Cap::SchedContext { size_bits, .. } => size_bits,
         Cap::Frame { size, .. } => size.bits(),
         Cap::PageTable { .. } | Cap::PageDirectory { .. } | Cap::Pdpt { .. } | Cap::Pml4 { .. } => 12,
+        Cap::Vcpu { .. } => bits::VCPU,
+        Cap::Ept { .. } => 12,
         Cap::AsidPool { .. } => bits::ASID_POOL,
         _ => 0,
     }
@@ -85,6 +91,8 @@ pub fn cap_is_physical(c: Cap) -> bool {
         | Cap::PageDirectory { .. }
         | Cap::Pdpt { .. }
         | Cap::Pml4 { .. }
+        | Cap::Vcpu { .. }
+        | Cap::Ept { .. }
         | Cap::AsidPool { .. } => true,
         _ => false,
     }
@@ -138,10 +146,12 @@ pub fn same_region_as(a: Cap, b: Cap) -> bool {
         Cap::PageDirectory { ptr, .. } => matches!(b, Cap::PageDirectory { ptr: p, .. } if p == ptr),
         Cap::Pdpt { ptr, .. } => matches!(b, Cap::Pdpt { ptr: p, .. } if p == ptr),
         Cap::Pml4 { ptr, .. } => matches!(b, Cap::Pml4 { ptr: p, .. } if p == ptr),
+        Cap::Vcpu { ptr } => matches!(b, Cap::Vcpu { ptr: p } if p == ptr),
+        Cap::Ept { ptr, level, .. } => matches!(b, Cap::Ept { ptr: p, level: l, .. } if p == ptr && l == level),
         Cap::AsidControl => matches!(b, Cap::AsidControl),
         Cap::AsidPool { ptr, .. } => matches!(b, Cap::AsidPool { ptr: p, .. } if p == ptr),
         Cap::IoPortControl => matches!(b, Cap::IoPortControl | Cap::IoPort { .. }),
-        Cap::IoPort { first, last } => matches!(b, Cap::IoPort { first: f, last: l } if f == first && l == last),
+        Cap::IoPort { first, last, .. } => matches!(b, Cap::IoPort { first: f, last: l, .. } if f == first && l == last),
         _ => false,
     }
 }
@@ -228,7 +238,8 @@ pub fn derive_cap<S: Store>(s: &S, slot: Slot, c: Cap) -> KResult<Cap> {
         Cap::PageTable { mapped, .. }
         | Cap::PageDirectory { mapped, .. }
         | Cap::Pdpt { mapped, .. }
-        | Cap::Pml4 { mapped, .. } => {
+        | Cap::Pml4 { mapped, .. }
+        | Cap::Ept { mapped, .. } => {
             if mapped {
                 Ok(c)
             } else {
@@ -236,7 +247,7 @@ pub fn derive_cap<S: Store>(s: &S, slot: Slot, c: Cap) -> KResult<Cap> {
             }
         }
         Cap::Frame { ptr, size, rights, is_device, .. } => {
-            Ok(Cap::Frame { ptr, size, rights, is_device, mapped: false, asid: 0, vaddr: 0 })
+            Ok(Cap::Frame { ptr, size, rights, is_device, mapped: false, is_ept: false, asid: 0, vaddr: 0 })
         }
         other => Ok(other),
     }
@@ -257,9 +268,11 @@ pub fn finalise_cap<S: Store, A: Arch>(s: &mut S, a: &mut A, c: Cap, fin: bool, 
 /// that deleting the slot's cap (always a notification cap) cannot recurse.
 pub fn finalise_cap_object<S: Store, A: Arch>(s: &mut S, a: &mut A, c: Cap, fin: bool) -> (Cap, Cap) {
     match c {
-        Cap::Frame { ptr, size, mapped, asid, vaddr, .. } => {
+        Cap::Vcpu { ptr } => { if fin { crate::vcpu::finalise(s, a, ptr); } (Cap::Null, Cap::Null) }
+        Cap::Ept { .. } => { if fin { crate::ept::finalise(s, a, c); } (Cap::Null, Cap::Null) }
+        Cap::Frame { ptr, size, mapped, is_ept, asid, vaddr, .. } => {
             if mapped && asid != 0 {
-                vspace::unmap_page(s, a, size, asid, vaddr, ptr);
+                if is_ept { crate::ept::unmap(s, a, asid, vaddr, ptr, size.bits(), false); } else { vspace::unmap_page(s, a, size, asid, vaddr, ptr); }
             }
             (Cap::Null, Cap::Null)
         }
@@ -342,6 +355,7 @@ pub fn finalise_cap_object<S: Store, A: Arch>(s: &mut S, a: &mut A, c: Cap, fin:
             if fin {
                 let t = Tcb(ptr);
                 crate::smp::remote_tcb_stall(s, a, t);
+                crate::vcpu::detach(s, a, t);
                 notification::unbind_notification(s, t);
                 crate::timer::remove(s, t);
                 let sc = Sc(t.sc(s));
@@ -391,7 +405,7 @@ pub fn finalise_cap_object<S: Store, A: Arch>(s: &mut S, a: &mut A, c: Cap, fin:
 pub fn post_cap_deletion<S: Store, A: Arch>(s: &mut S, a: &mut A, cleanup: Cap) {
     match cleanup {
         Cap::IrqHandler { irq } => interrupt::deleted_irq_handler(s, a, irq),
-        Cap::IoPort { first, last } => crate::ioport::free_ioports(s, first, last),
+        Cap::IoPort { first, last, .. } => { crate::vcpu::revoke_ports(s, a, first, last); crate::ioport::free_ioports(s, first, last); }
         _ => {}
     }
 }
@@ -437,7 +451,13 @@ fn init_fpu<S: Store>(s: &mut S, t: Tcb) {
 /// seL4 `createObject`. The memory is already zero.
 pub fn create_object<S: Store, A: Arch>(s: &mut S, a: &mut A, t: u64, base: u64, user_size: u64, device: bool) -> Cap {
     let _ = a;
-    if t == ot::Tcb {
+    if t == ot::X86Vcpu {
+        crate::vcpu::init(s, a, base);
+        Cap::Vcpu { ptr: base }
+    } else if t >= ot::X86EptPml4 && t <= ot::X86EptPt {
+        let level = if t == ot::X86EptPml4 { 0 } else if t == ot::X86EptPdpt { 39 } else if t == ot::X86EptPd { 30 } else { 21 };
+        Cap::Ept { ptr: base, level, mapped: false, asid: 0, vaddr: 0 }
+    } else if t == ot::Tcb {
         let tcb = Tcb(base);
         crate::regs::init_context(s, tcb);
         init_fpu(s, tcb);
@@ -468,7 +488,7 @@ pub fn create_object<S: Store, A: Arch>(s: &mut S, a: &mut A, t: u64, base: u64,
         } else {
             FrameSize::Huge
         };
-        Cap::Frame { ptr: base, size, rights: VM_READ_WRITE, is_device: device, mapped: false, asid: 0, vaddr: 0 }
+        Cap::Frame { ptr: base, size, rights: VM_READ_WRITE, is_device: device, mapped: false, is_ept: false, asid: 0, vaddr: 0 }
     } else if t == ot::X86PageTable {
         Cap::PageTable { ptr: base, mapped: false, asid: 0, vaddr: 0 }
     } else if t == ot::X86PageDirectory {

@@ -105,6 +105,7 @@ fn qemu_cmd(setup: &str, smp: u32, kernel: &Path, initrd: Option<&Path>) -> Comm
         // IOAPIC, QEMU gives GSI 2 no route, so an HPET timer routed to pin
         // 2 (where sel4test's driver puts it) never interrupts.
         "kvm" => c.args(["-enable-kvm", "-machine", "kernel-irqchip=split", "-cpu", "host,+invtsc"]),
+        "kvm-no-vm" => c.args(["-enable-kvm", "-machine", "kernel-irqchip=split", "-cpu", "host,-vmx,-svm"]),
         // The fallback paths: xAPIC, the APIC one-shot timer, no PCIDs,
         // the FS/GS MSRs, XSAVEOPT.
         "kvm-reduced" => c.args(["-enable-kvm", "-machine", "kernel-irqchip=split", "-cpu", "host,-x2apic,-tsc-deadline,-pcid,-invpcid,-fsgsbase,-xsaves,-xsavec"]),
@@ -113,7 +114,7 @@ fn qemu_cmd(setup: &str, smp: u32, kernel: &Path, initrd: Option<&Path>) -> Comm
         // An Intel CPU without IA32_ARCH_CAPABILITIES counts as vulnerable
         // to Meltdown: the skim window paths (TCG has no PCIDs).
         "tcg-intel" => c.args(["-accel", "tcg", "-cpu", "Skylake-Client-v1,-hle,-rtm"]),
-        s => fail(&format!("unknown setup {s} (kvm, kvm-reduced, tcg)")),
+        s => fail(&format!("unknown setup {s} (kvm, kvm-reduced, kvm-no-vm, tcg, tcg-intel)")),
     };
     c.args(["-m", "3G", "-smp"]).arg(smp.to_string());
     c.args(["-display", "none", "-serial", "stdio", "-no-reboot", "-monitor", "none"]);
@@ -488,7 +489,7 @@ fn sel4test_build(o: &Opts, fl4test: bool) -> PathBuf {
     }
     // perf.c, fuzz.c and upstream.c use only the seL4 API: both kernels
     // build them.
-    let extra = [("perf.c", "fl4perf.c"), ("fuzz.c", "fl4fuzz.c"), ("upstream.c", "fl4upstream.c")];
+    let extra = [("perf.c", "fl4perf.c"), ("fuzz.c", "fl4fuzz.c"), ("upstream.c", "fl4upstream.c"), ("virtualization.c", "fl4virtualization.c")];
     for (src, dst) in extra {
         let l = ws.join("projects/sel4test/apps/sel4test-tests/src/tests").join(dst);
         if fs::symlink_metadata(&l).is_err() {
@@ -880,6 +881,13 @@ fn extract() {
     fs::create_dir_all(&out).unwrap();
     run(Command::new(&charon).current_dir(r.join("crates/fl4-core")).args(["cargo", "--preset=aeneas", "--include", "fl4_abi", "--dest"]).arg(&out));
     run(Command::new(&aeneas).args(["-backend", "lean", "-split-files", "-dest"]).arg(r.join("proofs/Fl4Core")).arg(out.join("fl4_core.llbc")));
+    // Aeneas can leave spaces at the end of wrapped binder lists.
+    for name in ["Types.lean", "Funs.lean", "FunsExternal_Template.lean"] {
+        let path = r.join("proofs/Fl4Core").join(name);
+        let text = fs::read_to_string(&path).unwrap();
+        let clean = text.lines().map(str::trim_end).collect::<Vec<_>>().join("\n") + "\n";
+        fs::write(path, clean).unwrap();
+    }
 }
 
 fn main() {

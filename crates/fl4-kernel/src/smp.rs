@@ -99,7 +99,9 @@ extern "C" fn fl4_ap_main(c: u64) -> ! {
     cpu::write_cr4(f.cr4);
     let stack_top = percpu::get_for(c as usize).stack_top;
     gdt::init_core(c as usize, stack_top);
+    cpu::init_pat();
     fpu::init();
+    assert!(fl4_arch_x86_64::vm::init(false), "virtualization features differ between cores");
     let pc = percpu::get();
     pc.cr3 = paging::root_paddr();
     pc.kernel_cr3 = fl4_arch_x86_64::tlb::kernel_cr3(paging::root_paddr());

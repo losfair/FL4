@@ -374,33 +374,65 @@ extern "C" fn fl4_entry(f: &mut Frame) {
 /// the serial gate. What follows touches only this core's thread, whose
 /// context no other core changes without stalling this one first.
 pub fn exit() -> ! {
-    let s = &mut store();
-    let ct = sched::cur_thread(s);
-    let core = s.cur_cpu();
-    let idle = ct.0 == node_get(s, core, node::IDLE_THREAD);
-    unlock();
-    let stack_top = percpu::get().stack_top;
-    if idle {
-        percpu::get().idle = true;
-        unsafe { fl4_idle(stack_top) }
+    loop {
+        let s = &mut store();
+        let mut ct = sched::cur_thread(s);
+        if ct.state(s) == sched::TS_RUNNING_VM {
+            // Register the nested root before releasing the gate. An
+            // unmap must then interrupt this core even if it has not yet
+            // executed its entry instruction.
+            if !percpu::get().gate_held {
+                lock();
+                ct = sched::cur_thread(s);
+            }
+            let mut a = PhysArch;
+            fl4_core::vcpu::check(s, &mut a, ct);
+            if ct.state(s) == sched::TS_RUNNING_VM {
+                let v = fl4_core::vcpu::bound(s, ct);
+                let cap = ct.slot(tl::SLOT_EPT).cap(s);
+                let root = match fl4_core::ept::root(s, cap) {
+                    Ok((root, _)) => { fl4_core::ept::mark_core(s, root); root }
+                    Err(_) => fl4_arch_x86_64::vm::empty_root(),
+                };
+                unlock();
+                let vector = fl4_arch_x86_64::vm::run(s, v, ct.0, root);
+                let irq = if vector == 0x100 {
+                    // This poll is outside the transaction runner; it
+                    // must not leave a held IRQ for the next kernel entry.
+                    percpu::get().polled_irq = percpu::NO_IRQ;
+                    percpu::get().polling = true;
+                    cpu::enable_interrupts_briefly();
+                    percpu::get().polling = false;
+                    percpu::get().polled_irq
+                } else if (VEC_IRQ_MIN..=VEC_IRQ_MAX).contains(&vector) {
+                    vector - VEC_IRQ_MIN
+                } else { syscall::NO_IRQ };
+                // Results are already durable if this call stalls us.
+                service_remote();
+                lock();
+                syscall::handle_vcpu_exit(s, &mut a, irq);
+                unlock();
+                continue;
+            }
+        }
+        let core = s.cur_cpu();
+        let idle = ct.0 == node_get(s, core, node::IDLE_THREAD);
+        unlock();
+        let stack_top = percpu::get().stack_top;
+        if idle {
+            percpu::get().idle = true;
+            unsafe { fl4_idle(stack_top) }
+        }
+        fpu::switch_to(ct.0, ct.flags(s) & fl4_abi::consts::tcb_flag::FPU_DISABLED != 0);
+        let pc = percpu::get();
+        let fs = ct.reg(s, reg::FS_BASE);
+        if fs != pc.fs_base { cpu::set_fs_base(fs); pc.fs_base = fs; }
+        let gs = ct.reg(s, reg::GS_BASE);
+        if gs != pc.gs_base { cpu::set_gs_base(gs); pc.gs_base = gs; }
+        if fl4_abi::config::HARDWARE_DEBUG_API { load_debug_state(s, ct); }
+        let cr3 = if tlb::skim() { tlb::take_exit_cr3() } else { 0 };
+        unsafe { fl4_restore_user(ct.0 + tl::REGS, stack_top, cr3) }
     }
-    fpu::switch_to(ct.0, ct.flags(s) & fl4_abi::consts::tcb_flag::FPU_DISABLED != 0);
-    let pc = percpu::get();
-    let fs = ct.reg(s, reg::FS_BASE);
-    if fs != pc.fs_base {
-        cpu::set_fs_base(fs);
-        pc.fs_base = fs;
-    }
-    let gs = ct.reg(s, reg::GS_BASE);
-    if gs != pc.gs_base {
-        cpu::set_gs_base(gs);
-        pc.gs_base = gs;
-    }
-    if fl4_abi::config::HARDWARE_DEBUG_API {
-        load_debug_state(s, ct);
-    }
-    let cr3 = if tlb::skim() { tlb::take_exit_cr3() } else { 0 };
-    unsafe { fl4_restore_user(ct.0 + tl::REGS, stack_top, cr3) }
 }
 
 /// Load a thread's breakpoints and single-step flag (seL4

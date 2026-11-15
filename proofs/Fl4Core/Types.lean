@@ -90,7 +90,7 @@ inductive capability.FrameSize where
 | Huge : capability.FrameSize
 
 /-- [fl4_core::capability::Cap]
-    Source: 'crates/fl4-core/src/capability.rs', lines 47:0-70:1
+    Source: 'crates/fl4-core/src/capability.rs', lines 47:0-72:1
     Visibility: public -/
 @[discriminant isize]
 inductive capability.Cap where
@@ -120,6 +120,7 @@ inductive capability.Cap where
   Std.U64 →
   Bool →
   Bool →
+  Bool →
   Std.U64 →
   Std.U64 →
   capability.Cap
@@ -127,10 +128,12 @@ inductive capability.Cap where
 | PageDirectory : Std.U64 → Bool → Std.U64 → Std.U64 → capability.Cap
 | Pdpt : Std.U64 → Bool → Std.U64 → Std.U64 → capability.Cap
 | Pml4 : Std.U64 → Bool → Std.U64 → capability.Cap
+| Vcpu : Std.U64 → capability.Cap
+| Ept : Std.U64 → Std.U64 → Bool → Std.U64 → Std.U64 → capability.Cap
 | AsidControl : capability.Cap
 | AsidPool : Std.U64 → Std.U64 → capability.Cap
 | IoPortControl : capability.Cap
-| IoPort : Std.U64 → Std.U64 → capability.Cap
+| IoPort : Std.U64 → Std.U64 → Std.U64 → capability.Cap
 
 /-- [fl4_core::obj::Sc]
     Source: 'crates/fl4-core/src/obj.rs', lines 34:0-34:23
@@ -152,15 +155,19 @@ structure sporadic.Refill where
 def obj.Tcb := Std.U64
 
 /-- [fl4_core::boot::Pick]
-    Source: 'crates/fl4-core/src/boot.rs', lines 367:0-370:1 -/
+    Source: 'crates/fl4-core/src/boot.rs', lines 368:0-371:1 -/
 structure boot.Pick where
   k : Std.Usize
   start : Std.U64
 
 /-- Trait declaration: [fl4_core::machine::Arch]
-    Source: 'crates/fl4-core/src/machine.rs', lines 30:0-92:1
+    Source: 'crates/fl4-core/src/machine.rs', lines 30:0-101:1
     Visibility: public -/
 structure machine.Arch (Self : Type _) where
+  virtualization : Self → Result Std.U64
+  vcpu_capability : Self → Std.U64 → Result Std.U64
+  vcpu_barrier : Self → Result Self
+  invalidate_ept : Self → Std.U64 → Std.U64 → Result Self
   now : Self → Result (Std.U64 × Self)
   set_deadline : Self → Std.U64 → Result Self
   us_to_ticks : Self → Std.U64 → Result Std.U64
@@ -243,7 +250,7 @@ inductive error.Exc where
 | Preempted : error.Exc
 
 /-- [fl4_core::boot::Root]
-    Source: 'crates/fl4-core/src/boot.rs', lines 415:0-427:1 -/
+    Source: 'crates/fl4-core/src/boot.rs', lines 416:0-428:1 -/
 structure boot.Root where
   b : boot.Boot
   extra_bi : Std.U64
@@ -258,7 +265,7 @@ structure boot.Root where
   it : boot.Region
 
 /-- [fl4_core::boot::RootLayout]
-    Source: 'crates/fl4-core/src/boot.rs', lines 432:0-442:1 -/
+    Source: 'crates/fl4-core/src/boot.rs', lines 433:0-443:1 -/
 structure boot.RootLayout where
   ipcbuf_vptr : Std.U64
   bi_frame_vptr : Std.U64
@@ -271,7 +278,7 @@ structure boot.RootLayout where
   total : Std.U64
 
 /-- [fl4_core::capability::Rights]
-    Source: 'crates/fl4-core/src/capability.rs', lines 259:0-264:1
+    Source: 'crates/fl4-core/src/capability.rs', lines 271:0-276:1
     Visibility: public -/
 structure capability.Rights where
   write : Bool
@@ -344,8 +351,18 @@ structure debug.Breakpoint where
   rw : Std.U64
   enabled : Bool
 
+/-- [fl4_core::ept::root::{closure}]
+    Source: 'crates/fl4-core/src/ept.rs', lines 34:25-34:84 -/
+@[reducible]
+def ept.root.closure (S : Type _) := Unit
+
+/-- [fl4_core::ept::slot::{closure}]
+    Source: 'crates/fl4-core/src/ept.rs', lines 70:40-70:99 -/
+@[reducible]
+def ept.slot.closure (S : Type _) := Unit
+
 /-- [fl4_core::vspace::TableCap]
-    Source: 'crates/fl4-core/src/vspace.rs', lines 702:0-710:1 -/
+    Source: 'crates/fl4-core/src/vspace.rs', lines 711:0-719:1 -/
 structure vspace.TableCap where
   map_lbl : Std.U64
   unmap_lbl : Std.U64
@@ -356,24 +373,35 @@ structure vspace.TableCap where
   vaddr : Std.U64
 
 /-- [fl4_core::vspace::FrameCap]
-    Source: 'crates/fl4-core/src/vspace.rs', lines 431:0-439:1 -/
+    Source: 'crates/fl4-core/src/vspace.rs', lines 436:0-445:1 -/
 structure vspace.FrameCap where
   ptr : Std.U64
   size : capability.FrameSize
   rights : Std.U64
   is_device : Bool
   mapped : Bool
+  is_ept : Bool
   asid : Std.U64
   vaddr : Std.U64
 
 /-- [fl4_core::vspace::VRoot]
-    Source: 'crates/fl4-core/src/vspace.rs', lines 489:0-492:1 -/
+    Source: 'crates/fl4-core/src/vspace.rs', lines 498:0-501:1 -/
 structure vspace.VRoot where
   pml4 : Std.U64
   asid : Std.U64
 
+/-- [fl4_core::vcpu::msr_addr::{closure#1}]
+    Source: 'crates/fl4-core/src/vcpu.rs', lines 753:20-753:76 -/
+@[reducible]
+def vcpu.msr_addr.closure_1 := Std.U64
+
+/-- [fl4_core::vcpu::msr_addr::{closure}]
+    Source: 'crates/fl4-core/src/vcpu.rs', lines 748:30-748:55 -/
+@[reducible]
+def vcpu.msr_addr.closure := Std.U64
+
 /-- [fl4_core::untyped::UntypedCap]
-    Source: 'crates/fl4-core/src/untyped.rs', lines 131:0-136:1 -/
+    Source: 'crates/fl4-core/src/untyped.rs', lines 132:0-137:1 -/
 structure untyped.UntypedCap where
   ptr : Std.U64
   size_bits : Std.U64

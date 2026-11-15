@@ -28,6 +28,15 @@ pub trait Store {
 /// Machine operations the kernel logic needs. Implemented by the x86_64
 /// backend on hardware and by the simulator.
 pub trait Arch {
+    /// Runtime virtualization backend: 0 unavailable, 1 VMX, 2 SVM.
+    fn virtualization(&self) -> u64 { 0 }
+    /// VMX capability MSR, host XCR0 (0), or canonical-address width (1).
+    fn vcpu_capability(&self, _field: u64) -> u64 { 0 }
+    /// Require the serial gate before accessing live virtualization state.
+    fn vcpu_barrier(&mut self) {}
+    /// Drop nested translations on the cores in mask, synchronously.
+    fn invalidate_ept(&mut self, _root: u64, _mask: u64) {}
+
     // Time (MCS): ticks are the timer's own units (the TSC on x86).
     fn now(&mut self) -> u64;
     fn set_deadline(&mut self, ticks: u64);

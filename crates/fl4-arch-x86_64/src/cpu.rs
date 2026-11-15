@@ -239,3 +239,11 @@ pub mod msr {
     pub const KERNEL_GS_BASE: u32 = 0xc000_0102;
     pub const XSS: u32 = 0xda0;
 }
+
+/// seL4's PAT palette, also used by AMD nested page-table entries:
+/// WB, WT, UC-, UC, WC in indices 0..4. Configure before user mappings.
+pub fn init_pat() {
+    if cpuid(1, 0).edx & (1 << 16) != 0 {
+        wrmsr(msr::PAT, (rdmsr(msr::PAT) & !0x0000_00ff_ffff_ffff) | 0x0000_0001_0007_0406);
+    }
+}

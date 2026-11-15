@@ -99,7 +99,7 @@ pub fn decode_control<S: Store, A: Arch>(s: &mut S, a: &mut A, lbl: u64, length:
     cdt::ensure_empty_slot(s, dest)?;
     sched::set_thread_state(s, ct, sched::TS_RESTART);
     set_mask(s, first, last, true);
-    cdt::insert(s, Cap::IoPort { first, last }, slot, dest);
+    cdt::insert(s, Cap::IoPort { first, last, vcpu: 0 }, slot, dest);
     Ok(())
 }
 
@@ -137,7 +137,7 @@ fn is_port_in(lbl: u64) -> bool {
 
 pub fn decode<S: Store, A: Arch>(s: &mut S, a: &mut A, lbl: u64, length: u64, cap: Cap, call: bool, buf: u64) -> KResult<()> {
     let (first, last) = match cap {
-        Cap::IoPort { first, last } => (first, last),
+        Cap::IoPort { first, last, .. } => (first, last),
         _ => return illegal(),
     };
     let ct = sched::cur_thread(s);

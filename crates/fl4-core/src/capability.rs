@@ -58,15 +58,17 @@ pub enum Cap {
     Domain,
     SchedContext { ptr: u64, size_bits: u64 },
     SchedControl { cpu: u64 },
-    Frame { ptr: u64, size: FrameSize, rights: u64, is_device: bool, mapped: bool, asid: u64, vaddr: u64 },
+    Frame { ptr: u64, size: FrameSize, rights: u64, is_device: bool, mapped: bool, is_ept: bool, asid: u64, vaddr: u64 },
     PageTable { ptr: u64, mapped: bool, asid: u64, vaddr: u64 },
     PageDirectory { ptr: u64, mapped: bool, asid: u64, vaddr: u64 },
     Pdpt { ptr: u64, mapped: bool, asid: u64, vaddr: u64 },
     Pml4 { ptr: u64, mapped: bool, asid: u64 },
+    Vcpu { ptr: u64 },
+    Ept { ptr: u64, level: u64, mapped: bool, asid: u64, vaddr: u64 },
     AsidControl,
     AsidPool { ptr: u64, asid_base: u64 },
     IoPortControl,
-    IoPort { first: u64, last: u64 },
+    IoPort { first: u64, last: u64, vcpu: u64 },
 }
 
 const PTR_MASK: u64 = 0x0000_ffff_ffff_ffff;
@@ -145,6 +147,7 @@ impl Cap {
                 rights: (w0 >> 50) & 3,
                 is_device: bit(w0, 52),
                 mapped: bit(w0, 53),
+                is_ept: bit(w0, 58),
                 asid: unpack_asid(w0, 54, w1),
                 vaddr: w1 & PTR_MASK,
             },
@@ -154,8 +157,10 @@ impl Cap {
             17 => Cap::Pml4 { ptr: p, mapped: bit(w0, 48), asid: w1 },
             18 => Cap::AsidControl,
             19 => Cap::AsidPool { ptr: p, asid_base: w1 },
+            22 => Cap::Vcpu { ptr: p },
+            23 => Cap::Ept { ptr: p, level: (w0 >> 53) & 0x3f, mapped: bit(w0, 48), asid: unpack_asid(w0, 49, w1), vaddr: w1 & PTR_MASK },
             20 => Cap::IoPortControl,
-            21 => Cap::IoPort { first: w1 & 0xffff, last: (w1 >> 16) & 0xffff },
+            21 => Cap::IoPort { first: w1 & 0xffff, last: (w1 >> 16) & 0xffff, vcpu: if w0 & PTR_MASK == 0 { 0 } else { p } },
             _ => Cap::Null,
         }
     }
@@ -185,13 +190,14 @@ impl Cap {
             Cap::Domain => (tag(10), 0),
             Cap::SchedContext { ptr, size_bits } => (tag(11) | pack_ptr(ptr) | ((size_bits & 0x3f) << 48), 0),
             Cap::SchedControl { cpu } => (tag(12), cpu),
-            Cap::Frame { ptr, size, rights, is_device, mapped, asid, vaddr } => (
+            Cap::Frame { ptr, size, rights, is_device, mapped, is_ept, asid, vaddr } => (
                 tag(13)
                     | pack_ptr(ptr)
                     | (size.code() << 48)
                     | ((rights & 3) << 50)
                     | b(is_device, 52)
                     | b(mapped, 53)
+                    | b(is_ept, 58)
                     | asid_high(asid, 54),
                 ((asid & 0xffff) << 48) | (vaddr & PTR_MASK),
             ),
@@ -207,8 +213,10 @@ impl Cap {
             Cap::Pml4 { ptr, mapped, asid } => (tag(17) | pack_ptr(ptr) | b(mapped, 48), asid),
             Cap::AsidControl => (tag(18), 0),
             Cap::AsidPool { ptr, asid_base } => (tag(19) | pack_ptr(ptr), asid_base),
+            Cap::Vcpu { ptr } => (tag(22) | pack_ptr(ptr), 0),
+            Cap::Ept { ptr, level, mapped, asid, vaddr } => (tag(23) | pack_ptr(ptr) | b(mapped, 48) | asid_high(asid, 49) | ((level & 0x3f) << 53), ((asid & 0xffff) << 48) | (vaddr & PTR_MASK)),
             Cap::IoPortControl => (tag(20), 0),
-            Cap::IoPort { first, last } => (tag(21), (first & 0xffff) | ((last & 0xffff) << 16)),
+            Cap::IoPort { first, last, vcpu } => (tag(21) | pack_ptr(vcpu), (first & 0xffff) | ((last & 0xffff) << 16)),
         }
     }
 
@@ -227,6 +235,8 @@ impl Cap {
                 | Cap::Pml4 { .. }
                 | Cap::AsidControl
                 | Cap::AsidPool { .. }
+                | Cap::Vcpu { .. }
+                | Cap::Ept { .. }
                 | Cap::IoPortControl
                 | Cap::IoPort { .. }
         )
@@ -248,6 +258,8 @@ impl Cap {
             | Cap::PageDirectory { ptr, .. }
             | Cap::Pdpt { ptr, .. }
             | Cap::Pml4 { ptr, .. }
+            | Cap::Vcpu { ptr }
+            | Cap::Ept { ptr, .. }
             | Cap::AsidPool { ptr, .. } => ptr,
             _ => 0,
         }
@@ -302,12 +314,13 @@ pub fn mask_cap_rights(r: Rights, c: Cap) -> Cap {
             Cap::Notification { ptr, badge, send: send && r.write, recv: recv && r.read }
         }
         Cap::Reply { ptr, grant } => Cap::Reply { ptr, grant: grant && r.grant },
-        Cap::Frame { ptr, size, rights, is_device, mapped, asid, vaddr } => Cap::Frame {
+        Cap::Frame { ptr, size, rights, is_device, mapped, is_ept, asid, vaddr } => Cap::Frame {
             ptr,
             size,
             rights: mask_vm_rights(rights, r),
             is_device,
             mapped,
+            is_ept,
             asid,
             vaddr,
         },

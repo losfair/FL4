@@ -36,6 +36,7 @@ pub fn decode<S: Store, A: Arch>(s: &mut S, a: &mut A, lbl: u64, length: u64, sl
     let node_depth = msg::syscall_arg(s, ct, buf, 3);
     let node_offset = msg::syscall_arg(s, ct, buf, 4);
     let node_window = msg::syscall_arg(s, ct, buf, 5);
+    if new_type >= ot::X86Vcpu && new_type < ot::Count && a.virtualization() == 0 { return invalid_arg(0); }
     let obj_size = retype_size(new_type, user_size)?;
     let dest = retype_dest(s, extra[0], node_index, node_depth, node_offset, node_window)?;
     ensure_empty_slots(s, dest, node_offset, node_offset.wrapping_add(node_window))?;

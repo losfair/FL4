@@ -753,6 +753,13 @@ def generate_stub(arch, wordsize, interface_name, method_name, method_id, input_
         result.append("\t}")
         result.append("")
 
+    # ReadVMCB returns a variable number of words in the MRs; its C
+    # result struct names only the first. Preserve the register MRs too,
+    # so seL4_GetMR(1..3) sees the rest just as it sees buffered MRs 4+.
+    if method_id == "X86VCPUReadVMCB" and not use_only_ipc_buffer:
+        for i in range(num_mrs):
+            result.append("\tseL4_SetMR(%d, mr%d);" % (i, i))
+
     #
     # Generate unmarshalling code.
     #

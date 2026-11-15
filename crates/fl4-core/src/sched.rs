@@ -19,6 +19,7 @@ pub const TS_BLOCKED_ON_SEND: u64 = 4;
 pub const TS_BLOCKED_ON_REPLY: u64 = 5;
 pub const TS_BLOCKED_ON_NTFN: u64 = 6;
 pub const TS_IDLE: u64 = 7;
+pub const TS_RUNNING_VM: u64 = 8;
 
 pub const ACTION_RESUME_CURRENT: u64 = 0;
 pub const ACTION_CHOOSE_NEW: u64 = 1;
@@ -102,7 +103,7 @@ pub fn state<S: Store>(s: &S, t: Tcb) -> u64 {
 
 pub fn is_runnable<S: Store>(s: &S, t: Tcb) -> bool {
     let st = t.state(s);
-    st == TS_RUNNING || st == TS_RESTART
+    st == TS_RUNNING || st == TS_RESTART || st == TS_RUNNING_VM
 }
 
 pub fn is_blocked<S: Store>(s: &S, t: Tcb) -> bool {
@@ -471,7 +472,7 @@ pub fn end_timeslice<S: Store, A: Arch>(s: &mut S, a: &mut A, can_timeout_fault:
     let sc = cur_sc(s);
     let ct = cur_thread(s);
     let rr = sporadic::is_round_robin(s, sc);
-    let valid = faults::valid_timeout_handler(s, ct);
+    let valid = ct.state(s) != TS_RUNNING_VM && faults::valid_timeout_handler(s, ct);
     if can_timeout_fault && !rr && valid {
         let badge = sc.badge(s);
         faults::handle_timeout(s, a, ct, crate::error::Fault::Timeout { badge });
@@ -688,7 +689,7 @@ pub fn set_domain<S: Store>(s: &mut S, t: Tcb, dom: u64) {
 /// seL4 `setPriority` (MCS).
 pub fn set_priority<S: Store>(s: &mut S, t: Tcb, prio: u64) {
     let st = t.state(s);
-    if st == TS_RUNNING || st == TS_RESTART {
+    if st == TS_RUNNING || st == TS_RESTART || st == TS_RUNNING_VM {
         if queued(s, t) || t == cur_thread(s) {
             dequeue(s, t);
             t.set_prio(s, prio);

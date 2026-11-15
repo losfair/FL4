@@ -34,7 +34,7 @@ RequireTool(XMLLINT_PATH xmllint.sh)
 
 include(config.cmake)
 
-if(NOT KernelIsMCS OR KernelVTX OR KernelIOMMU OR KernelFastpath)
+if(NOT KernelIsMCS OR NOT KernelVTX OR KernelIOMMU OR KernelFastpath)
   message(FATAL_ERROR "FL4: configuration rules were not applied")
 endif()
 

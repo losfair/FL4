@@ -144,7 +144,7 @@ fn set_asid_table<S: Store>(s: &mut S, high: u64, pool: u64) {
 }
 
 /// seL4 `findVSpaceForASID`: the PML4 assigned to `asid`.
-pub fn find_vspace_for_asid<S: Store>(s: &S, asid: u64) -> Result<u64, LookupFault> {
+pub fn find_asid<S: Store>(s: &S, asid: u64) -> Result<u64, LookupFault> {
     let pool = asid_table(s, asid >> ASID_LOW_BITS);
     if pool == 0 {
         return Err(LookupFault::InvalidRoot);
@@ -154,6 +154,11 @@ pub fn find_vspace_for_asid<S: Store>(s: &S, asid: u64) -> Result<u64, LookupFau
         return Err(LookupFault::InvalidRoot);
     }
     Ok(root)
+}
+
+pub fn find_vspace_for_asid<S: Store>(s: &S, asid: u64) -> Result<u64, LookupFault> {
+    let root = find_asid(s, asid)?;
+    if root & 1 != 0 { Err(LookupFault::InvalidRoot) } else { Ok(root) }
 }
 
 pub fn is_valid_vtable_root(c: Cap) -> bool {
@@ -314,8 +319,9 @@ pub fn delete_asid<S: Store, A: Arch>(s: &mut S, a: &mut A, asid: u64, root: u64
         return;
     }
     let e = pool.wrapping_add((asid & 511).wrapping_mul(8));
-    if s.read(e) == root {
-        a.invalidate_asid(asid);
+    let old = s.read(e);
+    if old & !1 == root {
+        if old & 1 != 0 { crate::ept::invalidate(s, a, root); } else { a.invalidate_asid(asid); }
         s.write(e, 0);
         let ct = sched::cur_thread(s);
         set_vm_root(s, a, ct);
@@ -329,9 +335,8 @@ pub fn delete_asid_pool<S: Store, A: Arch>(s: &mut S, a: &mut A, base: u64, pool
     }
     let mut i = 0;
     while i < 512 {
-        if s.read(pool.wrapping_add(i * 8)) != 0 {
-            a.invalidate_asid(base.wrapping_add(i));
-        }
+        let r = s.read(pool.wrapping_add(i * 8));
+        if r & 1 != 0 { crate::ept::invalidate(s, a, r & !1); } else if r != 0 { a.invalidate_asid(base.wrapping_add(i)); }
         i += 1;
     }
     set_asid_table(s, base >> ASID_LOW_BITS, 0);
@@ -434,13 +439,14 @@ struct FrameCap {
     rights: u64,
     is_device: bool,
     mapped: bool,
+    is_ept: bool,
     asid: u64,
     vaddr: u64,
 }
 
 fn as_frame(c: Cap) -> Option<FrameCap> {
     match c {
-        Cap::Frame { ptr, size, rights, is_device, mapped, asid, vaddr } => Some(FrameCap { ptr, size, rights, is_device, mapped, asid, vaddr }),
+        Cap::Frame { ptr, size, rights, is_device, mapped, is_ept, asid, vaddr } => Some(FrameCap { ptr, size, rights, is_device, mapped, is_ept, asid, vaddr }),
         _ => None,
     }
 }
@@ -460,15 +466,18 @@ fn decode_frame<S: Store, A: Arch>(
         Some(f) => f,
         None => return illegal(),
     };
-    if lbl == label::X86PageMap {
+    if lbl == label::X86PageMapEPT {
+        crate::ept::map_frame(s, a, length, cap, slot, buf, ex)
+    } else if lbl == label::X86PageMap {
+        if f.mapped && f.is_ept { return invalid_cap(0); }
         decode_page_map(s, a, length, slot, f, buf, ex)
     } else if lbl == label::X86PageUnmap {
         let ct = sched::cur_thread(s);
         sched::set_thread_state(s, ct, sched::TS_RESTART);
         if f.mapped && f.asid != 0 {
-            unmap_page(s, a, f.size, f.asid, f.vaddr, f.ptr);
+            if f.is_ept { crate::ept::unmap(s, a, f.asid, f.vaddr, f.ptr, f.size.bits(), false); } else { unmap_page(s, a, f.size, f.asid, f.vaddr, f.ptr); }
         }
-        slot.set_cap(s, Cap::Frame { ptr: f.ptr, size: f.size, rights: f.rights, is_device: f.is_device, mapped: false, asid: 0, vaddr: 0 });
+        slot.set_cap(s, Cap::Frame { ptr: f.ptr, size: f.size, rights: f.rights, is_device: f.is_device, mapped: false, is_ept: false, asid: 0, vaddr: 0 });
         Ok(())
     } else if lbl == label::X86PageGetAddress {
         let ct = sched::cur_thread(s);
@@ -538,7 +547,7 @@ fn decode_page_map<S: Store, A: Arch>(s: &mut S, a: &mut A, length: u64, slot: S
     let e_addr = page_entry_slot(s, root, vaddr, f.size)?;
     let e = make_user_page(s, layout::paddr(f.ptr), attr, vm, large);
     sched::set_thread_state(s, ct, sched::TS_RESTART);
-    slot.set_cap(s, Cap::Frame { ptr: f.ptr, size: f.size, rights: f.rights, is_device: f.is_device, mapped: true, asid, vaddr });
+    slot.set_cap(s, Cap::Frame { ptr: f.ptr, size: f.size, rights: f.rights, is_device: f.is_device, mapped: true, is_ept: false, asid, vaddr });
     write_mapping(s, a, e_addr, e, asid, vaddr, defer);
     Ok(())
 }
@@ -687,7 +696,7 @@ fn insert_subframes<S: Store>(s: &mut S, src: Slot, dest: u64, first: u64, base:
             size: FrameSize::Small,
             rights: vm,
             is_device: false,
-            mapped: false,
+            mapped: false, is_ept: false,
             asid: 0,
             vaddr: 0,
         };
@@ -902,6 +911,7 @@ pub fn decode<S: Store, A: Arch>(
             };
             let vroot = match vslot.cap(s) {
                 Cap::Pml4 { ptr, mapped: false, .. } => ptr,
+                Cap::Ept { ptr, level: 0, mapped: false, .. } => ptr | 1,
                 _ => return invalid_cap(1),
             };
             let pool = asid_table(s, asid_base >> ASID_LOW_BITS);
@@ -920,7 +930,8 @@ pub fn decode<S: Store, A: Arch>(
             }
             let asid = asid_base.wrapping_add(i);
             sched::set_thread_state(s, ct, sched::TS_RESTART);
-            vslot.set_cap(s, Cap::Pml4 { ptr: vroot, mapped: true, asid });
+            let assigned = if vroot & 1 != 0 { Cap::Ept { ptr: vroot & !1, level: 0, mapped: true, asid, vaddr: 0 } } else { Cap::Pml4 { ptr: vroot, mapped: true, asid } };
+            vslot.set_cap(s, assigned);
             s.write(pool.wrapping_add((asid & 511) * 8), vroot);
             Ok(())
         }

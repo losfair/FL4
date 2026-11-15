@@ -87,6 +87,15 @@ fn switch_vspace(root: u64, asid: u64) {
 }
 
 impl Arch for PhysArch {
+    fn virtualization(&self) -> u64 { crate::vm::backend() }
+    fn vcpu_capability(&self, field: u64) -> u64 { crate::vm::capability(field) }
+    fn vcpu_barrier(&mut self) { if in_tx() { serial_needed(); } }
+    fn invalidate_ept(&mut self, root: u64, mask: u64) {
+        if in_tx() { return serial_needed(); }
+        crate::vm::invalidate_local(root);
+        smp::remote_call(smp::CALL_EPT, root, 0, mask);
+    }
+
     fn now(&mut self) -> u64 {
         timer::now()
     }

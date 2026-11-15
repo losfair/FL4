@@ -7,6 +7,16 @@
 #pragma once
 
 #ifdef CONFIG_VTX
+/*
+ * On AMD CPUs (SVM) the same registers carry SVM's fields: CONTROL_PPC_MR
+ * the misc1 intercept vector (offset 0x00c of the VMCB), INTERRUPT_INFO_MR
+ * EVENTINJ, REASON_MR the exit code, QUALIFICATION_MR and GUEST_PHYSICAL_MR
+ * EXITINFO1 and EXITINFO2, INSTRUCTION_LEN_MR NEXT_RIP - RIP (0 where the
+ * CPU gave no NEXT_RIP), GUEST_INT_MR the interrupt state, CR3_MR the
+ * guest's CR3, and IDT_VECTOR_INFO and _ERROR EXITINTINFO.  EXIT_INTR_INFO
+ * and _ERROR are 0: an exception exit has its own exit code, and its error
+ * code in EXITINFO1.
+ */
 typedef enum kernel_fault_context {
     /*
      * When performing a seL4_SysVMEnter seL4 expects certain guest state to be
@@ -29,7 +39,7 @@ typedef enum kernel_fault_context {
     SEL4_VMENTER_FAULT_GUEST_PHYSICAL_MR,
     SEL4_VMENTER_FAULT_RFLAGS_MR,
     SEL4_VMENTER_FAULT_GUEST_INT_MR,
-    SEL4_VMENTER_FAULT_CR3_MR,
+    SEL4_VMENTER_FAULT_CR3_MR,	/* VT-x: 0 on x86_64 l4h, read it with ReadVMCS */
     SEL4_VMENTER_FAULT_EAX,
     SEL4_VMENTER_FAULT_EBX,
     SEL4_VMENTER_FAULT_ECX,
@@ -47,6 +57,11 @@ typedef enum kernel_fault_context {
     SEL4_VMENTER_FAULT_R14,
     SEL4_VMENTER_FAULT_R15,
 #endif
+    SEL4_VMENTER_FAULT_EXIT_INTR_INFO,
+    SEL4_VMENTER_FAULT_EXIT_INTR_ERROR,
+    SEL4_VMENTER_FAULT_IDT_VECTOR_INFO,
+    SEL4_VMENTER_FAULT_IDT_VECTOR_ERROR,
+    SEL4_VMENTER_FAULT_CR2,
     SEL4_VMENTER_NUM_FAULT_MSGS,
 } kernel_fault_context_t;
 #endif
@@ -64,6 +79,14 @@ typedef enum kernel_fault_context {
  * format is a combination of the format we passed to seL4_SysVMEnter with
  * additional registers described with the SEL4_VMENTER_FAULT_ constants
  */
+/* For VCPU_ReadMSR and VCPU_WriteMSR: the guest's CR2, which has no VMCS field
+ * and which other threads' page faults overwrite. */
+#define SEL4_VCPU_MSR_CR2 0xffffffffu
+/* The guest's XCR0, installed for VM entries only: a subset of the kernel's
+ * (KernelXSaveFeatureSet) that XSETBV accepts, with x87 enabled, SSE wherever
+ * AVX is, and AVX-512, MPX and AMX state only whole. */
+#define SEL4_VCPU_MSR_XCR0 0xfffffffeu
+
 #define SEL4_VMENTER_RESULT_FAULT 1
 #define SEL4_VMENTER_RESULT_NOTIF 0
 
@@ -72,5 +95,5 @@ typedef enum kernel_fault_context {
  * kernel for each of the return cases of VMEnter
  */
 #define SEL4_VMENTER_RESULT_FAULT_LEN SEL4_VMENTER_NUM_FAULT_MSGS
-#define SEL4_VMENTER_RESULT_NOTIF_LEN 3
+#define SEL4_VMENTER_RESULT_NOTIF_LEN SEL4_VMENTER_NUM_FAULT_MSGS
 

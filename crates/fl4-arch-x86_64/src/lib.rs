@@ -16,3 +16,5 @@ pub mod smp;
 pub mod spec;
 pub mod timer;
 pub mod tlb;
+
+pub mod vm;
