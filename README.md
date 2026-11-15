@@ -49,16 +49,20 @@ both backends. Intel uses `ReadVMCS`/`WriteVMCS`; AMD uses
 The other backend's field operations return `seL4_IllegalOperation`.
 VCPU objects occupy 32 KiB (`seL4_VCPUBits = 15`).
 
-The first implementation rebuilds a per-core VMCS on each entry, uses no
-VMX VPID, and flushes SVM's ASID on every entry. This favors simple
-ownership and migration over entry/exit performance. Nested unmaps and
+Each core retains a VMCS and uses `VMRESUME` after its first successful
+launch. A field cache follows both software writes and guest changes read
+on exit, so entries write only changed VMCS fields. The VCPU's software
+image remains complete before remote operations or migration; the hardware
+VMCS stays on its core. EPT translations survive entries. Nested unmaps and
 root/ASID-pool deletion synchronously invalidate every core recorded in
-the root before memory can be reused. Guest FPU state is the bound TCB's;
+the root before memory can be reused. VMX uses no VPID, and SVM flushes its
+ASID on every entry. Guest FPU state is the bound TCB's;
 XCR0, CR2, syscall MSRs, descriptor-table limits, and host state are
 restored on successful and failed entries.
 
 Virtualization regression tests run real guests and cover field restrictions,
-CPUID/HLT exits, GPRs, notifications, cross-core rebinding, migration,
+CPUID/HLT exits, repeated entry, failed entry, GPRs, notifications,
+replacement of cached nested mappings, cross-core rebinding, migration,
 revocation, and deletion of a running VCPU:
 
 ```
@@ -78,7 +82,12 @@ ASID assignment, and VCPU/EPT functional refinement remain outside their
 semantic scope. The entry/exit assembly and architecture backend remain
 trusted. See [DESIGN.md §9](DESIGN.md#9-proof-plan) for the exact claims.
 
-Real-guest execution passes on AMD-V under QEMU/KVM and on Intel VT-x
-through Hyper-V/KVM, including SMP, release, reduced-feature and no-PMU
-configurations. VMX performance-MSR switching is enabled only when CPUID
-exposes a suitable PMU; a PMU-present Intel runtime has not been tested.
+Real-guest execution passes on AMD-V under QEMU/KVM, including SMP,
+release, reduced-feature and no-PMU configurations. The retained Intel
+VMCS path has stateful host tests and a two-core Bochs 3.0 VMX run covering
+repeated and failed entry, mapping replacement, migration, revocation and
+deletion. That emulator run enabled guest IF for the timer and loop tests:
+the IF-clear timer test also hangs with the original backend in Bochs.
+Intel hardware validation of the retained VMCS path remains outstanding.
+VMX performance-MSR switching is enabled only when CPUID exposes a suitable
+PMU; a PMU-present Intel hardware runtime has not been tested.

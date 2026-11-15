@@ -1,11 +1,12 @@
 //! Trusted VMX/SVM instruction boundary. Policy lives in fl4-core::vcpu.
 //!
-//! A per-core VMCS is rebuilt from the VCPU's software image for each entry
-//! and cleared before remote calls can move/delete the VCPU. No VMCS can
-//! be active on two cores. VMX uses no VPID; SVM flushes ASID 1 on each run.
-//! These conservative flushes make migration and FlushTLB independent of
-//! cached identifier ownership. EPT unmaps still synchronously stop every
-//! core that could be using the root before memory can be reused.
+//! Each core retains its own VMCS and resumes it after the first launch.
+//! Its field cache follows VMWRITE and VMREAD, so unchanged fields need no
+//! VMWRITE even when a guest changed them. A VCPU's complete software image
+//! is saved before remote calls can move/delete it; the hardware VMCS never
+//! migrates or belongs to user memory. EPT translations survive entries;
+//! unmaps and root deletion invalidate every core recorded for the root.
+//! VMX uses no VPID; SVM flushes ASID 1 on each run.
 use crate::{cpu, fpu, percpu, tlb};
 use core::arch::asm;
 use core::cell::UnsafeCell;
@@ -17,16 +18,65 @@ use fl4_core::vcpu::{self, svm, vmx::*};
 core::arch::global_asm!(include_str!("vm.S"), options(att_syntax));
 extern "C" {
     fn fl4_vmx_run(run: *mut Run);
+    fn fl4_vmx_exit();
     fn fl4_svm_run(run: *mut Run);
 }
 
 #[repr(C, align(4096))]
 struct Page([u8; 4096]);
+
+struct VmcsState {
+    values: [u64; 2048],
+    valid: [u64; 32],
+    loaded: bool,
+    launched: bool,
+}
+impl VmcsState {
+    const fn new() -> Self {
+        Self {
+            values: [0; 2048],
+            valid: [0; 32],
+            loaded: false,
+            launched: false,
+        }
+    }
+    fn index(field: u64) -> usize {
+        ((vcpu::vmcs_addr(0, field) - vcpu::SHADOW) / 8) as usize
+    }
+    fn get(&self, field: u64) -> Option<u64> {
+        let i = Self::index(field);
+        if self.valid[i / 64] & (1 << (i % 64)) != 0 {
+            Some(self.values[i])
+        } else {
+            None
+        }
+    }
+    fn observe(&mut self, field: u64, value: u64) {
+        let i = Self::index(field);
+        self.values[i] = value;
+        self.valid[i / 64] |= 1 << (i % 64);
+    }
+    fn write(&mut self, field: u64, value: u64, write: impl FnOnce(u64, u64)) {
+        if self.get(field) != Some(value) {
+            write(field, value);
+            self.observe(field, value);
+        }
+    }
+    fn finish_entry(&mut self, failed: bool, reason: u64) -> bool {
+        let valid = !failed && reason & (1 << 31) == 0;
+        // Failed launches stay clear; failed resumes stay launched. Intel
+        // sets the launch state only after guest-state and MSR checks.
+        self.launched |= valid;
+        valid
+    }
+}
+
 #[repr(C, align(4096))]
 struct Core {
     enable: Page,
     host: Page,
     vmcs: Page,
+    vmx: VmcsState,
 }
 struct Cores(UnsafeCell<[Core; percpu::MAX_CPUS]>);
 // Each core alone accesses its pages, after BSP initialization.
@@ -37,6 +87,7 @@ static CORES: Cores = Cores(UnsafeCell::new(
             enable: Page([0; 4096]),
             host: Page([0; 4096]),
             vmcs: Page([0; 4096]),
+            vmx: VmcsState::new(),
         }
     }; percpu::MAX_CPUS],
 ));
@@ -70,9 +121,15 @@ struct Run {
     guest_xcr0: u64,
     guest_cr2: u64,
     failed: u64,
+    resume: u64,
+    host_rsp: u64,
 }
-const _: () =
-    assert!(core::mem::offset_of!(Run, vmcb) == 128 && core::mem::offset_of!(Run, failed) == 176);
+const _: () = assert!(
+    core::mem::offset_of!(Run, vmcb) == 128
+        && core::mem::offset_of!(Run, failed) == 176
+        && core::mem::offset_of!(Run, resume) == 184
+        && core::mem::offset_of!(Run, host_rsp) == 192
+);
 #[repr(C, align(16))]
 struct Msr {
     number: u32,
@@ -117,12 +174,15 @@ fn vmread(f: u64) -> u64 {
     unsafe {
         asm!("vmread {value}, {field}", value=inout(reg) value, field=in(reg) f, options(nostack));
     }
+    // Guest execution can change fields without VMWRITE. The cache must
+    // reflect hardware before a VMM changes one back to its old value.
+    local().vmx.observe(f, value);
     value
 }
 fn vmwrite(f: u64, value: u64) {
-    unsafe {
-        asm!("vmwrite {field}, {value}", field=in(reg) f, value=in(reg) value, options(nostack));
-    }
+    local().vmx.write(f, value, |field, value| unsafe {
+        asm!("vmwrite {field}, {value}", field=in(reg) field, value=in(reg) value, options(nostack));
+    });
 }
 fn vmclear(pa: u64) -> bool {
     let fail: u8;
@@ -222,6 +282,29 @@ fn pmu_controls(field: u32, value: u64, perf_global_ctrl: bool) -> Option<u64> {
     }
 }
 
+fn read_vmx_capabilities(
+    true_controls: bool,
+    perf_global_ctrl: bool,
+    mut read_msr: impl FnMut(u32) -> u64,
+) -> Option<[u64; 32]> {
+    let mut caps = [0; 32];
+    for field in [
+        0x481u32, 0x482, 0x483, 0x484, 0x485, 0x486, 0x487, 0x488, 0x489, 0x48b,
+    ] {
+        // IA32_VMX_PROCBASED_CTLS2 exists only if primary controls allow
+        // "activate secondary controls" (bit 31 in the allowed-1 mask).
+        if field == 0x48b && caps[2] & (1 << 63) == 0 {
+            return None;
+        }
+        caps[(field - 0x480) as usize] = pmu_controls(
+            field,
+            read_msr(control_msr(field, true_controls)),
+            perf_global_ctrl,
+        )?;
+    }
+    Some(caps)
+}
+
 fn init_vmx(bsp: bool) -> bool {
     if cpu::cpuid(1, 0).ecx & (1 << 5) == 0 {
         return false;
@@ -238,19 +321,13 @@ fn init_vmx(bsp: bool) -> bool {
         0
     };
     let perf_global_ctrl = has_perf_global_ctrl(max_leaf, pmu_eax);
-    for f in [
-        0x481u32, 0x482, 0x483, 0x484, 0x485, 0x486, 0x487, 0x488, 0x489, 0x48b,
-    ] {
-        let Some(value) = pmu_controls(
-            f,
-            cpu::rdmsr(control_msr(f, true_controls)),
-            perf_global_ctrl,
-        ) else {
-            return false;
-        };
+    let Some(caps) = read_vmx_capabilities(true_controls, perf_global_ctrl, cpu::rdmsr) else {
+        return false;
+    };
+    for (saved, value) in CAPS.iter().zip(caps) {
         if bsp {
-            CAPS[(f - 0x480) as usize].store(value, Ordering::Relaxed);
-        } else if CAPS[(f - 0x480) as usize].load(Ordering::Relaxed) != value {
+            saved.store(value, Ordering::Relaxed);
+        } else if saved.load(Ordering::Relaxed) != value {
             return false;
         }
     }
@@ -428,6 +505,8 @@ pub fn run<S: Store>(s: &mut S, v: u64, tcb: u64, root: u64) -> u64 {
         guest_xcr0: vcpu::get(s, v, vcpu::XCR0),
         guest_cr2: vcpu::get(s, v, vcpu::CR2),
         failed: 0,
+        resume: local().vmx.launched as u64,
+        host_rsp: local().vmx.get(HOST_RSP).unwrap_or(0),
     };
     for i in 0..15 {
         run.regs[i] = vcpu::get(s, v, vcpu::REGS + i as u64 * 8);
@@ -461,11 +540,17 @@ pub fn run<S: Store>(s: &mut S, v: u64, tcb: u64, root: u64) -> u64 {
             asm!("vmsave rax", in("rax") run.host, options(nostack));
         }
     } else {
-        let pa = physical(local().vmcs.0.as_ptr() as u64);
-        assert!(vmclear(pa) && vmptrld(pa));
+        if !local().vmx.loaded {
+            let pa = physical(local().vmcs.0.as_ptr() as u64);
+            assert!(vmclear(pa) && vmptrld(pa));
+            local().vmx.loaded = true;
+        }
         for field in vcpu::WRITE_FIELDS {
             vmwrite(field, vcpu::read_vmcs(s, v, field));
         }
+        vmwrite(CONTROL_PAGE_FAULT_MASK, 0);
+        vmwrite(CONTROL_PAGE_FAULT_MATCH, 0);
+        vmwrite(CONTROL_CR3_TARGET_COUNT, 0);
         vmwrite(GUEST_VMCS_LINK_POINTER, u64::MAX);
         vmwrite(CONTROL_IOA_ADDRESS, physical(v + vcpu::IO));
         vmwrite(CONTROL_IOB_ADDRESS, physical(v + vcpu::IO + 4096));
@@ -486,8 +571,8 @@ pub fn run<S: Store>(s: &mut S, v: u64, tcb: u64, root: u64) -> u64 {
         vmwrite(CONTROL_EXIT_MSR_STORE_COUNT, 5);
         vmwrite(CONTROL_EXIT_MSR_LOAD_COUNT, 5);
         vmwrite(CONTROL_ENTRY_MSR_LOAD_COUNT, 5);
+        vmwrite(HOST_RIP, fl4_vmx_exit as *const () as u64);
         host_vmcs(&gdt, &idt, tr);
-        invalidate_local(root);
     }
     if run.host_xcr0 != 0 && run.guest_xcr0 != run.host_xcr0 {
         cpu::xsetbv(0, run.guest_xcr0);
@@ -592,7 +677,8 @@ pub fn run<S: Store>(s: &mut S, v: u64, tcb: u64, root: u64) -> u64 {
         } else {
             raw & 0xffff
         };
-        valid = run.failed == 0 && raw & (1 << 31) == 0;
+        valid = local().vmx.finish_entry(run.failed != 0, raw);
+        local().vmx.observe(HOST_RSP, run.host_rsp);
         for field in vcpu::READ_FIELDS {
             // Undefined exit fields must not expose another VCPU's last
             // exit from this core's reusable VMCS.
@@ -714,7 +800,6 @@ pub fn run<S: Store>(s: &mut S, v: u64, tcb: u64, root: u64) -> u64 {
         ] {
             vcpu::write_vmcs(s, v, field, value);
         }
-        assert!(vmclear(physical(local().vmcs.0.as_ptr() as u64)));
     }
     exit[10..25].copy_from_slice(&run.regs);
     exit[29] = run.guest_cr2;
@@ -754,6 +839,106 @@ pub fn empty_root() -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn vmcs_reentry_writes_no_unchanged_fields() {
+        let mut state = VmcsState::new();
+        let mut writes = 0;
+        for field in vcpu::WRITE_FIELDS {
+            state.write(field, 0, |_, _| writes += 1);
+        }
+        // Even zero-valued fields must be initialized on the first entry.
+        assert_eq!(writes, vcpu::WRITE_FIELDS.len());
+        writes = 0;
+        for _ in 0..16 {
+            for field in vcpu::WRITE_FIELDS {
+                state.write(field, 0, |_, _| writes += 1);
+            }
+        }
+        assert_eq!(writes, 0);
+    }
+    #[test]
+    fn vmcs_cache_observes_guest_changes_before_restoring_old_values() {
+        let mut state = VmcsState::new();
+        state.write(GUEST_RIP, 0x20, |_, _| {});
+        // Guest execution advanced RIP; VMREAD must update the cache.
+        state.observe(GUEST_RIP, 0x21);
+        state.write(GUEST_RIP, 0x21, |_, _| {
+            panic!("RIP already matches hardware")
+        });
+        let mut write = None;
+        state.write(GUEST_RIP, 0x20, |f, value| write = Some((f, value)));
+        assert_eq!(write, Some((GUEST_RIP, 0x20)));
+    }
+    #[test]
+    fn vmcs_switches_program_each_vcpus_values() {
+        let mut state = VmcsState::new();
+        let fields = [
+            GUEST_CR3,
+            GUEST_PAT,
+            CONTROL_EPT_POINTER,
+            CONTROL_IOA_ADDRESS,
+        ];
+        for base in [0x1000, 0x2000, 0x1000, 0] {
+            let mut writes = 0;
+            for (i, field) in fields.iter().enumerate() {
+                state.write(*field, base + i as u64, |_, _| writes += 1);
+            }
+            assert_eq!(writes, fields.len());
+            for (i, field) in fields.iter().enumerate() {
+                assert_eq!(state.get(*field), Some(base + i as u64));
+            }
+        }
+    }
+    #[test]
+    fn vmcs_failed_entries_preserve_the_launch_state() {
+        let mut state = VmcsState::new();
+        assert!(!state.launched);
+        assert!(!state.finish_entry(true, 0));
+        assert!(!state.finish_entry(false, (1 << 31) | 33));
+        assert!(!state.launched);
+        assert!(state.finish_entry(false, 10));
+        assert!(state.launched);
+        assert!(!state.finish_entry(true, 10));
+        assert!(!state.finish_entry(false, (1 << 31) | 33));
+        assert!(state.launched);
+        assert!(state.finish_entry(false, 10));
+    }
+    #[test]
+    fn vmx_probe_does_not_read_absent_secondary_controls() {
+        for true_controls in [false, true] {
+            let mut primary_read = false;
+            let caps = read_vmx_capabilities(true_controls, true, |msr| match msr {
+                0x482 | 0x48e => {
+                    primary_read = true;
+                    !(1 << 63)
+                }
+                0x48b => panic!("secondary-control MSR does not exist"),
+                _ => u64::MAX,
+            });
+            assert!(primary_read);
+            assert!(caps.is_none());
+        }
+    }
+    #[test]
+    fn vmx_probe_reads_supported_secondary_controls_after_primary_controls() {
+        for true_controls in [false, true] {
+            let mut primary_read = false;
+            let caps = read_vmx_capabilities(true_controls, true, |msr| match msr {
+                0x482 | 0x48e => {
+                    primary_read = true;
+                    1 << 63
+                }
+                0x48b => {
+                    assert!(primary_read);
+                    2 << 32
+                }
+                _ => 0,
+            })
+            .unwrap();
+            assert_eq!(caps[2], 1 << 63);
+            assert_eq!(caps[0xb], 2 << 32);
+        }
+    }
     #[test]
     fn vmx_perf_controls_require_an_available_pmu() {
         for (max_leaf, pmu_eax, available) in [

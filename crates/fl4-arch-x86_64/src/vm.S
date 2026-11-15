@@ -57,16 +57,25 @@
 .global fl4_vmx_run
 fl4_vmx_run:
     save_host
+    cmpq %rsp, 192(%rdi)
+    je .Lhost_rsp_ready
     movq $0x6c14, %rcx
     vmwrite %rsp, %rcx
-    leaq fl4_vmx_exit(%rip), %rdx
-    movq $0x6c16, %rcx
-    vmwrite %rdx, %rcx
+    movq %rsp, 192(%rdi)
+.Lhost_rsp_ready:
+    cmpq $0, 184(%rdi)
+    /* MOV preserves the resume decision while loading the guest. */
     load_guest
     movq (%rax), %rax
+    jne .Lvmresume
     vmlaunch
+    jmp .Lentry_failed
+.Lvmresume:
+    vmresume
+.Lentry_failed:
     pushq $1
     jmp 1f
+.global fl4_vmx_exit
 fl4_vmx_exit:
     pushq $0
 1:

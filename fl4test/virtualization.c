@@ -46,6 +46,9 @@ static int test_vm_policy(env_t env)
 {
     vka_object_t v;
     if (!alloc_vm(env, &v)) { return sel4test_get_result(); }
+#ifdef CONFIG_DEBUG_BUILD
+    test_eq(seL4_DebugCapIdentify(v.cptr), 21);
+#endif
     int amd = is_amd(v.cptr);
     test_eq(seL4_X86_VCPU_WriteMSR(v.cptr, SEL4_VCPU_MSR_CR2, 0x12345678).error, seL4_NoError);
     test_eq(seL4_X86_VCPU_ReadMSR(v.cptr, SEL4_VCPU_MSR_CR2).value, 0x12345678);
@@ -127,6 +130,12 @@ static int test_vm_execute(env_t env)
     test_eq(vka_alloc_object(&env->vka, seL4_X86_EPTPDPTObject, 0, &pdpt), 0);
     test_eq(vka_alloc_object(&env->vka, seL4_X86_EPTPDObject, 0, &pd), 0);
     test_eq(vka_alloc_object(&env->vka, seL4_X86_EPTPTObject, 0, &pt), 0);
+#ifdef CONFIG_DEBUG_BUILD
+    test_eq(seL4_DebugCapIdentify(root.cptr), 29);
+    test_eq(seL4_DebugCapIdentify(pdpt.cptr), 27);
+    test_eq(seL4_DebugCapIdentify(pd.cptr), 25);
+    test_eq(seL4_DebugCapIdentify(pt.cptr), 23);
+#endif
     test_eq(seL4_X86_ASIDPool_Assign(env->asid_pool, root.cptr), seL4_NoError);
     test_eq(seL4_X86_EPTPDPT_Map(pdpt.cptr, root.cptr, 0, seL4_X86_EPT_Default_VMAttributes), seL4_NoError);
     test_eq(seL4_X86_EPTPD_Map(pd.cptr, root.cptr, 0, seL4_X86_EPT_Default_VMAttributes), seL4_NoError);
@@ -182,10 +191,61 @@ static int test_vm_execute(env_t env)
     test_eq(seL4_GetMR(SEL4_VMENTER_FAULT_EAX), regs.eax);
     test_eq(seL4_GetMR(SEL4_VMENTER_FAULT_R15), regs.r15);
     test_eq(seL4_GetMR(SEL4_VMENTER_FAULT_INSTRUCTION_LEN_MR), 2);
+    if (!amd) {
+        /* Both kinds of failed VMRESUME must leave the VMCS launched,
+         * and must not return the preceding CPUID exit's length. */
+        test_eq(vmcs_write(v.cptr, 0x6820, 0), seL4_NoError);
+        seL4_SetMR(0, 0); seL4_SetMR(1, ctl); seL4_SetMR(2, 0);
+        test_eq(seL4_VMEnter(&badge), SEL4_VMENTER_RESULT_FAULT);
+        test_eq(seL4_GetMR(SEL4_VMENTER_FAULT_REASON_MR), 33);
+        test_eq(seL4_GetMR(SEL4_VMENTER_FAULT_INSTRUCTION_LEN_MR), 0);
+        test_eq(vmcs_write(v.cptr, 0x6820, 2), seL4_NoError);
+        /* Reserved interruption type 1 fails the VM-entry control checks. */
+        seL4_SetMR(0, 0); seL4_SetMR(1, ctl); seL4_SetMR(2, 0x80000100);
+        test_eq(seL4_VMEnter(&badge), SEL4_VMENTER_RESULT_FAULT);
+        test_eq(seL4_GetMR(SEL4_VMENTER_FAULT_REASON_MR), 0xffffffff);
+        test_eq(seL4_GetMR(SEL4_VMENTER_FAULT_INSTRUCTION_LEN_MR), 0);
+    }
+    /* Each entry must rewind the RIP advanced by the preceding guest run.
+     * A cache that remembers only the last VMWRITE would skip that rewind. */
+    const unsigned char increment[] = {0x40, 0x0f, 0xa2}; /* INC AX; CPUID */
+    memcpy((unsigned char *)code + 0x20, increment, sizeof(increment));
+    for (int i = 1; i <= 16; i++) {
+        seL4_SetMR(0, 0x20); seL4_SetMR(1, ctl); seL4_SetMR(2, 0);
+        test_eq(seL4_VMEnter(&badge), SEL4_VMENTER_RESULT_FAULT);
+        test_eq(seL4_GetMR(SEL4_VMENTER_FAULT_REASON_MR), amd ? 0x72 : 10);
+        test_eq(seL4_GetMR(SEL4_VMENTER_CALL_EIP_MR), 0x21);
+        test_eq(seL4_GetMR(SEL4_VMENTER_FAULT_EAX), (regs.eax & ~0xffffull) | ((regs.eax + i) & 0xffff));
+        test_eq(seL4_GetMR(SEL4_VMENTER_FAULT_R15), regs.r15);
+    }
+    test_eq(seL4_X86_VCPU_WriteRegisters(v.cptr, &regs), seL4_NoError);
+    printf("VCPU repeated-entry checks completed\n");
     seL4_SetMR(0, 2); seL4_SetMR(1, ctl); seL4_SetMR(2, 0);
     test_eq(seL4_VMEnter(&badge), SEL4_VMENTER_RESULT_FAULT);
     test_eq(seL4_GetMR(SEL4_VMENTER_FAULT_REASON_MR), amd ? 0x78 : 12);
     test_eq(seL4_GetMR(SEL4_VMENTER_CALL_EIP_MR), 2);
+    /* Replace a cached nested translation with a different frame. Entries
+     * do no INVEPT: the unmap itself must evict the old translation. */
+    unsigned char *replacement = vspace_new_pages(&env->vspace, seL4_AllRights, 1, seL4_PageBits);
+    test_assert(replacement != NULL);
+    replacement[0] = 0xf4; /* HLT, where the original frame has CPUID. */
+    cspacepath_t replacement_cap;
+    test_eq(vka_cspace_alloc_path(&env->vka, &replacement_cap), 0);
+    vka_cspace_make_path(&env->vka, vspace_get_cap(&env->vspace, replacement), &src);
+    test_eq(vka_cnode_copy(&replacement_cap, &src, seL4_AllRights), seL4_NoError);
+    for (int round = 0; round < 3; round++) {
+        test_eq(seL4_X86_Page_Unmap(copy.capPtr), seL4_NoError);
+        test_eq(seL4_X86_Page_MapEPT(replacement_cap.capPtr, root.cptr, 0, seL4_AllRights, seL4_X86_EPT_Default_VMAttributes), seL4_NoError);
+        seL4_SetMR(0, 0); seL4_SetMR(1, ctl); seL4_SetMR(2, 0);
+        test_eq(seL4_VMEnter(&badge), SEL4_VMENTER_RESULT_FAULT);
+        test_eq(seL4_GetMR(SEL4_VMENTER_FAULT_REASON_MR), amd ? 0x78 : 12);
+        test_eq(seL4_X86_Page_Unmap(replacement_cap.capPtr), seL4_NoError);
+        test_eq(seL4_X86_Page_MapEPT(copy.capPtr, root.cptr, 0, seL4_AllRights, seL4_X86_EPT_Default_VMAttributes), seL4_NoError);
+        seL4_SetMR(0, 0); seL4_SetMR(1, ctl); seL4_SetMR(2, 0);
+        test_eq(seL4_VMEnter(&badge), SEL4_VMENTER_RESULT_FAULT);
+        test_eq(seL4_GetMR(SEL4_VMENTER_FAULT_REASON_MR), amd ? 0x72 : 10);
+    }
+    printf("VCPU nested-mapping replacement checks completed\n");
     /* An armed host timer must end a guest loop, including with guest IF
      * clear. A pending signal also completes VMEnter without executing. */
     seL4_CPtr ntfn = vka_alloc_notification_leaky(&env->vka);
@@ -201,6 +261,7 @@ static int test_vm_execute(env_t env)
     test_eq(badge, 0x42);
     test_eq(seL4_GetMR(SEL4_VMENTER_FAULT_REASON_MR), 0);
     test_eq(seL4_TCB_UnbindNotification(env->tcb), seL4_NoError);
+    printf("VCPU notification checks completed\n");
     /* Native mapping remains readable after the guest and the EPT alias
      * is revoked while the underlying frame remains allocated. */
     test_eq(((unsigned char *)code)[0], 0x0f);

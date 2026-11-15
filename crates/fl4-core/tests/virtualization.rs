@@ -138,6 +138,43 @@ fn fixture(backend: u64) -> (Memory, Machine, Tcb, u64) {
     (s, a, t, 0x80000)
 }
 #[test]
+fn debug_cap_identify_uses_sel4_virtualization_tags() {
+    if !fl4_abi::config::DEBUG_BUILD {
+        return;
+    }
+    let (mut s, mut a, t, v) = fixture(1);
+    let cnode = 0x30000;
+    t.slot(tcb::SLOT_CTABLE).set_cap(
+        &mut s,
+        Cap::CNode {
+            ptr: cnode,
+            radix: 4,
+            guard_size: 60,
+            guard: 0,
+        },
+    );
+    // seL4's x86_64 structures.bf tags, visible through DebugCapIdentify.
+    let mut caps = vec![(Cap::Vcpu { ptr: v }, 21)];
+    for (level, tag) in [(0, 29), (39, 27), (30, 25), (21, 23)] {
+        caps.push((
+            Cap::Ept {
+                ptr: layout::pptr(0x1000),
+                level,
+                mapped: false,
+                asid: 0,
+                vaddr: 0,
+            },
+            tag,
+        ));
+    }
+    for (cap, expected) in caps {
+        Slot::index(cnode, 1).set_cap(&mut s, cap);
+        t.set_reg(&mut s, reg::CAP, 1);
+        fl4_core::syscall::handle_syscall(&mut s, &mut a, fl4_abi::syscall::SysDebugCapIdentify);
+        assert_eq!(t.reg(&s, reg::CAP), expected);
+    }
+}
+#[test]
 fn capability_encoding_preserves_nested_mapping_and_high_asid() {
     for c in [
         Cap::Frame {

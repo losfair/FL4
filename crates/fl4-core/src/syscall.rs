@@ -498,8 +498,8 @@ fn cap_type_code(c: Cap) -> u64 {
         Cap::AsidPool { .. } => 13,
         Cap::IoPort { .. } => 19,
         Cap::IoPortControl => 31,
-        Cap::Vcpu { .. } => 17,
-        Cap::Ept { level, .. } => if level == 0 { 19 } else if level == 39 { 21 } else if level == 30 { 23 } else { 25 },
+        Cap::Vcpu { .. } => 21,
+        Cap::Ept { level, .. } => if level == 0 { 29 } else if level == 39 { 27 } else if level == 30 { 25 } else { 23 },
     }
 }
 

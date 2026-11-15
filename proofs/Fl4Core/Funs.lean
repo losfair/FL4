@@ -38028,16 +38028,16 @@ def syscall.cap_type_code (c : capability.Cap) : Result Std.U64 := do
   | capability.Cap.PageDirectory _ _ _ _ => ok 5#u64
   | capability.Cap.Pdpt _ _ _ _ => ok 7#u64
   | capability.Cap.Pml4 _ _ _ => ok 9#u64
-  | capability.Cap.Vcpu _ => ok 17#u64
+  | capability.Cap.Vcpu _ => ok 21#u64
   | capability.Cap.Ept _ level _ _ _ =>
     if level = 0#u64
-    then ok 19#u64
+    then ok 29#u64
     else
       if level = 39#u64
-      then ok 21#u64
+      then ok 27#u64
       else if level = 30#u64
-           then ok 23#u64
-           else ok 25#u64
+           then ok 25#u64
+           else ok 23#u64
   | capability.Cap.AsidControl => ok 11#u64
   | capability.Cap.AsidPool _ _ => ok 13#u64
   | capability.Cap.IoPortControl => ok 31#u64
