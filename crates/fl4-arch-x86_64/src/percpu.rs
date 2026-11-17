@@ -52,6 +52,9 @@ pub struct PerCpu {
     /// The current run of the entry (transaction attempt or serial run)
     /// was given `held_irq`.
     pub held_used: bool,
+    /// Initialized locally before enabling virtualization.
+    pub spec_plan: Option<crate::spec::policy::Plan>,
+    pub spec_rejected: Option<crate::spec::policy::Rejected>,
 }
 
 impl PerCpu {
@@ -80,6 +83,8 @@ impl PerCpu {
             neffects: 0,
             held_irq: NO_IRQ,
             held_used: false,
+            spec_plan: None,
+            spec_rejected: None,
         }
     }
 }

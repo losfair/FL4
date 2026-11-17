@@ -100,6 +100,14 @@ fn build_kernel(o: &Opts) -> PathBuf {
 
 fn qemu_cmd(setup: &str, smp: u32, kernel: &Path, initrd: Option<&Path>) -> Command {
     let mut c = Command::new("qemu-system-x86_64");
+    if env::var("FL4_TEST_VERW_FIXTURE").as_deref() == Ok("1") {
+        let lib = root().join("build/kvm-verw-fixture.so");
+        fs::create_dir_all(lib.parent().unwrap()).unwrap();
+        run(Command::new("cc").args(["-shared", "-fPIC", "-Wall", "-Wextra", "-Werror"])
+            .arg(root().join("xtask/tests/kvm_verw_fixture.c")).arg("-ldl").arg("-o").arg(&lib));
+        eprintln!("xtask: TEST ONLY VERW_CLEAR fixture; no hardware buffer-clearing security claim");
+        c.env("LD_PRELOAD", &lib);
+    }
     match setup {
         // The IOAPIC runs in QEMU (split irqchip): with KVM's in-kernel
         // IOAPIC, QEMU gives GSI 2 no route, so an HPET timer routed to pin
@@ -107,6 +115,8 @@ fn qemu_cmd(setup: &str, smp: u32, kernel: &Path, initrd: Option<&Path>) -> Comm
         "kvm" => c.args(["-enable-kvm", "-machine", "kernel-irqchip=split", "-cpu", "host,+invtsc"]),
         "kvm-no-vm" => c.args(["-enable-kvm", "-machine", "kernel-irqchip=split", "-cpu", "host,-vmx,-svm"]),
         "kvm-no-ibrs" => c.args(["-enable-kvm", "-machine", "kernel-irqchip=split", "-cpu", "host,-auto-ibrs,-ibrs-all"]),
+        "kvm-no-ibpb" => c.args(["-enable-kvm", "-machine", "kernel-irqchip=split", "-cpu", "host,-ibpb,-spec-ctrl"]),
+        "kvm-no-rdcl" => c.args(["-enable-kvm", "-machine", "kernel-irqchip=split", "-cpu", "host,vendor=GenuineIntel,-rdctl-no"]),
         "kvm-no-pmu" => c.args(["-enable-kvm", "-machine", "kernel-irqchip=split", "-cpu", "host,pmu=off"]),
         // The fallback paths: xAPIC, the APIC one-shot timer, no PCIDs,
         // the FS/GS MSRs, XSAVEOPT.
@@ -116,7 +126,7 @@ fn qemu_cmd(setup: &str, smp: u32, kernel: &Path, initrd: Option<&Path>) -> Comm
         // An Intel CPU without IA32_ARCH_CAPABILITIES counts as vulnerable
         // to Meltdown: the skim window paths (TCG has no PCIDs).
         "tcg-intel" => c.args(["-accel", "tcg", "-cpu", "Skylake-Client-v1,-hle,-rtm"]),
-        s => fail(&format!("unknown setup {s} (kvm, kvm-reduced, kvm-no-vm, kvm-no-ibrs, kvm-no-pmu, tcg, tcg-intel)")),
+        s => fail(&format!("unknown setup {s} (kvm, kvm-reduced, kvm-no-vm, kvm-no-ibrs, kvm-no-ibpb, kvm-no-rdcl, kvm-no-pmu, tcg, tcg-intel)")),
     };
     c.args(["-m", "3G", "-smp"]).arg(smp.to_string());
     c.args(["-display", "none", "-serial", "stdio", "-no-reboot", "-monitor", "none"]);
@@ -687,6 +697,12 @@ fn sel4test_once(o: &Opts, fl4test: bool) -> Result<(), Vec<String>> {
     let log = b.join("sel4test.log");
     let stop = ["All is well in the universe", "Test suite failed", "Halting...", "FL4 panic"];
     let out = run_qemu(qemu_cmd(&o.setup, o.smp, &k, Some(&i)), o.timeout, &stop, &log);
+    if let Ok(expected) = env::var("FL4_EXPECT_VM") {
+        if !vm_expectation_ok(&out, &expected) {
+            eprintln!("xtask: expected virtualization {expected}; inspect the CPU mitigation diagnostic in {}", log.display());
+            return Err(Vec::new());
+        }
+    }
     let (passed, failed) = sel4test_results(&out);
     let suite = if fl4test { "fl4test" } else { "sel4test" };
     eprintln!("\nxtask: {suite} {}: {passed} passed, {} failed", o.setup, failed.len());
@@ -704,6 +720,16 @@ fn sel4test_once(o: &Opts, fl4test: bool) -> Result<(), Vec<String>> {
         return Err(failed);
     }
     Ok(())
+}
+
+/// Explicitly distinguish guest execution from an unavailable-backend skip.
+fn vm_expectation_ok(out: &str, expected: &str) -> bool {
+    match expected {
+        "present" => (out.contains("FL4: virtualization AMD-V") || out.contains("FL4: virtualization VT-x"))
+            && !out.contains("Virtualization unavailable; skipping guest execution"),
+        "absent" => out.contains("FL4: virtualization unavailable"),
+        _ => false,
+    }
 }
 
 /// Passed tests and failed test names. Release builds print only
@@ -931,6 +957,19 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::sel4test_results;
+    use super::vm_expectation_ok;
+
+    #[test]
+    fn virtualization_expectations_reject_silently_skipped_guest_tests() {
+        let present = "FL4: virtualization AMD-V\nAll is well in the universe";
+        let absent = "FL4: virtualization unavailable\nVirtualization unavailable; skipping guest execution";
+        assert!(vm_expectation_ok(present, "present"));
+        assert!(!vm_expectation_ok(absent, "present"));
+        assert!(!vm_expectation_ok("", "present"));
+        assert!(vm_expectation_ok(absent, "absent"));
+        assert!(!vm_expectation_ok(present, "absent"));
+        assert!(!vm_expectation_ok(present, "typo"));
+    }
 
     #[test]
     fn debug_log() {

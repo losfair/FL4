@@ -45,13 +45,15 @@ pub fn start_aps(apic_ids: &[u32], f: Features) -> usize {
     unsafe { FEATURES = f };
     let max = (MAX_NODES as usize).min(percpu::MAX_CPUS);
     let bsp = percpu::get().apic_id;
+    let smt_shift = fl4_arch_x86_64::spec::smt_shift();
     let tramp = unsafe { &fl4_ap_trampoline as *const u8 };
     let len = unsafe { &fl4_ap_trampoline_end as *const u8 as usize } - tramp as usize;
     let data_off = unsafe { &fl4_ap_data as *const u8 as usize } - tramp as usize;
     let boot_root = paging::ap_boot_root();
     let mut next = 1;
     for &id in apic_ids {
-        if id == bsp || next >= max {
+        if next >= max || !fl4_arch_x86_64::spec::allow_ap(
+            id, bsp, smt_shift, fl4_arch_x86_64::spec::no_smt()) {
             continue;
         }
         let c = next;
@@ -101,11 +103,11 @@ extern "C" fn fl4_ap_main(c: u64) -> ! {
     gdt::init_core(c as usize, stack_top);
     cpu::init_pat();
     fpu::init();
+    assert!(fl4_arch_x86_64::spec::init_core(false), "speculation capabilities differ between cores");
     assert!(fl4_arch_x86_64::vm::init(false), "virtualization features differ between cores");
     let pc = percpu::get();
     pc.cr3 = paging::root_paddr();
     pc.kernel_cr3 = fl4_arch_x86_64::tlb::kernel_cr3(paging::root_paddr());
-    fl4_arch_x86_64::spec::init_core();
     apic::enable(pptr(apic::base_paddr()));
     apic::write(apic::REG_SVR, (1 << 8) | 0xff);
     apic::write(apic::REG_LVT_LINT0, 1 << 16);

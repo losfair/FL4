@@ -54,6 +54,12 @@ static int test_vm_policy(env_t env)
     test_eq(seL4_X86_VCPU_ReadMSR(v.cptr, SEL4_VCPU_MSR_CR2).value, 0x12345678);
     test_eq(seL4_X86_VCPU_WriteMSR(v.cptr, SEL4_VCPU_MSR_XCR0, 0).error, seL4_InvalidArgument);
     test_eq(seL4_X86_VCPU_WriteMSR(v.cptr, 0xc0000102, 0x0200000000000000ull).error, seL4_InvalidArgument);
+    /* The VMM API must not modify the host's speculation controls. */
+    const seL4_Word protected_msrs[] = {0x48, 0x49, 0x122, 0x123, 0xc0011029};
+    for (unsigned i = 0; i < sizeof(protected_msrs) / sizeof(protected_msrs[0]); i++) {
+        test_eq(seL4_X86_VCPU_ReadMSR(v.cptr, protected_msrs[i]).error, seL4_IllegalOperation);
+        test_eq(seL4_X86_VCPU_WriteMSR(v.cptr, protected_msrs[i], 0).error, seL4_IllegalOperation);
+    }
     test_eq(seL4_X86_VCPU_FlushTLB(v.cptr), seL4_NoError);
     if (amd) {
         test_eq(seL4_X86_VCPU_ReadVMCS(v.cptr, 0x6800).error, seL4_IllegalOperation);
@@ -210,7 +216,10 @@ static int test_vm_execute(env_t env)
      * A cache that remembers only the last VMWRITE would skip that rewind. */
     const unsigned char increment[] = {0x40, 0x0f, 0xa2}; /* INC AX; CPUID */
     memcpy((unsigned char *)code + 0x20, increment, sizeof(increment));
-    for (int i = 1; i <= 16; i++) {
+    const int entry_rounds = 512;
+    __builtin_ia32_lfence();
+    uint64_t entry_start = __builtin_ia32_rdtsc();
+    for (int i = 1; i <= entry_rounds; i++) {
         seL4_SetMR(0, 0x20); seL4_SetMR(1, ctl); seL4_SetMR(2, 0);
         test_eq(seL4_VMEnter(&badge), SEL4_VMENTER_RESULT_FAULT);
         test_eq(seL4_GetMR(SEL4_VMENTER_FAULT_REASON_MR), amd ? 0x72 : 10);
@@ -218,8 +227,27 @@ static int test_vm_execute(env_t env)
         test_eq(seL4_GetMR(SEL4_VMENTER_FAULT_EAX), (regs.eax & ~0xffffull) | ((regs.eax + i) & 0xffff));
         test_eq(seL4_GetMR(SEL4_VMENTER_FAULT_R15), regs.r15);
     }
+    __builtin_ia32_lfence();
+    uint64_t entry_ticks = __builtin_ia32_rdtsc() - entry_start;
+    printf("VCPU CPUID round trip: %llu TSC ticks/entry (%d entries, includes VMM checks)\n",
+           (unsigned long long)(entry_ticks / entry_rounds), entry_rounds);
     test_eq(seL4_X86_VCPU_WriteRegisters(v.cptr, &regs), seL4_NoError);
     printf("VCPU repeated-entry checks completed\n");
+    /* Guest instructions must exit too, independently of the VMM API.
+     * A passthrough WRMSR here would turn off host IBRS/STIBP. */
+    const unsigned char read_spec[] = {0x0f, 0x32, 0xf4};
+    const unsigned char write_spec[] = {0x0f, 0x30, 0xf4};
+    memcpy((unsigned char *)code + 0x60, read_spec, sizeof(read_spec));
+    memcpy((unsigned char *)code + 0x70, write_spec, sizeof(write_spec));
+    for (int write = 0; write < 2; write++) {
+        seL4_VCPUContext spec_regs = {.ecx = 0x48};
+        test_eq(seL4_X86_VCPU_WriteRegisters(v.cptr, &spec_regs), seL4_NoError);
+        seL4_SetMR(0, write ? 0x70 : 0x60); seL4_SetMR(1, ctl); seL4_SetMR(2, 0);
+        test_eq(seL4_VMEnter(&badge), SEL4_VMENTER_RESULT_FAULT);
+        test_eq(seL4_GetMR(SEL4_VMENTER_FAULT_REASON_MR), amd ? 0x7c : (write ? 32 : 31));
+        test_eq(seL4_GetMR(SEL4_VMENTER_CALL_EIP_MR), write ? 0x70 : 0x60);
+    }
+    test_eq(seL4_X86_VCPU_WriteRegisters(v.cptr, &regs), seL4_NoError);
     if (!amd) {
         /* Seed instruction information with SGDT, then execute scalar IN
          * and UD2. Their undefined fields must not retain the old exit. */

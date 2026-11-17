@@ -18,9 +18,18 @@ use fl4_core::vcpu::{self, svm, vmx::*};
 
 mod vmx_exit;
 
-core::arch::global_asm!(include_str!("vm.S"), options(att_syntax));
+core::arch::global_asm!(
+    include_str!("spec.S"), include_str!("vm.S"),
+    spec_ibpb = const spec::policy::IBPB,
+    spec_rsb = const spec::policy::RSB,
+    spec_pbrsb = const spec::policy::PBRSB,
+    spec_legacy = const spec::policy::LEGACY_IBRS,
+    spec_bhb = const spec::policy::BHB,
+    spec_ibhf = const spec::policy::IBHF,
+    options(att_syntax)
+);
 // Exercise the real exit assembly in host tests without executing VMX:
-// reproduce HOST_RSP, load the guest GPRs, and enter either exit label.
+// reproduce HOST_RSP, load the guest GPRs, and enter the real exit label.
 #[cfg(test)]
 core::arch::global_asm!(
     ".global fl4_test_vmx_exit
@@ -35,7 +44,6 @@ fl4_test_vmx_exit:
 extern "C" {
     fn fl4_vmx_run(run: *mut Run);
     fn fl4_vmx_exit();
-    fn fl4_vmx_exit_pbrsb();
     fn fl4_svm_run(run: *mut Run);
 }
 
@@ -47,7 +55,6 @@ struct VmcsState {
     valid: [u64; 32],
     loaded: bool,
     launched: bool,
-    pbrsb: bool,
 }
 
 /// Only one SVM address space is retained per core. The VCPU's owner word
@@ -146,7 +153,6 @@ impl VmcsState {
             valid: [0; 32],
             loaded: false,
             launched: false,
-            pbrsb: true,
         }
     }
     fn index(field: u64) -> usize {
@@ -237,12 +243,14 @@ struct Run {
     failed: u64,
     resume: u64,
     host_rsp: u64,
+    speculation: u64,
 }
 const _: () = assert!(
     core::mem::offset_of!(Run, vmcb) == 128
         && core::mem::offset_of!(Run, failed) == 176
         && core::mem::offset_of!(Run, resume) == 184
         && core::mem::offset_of!(Run, host_rsp) == 192
+        && core::mem::offset_of!(Run, speculation) == 200
 );
 #[repr(C, align(16))]
 struct Msr {
@@ -331,7 +339,7 @@ fn pass_msr(bitmap: &mut [u8], msr: u32, amd: bool) {
     }
 }
 fn init_svm(bsp: bool) -> bool {
-    if !spec::auto_ibrs_supported() {
+    if spec::vmexit().is_none() {
         return false;
     }
     if cpu::cpuid(0x8000_0000, 0).eax < 0x8000_000a || cpu::cpuid(0x8000_0001, 0).ecx & 4 == 0 {
@@ -427,7 +435,7 @@ fn init_vmx(bsp: bool) -> bool {
     if cpu::cpuid(1, 0).ecx & (1 << 5) == 0 {
         return false;
     }
-    let Some(pbrsb) = spec::vmx_pbrsb() else {
+    let Some(_) = spec::vmexit() else {
         return false;
     };
     let basic = cpu::rdmsr(0x480);
@@ -493,7 +501,6 @@ fn init_vmx(bsp: bool) -> bool {
         cpu::wrmsr(0x3a, feature | 5);
     }
     let c = local();
-    c.vmx.pbrsb = pbrsb;
     c.enable.0[..4].copy_from_slice(&(basic as u32 & 0x7fff_ffff).to_le_bytes());
     c.vmcs.0[..4].copy_from_slice(&(basic as u32 & 0x7fff_ffff).to_le_bytes());
     cpu::write_cr4(cr4);
@@ -637,6 +644,7 @@ pub fn run<S: Store>(s: &mut S, v: u64, tcb: u64, root: u64) -> u64 {
         failed: 0,
         resume: local().vmx.launched as u64,
         host_rsp: local().vmx.get(HOST_RSP).unwrap_or(0),
+        speculation: spec::vmexit().expect("VM backend without speculation protection") as u64,
     };
     for i in 0..15 {
         run.regs[i] = vcpu::get(s, v, vcpu::REGS + i as u64 * 8);
@@ -734,12 +742,7 @@ pub fn run<S: Store>(s: &mut S, v: u64, tcb: u64, root: u64) -> u64 {
         vmwrite(CONTROL_EXIT_MSR_STORE_COUNT, 5);
         vmwrite(CONTROL_EXIT_MSR_LOAD_COUNT, 5);
         vmwrite(CONTROL_ENTRY_MSR_LOAD_COUNT, 5);
-        let exit = if local().vmx.pbrsb {
-            fl4_vmx_exit_pbrsb
-        } else {
-            fl4_vmx_exit
-        };
-        vmwrite(HOST_RIP, exit as *const () as u64);
+        vmwrite(HOST_RIP, fl4_vmx_exit as *const () as u64);
         host_vmcs(&gdt, &idt, tr);
     }
     if run.host_xcr0 != 0 && run.guest_xcr0 != run.host_xcr0 {
@@ -989,7 +992,12 @@ mod tests {
         extern "C" {
             fn fl4_test_vmx_exit(run: *mut Run, exit: unsafe extern "C" fn());
         }
-        for exit in [fl4_vmx_exit, fl4_vmx_exit_pbrsb] {
+        // Exercise the real software sequences. Linked-image checks cover
+        // privileged WRMSR ordering; AMD guest tests exercise IBPB. Intel
+        // IBRS runtime validation requires Intel hardware.
+        for speculation in [0, spec::policy::RSB, spec::policy::PBRSB,
+                            spec::policy::BHB | spec::policy::IBHF,
+                            spec::policy::RSB | spec::policy::PBRSB | spec::policy::BHB | spec::policy::IBHF] {
             let regs = core::array::from_fn(|i| 0x1234_5678_9abc_de00 + i as u64);
             let mut run = Run {
                 regs,
@@ -1003,8 +1011,9 @@ mod tests {
                 failed: 1,
                 resume: 0,
                 host_rsp: 0,
+                speculation: speculation as u64,
             };
-            unsafe { fl4_test_vmx_exit(&mut run, exit) };
+            unsafe { fl4_test_vmx_exit(&mut run, fl4_vmx_exit) };
             assert_eq!(run.regs, regs);
             assert_eq!(run.failed, 0);
         }

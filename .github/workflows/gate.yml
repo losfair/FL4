@@ -14,7 +14,9 @@ jobs:
         with:
           submodules: recursive
       - name: Build the kernel crates
-        run: cargo build -p fl4-core && cargo build --release -p fl4-kernel --target x86_64-unknown-none
+        run: cargo build -p fl4-core && cargo xtask kernel
+      - name: Check linked entry and VM-exit mitigation sequences
+        run: python3 xtask/scripts/check_vm_asm.py build/kernel.elf
       - name: Host tests
         run: cargo test -p fl4-abi -p fl4-core -p fl4-arch-x86_64 -p xtask -p fl4-store -p fl4-sync
       - name: Trusted base
@@ -34,10 +36,27 @@ jobs:
             cargo xtask fl4test --setup $setup --smp 4
           done
       - name: Boot and runtime probe without virtualization
-        run: FL4_TESTS='^FL4VCPU' cargo xtask fl4test --setup kvm-no-vm --smp 2
-      - name: Disable virtualization without guest return-predictor protection
-        run: FL4_TESTS='^FL4VCPU' cargo xtask fl4test --setup kvm-no-ibrs --smp 2
+        run: FL4_EXPECT_VM=absent FL4_TESTS='^FL4VCPU' cargo xtask fl4test --setup kvm-no-vm --smp 2
+      - name: Reject missing IBPB and Meltdown-affected Intel
+        run: |
+          FL4_EXPECT_VM=absent FL4_TESTS='^FL4VCPU' cargo xtask fl4test --setup kvm-no-ibpb --smp 2
+          FL4_EXPECT_VM=absent FL4_TESTS='^FL4VCPU' cargo xtask fl4test --setup kvm-no-rdcl --smp 2
+      # The current AMD runner lacks TSA microcode. The explicitly labelled
+      # QEMU fixture advertises VERW_CLEAR to exercise production guest paths;
+      # it neither changes the kernel's policy nor validates hardware TSA safety.
+      - name: Guest execution with hardware IBRS and with the software fallback
+        env:
+          FL4_TEST_VERW_FIXTURE: "1"
+          FL4_EXPECT_VM: present
+          FL4_TESTS: "^FL4VCPU"
+        run: |
+          cargo xtask fl4test --setup kvm --smp 4
+          cargo xtask fl4test --setup kvm-no-ibrs --smp 4
+          cargo xtask fl4test --setup kvm-no-ibrs --smp 4 --release
       - name: VCPU execution without a PMU
+        env:
+          FL4_TEST_VERW_FIXTURE: "1"
+          FL4_EXPECT_VM: present
         run: |
           FL4_TESTS='^FL4VCPU' cargo xtask fl4test --setup kvm-no-pmu --smp 1
           FL4_TESTS='^FL4VCPU' cargo xtask fl4test --setup kvm-no-pmu --smp 4 --release

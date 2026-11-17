@@ -1,0 +1,44 @@
+/*
+ * TEST ONLY: make KVM advertise AMD VERW_CLEAR to the nested test kernel.
+ * This models updated firmware for functional tests of entry/exit code.
+ * It does NOT update microcode or validate TSA mitigation on the host.
+ * xtask loads this library into QEMU only when FL4_TEST_VERW_FIXTURE=1.
+ * Never use this fixture with untrusted guests or sensitive workloads.
+ */
+#define _GNU_SOURCE
+#include <dlfcn.h>
+#include <linux/kvm.h>
+#include <stdarg.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <sys/ioctl.h>
+
+int ioctl(int fd, unsigned long request, ...)
+{
+    static int (*next_ioctl)(int, unsigned long, ...);
+    if (!next_ioctl) {
+        next_ioctl = dlsym(RTLD_NEXT, "ioctl");
+    }
+    va_list ap;
+    va_start(ap, request);
+    unsigned long arg = va_arg(ap, unsigned long);
+    va_end(ap);
+    if (request == KVM_SET_CPUID2) {
+        struct kvm_cpuid2 *cpuid = (void *)(uintptr_t)arg;
+        int amd = 0;
+        for (unsigned i = 0; i < cpuid->nent; ++i) {
+            struct kvm_cpuid_entry2 *e = &cpuid->entries[i];
+            if (e->function == 0) {
+                amd = e->ebx == 0x68747541 && e->edx == 0x69746e65 && e->ecx == 0x444d4163;
+            }
+        }
+        for (unsigned i = 0; amd && i < cpuid->nent; ++i) {
+            struct kvm_cpuid_entry2 *e = &cpuid->entries[i];
+            if (e->function == 0x80000021 && e->index == 0) {
+                e->eax |= 1u << 5;
+                fprintf(stderr, "TEST FIXTURE: advertising VERW_CLEAR; TSA protection is NOT validated\n");
+            }
+        }
+    }
+    return next_ioctl(fd, request, arg);
+}

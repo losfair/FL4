@@ -267,11 +267,11 @@ pub extern "C" fn fl4_boot(magic: u32, info: u32) -> ! {
     gdt::init_core(0, stack_top);
     cpu::init_pat();
     fpu::init();
+    assert!(spec::init_core(true));
     assert!(fl4_arch_x86_64::vm::init(true));
     kprintln!("FL4: virtualization {}", match fl4_arch_x86_64::vm::backend() { 1 => "VT-x", 2 => "AMD-V", _ => "unavailable" });
     percpu::get().cr3 = paging::root_paddr();
     percpu::get().kernel_cr3 = tlb::kernel_cr3(paging::root_paddr());
-    spec::init_core();
 
     // Interrupt controllers and the timer.
     let acpi = match acpi::init(mb.rsdp) {

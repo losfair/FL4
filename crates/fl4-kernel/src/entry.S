@@ -35,6 +35,7 @@ fl4_vectors:
     .global fl4_syscall_entry
 fl4_syscall_entry:
     swapgs
+    lfence
     movq %rsp, %gs:8
     movq %gs:0, %rsp
     pushq $0x2b
@@ -63,6 +64,9 @@ fl4_common_entry:
     pushq %r14
     pushq %r15
     cld
+    movl FL4_SPEC_ENTRY(%rip), %r11d
+    fl4_spec_barrier %r11d
+    fl4_clear_guest_gprs
     movq %rsp, %rdi
     call fl4_entry
     popq %r15
@@ -81,6 +85,7 @@ fl4_common_entry:
     popq %rbx
     popq %rax
     addq $16, %rsp
+    fl4_clear_buffers
     iretq
 
 /* fl4_restore_user(regs: *const u64, stack_top: u64, cr3: u64) -> !
@@ -133,6 +138,7 @@ fl4_restore_user:
 2:
     popq %rdi
     addq $8, %rsp
+    fl4_clear_buffers
     iretq
 
 3:  /* SYSRET path. The frame on the kernel stack: user rsp, cr3, rdi. */
@@ -166,6 +172,7 @@ fl4_restore_user:
     popq %rdi
     addq $8, %rsp
     popq %rsp
+    fl4_clear_buffers
     sysretq
 
 /* fl4_idle(stack_top: u64) -> !: the idle thread. Interrupts arrive in
@@ -175,6 +182,7 @@ fl4_restore_user:
 fl4_idle:
     movq %rdi, %rsp
 1:
+    fl4_clear_buffers
     sti
     hlt
     cli

@@ -12,7 +12,16 @@ use fl4_store::{Phys, PhysStore};
 use fl4_sync::SerialGate;
 use fl4_arch_x86_64::smp;
 
-core::arch::global_asm!(include_str!("entry.S"), options(att_syntax));
+core::arch::global_asm!(
+    include_str!("../../fl4-arch-x86_64/src/spec.S"), include_str!("entry.S"),
+    spec_ibpb = const fl4_arch_x86_64::spec::policy::IBPB,
+    spec_rsb = const fl4_arch_x86_64::spec::policy::RSB,
+    spec_pbrsb = const fl4_arch_x86_64::spec::policy::PBRSB,
+    spec_legacy = const fl4_arch_x86_64::spec::policy::LEGACY_IBRS,
+    spec_bhb = const fl4_arch_x86_64::spec::policy::BHB,
+    spec_ibhf = const fl4_arch_x86_64::spec::policy::IBHF,
+    options(att_syntax)
+);
 
 extern "C" {
     fn fl4_restore_user(regs: u64, stack_top: u64, cr3: u64) -> !;

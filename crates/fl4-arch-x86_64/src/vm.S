@@ -68,25 +68,15 @@ fl4_vmx_run:
     load_guest
     movq (%rax), %rax
     jne .Lvmresume
+    fl4_clear_buffers
     vmlaunch
     jmp .Lentry_failed
 .Lvmresume:
+    fl4_clear_buffers
     vmresume
 .Lentry_failed:
     pushq $1
     jmp 1f
-/* Intel's PBRSB sequence must retire a CALL before the first unbalanced
- * RET after VM exit. HOST_RIP selects this entry on affected eIBRS CPUs;
- * there is no conditional branch around the barrier in the exit path.
- * CALL/LEA/LFENCE preserve the guest registers saved below.
- * Intel INTEL-SA-00706 / CVE-2022-26373. */
-.global fl4_vmx_exit_pbrsb
-fl4_vmx_exit_pbrsb:
-    call .Lpbrsb_call
-    int3
-.Lpbrsb_call:
-    leaq 8(%rsp), %rsp
-    lfence
 .global fl4_vmx_exit
 fl4_vmx_exit:
     pushq $0
@@ -96,26 +86,34 @@ fl4_vmx_exit:
     movq %rcx, (%rax)
     popq %rcx
     movq %rcx, 176(%rax)
+    movl 200(%rax), %r11d
+    fl4_spec_barrier %r11d
     cld
+    fl4_clear_guest_gprs
     restore_host
 
 .global fl4_svm_run
 fl4_svm_run:
-    /* init_svm requires Automatic IBRS: hardware clears or isolates guest
-     * return predictions before resuming the host. */
     save_host
     clgi
     sti
     load_guest
     movq 128(%rax), %rax
     vmload %rax
+    fl4_clear_buffers
     vmrun %rax
     cli
     vmsave %rax
     save_guest 8
     addq $8, %rsp
+    movl 200(%rax), %r11d
     movq 136(%rax), %rax
     vmload %rax
+    /* Restore host segment/MSR state first, then invalidate guest branch
+     * predictions and, on Zen 2/3, overwrite the RAP. GIF stays clear
+     * until after the barrier; no RET or indirect branch precedes it. */
+    fl4_spec_barrier %r11d
     cld
+    fl4_clear_guest_gprs
     stgi
     restore_host
