@@ -54,8 +54,8 @@ address. [Userspace NVMe example](xtask/tests/sev_guest.c)
 Shared frames have device-frame restrictions, including exclusion
 from IPC buffers and subframe derivation. Stop device DMA before revoking the
 source or deleting the last frame cap. The kernel flushes the old cache lines
-and zeros the private frame before reuse. A call with SEV disabled returns
-`seL4_IllegalOperation`. [AMD memory encryption](https://docs.kernel.org/arch/x86/amd-memory-encryption.html)
+and zeros the private frame before reuse. With SEV disabled the call returns
+`seL4_IllegalOperation`, and drivers can use ordinary RAM for DMA. [AMD memory encryption](https://docs.kernel.org/arch/x86/amd-memory-encryption.html)
 
 `xtask/scripts/sev-smoke-image.sh` builds `build/sev-smoke/fl4-sev.tar.gz`
 with a GRUB EFI loader and a test root task. The script requires the sel4test
@@ -143,7 +143,9 @@ FL4_P0_STRICT=1 cargo xtask gate
 ```
 
 All 1,052 extracted core functions have checked totality proofs with zero
-`sorry`s in P0. The native P1/P3 model uses plain guest physical addresses.
+`sorry`s in P0. For SEV, `sev_frame_address` proves that leaf entries select
+the requested visibility and decode to the original GPA. The native P1/P3
+l4v model uses plain guest physical addresses.
 Its semantic scope excludes SEV memory sharing, VMEnter, SetEPTRoot, EPT
 mapping, guest-root ASID assignment, and VCPU/EPT refinement. The entry/exit
 assembly and architecture backend are trusted. See [DESIGN.md §9](DESIGN.md#9-proof-plan) for the exact claims.

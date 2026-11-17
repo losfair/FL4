@@ -419,8 +419,8 @@ theorem fin_frame (hH : VsUnmapPageHyps st A ar L3 L2 L1 SR) (s : S) (a : A) (σ
   have hok := hX.vc.at hDS.1.2.2.1 hA.isSlot hc (by simp)
   simp only [VCapOK] at hok
   have h0 : asid ≠ 0#u64 := by simpa using hok.1
-  simp only [objects.finalise_cap, objects.finalise_cap_object, bind_ok, ↓reduceIte, bne_iff_ne, ne_eq, h0,
-    not_false_eq_true]
+  simp only [objects.finalise_cap, objects.finalise_cap_object, L.encryption_mask_eq, bind_ok, ↓reduceIte,
+    bne_iff_ne, ne_eq, h0, not_false_eq_true, not_true_eq_false, Bool.false_eq_true, ite_self]
   refine WP.spec_bind (unmap_page_rel (hH.fin (W := PtWAll L4 L3 L2 L1) (s0 := s) (σ0 := σ) (fun _ h => h)) s a σ hX.pl hX.pp hX.ps hX.vp
     hX.pv hX.x.2.2.2.1 ⟨FinSR.init hX.x.1, hDS.1.1, hDS.1.2.1, hX.x.2.1, hX.x.2.2.1⟩ sz asid va p h0) ?_
   rintro ⟨s1, a1⟩ ⟨-, -, σ', hm, ⟨hF, hSt1, -, hR1, hPt1⟩, -⟩

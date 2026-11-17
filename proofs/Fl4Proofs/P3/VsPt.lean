@@ -25,12 +25,34 @@ same slot (an entry of a table of the right level) or the same
 -/
 import Fl4Proofs.P3.VsDelRoot
 import Mathlib.Tactic.NormNum
+import Std.Tactic.BVDecide
 open Aeneas Aeneas.Std Result
 
 namespace Fl4Proofs.P3.Vs
 open fl4_core Fl4Proofs.P1 Fl4Proofs.P3.Notif Fl4Proofs.P3.Endp Fl4Proofs.P3
 
 noncomputable section
+
+/-- SEV leaf mappings select the private representation for ordinary frames
+and private RAM exposed via device caps, and decoding either representation recovers the GPA. -/
+theorem sev_frame_address {S A : Type} (st : machine.Store S) (ar : machine.Arch A)
+    (s : S) (a : A) (f : vspace.FrameCap) (pa mask : U64) (firmware : Bool)
+    (hp : layout.paddr f.ptr = ok pa) (hm : st.encryption_mask s = ok mask)
+    (hen : (mask != 0#u64) = true) (hgpa : pa.bv &&& mask.bv = 0)
+    (hd : ar.private_device_frame a pa = ok firmware) :
+    let leaf := if f.is_device && !firmware then pa else pa ||| mask
+    vspace.frame_address st ar s a f = ok leaf ∧ vspace.frame_gpa st s leaf = ok pa := by
+  have shared : pa &&& ~~~mask = pa := by
+    apply eq_of_bv
+    change pa.bv &&& ~~~mask.bv = pa.bv
+    bv_decide
+  have privateEq : (pa ||| mask) &&& ~~~mask = pa := by
+    apply eq_of_bv
+    change (pa.bv ||| mask.bv) &&& ~~~mask.bv = pa.bv
+    bv_decide
+  simp only [vspace.frame_address, hp, hm, bind_ok, hen, ↓reduceIte]
+  cases f.is_device <;> cases firmware <;>
+    simp [vspace.frame_gpa, hm, hd, lift, shared, privateEq]
 
 /-- On the l4v native address format, reading a leaf returns its GPA. -/
 theorem frame_gpa_plain {S : Type} {st : machine.Store S} [L : LawfulStore st] (s : S) (p : U64) :

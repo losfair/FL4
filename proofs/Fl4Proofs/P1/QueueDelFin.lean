@@ -186,14 +186,14 @@ theorem fin_vs {A : Type _} {ar : machine.Arch A} (hA : P0.ArchTotal ar) {V : U6
       · exact W _ (vspace.unmap_page_table.vs hA s a z w x P.vs fun r1 => P.pd Ac' s r1 w h.fr hb)
       · exact K
     · exact K
-  · simp only [objects.finalise_cap, objects.finalise_cap_object, bind_ok]
+  · simp only [objects.finalise_cap, objects.finalise_cap_object, L.encryption_mask_eq, bind_ok,
+      bne_self_eq_false, Bool.false_eq_true, ↓reduceIte, ite_self]
     split
     · split
-      · simp only [Bool.false_eq_true, ↓reduceIte]
-        exact W _ (vspace.unmap_page.vs hA s a y asid vaddr x P.vs (fun r1 => P.pt Ac' s r1 vaddr h.fr hb)
+      · exact W _ (vspace.unmap_page.vs hA s a y asid vaddr x P.vs (fun r1 => P.pt Ac' s r1 vaddr h.fr hb)
           (fun r1 => P.pd Ac' s r1 vaddr h.fr hb) (fun r1 => P.pdpt Ac' s r1 vaddr h.fr hb))
-      · exact K
-    · exact K
+      · simpa only [bind_ok, uncurry_apply_pair] using K
+    · simpa only [bind_ok, uncurry_apply_pair] using K
   · simp only [objects.finalise_cap, objects.finalise_cap_object, bind_ok]
     split
     · split
