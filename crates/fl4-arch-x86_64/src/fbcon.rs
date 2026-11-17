@@ -4,7 +4,7 @@
 //! the upper half), 8x8 glyphs scaled 1x2, and wraps to the top of its area
 //! rather than scrolling, so it never reads the framebuffer.
 use core::sync::atomic::{AtomicU64, Ordering};
-use fl4_core::layout::pptr;
+use crate::sev::shared_ptr;
 
 /// Printable ASCII, 0x20 to 0x7e.
 static FONT: [[u8; 8]; 95] = [
@@ -137,7 +137,7 @@ pub fn init(paddr: u64, pitch: u32, width: u32, height: u32, bpp: u8, ty: u8) ->
     TOP.store(top, Ordering::Relaxed);
     ROWS.store(height as u64 / 16 - top, Ordering::Relaxed);
     CURSOR.store(0, Ordering::Relaxed);
-    BASE.store(pptr(paddr), Ordering::Release);
+    BASE.store(shared_ptr(paddr), Ordering::Release);
     true
 }
 

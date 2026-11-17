@@ -543,7 +543,7 @@ fn init_vmx(bsp: bool) -> bool {
 }
 /// BSP picks the backend, APs must be able to provide the same interface.
 pub fn init(bsp: bool) -> bool {
-    if tlb::skim() {
+    if tlb::skim() || crate::sev::mask() != 0 {
         return true;
     }
     if !bsp && backend() == 0 {

@@ -5,6 +5,7 @@
 //! never executable; the image is mapped with 4 KiB pages, its code
 //! read-only, its read-only data read-only and not executable, and its
 //! data not executable.
+use fl4_arch_x86_64::sev;
 use core::cell::UnsafeCell;
 use fl4_arch_x86_64::cpu::{cpuid, write_cr3};
 use fl4_core::layout::{PADDR_TOP, PPTR_BASE};
@@ -26,6 +27,8 @@ struct Tables {
     pml4: Table,
     pdpt: Table,
     pds: [Table; SMALL_WINDOW_GIB],
+    shared_pdpt: Table,
+    shared_pds: [Table; SMALL_WINDOW_GIB],
     /// The kernel image, in 4 KiB pages: one page table per 2 MiB of
     /// physical memory from 0.
     image_pd: Table,
@@ -53,6 +56,8 @@ static TABLES: Cell = Cell(UnsafeCell::new(Tables {
     pml4: Table([0; 512]),
     pdpt: Table([0; 512]),
     pds: [const { Table([0; 512]) }; SMALL_WINDOW_GIB],
+    shared_pdpt: Table([0; 512]),
+    shared_pds: [const { Table([0; 512]) }; SMALL_WINDOW_GIB],
     image_pd: Table([0; 512]),
     image_pts: [const { Table([0; 512]) }; IMAGE_PTS],
     ap_pml4: Table([0; 512]),
@@ -101,7 +106,7 @@ fn map_image(pd: &mut Table, pts: &mut [Table; IMAGE_PTS], start: u64, end: u64,
     while pa < end {
         let pd_i = (pa >> 21) as usize;
         assert!(pd_i < IMAGE_PTS, "FL4: kernel image too large for its page tables");
-        pts[pd_i].0[((pa >> 12) & 511) as usize] = pa | flags;
+        pts[pd_i].0[((pa >> 12) & 511) as usize] = pa | flags | sev::mask();
         pd.0[pd_i] = image_paddr(&pts[pd_i] as *const Table as u64) | P | RW;
         pa += 4096;
     }
@@ -115,23 +120,34 @@ pub fn init(nx: bool, skim: bool) -> (u64, u64) {
     let t = unsafe { &mut *TABLES.0.get() };
     let nx_bit = if nx { NX } else { 0 };
     let wg = if skim { 0 } else { G };
-    let window_top;
-    if has_huge_pages() {
-        let n = (PADDR_TOP >> 30) as usize;
-        for i in 0..n {
-            t.pdpt.0[i] = ((i as u64) << 30) | P | RW | PS | wg | nx_bit;
-        }
-        window_top = PADDR_TOP;
-    } else {
-        for (g, pd) in t.pds.iter_mut().enumerate() {
-            for (j, e) in pd.0.iter_mut().enumerate() {
-                *e = ((g as u64) << 30) | ((j as u64) << 21) | P | RW | PS | wg | nx_bit;
+    let huge = has_huge_pages();
+    let max = if huge { PADDR_TOP } else { (SMALL_WINDOW_GIB as u64) << 30 };
+    let mask = sev::mask();
+    let window_top = if mask == 0 { max } else { max.min(mask) };
+    let flags = P | RW | PS | wg | nx_bit;
+    // SEV always encrypts page-table walks (including CR3). The C-bit on
+    // a leaf selects the data view. Keep the kernel window private and use
+    // a second supervisor-only, NX window for MMIO and DMA transitions.
+    let n = (window_top >> 30) as usize;
+    for g in 0..n {
+        let base = (g as u64) << 30;
+        if huge {
+            t.pdpt.0[g] = base | flags | mask;
+            if mask != 0 { t.shared_pdpt.0[g] = base | flags; }
+        } else {
+            for j in 0..512 {
+                let e = base | ((j as u64) << 21) | flags;
+                t.pds[g].0[j] = e | mask;
+                if mask != 0 { t.shared_pds[g].0[j] = e; }
+            }
+            t.pdpt.0[g] = image_paddr(&t.pds[g] as *const Table as u64) | P | RW;
+            if mask != 0 {
+                t.shared_pdpt.0[g] = image_paddr(&t.shared_pds[g] as *const Table as u64) | P | RW;
             }
         }
-        for g in 0..SMALL_WINDOW_GIB {
-            t.pdpt.0[g] = image_paddr(&t.pds[g] as *const Table as u64) | P | RW;
-        }
-        window_top = (SMALL_WINDOW_GIB as u64) << 30;
+    }
+    if mask != 0 {
+        t.pml4.0[sev::SHARED_SLOT] = image_paddr(&t.shared_pdpt as *const Table as u64) | P | RW;
     }
     // The image, and nothing else, at KERNEL_OFFSET. (Its alias of all of
     // the low 2 GiB was writable and executable.)
@@ -174,7 +190,7 @@ pub fn root_paddr() -> u64 {
 pub fn ap_boot_root() -> u64 {
     let t = unsafe { &mut *TABLES.0.get() };
     for (j, e) in t.ap_pd.0.iter_mut().enumerate() {
-        *e = ((j as u64) << 21) | P | RW | PS;
+        *e = ((j as u64) << 21) | P | RW | PS | sev::mask();
     }
     t.ap_pdpt.0[0] = image_paddr(&t.ap_pd as *const Table as u64) | P | RW;
     t.ap_pml4.0[0] = image_paddr(&t.ap_pdpt as *const Table as u64) | P | RW;

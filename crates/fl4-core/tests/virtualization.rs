@@ -14,6 +14,7 @@ struct Memory {
     writes: usize,
 }
 impl Store for Memory {
+    fn encryption_mask(&self) -> u64 { self.read(self.ks_base() + ks::ENCRYPTION_MASK) }
     fn read(&self, a: u64) -> u64 {
         *self.words.get(&a).unwrap_or(&0)
     }
@@ -40,8 +41,13 @@ impl Store for Memory {
 struct Machine {
     backend: u64,
     invalidations: Vec<(u64, u64)>,
+    dma_transitions: Vec<(u64, u64, bool)>,
 }
 impl Arch for Machine {
+    fn dma_frame(&mut self, base: u64, bits: u64, shared: bool) -> bool {
+        self.dma_transitions.push((base, bits, shared));
+        true
+    }
     fn virtualization(&self) -> u64 {
         self.backend
     }
@@ -138,6 +144,39 @@ fn fixture(backend: u64) -> (Memory, Machine, Tcb, u64) {
     t.set_ipc_buffer(&mut s, 0x1000);
     vcpu::init(&mut s, &a, 0x80000);
     (s, a, t, 0x80000)
+}
+
+#[test]
+fn sharing_checks_the_untyped_and_destination_before_changing_visibility() {
+    let (mut s, mut a, _, _) = fixture(0);
+    let ptr = layout::pptr(0x200000);
+    let cap = Cap::Untyped { ptr, size_bits: 12, free_index: 0, is_device: false };
+    let source = Slot(0x30000);
+    let root = Slot(0x30100);
+    let dest = Slot(0x50000);
+    source.set_cap(&mut s, cap);
+    source.set_next_flags(&mut s, Slot(0), true, true);
+    root.set_cap(&mut s, Cap::CNode { ptr: dest.0, radix: 4, guard_size: 60, guard: 0 });
+    let share = |s: &mut Memory, a: &mut Machine| {
+        let cap = source.cap(s);
+        fl4_core::untyped::decode(s, a, label::X86UntypedRetypeShared, 3, source, cap, 0, &[root, Slot(0), Slot(0)])
+    };
+    assert!(matches!(share(&mut s, &mut a), Err(Exc::Sys(SysError::IllegalOperation))));
+    ks_set(&mut s, ks::ENCRYPTION_MASK, 1 << 51);
+    dest.set_cap(&mut s, Cap::Domain);
+    assert!(matches!(share(&mut s, &mut a), Err(Exc::Sys(SysError::DeleteFirst))));
+    assert!(source.cap(&s) == cap);
+    assert!(a.dma_transitions.is_empty());
+
+    dest.set_cap(&mut s, Cap::Null);
+    assert!(share(&mut s, &mut a).is_ok());
+    assert!(matches!(dest.cap(&s), Cap::Frame { ptr: p, is_device: true, size: FrameSize::Small, .. } if p == ptr));
+    assert!(matches!(share(&mut s, &mut a), Err(Exc::Sys(SysError::RevokeFirst))));
+    let child = dest.cap(&s);
+    objects::finalise_cap_object(&mut s, &mut a, child, false);
+    assert_eq!(a.dma_transitions, [(ptr, 12, true)]);
+    assert!(fl4_core::cdt::delete(&mut s, &mut a, dest, true).is_ok());
+    assert_eq!(a.dma_transitions, [(ptr, 12, true), (ptr, 12, false)]);
 }
 
 #[test]

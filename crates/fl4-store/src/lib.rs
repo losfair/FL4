@@ -39,6 +39,11 @@ pub struct PhysStore {
 
 impl Store for PhysStore {
     #[inline(always)]
+    fn encryption_mask(&self) -> u64 {
+        self.read(self.ks_base + fl4_core::layout::ks::ENCRYPTION_MASK)
+    }
+
+    #[inline(always)]
     fn read(&self, addr: u64) -> u64 {
         debug_assert!(addr & 7 == 0);
         if self.tx {
@@ -123,6 +128,8 @@ impl<const TX: bool> EntryStore<TX> {
 }
 
 impl<const TX: bool> Store for EntryStore<TX> {
+    #[inline(always)]
+    fn encryption_mask(&self) -> u64 { self.phys().encryption_mask() }
     #[inline(always)]
     fn read(&self, addr: u64) -> u64 { self.phys().read(addr) }
     #[inline(always)]

@@ -137,7 +137,7 @@ extern "C" fn fl4_ap_main(c: u64) -> ! {
     if !fl4_arch_x86_64::spec::init_core(false) { reject_ap(REJECT_SPEC); }
     if !fl4_arch_x86_64::vm::init(false) { reject_ap(REJECT_VM); }
     percpu::get().cr3.set(paging::root_paddr());
-    apic::enable(pptr(apic::base_paddr()));
+    apic::enable(fl4_arch_x86_64::sev::shared_ptr(apic::base_paddr()));
     apic::write(apic::REG_SVR, (1 << 8) | 0xff);
     apic::write(apic::REG_LVT_LINT0, 1 << 16);
     apic::write(apic::REG_LVT_LINT1, 1 << 16);

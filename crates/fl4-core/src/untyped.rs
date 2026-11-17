@@ -24,6 +24,9 @@ fn align_up(v: u64, align: u64) -> u64 {
 /// seL4 `decodeUntypedInvocation`.
 pub fn decode<S: Store, A: Arch>(s: &mut S, a: &mut A, lbl: u64, length: u64, slot: Slot, cap: Cap, buf: u64, extra: &[Slot; 3]) -> KResult<()> {
     if lbl != label::UntypedRetype {
+        if lbl == label::X86UntypedRetypeShared && s.encryption_mask() != 0 {
+            return retype_shared(s, a, length, slot, cap, buf, extra);
+        }
         return illegal();
     }
     if length < 6 || extra[0].is_null() {
@@ -63,6 +66,33 @@ pub fn decode<S: Store, A: Arch>(s: &mut S, a: &mut A, lbl: u64, length: u64, sl
     let aligned = align_up(free_ref, obj_size);
     sched::set_thread_state(s, ct, sched::TS_RESTART);
     retype(s, a, slot, reset, aligned, new_type, user_size, dest, node_offset, node_window, device)
+}
+
+/// Turn a whole, childless RAM untyped into one zeroed DMA frame. Device-frame
+/// semantics preclude kernel IPC-buffer and subframe aliases. All copies remain
+/// in the untyped's derivation tree and use the same shared representation.
+fn retype_shared<S: Store, A: Arch>(s: &mut S, a: &mut A, length: u64, slot: Slot, cap: Cap, buf: u64, extra: &[Slot; 3]) -> KResult<()> {
+    if length < 3 || extra[0].is_null() { return truncated(); }
+    let u = match as_untyped(cap) {
+        Some(u) if !u.is_device && (u.size_bits == 12 || u.size_bits == 21) => u,
+        _ => return illegal(),
+    };
+    cdt::ensure_no_children(s, slot)?;
+    let ct = sched::cur_thread(s);
+    let index = msg::syscall_arg(s, ct, buf, 0);
+    let depth = msg::syscall_arg(s, ct, buf, 1);
+    let offset = msg::syscall_arg(s, ct, buf, 2);
+    let dest = retype_dest(s, extra[0], index, depth, offset, 1)?;
+    let target = Slot::index(dest, offset);
+    cdt::ensure_empty_slot(s, target)?;
+    if !a.dma_frame(u.ptr, u.size_bits, true) { return illegal(); }
+
+    sched::set_thread_state(s, ct, sched::TS_RESTART);
+    slot.set_cap(s, Cap::Untyped { ptr: u.ptr, size_bits: u.size_bits, free_index: 1u64 << (u.size_bits & 63), is_device: false });
+    let t = if u.size_bits == 12 { ot::X86Page4K } else { ot::X86LargePage };
+    let frame = objects::create_object(s, a, t, u.ptr, 0, true);
+    cdt::insert_new_cap(s, slot, target, frame);
+    Ok(())
 }
 
 /// The size in bits of each new object, with seL4's checks on the type

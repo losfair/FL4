@@ -251,7 +251,7 @@ pub fn unmap_page<S: Store, A: Arch>(s: &mut S, a: &mut A, size: FrameSize, asid
     };
     let e = s.read(slot);
     let large = !matches!(size, FrameSize::Small);
-    if e & P_PRESENT == 0 || (large && e & P_PS == 0) || frame_base(e, size) != pa {
+    if e & P_PRESENT == 0 || (large && e & P_PS == 0) || frame_gpa(s, frame_base(e, size)) != pa {
         return;
     }
     s.write(slot, 0);
@@ -516,6 +516,18 @@ fn mapped_root(c: Cap) -> Option<VRoot> {
     }
 }
 
+/// Encode only native leaf addresses. SEV makes table walks private, so
+/// CR3 and table pointers, like cap pointers and GetAddress, remain plain GPAs.
+fn frame_address<S: Store, A: Arch>(s: &S, a: &A, f: FrameCap) -> u64 {
+    let pa = layout::paddr(f.ptr);
+    let mask = s.encryption_mask();
+    if mask != 0 && (!f.is_device || a.private_device_frame(pa)) { pa | mask } else { pa }
+}
+
+fn frame_gpa<S: Store>(s: &S, address: u64) -> u64 {
+    address & !s.encryption_mask()
+}
+
 fn decode_page_map<S: Store, A: Arch>(s: &mut S, a: &mut A, length: u64, slot: Slot, f: FrameCap, buf: u64, ex: &[Slot; 3]) -> KResult<()> {
     let ct = sched::cur_thread(s);
     let vslot = match extra(ex, 0) {
@@ -554,7 +566,7 @@ fn decode_page_map<S: Store, A: Arch>(s: &mut S, a: &mut A, length: u64, slot: S
     }
     let large = !matches!(f.size, FrameSize::Small);
     let e_addr = page_entry_slot(s, root, vaddr, f.size)?;
-    let e = make_user_page(s, layout::paddr(f.ptr), attr, vm, large);
+    let e = make_user_page(s, frame_address(s, a, f), attr, vm, large);
     sched::set_thread_state(s, ct, sched::TS_RESTART);
     slot.set_cap(s, Cap::Frame { ptr: f.ptr, size: f.size, rights: f.rights, is_device: f.is_device, mapped: true, is_ept: false, asid, vaddr });
     write_mapping(s, a, e_addr, e, asid, vaddr, defer);
@@ -593,7 +605,7 @@ fn mapped_entry<S: Store>(s: &S, f: FrameCap, root: u64) -> Option<u64> {
     };
     let e = s.read(x);
     let base = if large { frame_base(e, FrameSize::Large) } else { frame_base(e, FrameSize::Small) };
-    if e & P_PRESENT == 0 || (large && e & P_PS == 0) || base != pa {
+    if e & P_PRESENT == 0 || (large && e & P_PS == 0) || frame_gpa(s, base) != pa {
         return None;
     }
     Some(x)

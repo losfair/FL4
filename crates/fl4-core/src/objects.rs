@@ -270,10 +270,11 @@ pub fn finalise_cap_object<S: Store, A: Arch>(s: &mut S, a: &mut A, c: Cap, fin:
     match c {
         Cap::Vcpu { ptr } => { if fin { crate::vcpu::finalise(s, a, ptr); } (Cap::Null, Cap::Null) }
         Cap::Ept { .. } => { if fin { crate::ept::finalise(s, a, c); } (Cap::Null, Cap::Null) }
-        Cap::Frame { ptr, size, mapped, is_ept, asid, vaddr, .. } => {
+        Cap::Frame { ptr, size, is_device, mapped, is_ept, asid, vaddr, .. } => {
             if mapped && asid != 0 {
                 if is_ept { crate::ept::unmap(s, a, asid, vaddr, ptr, size.bits(), false); } else { vspace::unmap_page(s, a, size, asid, vaddr, ptr); }
             }
+            if fin && is_device && s.encryption_mask() != 0 { a.dma_frame(ptr, size.bits(), false); }
             (Cap::Null, Cap::Null)
         }
         Cap::PageTable { ptr, mapped, asid, vaddr } => {

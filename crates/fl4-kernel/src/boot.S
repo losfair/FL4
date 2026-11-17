@@ -44,6 +44,32 @@ _start:
     movl %ebx, %esi
     movl $boot_stack32_top, %esp
 
+    /* SEV encrypts memory accesses with paging off. Keep that view of
+     * RAM when paging comes on. A CPU advertising SEV can also be running
+     * an ordinary guest: only SEV_STATUS[0] enables the C-bit. */
+    xorl %ebp, %ebp
+    movl $0x80000000, %eax
+    cpuid
+    cmpl $0x8000001f, %eax
+    jb .Lboot_tables
+    movl $0x8000001f, %eax
+    cpuid
+    testl $2, %eax
+    jz .Lboot_tables
+    movl $0xc0010131, %ecx
+    rdmsr
+    testl $1, %eax
+    jz .Lboot_tables
+    testl $6, %eax             /* ES/SNP require a different entry protocol */
+    jnz .Lunsupported
+    andl $63, %ebx
+    cmpl $32, %ebx             /* high doubleword of a 52-bit PTE address */
+    jb .Lunsupported
+    cmpl $51, %ebx
+    ja .Lunsupported
+    movb %bl, %cl
+    btsl %ecx, %ebp            /* register bit index is modulo 32 */
+.Lboot_tables:
     /* 2048 2 MiB pages covering 0..4 GiB in four page directories. */
     movl $boot_pd, %ebx
     xorl %ecx, %ecx
@@ -52,7 +78,7 @@ _start:
     shll $21, %eax
     orl $0x83, %eax
     movl %eax, (%ebx, %ecx, 8)
-    movl $0, 4(%ebx, %ecx, 8)
+    movl %ebp, 4(%ebx, %ecx, 8)
     incl %ecx
     cmpl $2048, %ecx
     jne .Lpd_loop
@@ -92,6 +118,10 @@ _start:
     lgdt boot_gdt_ptr
     ljmp $0x08, $long_entry
 
+.Lunsupported:
+    hlt
+    jmp .Lunsupported
+
     .code64
 long_entry:
     movw $0x10, %ax
@@ -104,6 +134,8 @@ long_entry:
     movl %edi, %edi
     movl %esi, %esi
     movabsq $boot_stack_top, %rsp
+    movl %ebp, %edx
+    shlq $32, %rdx
     xorl %ebp, %ebp
     movabsq $fl4_boot, %rax
     call *%rax

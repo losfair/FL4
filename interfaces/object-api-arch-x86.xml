@@ -1309,4 +1309,20 @@
             </error>
         </method>
     </interface>
+    <interface name="seL4_Untyped" manual_name="Untyped" cap_description="Untyped RAM capability.">
+        <method id="X86UntypedRetypeShared" name="RetypeShared" manual_name="Retype Shared">
+            <brief>Create a zeroed frame accessible to a DMA device in an AMD SEV guest.</brief>
+            <description>
+                The source must be a childless 4 KiB or 2 MiB RAM untyped.
+                Map the new frame with X86 Page Map and obtain its DMA address
+                with Page GetAddress. Stop DMA before revoking the source.
+                Deleting the last frame capability restores private, zeroed RAM.
+                Returns IllegalOperation when guest memory sharing is unavailable.
+            </description>
+            <param dir="in" name="root" type="seL4_CNode" description="Root of the destination CSpace"/>
+            <param dir="in" name="node_index" type="seL4_Word" description="Destination CNode index"/>
+            <param dir="in" name="node_depth" type="seL4_Word" description="Depth of the destination lookup"/>
+            <param dir="in" name="node_offset" type="seL4_Word" description="Empty slot in the destination CNode"/>
+        </method>
+    </interface>
 </api>

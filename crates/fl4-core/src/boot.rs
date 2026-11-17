@@ -176,7 +176,7 @@ fn map_it_frame<S: Store>(s: &mut S, pml4: u64, vaddr: u64, paddr: u64) {
     let pdpt = next_table(s, pml4, vaddr, 39);
     let pd = next_table(s, pdpt, vaddr, 30);
     let pt = next_table(s, pd, vaddr, 21);
-    s.write(entry_addr(pt, vaddr, 12), (paddr & 0x000f_ffff_ffff_f000) | 0x7);
+    s.write(entry_addr(pt, vaddr, 12), ((paddr | s.encryption_mask()) & 0x000f_ffff_ffff_f000) | 0x7);
 }
 
 fn it_frame_cap(pptr: u64, vaddr: u64, mapped: bool) -> Cap {
