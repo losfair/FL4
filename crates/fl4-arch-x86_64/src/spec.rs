@@ -110,8 +110,9 @@ pub fn detect() {
 }
 
 /// Probe and initialize each logical CPU after its GDT/IDT is installed,
-/// before VMX/SVM is enabled. Rejection leaves virtualization unavailable;
-/// available native mitigations are still applied.
+/// before VMX/SVM is enabled. BSP rejection leaves virtualization unavailable;
+/// available native mitigations are still applied. Incompatible AP capabilities
+/// return false here or fail the subsequent VM initialization, halting boot.
 pub fn init_core(bsp: bool) -> bool {
     let c = caps();
     let ibpb = match c.vendor {

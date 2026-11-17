@@ -38,8 +38,10 @@ Host dependencies live in `$FL4_DEPS` (default `~/Projects/fl4-deps`):
 FL4 exposes the seL4 VCPU/EPT API and the l4h extensions from patches
 0038–0043. One image selects Intel VT-x or AMD-V at boot. On unsupported
 CPUs, firmware-disabled virtualization, missing mitigation microcode or
-capabilities, or the SKIM path, boot continues
+capabilities, or the SKIM path on the boot processor, native boot continues
 and retyping VCPU/EPT objects returns `seL4_InvalidArgument` for the type.
+Incompatible application processors or an AP startup timeout halt boot before
+userspace starts; an already-selected backend is not downgraded during AP startup.
 `KernelVTX` and `KernelX86_64VTX64BitGuests` are always enabled in the ABI.
 
 Use `seL4_X86_ASIDPool_Assign` for an EPT root and
@@ -81,8 +83,8 @@ legacy IBRS, PBRSB, and BHI protection where needed. Memory-form VERW clears
 CPU buffers before guest/user entry and idle on affected CPUs. SMT siblings
 are parked on SRSO-affected AMD and MDS/MMIO-affected Intel CPUs; STIBP is
 enabled when supported. Missing required protections disable virtualization
-with a boot diagnostic. Nested hosts must expose the mitigation capabilities
-accurately. See [the security policy](docs/virtualization-security.md) for
+on the boot processor with a diagnostic. Nested hosts must expose mitigation
+capabilities accurately. See [the security policy](docs/virtualization-security.md) for
 firmware checks, SMT restrictions, and validation limits.
 
 The requirements are checked on each core. VMX event and instruction metadata

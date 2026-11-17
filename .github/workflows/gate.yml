@@ -60,6 +60,15 @@ jobs:
         run: |
           FL4_TESTS='^FL4VCPU' cargo xtask fl4test --setup kvm-no-pmu --smp 1
           FL4_TESTS='^FL4VCPU' cargo xtask fl4test --setup kvm-no-pmu --smp 4 --release
+      - name: Halt boot on incompatible AP capabilities
+        env:
+          FL4_TEST_VERW_FIXTURE: "1"
+          FL4_EXPECT_VM: ap-rejected
+          FL4_TESTS: "^FL4VCPU"
+        run: |
+          for fault in ibpb lfence smt; do
+            FL4_TEST_AP_REJECT=$fault cargo xtask fl4test --setup kvm --smp 4
+          done
       - name: Differential fuzzing against seL4 (DESIGN.md §12)
         run: cargo xtask fuzz --setup kvm
       - name: Extract and prove (P0 must be complete)

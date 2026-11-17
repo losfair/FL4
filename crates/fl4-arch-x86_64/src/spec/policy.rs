@@ -30,7 +30,11 @@ const VERW_CLEAR: u32 = 1 << 5;
 pub const AUTO_IBRS: u32 = 1 << 8;
 const IBPB_BRTYPE: u32 = 1 << 28;
 const SRSO_NO: u32 = 1 << 29;
-const TSA_NO: u32 = (1 << 1) | (1 << 2) | (1 << 7);
+// AMD TSA guidance rev. 3.0 (November 2026), section 6, Fn8000_0021 ECX.
+const TSA_SQ_NO: u32 = 1 << 1;
+const TSA_L1_NO: u32 = 1 << 2;
+const TSA_FILL_NO: u32 = 1 << 7;
+const TSA_NO: u32 = TSA_SQ_NO | TSA_L1_NO | TSA_FILL_NO;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Vendor {
@@ -221,39 +225,43 @@ pub fn select(c: &Caps) -> Result<Plan, Rejected> {
             let mds = c.arch & MDS_NO == 0;
             let mmio = c.arch & MMIO_NO != MMIO_NO
                 && (c.hypervisor
-                    || matches!(
-                        c.model,
-                        0x55 | 0x8e
-                            | 0x9e
-                            | 0x6a
-                            | 0x6c
-                            | 0x7e
-                            | 0xa5
-                            | 0xa6
-                            | 0xa7
-                            | 0x8a
-                            | 0x86
-                            | 0x96
-                            | 0x9c
-                    ));
+                    || c.family == 6
+                        && matches!(
+                            c.model,
+                            0x55 | 0x8e
+                                | 0x9e
+                                | 0x6a
+                                | 0x6c
+                                | 0x7e
+                                | 0xa5
+                                | 0xa6
+                                | 0xa7
+                                | 0x8a
+                                | 0x86
+                                | 0x96
+                                | 0x9c
+                        ));
             let rfds = c.arch & RFDS_NO == 0
                 && (c.hypervisor
-                    || matches!(
-                        c.model,
-                        0x5c | 0x5f
-                            | 0x7a
-                            | 0x86
-                            | 0x96
-                            | 0x9c
-                            | 0x97
-                            | 0x9a
-                            | 0xb7
-                            | 0xba
-                            | 0xbf
-                            | 0xbe
-                    ));
+                    || c.family == 6
+                        && matches!(
+                            c.model,
+                            0x5c | 0x5f
+                                | 0x7a
+                                | 0x86
+                                | 0x96
+                                | 0x9c
+                                | 0x97
+                                | 0x9a
+                                | 0xb7
+                                | 0xba
+                                | 0xbf
+                                | 0xbe
+                        ));
             let taa = c.rtm && c.arch & TAA_NO == 0;
             p.disable_tsx = taa && c.arch & TSX_CTRL != 0;
+            // Intel MMIO guidance, "Example Mitigation Selection": implicit
+            // FB_CLEAR needs MDS_NO=0 as well as MD_CLEAR and FLUSH_L1D.
             if mds && c.leaf7_edx & (1 << 10) == 0
                 || mmio
                     && c.arch & FB_CLEAR == 0
@@ -301,7 +309,9 @@ pub fn select(c: &Caps) -> Result<Plan, Rejected> {
             // Use one thread per physical core on SRSO-affected parts.
             // Do not rely on model-specific shared-BTB controls initially.
             p.no_smt |= c.amd21 & SRSO_NO == 0;
-            // Family/model heuristics are valid only on bare metal.
+            // Only pre-19h bare metal has implicit TSA immunity. Affected
+            // Zen 5 advertises VERW_CLEAR after updating microcode (AMD TSA
+            // rev. 3.0, sections 1/6); do not exempt family 1Ah wholesale.
             p.buffers = c.amd21_ecx & TSA_NO != TSA_NO && !(zen2(c) && !c.hypervisor);
             if p.buffers && c.amd21 & VERW_CLEAR == 0 && !patched19 {
                 return Err(Rejected::BufferMicrocode);
@@ -446,6 +456,44 @@ mod tests {
     }
 
     #[test]
+    fn intel_model_vulnerabilities_do_not_alias_other_families() {
+        for model in [0x55, 0x97] {
+            // MMIO and RFDS model lists respectively.
+            let mut c = intel();
+            c.model = model;
+            c.arch = (c.arch | ITS_NO) & !(MMIO_NO | RFDS_NO);
+            assert_eq!(select(&c), Err(Rejected::BufferMicrocode));
+            for family in [0x12, 0x13] {
+                c.family = family;
+                assert!(!select(&c).unwrap().buffers);
+                c.hypervisor = true;
+                // Nested CPUs still require explicit immunity or clearing.
+                assert_eq!(select(&c), Err(Rejected::BufferMicrocode));
+                c.hypervisor = false;
+            }
+        }
+    }
+
+    #[test]
+    fn implicit_fill_buffer_clearing_requires_mds_vulnerability() {
+        for hypervisor in [false, true] {
+            let mut c = intel();
+            c.model = 0x86;
+            c.hypervisor = hypervisor;
+            c.arch &= !MMIO_NO;
+            c.leaf7_edx |= (1 << 10) | (1 << 28);
+            // MD_CLEAR + FLUSH_L1D alone does not promise VERW clears FB.
+            assert_eq!(select(&c), Err(Rejected::BufferMicrocode));
+            c.arch &= !MDS_NO;
+            assert!(select(&c).unwrap().buffers);
+            c.leaf7_edx &= !(1 << 28);
+            assert_eq!(select(&c), Err(Rejected::BufferMicrocode));
+            c.arch |= MDS_NO | FB_CLEAR;
+            assert!(select(&c).unwrap().buffers);
+        }
+    }
+
+    #[test]
     fn zen2_needs_ibpb_and_rap_stuffing_but_not_auto_ibrs() {
         let mut c = amd();
         let p = select(&c).unwrap();
@@ -514,6 +562,42 @@ mod tests {
         assert!(p.auto_ibrs && p.buffers && !p.no_smt);
         c.amd8 &= !AMD_STIBP;
         assert!(select(&c).unwrap().no_smt);
+        c.amd8 |= AMD_STIBP;
+        c.amd21 = (c.amd21 & !SRSO_NO) | IBPB_BRTYPE;
+        assert!(select(&c).unwrap().no_smt); // Deliberate conservative SMT policy.
+    }
+
+    #[test]
+    fn bare_metal_zen5_needs_the_tsa_microcode_capability() {
+        let mut c = amd();
+        c.family = 0x1a;
+        c.amd21 |= AUTO_IBRS | IBPB_BRTYPE;
+        c.microcode = u32::MAX; // A synthetic revision is not VERW_CLEAR.
+        for model in [0x02, 0x24, 0x44, 0x60, 0x70] {
+            c.model = model;
+            c.amd21 &= !VERW_CLEAR;
+            assert_eq!(c.amd21_ecx, 0);
+            assert_eq!(select(&c), Err(Rejected::BufferMicrocode));
+            c.amd21 |= VERW_CLEAR; // Enumerated by updated Zen 5 hardware.
+            assert!(select(&c).unwrap().buffers);
+        }
+    }
+
+    #[test]
+    fn tsa_sq_and_l1_immunity_does_not_imply_fill_immunity() {
+        for hypervisor in [false, true] {
+            let mut c = amd();
+            c.family = 0x1a;
+            c.hypervisor = hypervisor;
+            c.amd21 |= SRSO_NO;
+            c.amd21_ecx = TSA_SQ_NO | TSA_L1_NO;
+            assert_eq!(select(&c), Err(Rejected::BufferMicrocode));
+            c.amd21 |= VERW_CLEAR;
+            assert!(select(&c).unwrap().buffers);
+            c.amd21 &= !VERW_CLEAR;
+            c.amd21_ecx |= TSA_FILL_NO;
+            assert!(!select(&c).unwrap().buffers);
+        }
     }
 
     #[test]

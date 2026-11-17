@@ -1,6 +1,6 @@
 //! Starting the application processors (seL4 arch/x86/kernel/smp_sys.c).
 use crate::{entry, gdt, kprintln, paging};
-use core::sync::atomic::{AtomicBool, Ordering};
+use core::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use fl4_arch_x86_64::arch::TIMER_VECTOR;
 use fl4_arch_x86_64::{apic, cpu, fpu, percpu, pit, smp, timer};
 use fl4_core::layout::{pptr, MAX_NODES};
@@ -17,6 +17,16 @@ extern "C" {
 const AP_BASE: u64 = 0x8000;
 /// The boot core has created the root task; started cores may schedule.
 static BOOT_DONE: AtomicBool = AtomicBool::new(false);
+// AP failures must reach the BSP: a panic halts only the failing CPU and
+// would otherwise look like a startup timeout, allowing boot to continue.
+static AP_REJECTED: AtomicU8 = AtomicU8::new(0);
+const REJECT_SPEC: u8 = 1;
+const REJECT_VM: u8 = 2;
+
+fn reject_ap(reason: u8) -> ! {
+    AP_REJECTED.store(reason, Ordering::Release);
+    cpu::halt_forever()
+}
 
 /// CPU features the boot core enabled, for the other cores to match.
 #[derive(Clone, Copy)]
@@ -76,12 +86,26 @@ pub fn start_aps(apic_ids: &[u32], f: Features) -> usize {
             wait_us(200);
         }
         let deadline = cpu::rdtsc() + timer::us_to_ticks(100_000);
-        while smp::num_online() == before && cpu::rdtsc() < deadline {
+        while smp::num_online() == before && AP_REJECTED.load(Ordering::Acquire) == 0
+            && cpu::rdtsc() < deadline {
             core::hint::spin_loop();
+        }
+        let rejected = AP_REJECTED.load(Ordering::Acquire);
+        if rejected != 0 {
+            kprintln!("FL4: rejecting AP with APIC id {}: {}", id, if rejected == REJECT_SPEC {
+                "speculation capabilities differ between cores"
+            } else {
+                "virtualization features differ between cores"
+            });
+            // VMX/SVM may already be active on other cores. Keep them at
+            // BOOT_DONE and halt the BSP; never publish a partial backend.
+            crate::fail("incompatible AP capabilities; refusing to start userspace");
         }
         if smp::num_online() == before {
             kprintln!("FL4: core with APIC id {} did not start", id);
-            continue;
+            // An AP could still be probing. Do not reuse its per-core slot
+            // or release userspace before its capabilities are known.
+            crate::fail("AP startup timed out; refusing to start userspace");
         }
         next += 1;
     }
@@ -103,8 +127,8 @@ extern "C" fn fl4_ap_main(c: u64) -> ! {
     gdt::init_core(c as usize, stack_top);
     cpu::init_pat();
     fpu::init();
-    assert!(fl4_arch_x86_64::spec::init_core(false), "speculation capabilities differ between cores");
-    assert!(fl4_arch_x86_64::vm::init(false), "virtualization features differ between cores");
+    if !fl4_arch_x86_64::spec::init_core(false) { reject_ap(REJECT_SPEC); }
+    if !fl4_arch_x86_64::vm::init(false) { reject_ap(REJECT_VM); }
     let pc = percpu::get();
     pc.cr3 = paging::root_paddr();
     pc.kernel_cr3 = fl4_arch_x86_64::tlb::kernel_cr3(paging::root_paddr());

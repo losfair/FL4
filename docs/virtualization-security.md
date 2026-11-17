@@ -8,9 +8,11 @@ need Meltdown mitigation. The existing SKIM exclusion remains in place.
 
 The selector in `spec/policy.rs` is pure and tested against capability and
 firmware combinations. Every logical CPU is probed before VM initialization.
-Missing requirements leave VCPU/EPT allocation unavailable and produce a boot
-diagnostic. Native-only boot still applies available mitigations and reports
-the incomplete protection. FL4 does not install firmware/microcode updates.
+Missing requirements on the boot processor leave VCPU/EPT allocation unavailable
+and produce a boot diagnostic. Native-only boot still applies available
+mitigations and reports the incomplete protection. Incompatible AP capabilities
+or an AP startup timeout halt boot before userspace; see the SMP policy below.
+FL4 does not install firmware/microcode updates.
 
 ## Predictor boundaries
 
@@ -62,6 +64,10 @@ the existing VMCS/VMCB field and translation caches remain in use.
   use the explicit capability bits. Nested AMD must expose IBPB_BRTYPE or
   SRSO_NO and VERW_CLEAR or all applicable TSA immunity bits; masked family
   names and synthetic guest patch revisions cannot establish protection.
+  AMD's November 2026 revision adds affected family 1Ah products and defines
+  ECX[7] as TSA_FILL_NO. Updated affected Zen 5 CPUs enumerate VERW_CLEAR in
+  hardware; a family-wide Zen 5 exemption would admit vulnerable machines.
+  TSA_SQ_NO and TSA_L1_NO alone do not establish TSA-FILL immunity.
 * Memory-form VERW with a writable host data selector runs immediately before
   VMLAUNCH/VMRESUME/VMRUN, IRET/SYSRET and idle on affected processors. This
   covers Intel MDS/MMIO/RFDS and AMD TSA when the required microcode is present.
@@ -69,6 +75,8 @@ the existing VMCS/VMCB field and translation caches remain in use.
   Enumerated FB_CLEAR_DIS/GDS_MITG_DIS controls are cleared, preserving other
   firmware bits. The support contract still requires current vendor security
   firmware for hardware issues outside these enumerated software mechanisms.
+  Intel's implicit fill-buffer-clearing rule requires MDS_NO=0 along with
+  MD_CLEAR and FLUSH_L1D; MDS_NO CPUs need explicit FB_CLEAR for MMIO mitigation.
 
 ## SMT and heterogeneous systems
 
@@ -77,12 +85,25 @@ physical core. STIBP is enabled when available; an otherwise eligible CPU
 without adequate cross-thread branch protection also uses one thread per core.
 Unknown topology under this restriction uses only the boot processor. The BSP
 is retained even if firmware started it on a secondary thread.
+The SRSO_NO requirement for retaining AMD SMT is deliberately conservative,
+including on newer CPUs; model-specific relaxations need separate validation.
+
+Skipped siblings remain in firmware's wait-for-SIPI state. FL4 currently does
+not enable CR4.MCE. Future machine-check support must initialize every sibling
+at least once before parking it, so a broadcast machine check does not encounter
+a sibling with CR4.MCE=0 and shut down the machine (as documented in
+[Linux's CPU bring-up code](https://github.com/torvalds/linux/blob/master/kernel/cpu.c)).
 
 Native entry barriers use the union of admitted CPUs' actions, frozen before
 userspace starts; VM exits use the local CPU's plan. All admitted CPUs must
 support the common vendor/IBPB operations. An AP requiring stricter SMT
-isolation than the BSP is rejected before userspace can run. Existing VMX
-capability compatibility checks also apply to VCPU migration.
+isolation than the BSP, failing the local mitigation policy, or lacking the
+selected VM backend reports rejection to the BSP and halts. The BSP then halts
+with a diagnostic; other started APs remain behind the boot barrier. Startup
+timeouts also halt the BSP, preventing a late AP from racing userspace or reuse
+of its per-core storage. This deliberately stops boot while VMX/SVM may already
+be active on other cores. Existing VMX capability compatibility checks also
+apply to VCPU migration.
 
 Nested FL4 cannot police the physical host's SMT scheduling or install L0's
 firmware. L0 must supply the hardware isolation and truthful mitigation
@@ -135,6 +156,18 @@ The same fixture can exercise SMT admission with
 report two cores running. The repeated-CPUID guest loop reports TSC ticks per
 entry over 512 iterations, including VMM checks, for comparing mitigation paths.
 
+The AMD fixture can also remove IBPB or LFENCE serialization on AP 1, or make
+that AP require stricter SMT isolation than the BSP. Each run must observe the
+BSP's rejection diagnostic and stop before the root task starts:
+
+```sh
+for fault in ibpb lfence smt; do
+  FL4_TEST_VERW_FIXTURE=1 FL4_TEST_AP_REJECT=$fault \
+    FL4_EXPECT_VM=ap-rejected FL4_TESTS='^FL4VCPU' \
+    cargo xtask fl4test --setup kvm --smp 4
+done
+```
+
 ## Primary references
 
 * [Intel architectural speculation capabilities](https://www.intel.com/content/www/us/en/developer/articles/technical/software-security-guidance/technical-documentation/cpuid-enumeration-and-architectural-msrs.html)
@@ -142,6 +175,7 @@ entry over 512 iterations, including VMM checks, for comparing mitigation paths.
 * [Intel PBRSB](https://www.intel.com/content/www/us/en/developer/articles/technical/software-security-guidance/advisory-guidance/post-barrier-return-stack-buffer-predictions.html)
 * [Intel BHI and IBHF](https://www.intel.com/content/www/us/en/developer/articles/technical/software-security-guidance/technical-documentation/branch-history-injection.html)
 * [Intel ITS guidance](https://www.intel.com/content/www/us/en/developer/articles/technical/software-security-guidance/advisory-guidance/indirect-target-selection.html) and [IPU 2025.1 revisions](https://github.com/intel/Intel-Linux-Processor-Microcode-Data-Files/blob/microcode-20250512/releasenote.md)
+* [Intel MMIO stale-data mitigation selection](https://www.intel.com/content/www/us/en/developer/articles/technical/software-security-guidance/technical-documentation/processor-mmio-stale-data-vulnerabilities.html)
 * [AMD SRSO capabilities and IBPB behavior](https://www.amd.com/content/dam/amd/en/documents/corporate/cr/speculative-return-stack-overflow-whitepaper.pdf)
 * [AMD TSA guidance and microcode table, rev. 3.0](https://www.amd.com/content/dam/amd/en/documents/resources/bulletin/technical-guidance-for-mitigating-transient-scheduler-attacks.pdf)
 * [Linux RSB mitigation rationale](https://docs.kernel.org/admin-guide/hw-vuln/rsb.html) and [VMSCAPE boundary/SMT requirements](https://docs.kernel.org/admin-guide/hw-vuln/vmscape.html)

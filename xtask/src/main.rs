@@ -100,8 +100,15 @@ fn build_kernel(o: &Opts) -> PathBuf {
 
 fn qemu_cmd(setup: &str, smp: u32, kernel: &Path, initrd: Option<&Path>) -> Command {
     let mut c = Command::new("qemu-system-x86_64");
+    if let Ok(reject) = env::var("FL4_TEST_AP_REJECT") {
+        if env::var("FL4_TEST_VERW_FIXTURE").as_deref() != Ok("1")
+            || !matches!(reject.as_str(), "ibpb" | "lfence" | "smt") {
+            fail("FL4_TEST_AP_REJECT requires FL4_TEST_VERW_FIXTURE=1 and ibpb, lfence, or smt");
+        }
+    }
     if env::var("FL4_TEST_VERW_FIXTURE").as_deref() == Ok("1") {
-        let lib = root().join("build/kvm-verw-fixture.so");
+        // Concurrent test commands must not overwrite a running QEMU's library.
+        let lib = root().join(format!("build/kvm-verw-fixture-{}.so", std::process::id()));
         fs::create_dir_all(lib.parent().unwrap()).unwrap();
         run(Command::new("cc").args(["-shared", "-fPIC", "-Wall", "-Wextra", "-Werror"])
             .arg(root().join("xtask/tests/kvm_verw_fixture.c")).arg("-ldl").arg("-o").arg(&lib));
@@ -695,12 +702,16 @@ fn sel4test_once(o: &Opts, fl4test: bool) -> Result<(), Vec<String>> {
     let k = b.join("images/kernel-x86_64-pc99");
     let i = b.join("images/sel4test-driver-image-x86_64-pc99");
     let log = b.join("sel4test.log");
-    let stop = ["All is well in the universe", "Test suite failed", "Halting...", "FL4 panic"];
+    let stop = ["All is well in the universe", "Test suite failed", "Halting...", "FL4 panic", "FL4 boot failed:"];
     let out = run_qemu(qemu_cmd(&o.setup, o.smp, &k, Some(&i)), o.timeout, &stop, &log);
     if let Ok(expected) = env::var("FL4_EXPECT_VM") {
         if !vm_expectation_ok(&out, &expected) {
             eprintln!("xtask: expected virtualization {expected}; inspect the CPU mitigation diagnostic in {}", log.display());
             return Err(Vec::new());
+        }
+        if expected == "ap-rejected" {
+            eprintln!("xtask: incompatible AP halted boot before userspace");
+            return Ok(());
         }
     }
     let (passed, failed) = sel4test_results(&out);
@@ -728,6 +739,10 @@ fn vm_expectation_ok(out: &str, expected: &str) -> bool {
         "present" => (out.contains("FL4: virtualization AMD-V") || out.contains("FL4: virtualization VT-x"))
             && !out.contains("Virtualization unavailable; skipping guest execution"),
         "absent" => out.contains("FL4: virtualization unavailable"),
+        "ap-rejected" => (out.contains("FL4: virtualization AMD-V") || out.contains("FL4: virtualization VT-x"))
+            && out.contains("FL4: rejecting AP with APIC id ")
+            && out.contains("FL4 boot failed: incompatible AP capabilities; refusing to start userspace")
+            && !out.contains("FL4: starting the root task"),
         _ => false,
     }
 }
@@ -969,6 +984,16 @@ mod tests {
         assert!(vm_expectation_ok(absent, "absent"));
         assert!(!vm_expectation_ok(present, "absent"));
         assert!(!vm_expectation_ok(present, "typo"));
+    }
+
+    #[test]
+    fn ap_rejection_requires_bsp_shutdown_before_userspace() {
+        let ap_only = "FL4: virtualization AMD-V\nFL4: rejecting AP with APIC id 1: speculation capabilities differ between cores\n";
+        assert!(!vm_expectation_ok(ap_only, "ap-rejected"));
+        let stopped = format!("{ap_only}FL4 boot failed: incompatible AP capabilities; refusing to start userspace\n");
+        assert!(vm_expectation_ok(&stopped, "ap-rejected"));
+        assert!(!vm_expectation_ok(&format!("{stopped}FL4: starting the root task"), "ap-rejected"));
+        assert!(!vm_expectation_ok("FL4 panic: speculation capabilities differ between cores", "ap-rejected"));
     }
 
     #[test]
