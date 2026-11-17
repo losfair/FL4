@@ -37,7 +37,8 @@ Host dependencies live in `$FL4_DEPS` (default `~/Projects/fl4-deps`):
 
 FL4 exposes the seL4 VCPU/EPT API and the l4h extensions from patches
 0038–0043. One image selects Intel VT-x or AMD-V at boot. On unsupported
-CPUs, firmware-disabled virtualization, or the SKIM path, boot continues
+CPUs, firmware-disabled virtualization, missing guest return-predictor
+protection, or the SKIM path, boot continues
 and retyping VCPU/EPT objects returns `seL4_InvalidArgument` for the type.
 `KernelVTX` and `KernelX86_64VTX64BitGuests` are always enabled in the ABI.
 
@@ -71,6 +72,14 @@ MSR and descriptor-table work. Guest FPU state is the bound TCB's;
 XCR0, CR2, syscall MSRs, descriptor-table limits, and host state are
 restored on successful and failed entries.
 
+VT-x requires enhanced IBRS; affected CPUs also enter through Intel's
+PBRSB mitigation sequence before the first host return. AMD-V requires
+Automatic IBRS and relies on hardware clearing or isolating guest return
+predictions. CPUs without these protections keep virtualization disabled. The
+requirements are checked on each core. VMX event and instruction metadata
+is copied only where architecturally defined; invalid vector/error fields
+and undefined instruction bits are zeroed before reaching the VMM.
+
 Virtualization regression tests run real guests and cover field restrictions,
 CPUID/HLT exits, repeated entry, failed entry, GPRs, notifications,
 replacement of cached nested mappings, explicit guest TLB invalidation,
@@ -78,9 +87,10 @@ same-value CR3 writes, cross-core rebinding, migration,
 revocation, and deletion of a running VCPU:
 
 ```
-cargo test -p fl4-core
+cargo test -p fl4-core -p fl4-arch-x86_64
 FL4_TESTS='^FL4VCPU' cargo xtask fl4test --smp 4 --setup kvm
 FL4_TESTS='^FL4VCPU' cargo xtask fl4test --smp 2 --setup kvm-no-vm
+FL4_TESTS='^FL4VCPU' cargo xtask fl4test --smp 2 --setup kvm-no-ibrs
 FL4_TESTS='^FL4VCPU' cargo xtask fl4test --smp 1 --setup kvm-no-pmu
 FL4_P0_STRICT=1 cargo xtask gate
 ```
@@ -100,6 +110,8 @@ VMCS path has stateful host tests and a two-core Bochs 3.0 VMX run covering
 repeated and failed entry, mapping replacement, migration, revocation and
 deletion. That emulator run enabled guest IF for the timer and loop tests:
 the IF-clear timer test also hangs with the original backend in Bochs.
+The PBRSB exit sequence has a host assembly regression checking register
+and stack restoration; the Bochs run predates the eIBRS requirement.
 Intel hardware validation of the retained VMCS path remains outstanding.
 VMX performance-MSR switching is enabled only when CPUID exposes a suitable
 PMU; a PMU-present Intel hardware runtime has not been tested.

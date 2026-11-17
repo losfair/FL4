@@ -220,6 +220,38 @@ static int test_vm_execute(env_t env)
     }
     test_eq(seL4_X86_VCPU_WriteRegisters(v.cptr, &regs), seL4_NoError);
     printf("VCPU repeated-entry checks completed\n");
+    if (!amd) {
+        /* Seed instruction information with SGDT, then execute scalar IN
+         * and UD2. Their undefined fields must not retain the old exit. */
+        const unsigned char metadata[] = {0x0f, 0x01, 0x07, 0xe4, 0x80, 0x0f, 0x0b};
+        memcpy((unsigned char *)code + 0x40, metadata, sizeof(metadata));
+        seL4_X86_VCPU_WriteVMCS_t secondary = seL4_X86_VCPU_WriteVMCS(v.cptr, 0x401e, 2 | (1 << 7) | (1 << 2));
+        test_eq(secondary.error, seL4_NoError);
+        if (secondary.written & (1 << 2)) {
+            seL4_SetMR(0, 0x40); seL4_SetMR(1, ctl); seL4_SetMR(2, 0);
+            test_eq(seL4_VMEnter(&badge), SEL4_VMENTER_RESULT_FAULT);
+            test_eq(seL4_GetMR(SEL4_VMENTER_FAULT_REASON_MR), 46);
+            test_check(seL4_X86_VCPU_ReadVMCS(v.cptr, 0x440e).value != 0);
+        }
+        seL4_SetMR(0, 0x43); seL4_SetMR(1, ctl); seL4_SetMR(2, 0);
+        test_eq(seL4_VMEnter(&badge), SEL4_VMENTER_RESULT_FAULT);
+        test_eq(seL4_GetMR(SEL4_VMENTER_FAULT_REASON_MR), 30);
+        test_eq(seL4_GetMR(SEL4_VMENTER_FAULT_INSTRUCTION_LEN_MR), 2);
+        test_eq(seL4_X86_VCPU_ReadVMCS(v.cptr, 0x440e).value, 0);
+        test_eq(vmcs_write(v.cptr, 0x4004, 1 << 6), seL4_NoError);
+        seL4_SetMR(0, 0x45); seL4_SetMR(1, ctl); seL4_SetMR(2, 0);
+        test_eq(seL4_VMEnter(&badge), SEL4_VMENTER_RESULT_FAULT);
+        test_eq(seL4_GetMR(SEL4_VMENTER_FAULT_REASON_MR), 0);
+        test_eq(seL4_GetMR(SEL4_VMENTER_FAULT_INSTRUCTION_LEN_MR), 0);
+        test_eq(seL4_GetMR(SEL4_VMENTER_FAULT_IDT_VECTOR_INFO), 0);
+        test_eq(seL4_X86_VCPU_ReadVMCS(v.cptr, 0x4404).value & ~0x1000ull, 0x80000306);
+        test_eq(seL4_X86_VCPU_ReadVMCS(v.cptr, 0x4406).value, 0);
+        test_eq(seL4_X86_VCPU_ReadVMCS(v.cptr, 0x440a).value, 0);
+        test_eq(seL4_X86_VCPU_ReadVMCS(v.cptr, 0x440e).value, 0);
+        test_eq(vmcs_write(v.cptr, 0x4004, 0), seL4_NoError);
+        test_eq(vmcs_write(v.cptr, 0x401e, 2 | (1 << 7)), seL4_NoError);
+        printf("VCPU undefined-exit-metadata checks completed\n");
+    }
     if (amd) {
         /* Cache a guest-linear translation, edit its PTE without changing
          * the nested mapping, then demand invalidation through both APIs.

@@ -75,6 +75,18 @@ fl4_vmx_run:
 .Lentry_failed:
     pushq $1
     jmp 1f
+/* Intel's PBRSB sequence must retire a CALL before the first unbalanced
+ * RET after VM exit. HOST_RIP selects this entry on affected eIBRS CPUs;
+ * there is no conditional branch around the barrier in the exit path.
+ * CALL/LEA/LFENCE preserve the guest registers saved below.
+ * Intel INTEL-SA-00706 / CVE-2022-26373. */
+.global fl4_vmx_exit_pbrsb
+fl4_vmx_exit_pbrsb:
+    call .Lpbrsb_call
+    int3
+.Lpbrsb_call:
+    leaq 8(%rsp), %rsp
+    lfence
 .global fl4_vmx_exit
 fl4_vmx_exit:
     pushq $0
@@ -89,6 +101,8 @@ fl4_vmx_exit:
 
 .global fl4_svm_run
 fl4_svm_run:
+    /* init_svm requires Automatic IBRS: hardware clears or isolates guest
+     * return predictions before resuming the host. */
     save_host
     clgi
     sti

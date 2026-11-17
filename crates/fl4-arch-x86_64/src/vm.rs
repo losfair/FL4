@@ -8,7 +8,7 @@
 //! unmaps and root deletion invalidate every core recorded for the root.
 //! VMX uses no VPID. SVM retains ASID 1 only for the last VCPU/root on a
 //! core; migration, software paging changes and invalidation revoke it.
-use crate::{cpu, fpu, percpu, tlb};
+use crate::{cpu, fpu, percpu, spec, tlb};
 use core::arch::asm;
 use core::cell::UnsafeCell;
 use core::sync::atomic::{AtomicU64, Ordering};
@@ -16,10 +16,26 @@ use fl4_core::layout;
 use fl4_core::machine::Store;
 use fl4_core::vcpu::{self, svm, vmx::*};
 
+mod vmx_exit;
+
 core::arch::global_asm!(include_str!("vm.S"), options(att_syntax));
+// Exercise the real exit assembly in host tests without executing VMX:
+// reproduce HOST_RSP, load the guest GPRs, and enter either exit label.
+#[cfg(test)]
+core::arch::global_asm!(
+    ".global fl4_test_vmx_exit
+fl4_test_vmx_exit:
+    save_host
+    pushq %rsi
+    load_guest
+    movq (%rax), %rax
+    ret",
+    options(att_syntax)
+);
 extern "C" {
     fn fl4_vmx_run(run: *mut Run);
     fn fl4_vmx_exit();
+    fn fl4_vmx_exit_pbrsb();
     fn fl4_svm_run(run: *mut Run);
 }
 
@@ -31,6 +47,7 @@ struct VmcsState {
     valid: [u64; 32],
     loaded: bool,
     launched: bool,
+    pbrsb: bool,
 }
 
 /// Only one SVM address space is retained per core. The VCPU's owner word
@@ -129,6 +146,7 @@ impl VmcsState {
             valid: [0; 32],
             loaded: false,
             launched: false,
+            pbrsb: true,
         }
     }
     fn index(field: u64) -> usize {
@@ -313,6 +331,9 @@ fn pass_msr(bitmap: &mut [u8], msr: u32, amd: bool) {
     }
 }
 fn init_svm(bsp: bool) -> bool {
+    if !spec::auto_ibrs_supported() {
+        return false;
+    }
     if cpu::cpuid(0x8000_0000, 0).eax < 0x8000_000a || cpu::cpuid(0x8000_0001, 0).ecx & 4 == 0 {
         return false;
     }
@@ -406,6 +427,9 @@ fn init_vmx(bsp: bool) -> bool {
     if cpu::cpuid(1, 0).ecx & (1 << 5) == 0 {
         return false;
     }
+    let Some(pbrsb) = spec::vmx_pbrsb() else {
+        return false;
+    };
     let basic = cpu::rdmsr(0x480);
     if (basic >> 32) & 0x1fff > 4096 || (basic >> 50) & 15 != 6 {
         return false;
@@ -469,6 +493,7 @@ fn init_vmx(bsp: bool) -> bool {
         cpu::wrmsr(0x3a, feature | 5);
     }
     let c = local();
+    c.vmx.pbrsb = pbrsb;
     c.enable.0[..4].copy_from_slice(&(basic as u32 & 0x7fff_ffff).to_le_bytes());
     c.vmcs.0[..4].copy_from_slice(&(basic as u32 & 0x7fff_ffff).to_le_bytes());
     cpu::write_cr4(cr4);
@@ -709,7 +734,12 @@ pub fn run<S: Store>(s: &mut S, v: u64, tcb: u64, root: u64) -> u64 {
         vmwrite(CONTROL_EXIT_MSR_STORE_COUNT, 5);
         vmwrite(CONTROL_EXIT_MSR_LOAD_COUNT, 5);
         vmwrite(CONTROL_ENTRY_MSR_LOAD_COUNT, 5);
-        vmwrite(HOST_RIP, fl4_vmx_exit as *const () as u64);
+        let exit = if local().vmx.pbrsb {
+            fl4_vmx_exit_pbrsb
+        } else {
+            fl4_vmx_exit
+        };
+        vmwrite(HOST_RIP, exit as *const () as u64);
         host_vmcs(&gdt, &idt, tr);
     }
     if run.host_xcr0 != 0 && run.guest_xcr0 != run.host_xcr0 {
@@ -855,41 +885,18 @@ pub fn run<S: Store>(s: &mut S, v: u64, tcb: u64, root: u64) -> u64 {
         {
             exit[4] = vmread(DATA_EXIT_QUALIFICATION);
         }
-        let vector = if valid {
-            vmread(DATA_IDT_VECTOR_INFO)
-        } else {
-            0
-        };
-        if valid
-            && (vector & (1 << 31) != 0
-                || !matches!(
-                    reason,
-                    1..=4 | 7 | 8 | 33 | 34 | 37 | 41 | 43 | 48 | 49 | 52
-                ))
-        {
-            exit[5] = vmread(DATA_EXIT_INSTRUCTION_LENGTH);
-        }
+        let metadata = vmx_exit::read(valid, reason, exit[4], BASIC.load(Ordering::Relaxed), vmread);
+        let vector = metadata.vector;
+        exit[5] = metadata.length;
         if valid && matches!(reason, 48 | 49) {
             exit[6] = vmread(DATA_GUEST_PHYSICAL);
         }
         exit[7] = vmread(GUEST_RFLAGS);
         exit[8] = vmread(GUEST_INTERRUPTABILITY);
-        exit[25] = if valid && reason == 0 {
-            vmread(DATA_EXIT_INTERRUPT_INFO)
-        } else {
-            0
-        };
-        exit[26] = if exit[25] & (1 << 11) != 0 {
-            vmread(DATA_EXIT_INTERRUPT_ERROR)
-        } else {
-            0
-        };
+        exit[25] = metadata.interrupt;
+        exit[26] = metadata.interrupt_error;
         exit[27] = vector;
-        exit[28] = if vector & (1 << 11) != 0 {
-            vmread(DATA_IDT_VECTOR_ERROR)
-        } else {
-            0
-        };
+        exit[28] = metadata.vector_error;
         if reason == 1 && capability(0x483) >> 32 & (1 << 15) != 0 {
             interrupt = vmread(DATA_EXIT_INTERRUPT_INFO) & 255;
         }
@@ -899,19 +906,6 @@ pub fn run<S: Store>(s: &mut S, v: u64, tcb: u64, root: u64) -> u64 {
             if (vector >> 8) & 7 == 2 {
                 vcpu::write_vmcs(s, v, GUEST_INTERRUPTABILITY, exit[8] & !(1 << 3));
             }
-        }
-        if valid
-            && matches!(
-                reason,
-                19 | 21..=23 | 25 | 27 | 30 | 46 | 47 | 50 | 53 | 54 | 57 | 58 | 61 | 63 | 64
-            )
-        {
-            vcpu::write_vmcs(
-                s,
-                v,
-                DATA_EXIT_INSTRUCTION_INFO,
-                vmread(DATA_EXIT_INSTRUCTION_INFO),
-            );
         }
         if valid && reason == 30 {
             for (field, value) in [
@@ -937,6 +931,7 @@ pub fn run<S: Store>(s: &mut S, v: u64, tcb: u64, root: u64) -> u64 {
             (DATA_IDT_VECTOR_INFO, exit[27]),
             (DATA_IDT_VECTOR_ERROR, exit[28]),
             (DATA_EXIT_INSTRUCTION_LENGTH, exit[5]),
+            (DATA_EXIT_INSTRUCTION_INFO, metadata.instruction),
             (DATA_GUEST_PHYSICAL, exit[6]),
             (
                 DATA_GUEST_LINEAR_ADDRESS,
@@ -988,6 +983,33 @@ pub fn empty_root() -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn vmx_exit_entries_preserve_guest_registers_and_restore_the_host_stack() {
+        extern "C" {
+            fn fl4_test_vmx_exit(run: *mut Run, exit: unsafe extern "C" fn());
+        }
+        for exit in [fl4_vmx_exit, fl4_vmx_exit_pbrsb] {
+            let regs = core::array::from_fn(|i| 0x1234_5678_9abc_de00 + i as u64);
+            let mut run = Run {
+                regs,
+                reserved: 0,
+                vmcb: 0,
+                host: 0,
+                host_cr2: 0,
+                host_xcr0: 0,
+                guest_xcr0: 0,
+                guest_cr2: 0,
+                failed: 1,
+                resume: 0,
+                host_rsp: 0,
+            };
+            unsafe { fl4_test_vmx_exit(&mut run, exit) };
+            assert_eq!(run.regs, regs);
+            assert_eq!(run.failed, 0);
+        }
+    }
+
     #[test]
     fn svm_host_save_tracks_tls_and_the_dangerous_msr_profile() {
         let mut host = SvmHost::default();

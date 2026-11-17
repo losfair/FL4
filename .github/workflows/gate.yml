@@ -35,6 +35,8 @@ jobs:
           done
       - name: Boot and runtime probe without virtualization
         run: FL4_TESTS='^FL4VCPU' cargo xtask fl4test --setup kvm-no-vm --smp 2
+      - name: Disable virtualization without guest return-predictor protection
+        run: FL4_TESTS='^FL4VCPU' cargo xtask fl4test --setup kvm-no-ibrs --smp 2
       - name: VCPU execution without a PMU
         run: |
           FL4_TESTS='^FL4VCPU' cargo xtask fl4test --setup kvm-no-pmu --smp 1
