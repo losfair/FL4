@@ -217,6 +217,7 @@ macro "map_tail_L" : tactic => `(tactic| (
     | Ok sl =>
       obtain ⟨hsp, q, hq, rfl, d, hgd, hd⟩ := hsl _ rfl
       simp only [core.result.Result.Insts.CoreOpsTry.branch, bind_ok, layout.paddr]
+      simp only [vspace.frame_address, layout.paddr, L.encryption_mask_eq, bne_self_eq_false, Bool.false_eq_true, ↓reduceIte, bind_ok]
       refine WP.spec_bind (make_user_page_large s _ _ m) ?_
       rintro e ⟨xd, he⟩
       have hpte := pde_of_make_large (L1 := L1) (vmOk_of hm1 hm3) hpa he
@@ -610,6 +611,7 @@ macro "map_tail_H" : tactic => `(tactic| (
     | Ok sl =>
       obtain ⟨hsp, q, hq, rfl, d, hgd, hd⟩ := hsl _ rfl
       simp only [core.result.Result.Insts.CoreOpsTry.branch, bind_ok, layout.paddr]
+      simp only [vspace.frame_address, layout.paddr, L.encryption_mask_eq, bne_self_eq_false, Bool.false_eq_true, ↓reduceIte, bind_ok]
       refine WP.spec_bind (make_user_page_large s _ _ m) ?_
       rintro e ⟨xd, he⟩
       have hpte := pdpte_of_make_huge (L2 := L2) (vmOk_of hm1 hm3) hpa he

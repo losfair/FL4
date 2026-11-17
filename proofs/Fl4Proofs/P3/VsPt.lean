@@ -32,6 +32,15 @@ open fl4_core Fl4Proofs.P1 Fl4Proofs.P3.Notif Fl4Proofs.P3.Endp Fl4Proofs.P3
 
 noncomputable section
 
+/-- On the l4v native address format, reading a leaf returns its GPA. -/
+theorem frame_gpa_plain {S : Type} {st : machine.Store S} [L : LawfulStore st] (s : S) (p : U64) :
+    vspace.frame_gpa st s p = ok p := by
+  simp only [vspace.frame_gpa, L.encryption_mask_eq, lift, bind_ok]
+  congr 1
+  apply eq_of_bv
+  change p.bv &&& BitVec.allOnes 64 = p.bv
+  exact BitVec.and_allOnes
+
 /-! ## Bits -/
 
 theorem nat_and_hi (n : Nat) (hn : n < 2 ^ 64) : n &&& (2 ^ 64 - 1 - (2 ^ 12 - 1)) = 2 ^ 12 * (n / 2 ^ 12) := by

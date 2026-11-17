@@ -325,6 +325,7 @@ macro "map_tail" : tactic => `(tactic| (
     | Ok sl =>
       obtain ⟨hsp, q, hq, rfl⟩ := hsl _ rfl
       simp only [core.result.Result.Insts.CoreOpsTry.branch, bind_ok, layout.paddr]
+      simp only [vspace.frame_address, layout.paddr, L.encryption_mask_eq, bne_self_eq_false, Bool.false_eq_true, ↓reduceIte, bind_ok]
       refine WP.spec_bind (make_user_page_4k s _ _ m) ?_
       rintro e ⟨xd, he⟩
       have hpte := pte_of_make (vmOk_of hm1 hm3) he

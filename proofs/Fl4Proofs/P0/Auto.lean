@@ -1024,7 +1024,7 @@ theorem obj.Slot.Insts.CoreCmpPartialEqSlot.eq.p0 (self : obj.Slot) (other : obj
 
 @[step] theorem interrupt.deleted_irq_handler.p0 {S : Type _} {A : Type _} (machineStoreInst : machine.Store S) (machineArchInst : machine.Arch A) (s : S) (a : A) (irq : Std.U64) (hS : StoreTotal machineStoreInst) (hA : ArchTotal machineArchInst) :
     interrupt.deleted_irq_handler machineStoreInst machineArchInst s a irq ⦃ _ => True ⦄ := by
-  unfold interrupt.deleted_irq_handler; p0_auto
+  unfold interrupt.deleted_irq_handler; p0_split
 
 @[step] theorem objects.post_cap_deletion.p0 {S : Type _} {A : Type _} (machineStoreInst : machine.Store S) (machineArchInst : machine.Arch A) (s : S) (a : A) (cleanup : capability.Cap) (hS : StoreTotal machineStoreInst) (hA : ArchTotal machineArchInst) :
     objects.post_cap_deletion machineStoreInst machineArchInst s a cleanup ⦃ _ => True ⦄ := by
@@ -1174,6 +1174,10 @@ theorem vspace.P_PS.p0  :
 @[step] theorem vspace.unmap_page_table.p0 {S : Type _} {A : Type _} (machineStoreInst : machine.Store S) (machineArchInst : machine.Arch A) (s : S) (a : A) (asid : Std.U64) (vaddr : Std.U64) (pt : Std.U64) (hS : StoreTotal machineStoreInst) (hA : ArchTotal machineArchInst) :
     vspace.unmap_page_table machineStoreInst machineArchInst s a asid vaddr pt ⦃ _ => True ⦄ := by
   unfold vspace.unmap_page_table; p0_auto
+
+@[step] theorem vspace.frame_gpa.p0 {S : Type _} (machineStoreInst : machine.Store S) (s : S) (address : Std.U64) (hS : StoreTotal machineStoreInst) :
+    vspace.frame_gpa machineStoreInst s address ⦃ _ => True ⦄ := by
+  unfold vspace.frame_gpa; p0_auto
 
 @[step] theorem vspace.frame_base.p0 (e : Std.U64) (size : capability.FrameSize) :
     vspace.frame_base e size ⦃ _ => True ⦄ := by
@@ -3146,9 +3150,21 @@ theorem layout.ks.SIZE.p0  :
     layout.ks.SIZE ⦃ _ => True ⦄ := by
   exact WP.spec_mono Consts.layout.ks.SIZE.spec (fun _ _ => trivial)
 
+@[step] theorem machine.Store.encryption_mask.default.p0 {Self : Type _} (self : Self) :
+    machine.Store.encryption_mask.default self ⦃ _ => True ⦄ := by
+  unfold machine.Store.encryption_mask.default; p0_auto
+
 @[step] theorem machine.Store.read_pair.default.p0 {Self : Type _} (StoreInst : machine.Store Self) (self : Self) (addr : Std.U64) (hS : StoreTotal StoreInst) :
     machine.Store.read_pair.default StoreInst self addr ⦃ _ => True ⦄ := by
   unfold machine.Store.read_pair.default; p0_auto
+
+@[step] theorem machine.Arch.private_device_frame.default.p0 {Self : Type _} (self : Self) (_paddr : Std.U64) :
+    machine.Arch.private_device_frame.default self _paddr ⦃ _ => True ⦄ := by
+  unfold machine.Arch.private_device_frame.default; p0_auto
+
+@[step] theorem machine.Arch.dma_frame.default.p0 {Self : Type _} (self : Self) (_ptr : Std.U64) (_size_bits : Std.U64) (_shared : Bool) :
+    machine.Arch.dma_frame.default self _ptr _size_bits _shared ⦃ _ => True ⦄ := by
+  unfold machine.Arch.dma_frame.default; p0_auto
 
 @[step] theorem machine.Arch.virtualization.default.p0 {Self : Type _} (self : Self) :
     machine.Arch.virtualization.default self ⦃ _ => True ⦄ := by
@@ -3886,6 +3902,10 @@ theorem vspace.P_ACCESSED.p0  :
     vspace.page_entry_slot machineStoreInst s root vaddr size ⦃ _ => True ⦄ := by
   unfold vspace.page_entry_slot; p0_split
 
+@[step] theorem vspace.frame_address.p0 {S : Type _} {A : Type _} (machineStoreInst : machine.Store S) (machineArchInst : machine.Arch A) (s : S) (a : A) (f : vspace.FrameCap) (hS : StoreTotal machineStoreInst) (hA : ArchTotal machineArchInst) :
+    vspace.frame_address machineStoreInst machineArchInst s a f ⦃ _ => True ⦄ := by
+  unfold vspace.frame_address; p0_auto
+
 @[step] theorem vspace.mapped_root.p0 (c : capability.Cap) :
     vspace.mapped_root c ⦃ _ => True ⦄ := by
   unfold vspace.mapped_root; p0_auto
@@ -4159,6 +4179,10 @@ theorem vcpu.svm.RAX.p0  :
 @[step] theorem untyped.retype_size.p0 (new_type : Std.U64) (user_size : Std.U64) :
     untyped.retype_size new_type user_size ⦃ _ => True ⦄ := by
   unfold untyped.retype_size; p0_auto
+
+@[step] theorem untyped.retype_shared.p0 {S : Type _} {A : Type _} (machineStoreInst : machine.Store S) (machineArchInst : machine.Arch A) (s : S) (a : A) (length : Std.U64) (slot : obj.Slot) (cap : capability.Cap) (buf : Std.U64) (extra : Array obj.Slot 3#usize) (hS : StoreTotal machineStoreInst) (hA : ArchTotal machineArchInst) :
+    untyped.retype_shared machineStoreInst machineArchInst s a length slot cap buf extra ⦃ _ => True ⦄ := by
+  unfold untyped.retype_shared; p0_auto
 
 @[step] theorem untyped.align_up.p0 (v : Std.U64) (align : Std.U64) :
     untyped.align_up v align ⦃ _ => True ⦄ := by

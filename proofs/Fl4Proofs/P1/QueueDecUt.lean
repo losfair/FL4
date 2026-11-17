@@ -169,7 +169,9 @@ theorem untyped.decode.dec {A : Type _} {ar : machine.Arch A} {Adm : PSets → P
   have hS : P0.StoreTotal st := L.total
   unfold untyped.decode
   by_cases c1 : (lbl != fl4_abi.label.UntypedRetype) = true
-  · rw [if_pos c1]; errU
+  · rw [if_pos c1]
+    simp only [L.encryption_mask_eq, bind_ok, bne_self_eq_false, Bool.false_eq_true, ↓reduceIte, ite_self]
+    errU
   rw [if_neg c1]
   by_cases c2 : len < 6#u64
   · rw [if_pos c2]; errU

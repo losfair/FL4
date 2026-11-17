@@ -25,6 +25,8 @@ by `st` (the `*_eq` fields), so carrying it as data loses nothing. It is a
 class so that `step` finds it (by instance resolution) when it applies the
 specs below; proofs take it as `[L : LawfulStore st]` and write `L.mem`. -/
 class LawfulStore {S : Type _} (st : machine.Store S) where
+  /-- The native l4v model stores plain GPAs in page-table leaves. -/
+  encryption_mask_eq : ∀ s, st.encryption_mask s = ok 0#u64
   mem : S → U64 → U64
   wr : S → U64 → U64 → S
   zr : S → U64 → U64 → S
@@ -51,12 +53,13 @@ class LawfulStore {S : Type _} (st : machine.Store S) where
   ksb_zr : ∀ s a n, ksb (zr s a n) = ksb s
   cpu_zr : ∀ s a n, cpu (zr s a n) = cpu s
 
-attribute [simp] LawfulStore.ksb_wr LawfulStore.cpu_wr LawfulStore.ksb_zr LawfulStore.cpu_zr
+attribute [simp] LawfulStore.encryption_mask_eq LawfulStore.ksb_wr LawfulStore.cpu_wr LawfulStore.ksb_zr LawfulStore.cpu_zr
 
 section
 variable {S : Type _} {st : machine.Store S} [L : LawfulStore st]
 
 theorem LawfulStore.total : P0.StoreTotal st where
+  encryption_mask s := by rw [L.encryption_mask_eq]; simp
   read s a := by rw [L.read_eq]; simp
   read_pair s a := by rw [L.read_pair_eq]; simp
   write s a v := by rw [L.write_eq]; simp
@@ -143,6 +146,7 @@ end
 abbrev ModelState := (U64 → U64) × U64 × U64
 
 def modelStore : machine.Store ModelState where
+  encryption_mask _ := ok 0#u64
   read s a := ok (s.1 a)
   read_pair s a := ok (s.1 a, s.1 (core.num.U64.wrapping_add a 8#u64))
   write s a v := ok (Function.update s.1 a v, s.2)
@@ -152,6 +156,7 @@ def modelStore : machine.Store ModelState where
   cur_cpu s := ok s.2.2
 
 instance : LawfulStore modelStore where
+  encryption_mask_eq _ := rfl
   mem s a := s.1 a
   wr s a v := (Function.update s.1 a v, s.2)
   zr s a n := (fun b => if a.val ≤ b.val ∧ b.val < a.val + n.val then 0#u64 else s.1 b, s.2)

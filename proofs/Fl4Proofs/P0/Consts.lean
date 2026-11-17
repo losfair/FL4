@@ -879,6 +879,9 @@ open fl4_core
 @[simp, scalar_tac_simps] theorem fl4_abi.label.TCBSetEPTRoot.val_eq : fl4_abi.label.TCBSetEPTRoot.val = 88 := by
   unfold fl4_abi.label.TCBSetEPTRoot; rfl
 
+@[simp, scalar_tac_simps] theorem fl4_abi.label.X86UntypedRetypeShared.val_eq : fl4_abi.label.X86UntypedRetypeShared.val = 89 := by
+  unfold fl4_abi.label.X86UntypedRetypeShared; rfl
+
 @[simp, scalar_tac_simps] theorem fl4_abi.config.NUM_DOMAINS.val_eq : fl4_abi.config.NUM_DOMAINS.val = 1 := by
   unfold fl4_abi.config.NUM_DOMAINS; rfl
 
@@ -1550,6 +1553,9 @@ open fl4_core
 
 @[simp, scalar_tac_simps] theorem layout.ks.FEATURE_NX.val_eq : layout.ks.FEATURE_NX.val = 1 := by
   unfold layout.ks.FEATURE_NX; rfl
+
+@[simp, scalar_tac_simps] theorem layout.ks.ENCRYPTION_MASK.val_eq : layout.ks.ENCRYPTION_MASK.val = 88 := by
+  unfold layout.ks.ENCRYPTION_MASK; rfl
 
 @[simp, scalar_tac_simps] theorem layout.ks.NUM_ASID_POOLS.val_eq : layout.ks.NUM_ASID_POOLS.val = 2048 := by
   unfold layout.ks.NUM_ASID_POOLS; rfl

@@ -48,11 +48,11 @@ theorem finaliseCap_trivF (σ : Fl4Spec.State Unit) (c : capability.Cap) (fin : 
 theorem mem_single {α σ : Type} {m : Fl4Spec.NonDet σ α} {s : σ} {x : α × σ} (h : m s = ({x}, False)) :
     x ∈ (m s).1 := by rw [h]; rfl
 
-/-- A frame cap's finalisation ignores finality (an unmap if mapped). -/
+/-- On the native memory model a frame cap's finalisation only unmaps it. -/
 theorem finalise_cap_frame_fin (s : S) (a : A) {c : capability.Cap} (hc : isFrame c = true) (b b' : Bool) :
     objects.finalise_cap st arI s a c b false = objects.finalise_cap st arI s a c b' false := by
   cases c <;> simp [isFrame] at hc
-  simp only [objects.finalise_cap, objects.finalise_cap_object]
+  simp [objects.finalise_cap, objects.finalise_cap_object, L.encryption_mask_eq]
 
 /-- **`finalise_cap` refines the spec's `finalise_cap`**, for every non-null
 cap of a slot of the typed heap. -/

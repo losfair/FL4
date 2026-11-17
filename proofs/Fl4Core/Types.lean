@@ -64,9 +64,10 @@ structure boot.Boot where
   full : Bool
 
 /-- Trait declaration: [fl4_core::machine::Store]
-    Source: 'crates/fl4-core/src/machine.rs', lines 10:0-31:1
+    Source: 'crates/fl4-core/src/machine.rs', lines 10:0-33:1
     Visibility: public -/
 structure machine.Store (Self : Type _) where
+  encryption_mask : Self → Result Std.U64
   read : Self → Std.U64 → Result Std.U64
   read_pair : Self → Std.U64 → Result (Std.U64 × Std.U64)
   write : Self → Std.U64 → Std.U64 → Result Self
@@ -162,9 +163,11 @@ structure boot.Pick where
   start : Std.U64
 
 /-- Trait declaration: [fl4_core::machine::Arch]
-    Source: 'crates/fl4-core/src/machine.rs', lines 35:0-109:1
+    Source: 'crates/fl4-core/src/machine.rs', lines 37:0-119:1
     Visibility: public -/
 structure machine.Arch (Self : Type _) where
+  private_device_frame : Self → Std.U64 → Result Bool
+  dma_frame : Self → Std.U64 → Std.U64 → Bool → Result (Bool × Self)
   virtualization : Self → Result Std.U64
   vcpu_capability : Self → Std.U64 → Result Std.U64
   vcpu_barrier : Self → Result Self
@@ -364,7 +367,7 @@ def ept.root.closure (S : Type _) := Unit
 def ept.slot.closure (S : Type _) := Unit
 
 /-- [fl4_core::vspace::TableCap]
-    Source: 'crates/fl4-core/src/vspace.rs', lines 716:0-724:1 -/
+    Source: 'crates/fl4-core/src/vspace.rs', lines 728:0-736:1 -/
 structure vspace.TableCap where
   map_lbl : Std.U64
   unmap_lbl : Std.U64
@@ -403,7 +406,7 @@ def vcpu.msr_addr.closure_1 := Std.U64
 def vcpu.msr_addr.closure := Std.U64
 
 /-- [fl4_core::untyped::UntypedCap]
-    Source: 'crates/fl4-core/src/untyped.rs', lines 132:0-137:1 -/
+    Source: 'crates/fl4-core/src/untyped.rs', lines 162:0-167:1 -/
 structure untyped.UntypedCap where
   ptr : Std.U64
   size_bits : Std.U64

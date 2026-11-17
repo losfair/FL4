@@ -164,7 +164,7 @@ theorem untyped_decode_refines_with (bitsApi : Fl4Spec.ApiObjectType → Nat →
   by_cases hl : lbl = fl4_abi.label.UntypedRetype
   swap
   · have : (lbl != fl4_abi.label.UntypedRetype) = true := by simpa using hl
-    simp only [this, ↓reduceIte, error.illegal, bind_ok]
+    simp only [this, L.encryption_mask_eq, bind_ok, bne_self_eq_false, Bool.false_eq_true, ↓reduceIte, ite_self, error.illegal]
     apply UPost.err (e := .Sys .IllegalOperation) (e' := .illegalOperation) _ trivial
     have : ¬ Fl4Spec.genInvocationType slbl = .untypedRetype := fun h => hl (hlbl.1 h)
     simp only [Fl4Spec.NonDetE.unlessE, this, ↓reduceIte]

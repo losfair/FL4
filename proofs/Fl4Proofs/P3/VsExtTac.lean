@@ -162,7 +162,7 @@ theorem mapped_entry_small {L4 L3 L2 L1 : Set U64} (s : S) (σ : State Unit)
     dsimp only
     rw [L.read_eq]
     apply ok_bind_spec
-    simp only [vspace.frame_base, bind_ok, hAM]
+    simp only [vspace.frame_base, frame_gpa_plain, bind_ok, hAM]
     rw [P_PRESENT_eq]
     apply ok_bind_spec
     unfold lift
@@ -226,7 +226,7 @@ theorem mapped_entry_large {L4 L3 L2 L1 : Set U64} (s : S) (σ : State Unit)
     dsimp only
     rw [L.read_eq]
     apply ok_bind_spec
-    simp only [vspace.frame_base, bind_ok]
+    simp only [vspace.frame_base, frame_gpa_plain, bind_ok]
     rw [P_PRESENT_eq]
     apply ok_bind_spec
     unfold lift

@@ -587,63 +587,63 @@ def fl4_abi.consts.root_slot.InitThreadSC : Std.U64 := 14#u64
 def fl4_abi.consts.root_slot.NumInitialCaps : Std.U64 := 16#u64
 
 /-- [fl4_abi::label::UntypedRetype]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 7:4-7:32
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 7:4-7:32
     Name pattern: [fl4_abi::label::UntypedRetype]
     Visibility: public -/
 @[global_simps, irreducible, rust_const "fl4_abi::label::UntypedRetype"]
 def fl4_abi.label.UntypedRetype : Std.U64 := 1#u64
 
 /-- [fl4_abi::label::TCBReadRegisters]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 8:4-8:35
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 8:4-8:35
     Name pattern: [fl4_abi::label::TCBReadRegisters]
     Visibility: public -/
 @[global_simps, irreducible, rust_const "fl4_abi::label::TCBReadRegisters"]
 def fl4_abi.label.TCBReadRegisters : Std.U64 := 2#u64
 
 /-- [fl4_abi::label::TCBWriteRegisters]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 9:4-9:36
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 9:4-9:36
     Name pattern: [fl4_abi::label::TCBWriteRegisters]
     Visibility: public -/
 @[global_simps, irreducible, rust_const "fl4_abi::label::TCBWriteRegisters"]
 def fl4_abi.label.TCBWriteRegisters : Std.U64 := 3#u64
 
 /-- [fl4_abi::label::TCBCopyRegisters]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 10:4-10:35
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 10:4-10:35
     Name pattern: [fl4_abi::label::TCBCopyRegisters]
     Visibility: public -/
 @[global_simps, irreducible, rust_const "fl4_abi::label::TCBCopyRegisters"]
 def fl4_abi.label.TCBCopyRegisters : Std.U64 := 4#u64
 
 /-- [fl4_abi::label::TCBConfigure]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 11:4-11:31
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 11:4-11:31
     Name pattern: [fl4_abi::label::TCBConfigure]
     Visibility: public -/
 @[global_simps, irreducible, rust_const "fl4_abi::label::TCBConfigure"]
 def fl4_abi.label.TCBConfigure : Std.U64 := 5#u64
 
 /-- [fl4_abi::label::TCBSetPriority]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 12:4-12:33
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 12:4-12:33
     Name pattern: [fl4_abi::label::TCBSetPriority]
     Visibility: public -/
 @[global_simps, irreducible, rust_const "fl4_abi::label::TCBSetPriority"]
 def fl4_abi.label.TCBSetPriority : Std.U64 := 6#u64
 
 /-- [fl4_abi::label::TCBSetMCPriority]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 13:4-13:35
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 13:4-13:35
     Name pattern: [fl4_abi::label::TCBSetMCPriority]
     Visibility: public -/
 @[global_simps, irreducible, rust_const "fl4_abi::label::TCBSetMCPriority"]
 def fl4_abi.label.TCBSetMCPriority : Std.U64 := 7#u64
 
 /-- [fl4_abi::label::TCBSetSchedParams]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 14:4-14:36
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 14:4-14:36
     Name pattern: [fl4_abi::label::TCBSetSchedParams]
     Visibility: public -/
 @[global_simps, irreducible, rust_const "fl4_abi::label::TCBSetSchedParams"]
 def fl4_abi.label.TCBSetSchedParams : Std.U64 := 8#u64
 
 /-- [fl4_abi::label::TCBSetTimeoutEndpoint]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 15:4-15:40
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 15:4-15:40
     Name pattern: [fl4_abi::label::TCBSetTimeoutEndpoint]
     Visibility: public -/
 @[global_simps, irreducible, rust_const
@@ -651,42 +651,42 @@ def fl4_abi.label.TCBSetSchedParams : Std.U64 := 8#u64
 def fl4_abi.label.TCBSetTimeoutEndpoint : Std.U64 := 9#u64
 
 /-- [fl4_abi::label::TCBSetIPCBuffer]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 16:4-16:34
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 16:4-16:34
     Name pattern: [fl4_abi::label::TCBSetIPCBuffer]
     Visibility: public -/
 @[global_simps, irreducible, rust_const "fl4_abi::label::TCBSetIPCBuffer"]
 def fl4_abi.label.TCBSetIPCBuffer : Std.U64 := 10#u64
 
 /-- [fl4_abi::label::TCBSetSpace]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 17:4-17:30
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 17:4-17:30
     Name pattern: [fl4_abi::label::TCBSetSpace]
     Visibility: public -/
 @[global_simps, irreducible, rust_const "fl4_abi::label::TCBSetSpace"]
 def fl4_abi.label.TCBSetSpace : Std.U64 := 11#u64
 
 /-- [fl4_abi::label::TCBSuspend]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 18:4-18:29
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 18:4-18:29
     Name pattern: [fl4_abi::label::TCBSuspend]
     Visibility: public -/
 @[global_simps, irreducible, rust_const "fl4_abi::label::TCBSuspend"]
 def fl4_abi.label.TCBSuspend : Std.U64 := 12#u64
 
 /-- [fl4_abi::label::TCBResume]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 19:4-19:28
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 19:4-19:28
     Name pattern: [fl4_abi::label::TCBResume]
     Visibility: public -/
 @[global_simps, irreducible, rust_const "fl4_abi::label::TCBResume"]
 def fl4_abi.label.TCBResume : Std.U64 := 13#u64
 
 /-- [fl4_abi::label::TCBBindNotification]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 20:4-20:38
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 20:4-20:38
     Name pattern: [fl4_abi::label::TCBBindNotification]
     Visibility: public -/
 @[global_simps, irreducible, rust_const "fl4_abi::label::TCBBindNotification"]
 def fl4_abi.label.TCBBindNotification : Std.U64 := 14#u64
 
 /-- [fl4_abi::label::TCBUnbindNotification]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 21:4-21:40
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 21:4-21:40
     Name pattern: [fl4_abi::label::TCBUnbindNotification]
     Visibility: public -/
 @[global_simps, irreducible, rust_const
@@ -694,28 +694,28 @@ def fl4_abi.label.TCBBindNotification : Std.U64 := 14#u64
 def fl4_abi.label.TCBUnbindNotification : Std.U64 := 15#u64
 
 /-- [fl4_abi::label::TCBSetBreakpoint]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 22:4-22:35
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 22:4-22:35
     Name pattern: [fl4_abi::label::TCBSetBreakpoint]
     Visibility: public -/
 @[global_simps, irreducible, rust_const "fl4_abi::label::TCBSetBreakpoint"]
 def fl4_abi.label.TCBSetBreakpoint : Std.U64 := 16#u64
 
 /-- [fl4_abi::label::TCBGetBreakpoint]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 23:4-23:35
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 23:4-23:35
     Name pattern: [fl4_abi::label::TCBGetBreakpoint]
     Visibility: public -/
 @[global_simps, irreducible, rust_const "fl4_abi::label::TCBGetBreakpoint"]
 def fl4_abi.label.TCBGetBreakpoint : Std.U64 := 17#u64
 
 /-- [fl4_abi::label::TCBUnsetBreakpoint]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 24:4-24:37
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 24:4-24:37
     Name pattern: [fl4_abi::label::TCBUnsetBreakpoint]
     Visibility: public -/
 @[global_simps, irreducible, rust_const "fl4_abi::label::TCBUnsetBreakpoint"]
 def fl4_abi.label.TCBUnsetBreakpoint : Std.U64 := 18#u64
 
 /-- [fl4_abi::label::TCBConfigureSingleStepping]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 25:4-25:45
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 25:4-25:45
     Name pattern: [fl4_abi::label::TCBConfigureSingleStepping]
     Visibility: public -/
 @[global_simps, irreducible, rust_const
@@ -723,56 +723,56 @@ def fl4_abi.label.TCBUnsetBreakpoint : Std.U64 := 18#u64
 def fl4_abi.label.TCBConfigureSingleStepping : Std.U64 := 19#u64
 
 /-- [fl4_abi::label::TCBSetTLSBase]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 26:4-26:32
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 26:4-26:32
     Name pattern: [fl4_abi::label::TCBSetTLSBase]
     Visibility: public -/
 @[global_simps, irreducible, rust_const "fl4_abi::label::TCBSetTLSBase"]
 def fl4_abi.label.TCBSetTLSBase : Std.U64 := 20#u64
 
 /-- [fl4_abi::label::TCBSetFlags]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 27:4-27:30
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 27:4-27:30
     Name pattern: [fl4_abi::label::TCBSetFlags]
     Visibility: public -/
 @[global_simps, irreducible, rust_const "fl4_abi::label::TCBSetFlags"]
 def fl4_abi.label.TCBSetFlags : Std.U64 := 21#u64
 
 /-- [fl4_abi::label::TCBReadFPU]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 28:4-28:29
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 28:4-28:29
     Name pattern: [fl4_abi::label::TCBReadFPU]
     Visibility: public -/
 @[global_simps, irreducible, rust_const "fl4_abi::label::TCBReadFPU"]
 def fl4_abi.label.TCBReadFPU : Std.U64 := 22#u64
 
 /-- [fl4_abi::label::TCBWriteFPU]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 29:4-29:30
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 29:4-29:30
     Name pattern: [fl4_abi::label::TCBWriteFPU]
     Visibility: public -/
 @[global_simps, irreducible, rust_const "fl4_abi::label::TCBWriteFPU"]
 def fl4_abi.label.TCBWriteFPU : Std.U64 := 23#u64
 
 /-- [fl4_abi::label::TCBSetTimer]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 30:4-30:30
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 30:4-30:30
     Name pattern: [fl4_abi::label::TCBSetTimer]
     Visibility: public -/
 @[global_simps, irreducible, rust_const "fl4_abi::label::TCBSetTimer"]
 def fl4_abi.label.TCBSetTimer : Std.U64 := 24#u64
 
 /-- [fl4_abi::label::CNodeRevoke]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 31:4-31:30
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 31:4-31:30
     Name pattern: [fl4_abi::label::CNodeRevoke]
     Visibility: public -/
 @[global_simps, irreducible, rust_const "fl4_abi::label::CNodeRevoke"]
 def fl4_abi.label.CNodeRevoke : Std.U64 := 25#u64
 
 /-- [fl4_abi::label::CNodeDelete]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 32:4-32:30
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 32:4-32:30
     Name pattern: [fl4_abi::label::CNodeDelete]
     Visibility: public -/
 @[global_simps, irreducible, rust_const "fl4_abi::label::CNodeDelete"]
 def fl4_abi.label.CNodeDelete : Std.U64 := 26#u64
 
 /-- [fl4_abi::label::CNodeCancelBadgedSends]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 33:4-33:41
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 33:4-33:41
     Name pattern: [fl4_abi::label::CNodeCancelBadgedSends]
     Visibility: public -/
 @[global_simps, irreducible, rust_const
@@ -780,77 +780,77 @@ def fl4_abi.label.CNodeDelete : Std.U64 := 26#u64
 def fl4_abi.label.CNodeCancelBadgedSends : Std.U64 := 27#u64
 
 /-- [fl4_abi::label::CNodeCopy]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 34:4-34:28
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 34:4-34:28
     Name pattern: [fl4_abi::label::CNodeCopy]
     Visibility: public -/
 @[global_simps, irreducible, rust_const "fl4_abi::label::CNodeCopy"]
 def fl4_abi.label.CNodeCopy : Std.U64 := 28#u64
 
 /-- [fl4_abi::label::CNodeMint]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 35:4-35:28
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 35:4-35:28
     Name pattern: [fl4_abi::label::CNodeMint]
     Visibility: public -/
 @[global_simps, irreducible, rust_const "fl4_abi::label::CNodeMint"]
 def fl4_abi.label.CNodeMint : Std.U64 := 29#u64
 
 /-- [fl4_abi::label::CNodeMove]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 36:4-36:28
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 36:4-36:28
     Name pattern: [fl4_abi::label::CNodeMove]
     Visibility: public -/
 @[global_simps, irreducible, rust_const "fl4_abi::label::CNodeMove"]
 def fl4_abi.label.CNodeMove : Std.U64 := 30#u64
 
 /-- [fl4_abi::label::CNodeMutate]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 37:4-37:30
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 37:4-37:30
     Name pattern: [fl4_abi::label::CNodeMutate]
     Visibility: public -/
 @[global_simps, irreducible, rust_const "fl4_abi::label::CNodeMutate"]
 def fl4_abi.label.CNodeMutate : Std.U64 := 31#u64
 
 /-- [fl4_abi::label::CNodeRotate]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 38:4-38:30
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 38:4-38:30
     Name pattern: [fl4_abi::label::CNodeRotate]
     Visibility: public -/
 @[global_simps, irreducible, rust_const "fl4_abi::label::CNodeRotate"]
 def fl4_abi.label.CNodeRotate : Std.U64 := 32#u64
 
 /-- [fl4_abi::label::IRQIssueIRQHandler]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 39:4-39:37
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 39:4-39:37
     Name pattern: [fl4_abi::label::IRQIssueIRQHandler]
     Visibility: public -/
 @[global_simps, irreducible, rust_const "fl4_abi::label::IRQIssueIRQHandler"]
 def fl4_abi.label.IRQIssueIRQHandler : Std.U64 := 33#u64
 
 /-- [fl4_abi::label::IRQAckIRQ]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 40:4-40:28
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 40:4-40:28
     Name pattern: [fl4_abi::label::IRQAckIRQ]
     Visibility: public -/
 @[global_simps, irreducible, rust_const "fl4_abi::label::IRQAckIRQ"]
 def fl4_abi.label.IRQAckIRQ : Std.U64 := 34#u64
 
 /-- [fl4_abi::label::IRQSetIRQHandler]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 41:4-41:35
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 41:4-41:35
     Name pattern: [fl4_abi::label::IRQSetIRQHandler]
     Visibility: public -/
 @[global_simps, irreducible, rust_const "fl4_abi::label::IRQSetIRQHandler"]
 def fl4_abi.label.IRQSetIRQHandler : Std.U64 := 35#u64
 
 /-- [fl4_abi::label::IRQClearIRQHandler]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 42:4-42:37
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 42:4-42:37
     Name pattern: [fl4_abi::label::IRQClearIRQHandler]
     Visibility: public -/
 @[global_simps, irreducible, rust_const "fl4_abi::label::IRQClearIRQHandler"]
 def fl4_abi.label.IRQClearIRQHandler : Std.U64 := 36#u64
 
 /-- [fl4_abi::label::DomainSetSet]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 43:4-43:31
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 43:4-43:31
     Name pattern: [fl4_abi::label::DomainSetSet]
     Visibility: public -/
 @[global_simps, irreducible, rust_const "fl4_abi::label::DomainSetSet"]
 def fl4_abi.label.DomainSetSet : Std.U64 := 37#u64
 
 /-- [fl4_abi::label::DomainScheduleConfigure]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 44:4-44:42
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 44:4-44:42
     Name pattern: [fl4_abi::label::DomainScheduleConfigure]
     Visibility: public -/
 @[global_simps, irreducible, rust_const
@@ -858,7 +858,7 @@ def fl4_abi.label.DomainSetSet : Std.U64 := 37#u64
 def fl4_abi.label.DomainScheduleConfigure : Std.U64 := 38#u64
 
 /-- [fl4_abi::label::DomainScheduleSetStart]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 45:4-45:41
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 45:4-45:41
     Name pattern: [fl4_abi::label::DomainScheduleSetStart]
     Visibility: public -/
 @[global_simps, irreducible, rust_const
@@ -866,7 +866,7 @@ def fl4_abi.label.DomainScheduleConfigure : Std.U64 := 38#u64
 def fl4_abi.label.DomainScheduleSetStart : Std.U64 := 39#u64
 
 /-- [fl4_abi::label::SchedControlConfigureFlags]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 46:4-46:45
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 46:4-46:45
     Name pattern: [fl4_abi::label::SchedControlConfigureFlags]
     Visibility: public -/
 @[global_simps, irreducible, rust_const
@@ -874,21 +874,21 @@ def fl4_abi.label.DomainScheduleSetStart : Std.U64 := 39#u64
 def fl4_abi.label.SchedControlConfigureFlags : Std.U64 := 40#u64
 
 /-- [fl4_abi::label::SchedContextBind]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 47:4-47:35
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 47:4-47:35
     Name pattern: [fl4_abi::label::SchedContextBind]
     Visibility: public -/
 @[global_simps, irreducible, rust_const "fl4_abi::label::SchedContextBind"]
 def fl4_abi.label.SchedContextBind : Std.U64 := 41#u64
 
 /-- [fl4_abi::label::SchedContextUnbind]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 48:4-48:37
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 48:4-48:37
     Name pattern: [fl4_abi::label::SchedContextUnbind]
     Visibility: public -/
 @[global_simps, irreducible, rust_const "fl4_abi::label::SchedContextUnbind"]
 def fl4_abi.label.SchedContextUnbind : Std.U64 := 42#u64
 
 /-- [fl4_abi::label::SchedContextUnbindObject]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 49:4-49:43
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 49:4-49:43
     Name pattern: [fl4_abi::label::SchedContextUnbindObject]
     Visibility: public -/
 @[global_simps, irreducible, rust_const
@@ -896,63 +896,63 @@ def fl4_abi.label.SchedContextUnbind : Std.U64 := 42#u64
 def fl4_abi.label.SchedContextUnbindObject : Std.U64 := 43#u64
 
 /-- [fl4_abi::label::SchedContextConsumed]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 50:4-50:39
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 50:4-50:39
     Name pattern: [fl4_abi::label::SchedContextConsumed]
     Visibility: public -/
 @[global_simps, irreducible, rust_const "fl4_abi::label::SchedContextConsumed"]
 def fl4_abi.label.SchedContextConsumed : Std.U64 := 44#u64
 
 /-- [fl4_abi::label::SchedContextYieldTo]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 51:4-51:38
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 51:4-51:38
     Name pattern: [fl4_abi::label::SchedContextYieldTo]
     Visibility: public -/
 @[global_simps, irreducible, rust_const "fl4_abi::label::SchedContextYieldTo"]
 def fl4_abi.label.SchedContextYieldTo : Std.U64 := 45#u64
 
 /-- [fl4_abi::label::X86PML4Flush]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 52:4-52:31
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 52:4-52:31
     Name pattern: [fl4_abi::label::X86PML4Flush]
     Visibility: public -/
 @[global_simps, irreducible, rust_const "fl4_abi::label::X86PML4Flush"]
 def fl4_abi.label.X86PML4Flush : Std.U64 := 46#u64
 
 /-- [fl4_abi::label::X86PDPTMap]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 53:4-53:29
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 53:4-53:29
     Name pattern: [fl4_abi::label::X86PDPTMap]
     Visibility: public -/
 @[global_simps, irreducible, rust_const "fl4_abi::label::X86PDPTMap"]
 def fl4_abi.label.X86PDPTMap : Std.U64 := 47#u64
 
 /-- [fl4_abi::label::X86PDPTUnmap]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 54:4-54:31
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 54:4-54:31
     Name pattern: [fl4_abi::label::X86PDPTUnmap]
     Visibility: public -/
 @[global_simps, irreducible, rust_const "fl4_abi::label::X86PDPTUnmap"]
 def fl4_abi.label.X86PDPTUnmap : Std.U64 := 48#u64
 
 /-- [fl4_abi::label::X86VCPUReadMSR]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 55:4-55:33
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 55:4-55:33
     Name pattern: [fl4_abi::label::X86VCPUReadMSR]
     Visibility: public -/
 @[global_simps, irreducible, rust_const "fl4_abi::label::X86VCPUReadMSR"]
 def fl4_abi.label.X86VCPUReadMSR : Std.U64 := 49#u64
 
 /-- [fl4_abi::label::X86VCPUWriteMSR]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 56:4-56:34
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 56:4-56:34
     Name pattern: [fl4_abi::label::X86VCPUWriteMSR]
     Visibility: public -/
 @[global_simps, irreducible, rust_const "fl4_abi::label::X86VCPUWriteMSR"]
 def fl4_abi.label.X86VCPUWriteMSR : Std.U64 := 50#u64
 
 /-- [fl4_abi::label::X86PageDirectoryMap]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 57:4-57:38
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 57:4-57:38
     Name pattern: [fl4_abi::label::X86PageDirectoryMap]
     Visibility: public -/
 @[global_simps, irreducible, rust_const "fl4_abi::label::X86PageDirectoryMap"]
 def fl4_abi.label.X86PageDirectoryMap : Std.U64 := 51#u64
 
 /-- [fl4_abi::label::X86PageDirectoryUnmap]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 58:4-58:40
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 58:4-58:40
     Name pattern: [fl4_abi::label::X86PageDirectoryUnmap]
     Visibility: public -/
 @[global_simps, irreducible, rust_const
@@ -960,35 +960,35 @@ def fl4_abi.label.X86PageDirectoryMap : Std.U64 := 51#u64
 def fl4_abi.label.X86PageDirectoryUnmap : Std.U64 := 52#u64
 
 /-- [fl4_abi::label::X86PageTableMap]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 59:4-59:34
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 59:4-59:34
     Name pattern: [fl4_abi::label::X86PageTableMap]
     Visibility: public -/
 @[global_simps, irreducible, rust_const "fl4_abi::label::X86PageTableMap"]
 def fl4_abi.label.X86PageTableMap : Std.U64 := 53#u64
 
 /-- [fl4_abi::label::X86PageTableUnmap]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 60:4-60:36
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 60:4-60:36
     Name pattern: [fl4_abi::label::X86PageTableUnmap]
     Visibility: public -/
 @[global_simps, irreducible, rust_const "fl4_abi::label::X86PageTableUnmap"]
 def fl4_abi.label.X86PageTableUnmap : Std.U64 := 54#u64
 
 /-- [fl4_abi::label::X86PageMap]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 61:4-61:29
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 61:4-61:29
     Name pattern: [fl4_abi::label::X86PageMap]
     Visibility: public -/
 @[global_simps, irreducible, rust_const "fl4_abi::label::X86PageMap"]
 def fl4_abi.label.X86PageMap : Std.U64 := 55#u64
 
 /-- [fl4_abi::label::X86PageUnmap]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 62:4-62:31
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 62:4-62:31
     Name pattern: [fl4_abi::label::X86PageUnmap]
     Visibility: public -/
 @[global_simps, irreducible, rust_const "fl4_abi::label::X86PageUnmap"]
 def fl4_abi.label.X86PageUnmap : Std.U64 := 56#u64
 
 /-- [fl4_abi::label::X86PageDeriveSubframe]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 63:4-63:40
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 63:4-63:40
     Name pattern: [fl4_abi::label::X86PageDeriveSubframe]
     Visibility: public -/
 @[global_simps, irreducible, rust_const
@@ -996,7 +996,7 @@ def fl4_abi.label.X86PageUnmap : Std.U64 := 56#u64
 def fl4_abi.label.X86PageDeriveSubframe : Std.U64 := 57#u64
 
 /-- [fl4_abi::label::X86PageTestAndClearAccessed]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 64:4-64:46
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 64:4-64:46
     Name pattern: [fl4_abi::label::X86PageTestAndClearAccessed]
     Visibility: public -/
 @[global_simps, irreducible, rust_const
@@ -1004,21 +1004,21 @@ def fl4_abi.label.X86PageDeriveSubframe : Std.U64 := 57#u64
 def fl4_abi.label.X86PageTestAndClearAccessed : Std.U64 := 58#u64
 
 /-- [fl4_abi::label::X86PageGetAddress]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 65:4-65:36
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 65:4-65:36
     Name pattern: [fl4_abi::label::X86PageGetAddress]
     Visibility: public -/
 @[global_simps, irreducible, rust_const "fl4_abi::label::X86PageGetAddress"]
 def fl4_abi.label.X86PageGetAddress : Std.U64 := 59#u64
 
 /-- [fl4_abi::label::X86PageMapEPT]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 66:4-66:32
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 66:4-66:32
     Name pattern: [fl4_abi::label::X86PageMapEPT]
     Visibility: public -/
 @[global_simps, irreducible, rust_const "fl4_abi::label::X86PageMapEPT"]
 def fl4_abi.label.X86PageMapEPT : Std.U64 := 60#u64
 
 /-- [fl4_abi::label::X86ASIDControlMakePool]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 67:4-67:41
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 67:4-67:41
     Name pattern: [fl4_abi::label::X86ASIDControlMakePool]
     Visibility: public -/
 @[global_simps, irreducible, rust_const
@@ -1026,14 +1026,14 @@ def fl4_abi.label.X86PageMapEPT : Std.U64 := 60#u64
 def fl4_abi.label.X86ASIDControlMakePool : Std.U64 := 61#u64
 
 /-- [fl4_abi::label::X86ASIDPoolAssign]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 68:4-68:36
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 68:4-68:36
     Name pattern: [fl4_abi::label::X86ASIDPoolAssign]
     Visibility: public -/
 @[global_simps, irreducible, rust_const "fl4_abi::label::X86ASIDPoolAssign"]
 def fl4_abi.label.X86ASIDPoolAssign : Std.U64 := 62#u64
 
 /-- [fl4_abi::label::X86IOPortControlIssue]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 69:4-69:40
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 69:4-69:40
     Name pattern: [fl4_abi::label::X86IOPortControlIssue]
     Visibility: public -/
 @[global_simps, irreducible, rust_const
@@ -1041,49 +1041,49 @@ def fl4_abi.label.X86ASIDPoolAssign : Std.U64 := 62#u64
 def fl4_abi.label.X86IOPortControlIssue : Std.U64 := 63#u64
 
 /-- [fl4_abi::label::X86IOPortIn8]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 70:4-70:31
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 70:4-70:31
     Name pattern: [fl4_abi::label::X86IOPortIn8]
     Visibility: public -/
 @[global_simps, irreducible, rust_const "fl4_abi::label::X86IOPortIn8"]
 def fl4_abi.label.X86IOPortIn8 : Std.U64 := 64#u64
 
 /-- [fl4_abi::label::X86IOPortIn16]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 71:4-71:32
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 71:4-71:32
     Name pattern: [fl4_abi::label::X86IOPortIn16]
     Visibility: public -/
 @[global_simps, irreducible, rust_const "fl4_abi::label::X86IOPortIn16"]
 def fl4_abi.label.X86IOPortIn16 : Std.U64 := 65#u64
 
 /-- [fl4_abi::label::X86IOPortIn32]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 72:4-72:32
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 72:4-72:32
     Name pattern: [fl4_abi::label::X86IOPortIn32]
     Visibility: public -/
 @[global_simps, irreducible, rust_const "fl4_abi::label::X86IOPortIn32"]
 def fl4_abi.label.X86IOPortIn32 : Std.U64 := 66#u64
 
 /-- [fl4_abi::label::X86IOPortOut8]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 73:4-73:32
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 73:4-73:32
     Name pattern: [fl4_abi::label::X86IOPortOut8]
     Visibility: public -/
 @[global_simps, irreducible, rust_const "fl4_abi::label::X86IOPortOut8"]
 def fl4_abi.label.X86IOPortOut8 : Std.U64 := 67#u64
 
 /-- [fl4_abi::label::X86IOPortOut16]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 74:4-74:33
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 74:4-74:33
     Name pattern: [fl4_abi::label::X86IOPortOut16]
     Visibility: public -/
 @[global_simps, irreducible, rust_const "fl4_abi::label::X86IOPortOut16"]
 def fl4_abi.label.X86IOPortOut16 : Std.U64 := 68#u64
 
 /-- [fl4_abi::label::X86IOPortOut32]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 75:4-75:33
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 75:4-75:33
     Name pattern: [fl4_abi::label::X86IOPortOut32]
     Visibility: public -/
 @[global_simps, irreducible, rust_const "fl4_abi::label::X86IOPortOut32"]
 def fl4_abi.label.X86IOPortOut32 : Std.U64 := 69#u64
 
 /-- [fl4_abi::label::X86IRQIssueIRQHandlerIOAPIC]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 76:4-76:46
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 76:4-76:46
     Name pattern: [fl4_abi::label::X86IRQIssueIRQHandlerIOAPIC]
     Visibility: public -/
 @[global_simps, irreducible, rust_const
@@ -1091,7 +1091,7 @@ def fl4_abi.label.X86IOPortOut32 : Std.U64 := 69#u64
 def fl4_abi.label.X86IRQIssueIRQHandlerIOAPIC : Std.U64 := 70#u64
 
 /-- [fl4_abi::label::X86IRQIssueIRQHandlerMSI]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 77:4-77:43
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 77:4-77:43
     Name pattern: [fl4_abi::label::X86IRQIssueIRQHandlerMSI]
     Visibility: public -/
 @[global_simps, irreducible, rust_const
@@ -1099,7 +1099,7 @@ def fl4_abi.label.X86IRQIssueIRQHandlerIOAPIC : Std.U64 := 70#u64
 def fl4_abi.label.X86IRQIssueIRQHandlerMSI : Std.U64 := 71#u64
 
 /-- [fl4_abi::label::X86IRQIssueIRQHandlerIOAPICRemapped]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 78:4-78:54
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 78:4-78:54
     Name pattern: [fl4_abi::label::X86IRQIssueIRQHandlerIOAPICRemapped]
     Visibility: public -/
 @[global_simps, irreducible, rust_const
@@ -1107,63 +1107,63 @@ def fl4_abi.label.X86IRQIssueIRQHandlerMSI : Std.U64 := 71#u64
 def fl4_abi.label.X86IRQIssueIRQHandlerIOAPICRemapped : Std.U64 := 72#u64
 
 /-- [fl4_abi::label::X86VCPUSetTCB]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 79:4-79:32
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 79:4-79:32
     Name pattern: [fl4_abi::label::X86VCPUSetTCB]
     Visibility: public -/
 @[global_simps, irreducible, rust_const "fl4_abi::label::X86VCPUSetTCB"]
 def fl4_abi.label.X86VCPUSetTCB : Std.U64 := 73#u64
 
 /-- [fl4_abi::label::X86VCPUReadVMCS]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 80:4-80:34
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 80:4-80:34
     Name pattern: [fl4_abi::label::X86VCPUReadVMCS]
     Visibility: public -/
 @[global_simps, irreducible, rust_const "fl4_abi::label::X86VCPUReadVMCS"]
 def fl4_abi.label.X86VCPUReadVMCS : Std.U64 := 74#u64
 
 /-- [fl4_abi::label::X86VCPUWriteVMCS]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 81:4-81:35
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 81:4-81:35
     Name pattern: [fl4_abi::label::X86VCPUWriteVMCS]
     Visibility: public -/
 @[global_simps, irreducible, rust_const "fl4_abi::label::X86VCPUWriteVMCS"]
 def fl4_abi.label.X86VCPUWriteVMCS : Std.U64 := 75#u64
 
 /-- [fl4_abi::label::X86VCPUFlushTLB]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 82:4-82:34
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 82:4-82:34
     Name pattern: [fl4_abi::label::X86VCPUFlushTLB]
     Visibility: public -/
 @[global_simps, irreducible, rust_const "fl4_abi::label::X86VCPUFlushTLB"]
 def fl4_abi.label.X86VCPUFlushTLB : Std.U64 := 76#u64
 
 /-- [fl4_abi::label::X86VCPUReadVMCB]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 83:4-83:34
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 83:4-83:34
     Name pattern: [fl4_abi::label::X86VCPUReadVMCB]
     Visibility: public -/
 @[global_simps, irreducible, rust_const "fl4_abi::label::X86VCPUReadVMCB"]
 def fl4_abi.label.X86VCPUReadVMCB : Std.U64 := 77#u64
 
 /-- [fl4_abi::label::X86VCPUWriteVMCB]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 84:4-84:35
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 84:4-84:35
     Name pattern: [fl4_abi::label::X86VCPUWriteVMCB]
     Visibility: public -/
 @[global_simps, irreducible, rust_const "fl4_abi::label::X86VCPUWriteVMCB"]
 def fl4_abi.label.X86VCPUWriteVMCB : Std.U64 := 78#u64
 
 /-- [fl4_abi::label::X86VCPUEnableIOPort]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 85:4-85:38
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 85:4-85:38
     Name pattern: [fl4_abi::label::X86VCPUEnableIOPort]
     Visibility: public -/
 @[global_simps, irreducible, rust_const "fl4_abi::label::X86VCPUEnableIOPort"]
 def fl4_abi.label.X86VCPUEnableIOPort : Std.U64 := 79#u64
 
 /-- [fl4_abi::label::X86VCPUDisableIOPort]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 86:4-86:39
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 86:4-86:39
     Name pattern: [fl4_abi::label::X86VCPUDisableIOPort]
     Visibility: public -/
 @[global_simps, irreducible, rust_const "fl4_abi::label::X86VCPUDisableIOPort"]
 def fl4_abi.label.X86VCPUDisableIOPort : Std.U64 := 80#u64
 
 /-- [fl4_abi::label::X86VCPUWriteRegisters]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 87:4-87:40
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 87:4-87:40
     Name pattern: [fl4_abi::label::X86VCPUWriteRegisters]
     Visibility: public -/
 @[global_simps, irreducible, rust_const
@@ -1171,140 +1171,148 @@ def fl4_abi.label.X86VCPUDisableIOPort : Std.U64 := 80#u64
 def fl4_abi.label.X86VCPUWriteRegisters : Std.U64 := 81#u64
 
 /-- [fl4_abi::label::X86EPTPDPTMap]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 88:4-88:32
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 88:4-88:32
     Name pattern: [fl4_abi::label::X86EPTPDPTMap]
     Visibility: public -/
 @[global_simps, irreducible, rust_const "fl4_abi::label::X86EPTPDPTMap"]
 def fl4_abi.label.X86EPTPDPTMap : Std.U64 := 82#u64
 
 /-- [fl4_abi::label::X86EPTPDPTUnmap]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 89:4-89:34
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 89:4-89:34
     Name pattern: [fl4_abi::label::X86EPTPDPTUnmap]
     Visibility: public -/
 @[global_simps, irreducible, rust_const "fl4_abi::label::X86EPTPDPTUnmap"]
 def fl4_abi.label.X86EPTPDPTUnmap : Std.U64 := 83#u64
 
 /-- [fl4_abi::label::X86EPTPDMap]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 90:4-90:30
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 90:4-90:30
     Name pattern: [fl4_abi::label::X86EPTPDMap]
     Visibility: public -/
 @[global_simps, irreducible, rust_const "fl4_abi::label::X86EPTPDMap"]
 def fl4_abi.label.X86EPTPDMap : Std.U64 := 84#u64
 
 /-- [fl4_abi::label::X86EPTPDUnmap]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 91:4-91:32
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 91:4-91:32
     Name pattern: [fl4_abi::label::X86EPTPDUnmap]
     Visibility: public -/
 @[global_simps, irreducible, rust_const "fl4_abi::label::X86EPTPDUnmap"]
 def fl4_abi.label.X86EPTPDUnmap : Std.U64 := 85#u64
 
 /-- [fl4_abi::label::X86EPTPTMap]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 92:4-92:30
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 92:4-92:30
     Name pattern: [fl4_abi::label::X86EPTPTMap]
     Visibility: public -/
 @[global_simps, irreducible, rust_const "fl4_abi::label::X86EPTPTMap"]
 def fl4_abi.label.X86EPTPTMap : Std.U64 := 86#u64
 
 /-- [fl4_abi::label::X86EPTPTUnmap]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 93:4-93:32
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 93:4-93:32
     Name pattern: [fl4_abi::label::X86EPTPTUnmap]
     Visibility: public -/
 @[global_simps, irreducible, rust_const "fl4_abi::label::X86EPTPTUnmap"]
 def fl4_abi.label.X86EPTPTUnmap : Std.U64 := 87#u64
 
 /-- [fl4_abi::label::TCBSetEPTRoot]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 94:4-94:32
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 94:4-94:32
     Name pattern: [fl4_abi::label::TCBSetEPTRoot]
     Visibility: public -/
 @[global_simps, irreducible, rust_const "fl4_abi::label::TCBSetEPTRoot"]
 def fl4_abi.label.TCBSetEPTRoot : Std.U64 := 88#u64
 
+/-- [fl4_abi::label::X86UntypedRetypeShared]
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 95:4-95:41
+    Name pattern: [fl4_abi::label::X86UntypedRetypeShared]
+    Visibility: public -/
+@[global_simps, irreducible, rust_const
+  "fl4_abi::label::X86UntypedRetypeShared"]
+def fl4_abi.label.X86UntypedRetypeShared : Std.U64 := 89#u64
+
 /-- [fl4_abi::syscall::SysCall]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 103:4-103:26
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 104:4-104:26
     Name pattern: [fl4_abi::syscall::SysCall]
     Visibility: public -/
 @[global_simps, irreducible, rust_const "fl4_abi::syscall::SysCall"]
 def fl4_abi.syscall.SysCall : Std.I64 := (-1)#i64
 
 /-- [fl4_abi::syscall::SysReplyRecv]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 104:4-104:31
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 105:4-105:31
     Name pattern: [fl4_abi::syscall::SysReplyRecv]
     Visibility: public -/
 @[global_simps, irreducible, rust_const "fl4_abi::syscall::SysReplyRecv"]
 def fl4_abi.syscall.SysReplyRecv : Std.I64 := (-2)#i64
 
 /-- [fl4_abi::syscall::SysNBSendRecv]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 105:4-105:32
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 106:4-106:32
     Name pattern: [fl4_abi::syscall::SysNBSendRecv]
     Visibility: public -/
 @[global_simps, irreducible, rust_const "fl4_abi::syscall::SysNBSendRecv"]
 def fl4_abi.syscall.SysNBSendRecv : Std.I64 := (-3)#i64
 
 /-- [fl4_abi::syscall::SysNBSendWait]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 106:4-106:32
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 107:4-107:32
     Name pattern: [fl4_abi::syscall::SysNBSendWait]
     Visibility: public -/
 @[global_simps, irreducible, rust_const "fl4_abi::syscall::SysNBSendWait"]
 def fl4_abi.syscall.SysNBSendWait : Std.I64 := (-4)#i64
 
 /-- [fl4_abi::syscall::SysSend]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 107:4-107:26
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 108:4-108:26
     Name pattern: [fl4_abi::syscall::SysSend]
     Visibility: public -/
 @[global_simps, irreducible, rust_const "fl4_abi::syscall::SysSend"]
 def fl4_abi.syscall.SysSend : Std.I64 := (-5)#i64
 
 /-- [fl4_abi::syscall::SysNBSend]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 108:4-108:28
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 109:4-109:28
     Name pattern: [fl4_abi::syscall::SysNBSend]
     Visibility: public -/
 @[global_simps, irreducible, rust_const "fl4_abi::syscall::SysNBSend"]
 def fl4_abi.syscall.SysNBSend : Std.I64 := (-6)#i64
 
 /-- [fl4_abi::syscall::SysRecv]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 109:4-109:26
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 110:4-110:26
     Name pattern: [fl4_abi::syscall::SysRecv]
     Visibility: public -/
 @[global_simps, irreducible, rust_const "fl4_abi::syscall::SysRecv"]
 def fl4_abi.syscall.SysRecv : Std.I64 := (-7)#i64
 
 /-- [fl4_abi::syscall::SysNBRecv]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 110:4-110:28
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 111:4-111:28
     Name pattern: [fl4_abi::syscall::SysNBRecv]
     Visibility: public -/
 @[global_simps, irreducible, rust_const "fl4_abi::syscall::SysNBRecv"]
 def fl4_abi.syscall.SysNBRecv : Std.I64 := (-8)#i64
 
 /-- [fl4_abi::syscall::SysWait]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 111:4-111:26
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 112:4-112:26
     Name pattern: [fl4_abi::syscall::SysWait]
     Visibility: public -/
 @[global_simps, irreducible, rust_const "fl4_abi::syscall::SysWait"]
 def fl4_abi.syscall.SysWait : Std.I64 := (-9)#i64
 
 /-- [fl4_abi::syscall::SysNBWait]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 112:4-112:28
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 113:4-113:28
     Name pattern: [fl4_abi::syscall::SysNBWait]
     Visibility: public -/
 @[global_simps, irreducible, rust_const "fl4_abi::syscall::SysNBWait"]
 def fl4_abi.syscall.SysNBWait : Std.I64 := (-10)#i64
 
 /-- [fl4_abi::syscall::SysYield]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 113:4-113:27
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 114:4-114:27
     Name pattern: [fl4_abi::syscall::SysYield]
     Visibility: public -/
 @[global_simps, irreducible, rust_const "fl4_abi::syscall::SysYield"]
 def fl4_abi.syscall.SysYield : Std.I64 := (-11)#i64
 
 /-- [fl4_abi::syscall::SysDebugPutChar]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 114:4-114:34
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 115:4-115:34
     Name pattern: [fl4_abi::syscall::SysDebugPutChar]
     Visibility: public -/
 @[global_simps, irreducible, rust_const "fl4_abi::syscall::SysDebugPutChar"]
 def fl4_abi.syscall.SysDebugPutChar : Std.I64 := (-12)#i64
 
 /-- [fl4_abi::syscall::SysDebugDumpScheduler]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 115:4-115:40
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 116:4-116:40
     Name pattern: [fl4_abi::syscall::SysDebugDumpScheduler]
     Visibility: public -/
 @[global_simps, irreducible, rust_const
@@ -1312,14 +1320,14 @@ def fl4_abi.syscall.SysDebugPutChar : Std.I64 := (-12)#i64
 def fl4_abi.syscall.SysDebugDumpScheduler : Std.I64 := (-13)#i64
 
 /-- [fl4_abi::syscall::SysDebugHalt]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 116:4-116:31
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 117:4-117:31
     Name pattern: [fl4_abi::syscall::SysDebugHalt]
     Visibility: public -/
 @[global_simps, irreducible, rust_const "fl4_abi::syscall::SysDebugHalt"]
 def fl4_abi.syscall.SysDebugHalt : Std.I64 := (-14)#i64
 
 /-- [fl4_abi::syscall::SysDebugCapIdentify]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 117:4-117:38
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 118:4-118:38
     Name pattern: [fl4_abi::syscall::SysDebugCapIdentify]
     Visibility: public -/
 @[global_simps, irreducible, rust_const
@@ -1327,28 +1335,28 @@ def fl4_abi.syscall.SysDebugHalt : Std.I64 := (-14)#i64
 def fl4_abi.syscall.SysDebugCapIdentify : Std.I64 := (-15)#i64
 
 /-- [fl4_abi::syscall::SysDebugSnapshot]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 118:4-118:35
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 119:4-119:35
     Name pattern: [fl4_abi::syscall::SysDebugSnapshot]
     Visibility: public -/
 @[global_simps, irreducible, rust_const "fl4_abi::syscall::SysDebugSnapshot"]
 def fl4_abi.syscall.SysDebugSnapshot : Std.I64 := (-16)#i64
 
 /-- [fl4_abi::syscall::SysDebugNameThread]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 119:4-119:37
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 120:4-120:37
     Name pattern: [fl4_abi::syscall::SysDebugNameThread]
     Visibility: public -/
 @[global_simps, irreducible, rust_const "fl4_abi::syscall::SysDebugNameThread"]
 def fl4_abi.syscall.SysDebugNameThread : Std.I64 := (-17)#i64
 
 /-- [fl4_abi::syscall::SysDebugSendIPI]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 120:4-120:34
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 121:4-121:34
     Name pattern: [fl4_abi::syscall::SysDebugSendIPI]
     Visibility: public -/
 @[global_simps, irreducible, rust_const "fl4_abi::syscall::SysDebugSendIPI"]
 def fl4_abi.syscall.SysDebugSendIPI : Std.I64 := (-18)#i64
 
 /-- [fl4_abi::syscall::SysDebugGetThreadAffinity]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 121:4-121:44
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 122:4-122:44
     Name pattern: [fl4_abi::syscall::SysDebugGetThreadAffinity]
     Visibility: public -/
 @[global_simps, irreducible, rust_const
@@ -1356,49 +1364,49 @@ def fl4_abi.syscall.SysDebugSendIPI : Std.I64 := (-18)#i64
 def fl4_abi.syscall.SysDebugGetThreadAffinity : Std.I64 := (-19)#i64
 
 /-- [fl4_abi::syscall::SysSetTLSBase]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 122:4-122:32
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 123:4-123:32
     Name pattern: [fl4_abi::syscall::SysSetTLSBase]
     Visibility: public -/
 @[global_simps, irreducible, rust_const "fl4_abi::syscall::SysSetTLSBase"]
 def fl4_abi.syscall.SysSetTLSBase : Std.I64 := (-20)#i64
 
 /-- [fl4_abi::syscall::SysVMEnter]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 125:4-125:29
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 126:4-126:29
     Name pattern: [fl4_abi::syscall::SysVMEnter]
     Visibility: public -/
 @[global_simps, irreducible, rust_const "fl4_abi::syscall::SysVMEnter"]
 def fl4_abi.syscall.SysVMEnter : Std.I64 := (-23)#i64
 
 /-- [fl4_abi::syscall::SYSCALL_MAX]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 126:4-126:30
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 127:4-127:30
     Name pattern: [fl4_abi::syscall::SYSCALL_MAX]
     Visibility: public -/
 @[global_simps, irreducible, rust_const "fl4_abi::syscall::SYSCALL_MAX"]
 def fl4_abi.syscall.SYSCALL_MAX : Std.I64 := (-1)#i64
 
 /-- [fl4_abi::syscall::SYSCALL_MIN]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 127:4-127:30
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 128:4-128:30
     Name pattern: [fl4_abi::syscall::SYSCALL_MIN]
     Visibility: public -/
 @[global_simps, irreducible, rust_const "fl4_abi::syscall::SYSCALL_MIN"]
 def fl4_abi.syscall.SYSCALL_MIN : Std.I64 := (-11)#i64
 
 /-- [fl4_abi::config::DEBUG_BUILD]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 132:4-132:31
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 133:4-133:31
     Name pattern: [fl4_abi::config::DEBUG_BUILD]
     Visibility: public -/
 @[global_simps, irreducible, rust_const "fl4_abi::config::DEBUG_BUILD"]
 def fl4_abi.config.DEBUG_BUILD : Bool := true
 
 /-- [fl4_abi::config::PRINTING]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 133:4-133:28
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 134:4-134:28
     Name pattern: [fl4_abi::config::PRINTING]
     Visibility: public -/
 @[global_simps, irreducible, rust_const "fl4_abi::config::PRINTING"]
 def fl4_abi.config.PRINTING : Bool := true
 
 /-- [fl4_abi::config::KERNEL_INVOCATION_REPORT_ERROR_IPC]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 135:4-135:54
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 136:4-136:54
     Name pattern: [fl4_abi::config::KERNEL_INVOCATION_REPORT_ERROR_IPC]
     Visibility: public -/
 @[global_simps, irreducible, rust_const
@@ -1406,28 +1414,28 @@ def fl4_abi.config.PRINTING : Bool := true
 def fl4_abi.config.KERNEL_INVOCATION_REPORT_ERROR_IPC : Bool := true
 
 /-- [fl4_abi::config::ENABLE_SMP_SUPPORT]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 137:4-137:38
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 138:4-138:38
     Name pattern: [fl4_abi::config::ENABLE_SMP_SUPPORT]
     Visibility: public -/
 @[global_simps, irreducible, rust_const "fl4_abi::config::ENABLE_SMP_SUPPORT"]
 def fl4_abi.config.ENABLE_SMP_SUPPORT : Bool := true
 
 /-- [fl4_abi::config::SET_TLS_BASE_SELF]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 138:4-138:37
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 139:4-139:37
     Name pattern: [fl4_abi::config::SET_TLS_BASE_SELF]
     Visibility: public -/
 @[global_simps, irreducible, rust_const "fl4_abi::config::SET_TLS_BASE_SELF"]
 def fl4_abi.config.SET_TLS_BASE_SELF : Bool := true
 
 /-- [fl4_abi::config::NUM_DOMAINS]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 141:4-141:30
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 142:4-142:30
     Name pattern: [fl4_abi::config::NUM_DOMAINS]
     Visibility: public -/
 @[global_simps, irreducible, rust_const "fl4_abi::config::NUM_DOMAINS"]
 def fl4_abi.config.NUM_DOMAINS : Std.U64 := 1#u64
 
 /-- [fl4_abi::config::NUM_DOMAIN_SCHEDULES]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 142:4-142:39
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 143:4-143:39
     Name pattern: [fl4_abi::config::NUM_DOMAIN_SCHEDULES]
     Visibility: public -/
 @[global_simps, irreducible, rust_const
@@ -1435,14 +1443,14 @@ def fl4_abi.config.NUM_DOMAINS : Std.U64 := 1#u64
 def fl4_abi.config.NUM_DOMAIN_SCHEDULES : Std.U64 := 2#u64
 
 /-- [fl4_abi::config::MAX_NUM_NODES]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 143:4-143:32
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 144:4-144:32
     Name pattern: [fl4_abi::config::MAX_NUM_NODES]
     Visibility: public -/
 @[global_simps, irreducible, rust_const "fl4_abi::config::MAX_NUM_NODES"]
 def fl4_abi.config.MAX_NUM_NODES : Std.U64 := 64#u64
 
 /-- [fl4_abi::config::ROOT_CNODE_SIZE_BITS]
-    Source: 'target/aarch64-apple-darwin/debug/build/fl4-abi/dedf77609adaab99/out/generated.rs', lines 144:4-144:39
+    Source: 'target/x86_64-unknown-linux-gnu/debug/build/fl4-abi/62ca171a98a8acf9/out/generated.rs', lines 145:4-145:39
     Name pattern: [fl4_abi::config::ROOT_CNODE_SIZE_BITS]
     Visibility: public -/
 @[global_simps, irreducible, rust_const
@@ -2167,9 +2175,11 @@ def boot.map_it_frame
   let pd ← boot.next_table machineStoreInst s pdpt vaddr 30#u64
   let pt ← boot.next_table machineStoreInst s pd vaddr 21#u64
   let i ← boot.entry_addr pt vaddr 12#u64
-  let i1 ← lift (paddr &&& 4503599627366400#u64)
-  let i2 ← lift (i1 ||| 7#u64)
-  machineStoreInst.write s i i2
+  let i1 ← machineStoreInst.encryption_mask s
+  let i2 ← lift (paddr ||| i1)
+  let i3 ← lift (i2 &&& 4503599627366400#u64)
+  let i4 ← lift (i3 ||| 7#u64)
+  machineStoreInst.write s i i4
 
 /-- [fl4_core::capability::VM_READ_WRITE]
     Source: 'crates/fl4-core/src/capability.rs', lines 41:0-41:33
@@ -2886,7 +2896,7 @@ def sporadic.maybe_add_empty_tail
   else ok s
 
 /-- [fl4_core::layout::ks::IOPORT_WORDS]
-    Source: 'crates/fl4-core/src/layout.rs', lines 271:4-271:45
+    Source: 'crates/fl4-core/src/layout.rs', lines 273:4-273:45
     Visibility: public -/
 @[global_simps, irreducible]
 def layout.ks.IOPORT_WORDS : Result Std.U64 := 65536#u64 / 64#u64
@@ -2897,7 +2907,7 @@ def layout.ks.IOPORT_WORDS : Result Std.U64 := 65536#u64 / 64#u64
 @[global_simps, irreducible] def layout.WORD : Std.U64 := 8#u64
 
 /-- [fl4_core::layout::ks::DOM_SCHEDULE]
-    Source: 'crates/fl4-core/src/layout.rs', lines 266:4-266:44
+    Source: 'crates/fl4-core/src/layout.rs', lines 268:4-268:44
     Visibility: public -/
 @[global_simps, irreducible]
 def layout.ks.DOM_SCHEDULE : Result Std.U64 := 24#u64 * layout.WORD
@@ -2910,7 +2920,7 @@ def layout.NUM_DOMAIN_SCHEDULES : Std.U64 :=
   fl4_abi.config.NUM_DOMAIN_SCHEDULES
 
 /-- [fl4_core::layout::ks::IRQ_STATE]
-    Source: 'crates/fl4-core/src/layout.rs', lines 267:4-267:78
+    Source: 'crates/fl4-core/src/layout.rs', lines 269:4-269:78
     Visibility: public -/
 @[global_simps, irreducible]
 def layout.ks.IRQ_STATE : Result Std.U64 := do
@@ -2933,7 +2943,7 @@ def layout.irq.COUNT : Result Std.U64 := do let i ← layout.irq.MAX
                                             i + 1#u64
 
 /-- [fl4_core::layout::ks::IRQ_NODE]
-    Source: 'crates/fl4-core/src/layout.rs', lines 269:4-269:77
+    Source: 'crates/fl4-core/src/layout.rs', lines 271:4-271:77
     Visibility: public -/
 @[global_simps, irreducible]
 def layout.ks.IRQ_NODE : Result Std.U64 := do
@@ -2946,7 +2956,7 @@ def layout.ks.IRQ_NODE : Result Std.U64 := do
   i5 * 32#u64
 
 /-- [fl4_core::layout::ks::IOPORT_BITMAP]
-    Source: 'crates/fl4-core/src/layout.rs', lines 270:4-270:69
+    Source: 'crates/fl4-core/src/layout.rs', lines 272:4-272:69
     Visibility: public -/
 @[global_simps, irreducible]
 def layout.ks.IOPORT_BITMAP : Result Std.U64 := do
@@ -2956,7 +2966,7 @@ def layout.ks.IOPORT_BITMAP : Result Std.U64 := do
   i2 + i1
 
 /-- [fl4_core::layout::ks::NODES]
-    Source: 'crates/fl4-core/src/layout.rs', lines 272:4-272:80
+    Source: 'crates/fl4-core/src/layout.rs', lines 274:4-274:80
     Visibility: public -/
 @[global_simps, irreducible]
 def layout.ks.NODES : Result Std.U64 := do
@@ -3552,7 +3562,7 @@ def obj.Tcb.affinity
 @[global_simps, irreducible] def layout.node.DEBUG_TCBS : Std.U64 := 88#u64
 
 /-- [fl4_core::objects::debug_append]:
-    Source: 'crates/fl4-core/src/objects.rs', lines 416:0-425:1
+    Source: 'crates/fl4-core/src/objects.rs', lines 417:0-426:1
     Visibility: public -/
 def objects.debug_append
   {S : Type _} (machineStoreInst : machine.Store S) (s : S) (t : obj.Tcb) :
@@ -5667,7 +5677,7 @@ def layout.MAX_NODES : Std.U64 :=
   else fl4_abi.config.MAX_NUM_NODES
 
 /-- [fl4_core::layout::ks::ASID_TABLE]
-    Source: 'crates/fl4-core/src/layout.rs', lines 274:4-274:63
+    Source: 'crates/fl4-core/src/layout.rs', lines 276:4-276:63
     Visibility: public -/
 @[global_simps, irreducible]
 def layout.ks.ASID_TABLE : Result Std.U64 := do
@@ -7631,7 +7641,7 @@ def interrupt.deleted_irq_handler
   ok (s1, a2)
 
 /-- [fl4_core::objects::post_cap_deletion]:
-    Source: 'crates/fl4-core/src/objects.rs', lines 406:0-412:1
+    Source: 'crates/fl4-core/src/objects.rs', lines 407:0-413:1
     Visibility: public -/
 def objects.post_cap_deletion
   {S : Type _} {A : Type _} (machineStoreInst : machine.Store S)
@@ -8452,6 +8462,17 @@ def vspace.unmap_page_table
     | core.result.Result.Err _ => ok (s, a)
   | core.result.Result.Err _ => ok (s, a)
 
+/-- [fl4_core::vspace::frame_gpa]:
+    Source: 'crates/fl4-core/src/vspace.rs', lines 523:0-525:1 -/
+def vspace.frame_gpa
+  {S : Type _} (machineStoreInst : machine.Store S) (s : S) (address : Std.U64)
+  :
+  Result Std.U64
+  := do
+  let i ← machineStoreInst.encryption_mask s
+  let i1 ← lift (~~~ i)
+  ok (address &&& i1)
+
 /-- [fl4_core::vspace::frame_base]:
     Source: 'crates/fl4-core/src/vspace.rs', lines 223:0-229:1 -/
 def vspace.frame_base
@@ -8532,7 +8553,8 @@ def vspace.unmap_page
             then ok (s, a)
             else
               let i4 ← vspace.frame_base e capability.FrameSize.Small
-              if i4 != pa
+              let i5 ← vspace.frame_gpa machineStoreInst s i4
+              if i5 != pa
               then ok (s, a)
               else
                 let s1 ← machineStoreInst.write s x 0#u64
@@ -8540,7 +8562,8 @@ def vspace.unmap_page
                 ok (s1, a1)
           else
             let i2 ← vspace.frame_base e capability.FrameSize.Small
-            if i2 != pa
+            let i3 ← vspace.frame_gpa machineStoreInst s i2
+            if i3 != pa
             then ok (s, a)
             else
               let s1 ← machineStoreInst.write s x 0#u64
@@ -8565,7 +8588,8 @@ def vspace.unmap_page
             then ok (s, a)
             else
               let i4 ← vspace.frame_base e capability.FrameSize.Large
-              if i4 != pa
+              let i5 ← vspace.frame_gpa machineStoreInst s i4
+              if i5 != pa
               then ok (s, a)
               else
                 let s1 ← machineStoreInst.write s x 0#u64
@@ -8573,7 +8597,8 @@ def vspace.unmap_page
                 ok (s1, a1)
           else
             let i2 ← vspace.frame_base e capability.FrameSize.Large
-            if i2 != pa
+            let i3 ← vspace.frame_gpa machineStoreInst s i2
+            if i3 != pa
             then ok (s, a)
             else
               let s1 ← machineStoreInst.write s x 0#u64
@@ -8598,7 +8623,8 @@ def vspace.unmap_page
             then ok (s, a)
             else
               let i4 ← vspace.frame_base e capability.FrameSize.Huge
-              if i4 != pa
+              let i5 ← vspace.frame_gpa machineStoreInst s i4
+              if i5 != pa
               then ok (s, a)
               else
                 let s1 ← machineStoreInst.write s x 0#u64
@@ -8606,7 +8632,8 @@ def vspace.unmap_page
                 ok (s1, a1)
           else
             let i2 ← vspace.frame_base e capability.FrameSize.Huge
-            if i2 != pa
+            let i3 ← vspace.frame_gpa machineStoreInst s i2
+            if i3 != pa
             then ok (s, a)
             else
               let s1 ← machineStoreInst.write s x 0#u64
@@ -12361,7 +12388,7 @@ def obj.Tcb.debug_next
   machineStoreInst.read s i1
 
 /-- [fl4_core::objects::debug_remove]:
-    Source: 'crates/fl4-core/src/objects.rs', lines 427:0-442:1
+    Source: 'crates/fl4-core/src/objects.rs', lines 428:0-443:1
     Visibility: public -/
 def objects.debug_remove
   {S : Type _} (machineStoreInst : machine.Store S) (s : S) (t : obj.Tcb) :
@@ -13245,7 +13272,7 @@ def endpoint.cancel_all_ipc
     sched.reschedule_required machineStoreInst s1
 
 /-- [fl4_core::objects::finalise_cap_object]:
-    Source: 'crates/fl4-core/src/objects.rs', lines 269:0-403:1
+    Source: 'crates/fl4-core/src/objects.rs', lines 269:0-404:1
     Visibility: public -/
 def objects.finalise_cap_object
   {S : Type _} {A : Type _} (machineStoreInst : machine.Store S)
@@ -13361,25 +13388,36 @@ def objects.finalise_cap_object
     else ok ((capability.Cap.Null, capability.Cap.Null), s, a)
   | capability.Cap.SchedControl _ =>
     ok ((capability.Cap.Null, capability.Cap.Null), s, a)
-  | capability.Cap.Frame ptr size _ _ mapped is_ept asid vaddr =>
-    if mapped
-    then
-      if asid != 0#u64
+  | capability.Cap.Frame ptr size _ is_device mapped is_ept asid vaddr =>
+    let (s1, a1) ←
+      if mapped
       then
-        if is_ept
+        if asid != 0#u64
         then
-          let i ← capability.FrameSize.bits size
-          let (s1, a1) ←
+          if is_ept
+          then
+            do
+            let i ← capability.FrameSize.bits size
             ept.unmap machineStoreInst machineArchInst s a asid vaddr ptr i
               false
-          ok ((capability.Cap.Null, capability.Cap.Null), s1, a1)
-        else
-          let (s1, a1) ←
+          else
             vspace.unmap_page machineStoreInst machineArchInst s a size asid
               vaddr ptr
-          ok ((capability.Cap.Null, capability.Cap.Null), s1, a1)
-      else ok ((capability.Cap.Null, capability.Cap.Null), s, a)
-    else ok ((capability.Cap.Null, capability.Cap.Null), s, a)
+        else ok (s, a)
+      else ok (s, a)
+    if fin
+    then
+      if is_device
+      then
+        let i ← machineStoreInst.encryption_mask s1
+        if i != 0#u64
+        then
+          let i1 ← capability.FrameSize.bits size
+          let (_, a2) ← machineArchInst.dma_frame a1 ptr i1 false
+          ok ((capability.Cap.Null, capability.Cap.Null), s1, a2)
+        else ok ((capability.Cap.Null, capability.Cap.Null), s1, a1)
+      else ok ((capability.Cap.Null, capability.Cap.Null), s1, a1)
+    else ok ((capability.Cap.Null, capability.Cap.Null), s1, a1)
   | capability.Cap.PageTable ptr mapped asid vaddr =>
     if fin
     then
@@ -20663,13 +20701,18 @@ def layout.node.SCHED_CONTROL_USED : Std.U64 := 96#u64
     Visibility: public -/
 @[global_simps, irreducible] def layout.ks.FEATURE_NX : Std.U64 := 1#u64
 
+/-- [fl4_core::layout::ks::ENCRYPTION_MASK]
+    Source: 'crates/fl4-core/src/layout.rs', lines 265:4-265:40
+    Visibility: public -/
+@[global_simps, irreducible] def layout.ks.ENCRYPTION_MASK : Std.U64 := 88#u64
+
 /-- [fl4_core::layout::ks::NUM_ASID_POOLS]
-    Source: 'crates/fl4-core/src/layout.rs', lines 275:4-275:41
+    Source: 'crates/fl4-core/src/layout.rs', lines 277:4-277:41
     Visibility: public -/
 @[global_simps, irreducible] def layout.ks.NUM_ASID_POOLS : Std.U64 := 2048#u64
 
 /-- [fl4_core::layout::ks::SIZE]
-    Source: 'crates/fl4-core/src/layout.rs', lines 276:4-276:61
+    Source: 'crates/fl4-core/src/layout.rs', lines 278:4-278:61
     Visibility: public -/
 @[global_simps, irreducible]
 def layout.ks.SIZE : Result Std.U64 := do
@@ -20677,8 +20720,16 @@ def layout.ks.SIZE : Result Std.U64 := do
   let i1 ← layout.ks.ASID_TABLE
   i1 + i
 
+/-- [fl4_core::machine::Store::encryption_mask]:
+    Source: 'crates/fl4-core/src/machine.rs', lines 12:4-12:42
+    Visibility: public -/
+@[trait_default]
+def machine.Store.encryption_mask.default
+  {Self : Type _} (self : Self) : Result Std.U64 := do
+  ok 0#u64
+
 /-- [fl4_core::machine::Store::read_pair]:
-    Source: 'crates/fl4-core/src/machine.rs', lines 15:4-17:5
+    Source: 'crates/fl4-core/src/machine.rs', lines 17:4-19:5
     Visibility: public -/
 @[trait_default]
 def machine.Store.read_pair.default
@@ -20691,8 +20742,27 @@ def machine.Store.read_pair.default
   let i2 ← StoreInst.read self i1
   ok (i, i2)
 
+/-- [fl4_core::machine::Arch::private_device_frame]:
+    Source: 'crates/fl4-core/src/machine.rs', lines 40:4-40:65
+    Visibility: public -/
+@[trait_default]
+def machine.Arch.private_device_frame.default
+  {Self : Type _} (self : Self) (_paddr : Std.U64) : Result Bool := do
+  ok false
+
+/-- [fl4_core::machine::Arch::dma_frame]:
+    Source: 'crates/fl4-core/src/machine.rs', lines 44:4-44:88
+    Visibility: public -/
+@[trait_default]
+def machine.Arch.dma_frame.default
+  {Self : Type _} (self : Self) (_ptr : Std.U64) (_size_bits : Std.U64)
+  (_shared : Bool) :
+  Result (Bool × Self)
+  := do
+  ok (false, self)
+
 /-- [fl4_core::machine::Arch::virtualization]:
-    Source: 'crates/fl4-core/src/machine.rs', lines 37:4-37:41
+    Source: 'crates/fl4-core/src/machine.rs', lines 46:4-46:41
     Visibility: public -/
 @[trait_default]
 def machine.Arch.virtualization.default
@@ -20700,7 +20770,7 @@ def machine.Arch.virtualization.default
   ok 0#u64
 
 /-- [fl4_core::machine::Arch::vcpu_capability]:
-    Source: 'crates/fl4-core/src/machine.rs', lines 39:4-39:55
+    Source: 'crates/fl4-core/src/machine.rs', lines 48:4-48:55
     Visibility: public -/
 @[trait_default]
 def machine.Arch.vcpu_capability.default
@@ -20708,7 +20778,7 @@ def machine.Arch.vcpu_capability.default
   ok 0#u64
 
 /-- [fl4_core::machine::Arch::vcpu_barrier]:
-    Source: 'crates/fl4-core/src/machine.rs', lines 41:4-41:33
+    Source: 'crates/fl4-core/src/machine.rs', lines 50:4-50:33
     Visibility: public -/
 @[trait_default]
 def machine.Arch.vcpu_barrier.default
@@ -20716,7 +20786,7 @@ def machine.Arch.vcpu_barrier.default
   ok self
 
 /-- [fl4_core::machine::Arch::invalidate_ept]:
-    Source: 'crates/fl4-core/src/machine.rs', lines 43:4-43:59
+    Source: 'crates/fl4-core/src/machine.rs', lines 52:4-52:59
     Visibility: public -/
 @[trait_default]
 def machine.Arch.invalidate_ept.default
@@ -20726,7 +20796,7 @@ def machine.Arch.invalidate_ept.default
   ok self
 
 /-- [fl4_core::machine::Arch::irq_free]:
-    Source: 'crates/fl4-core/src/machine.rs', lines 64:4-64:40
+    Source: 'crates/fl4-core/src/machine.rs', lines 73:4-73:40
     Visibility: public -/
 @[trait_default]
 def machine.Arch.irq_free.default
@@ -21419,7 +21489,7 @@ def objects.mask_rights
   capability.mask_cap_rights r c
 
 /-- [fl4_core::objects::init_fpu]:
-    Source: 'crates/fl4-core/src/objects.rs', lines 446:0-450:1 -/
+    Source: 'crates/fl4-core/src/objects.rs', lines 447:0-451:1 -/
 def objects.init_fpu
   {S : Type _} (machineStoreInst : machine.Store S) (s : S) (t : obj.Tcb) :
   Result S
@@ -22498,7 +22568,7 @@ def vcpu.init
       1974748653749254#u64
 
 /-- [fl4_core::objects::name_byte]:
-    Source: 'crates/fl4-core/src/objects.rs', lines 514:0-516:1 -/
+    Source: 'crates/fl4-core/src/objects.rs', lines 515:0-517:1 -/
 def objects.name_byte
   {S : Type _} (machineStoreInst : machine.Store S) (s : S) (t : obj.Tcb)
   (i : Std.U64) :
@@ -22516,20 +22586,20 @@ def objects.name_byte
   ok (i9 &&& 255#u64)
 
 /-- [fl4_core::objects::CHILD_PREFIX_LEN]
-    Source: 'crates/fl4-core/src/objects.rs', lines 509:0-509:33 -/
+    Source: 'crates/fl4-core/src/objects.rs', lines 510:0-510:33 -/
 @[global_simps, irreducible] def objects.CHILD_PREFIX_LEN : Std.U64 := 11#u64
 
 /-- [fl4_core::objects::CHILD_PREFIX1]
-    Source: 'crates/fl4-core/src/objects.rs', lines 508:0-508:39 -/
+    Source: 'crates/fl4-core/src/objects.rs', lines 509:0-509:39 -/
 @[global_simps, irreducible] def objects.CHILD_PREFIX1 : Std.U64 := 2564154#u64
 
 /-- [fl4_core::objects::CHILD_PREFIX0]
-    Source: 'crates/fl4-core/src/objects.rs', lines 507:0-507:49 -/
+    Source: 'crates/fl4-core/src/objects.rs', lines 508:0-508:49 -/
 @[global_simps, irreducible]
 def objects.CHILD_PREFIX0 : Std.U64 := 7381153929971198051#u64
 
 /-- [fl4_core::objects::child_name_byte]:
-    Source: 'crates/fl4-core/src/objects.rs', lines 519:0-531:1 -/
+    Source: 'crates/fl4-core/src/objects.rs', lines 520:0-532:1 -/
 def objects.child_name_byte
   {S : Type _} (machineStoreInst : machine.Store S) (s : S) (parent : obj.Tcb)
   (len : Std.U64) (i : Std.U64) :
@@ -22556,11 +22626,11 @@ def objects.child_name_byte
            else ok 0#u64
 
 /-- [fl4_core::objects::CHILD_NAME_MAX]
-    Source: 'crates/fl4-core/src/objects.rs', lines 512:0-512:31 -/
+    Source: 'crates/fl4-core/src/objects.rs', lines 513:0-513:31 -/
 @[global_simps, irreducible] def objects.CHILD_NAME_MAX : Std.U64 := 51#u64
 
 /-- [fl4_core::objects::set_child_name]: loop body 0:
-    Source: 'crates/fl4-core/src/objects.rs', lines 540:4-542:5 -/
+    Source: 'crates/fl4-core/src/objects.rs', lines 541:4-543:5 -/
 @[rust_loop_body]
 def objects.set_child_name_loop0.body
   {S : Type _} (machineStoreInst : machine.Store S) (s : S) (parent : obj.Tcb)
@@ -22577,7 +22647,7 @@ def objects.set_child_name_loop0.body
   else ok (done len)
 
 /-- [fl4_core::objects::set_child_name]: loop 0:
-    Source: 'crates/fl4-core/src/objects.rs', lines 540:4-542:5 -/
+    Source: 'crates/fl4-core/src/objects.rs', lines 541:4-543:5 -/
 @[rust_loop]
 def objects.set_child_name_loop0
   {S : Type _} (machineStoreInst : machine.Store S) (s : S) (parent : obj.Tcb)
@@ -22590,7 +22660,7 @@ def objects.set_child_name_loop0
     len
 
 /-- [fl4_core::objects::set_child_name]: loop body 2:
-    Source: 'crates/fl4-core/src/objects.rs', lines 547:8-550:9 -/
+    Source: 'crates/fl4-core/src/objects.rs', lines 548:8-551:9 -/
 @[rust_loop_body]
 def objects.set_child_name_loop1_loop0.body
   {S : Type _} (machineStoreInst : machine.Store S) (s : S) (parent : obj.Tcb)
@@ -22611,7 +22681,7 @@ def objects.set_child_name_loop1_loop0.body
   else ok (done v)
 
 /-- [fl4_core::objects::set_child_name]: loop 2:
-    Source: 'crates/fl4-core/src/objects.rs', lines 547:8-550:9 -/
+    Source: 'crates/fl4-core/src/objects.rs', lines 548:8-551:9 -/
 @[rust_loop]
 def objects.set_child_name_loop1_loop0
   {S : Type _} (machineStoreInst : machine.Store S) (s : S) (parent : obj.Tcb)
@@ -22624,7 +22694,7 @@ def objects.set_child_name_loop1_loop0
     (v, k)
 
 /-- [fl4_core::objects::set_child_name]: loop body 1:
-    Source: 'crates/fl4-core/src/objects.rs', lines 544:4-553:5 -/
+    Source: 'crates/fl4-core/src/objects.rs', lines 545:4-554:5 -/
 @[rust_loop_body]
 def objects.set_child_name_loop1.body
   {S : Type _} (machineStoreInst : machine.Store S) (child : obj.Tcb)
@@ -22645,7 +22715,7 @@ def objects.set_child_name_loop1.body
   else ok (done s)
 
 /-- [fl4_core::objects::set_child_name]: loop 1:
-    Source: 'crates/fl4-core/src/objects.rs', lines 544:4-553:5 -/
+    Source: 'crates/fl4-core/src/objects.rs', lines 545:4-554:5 -/
 @[rust_loop]
 def objects.set_child_name_loop1
   {S : Type _} (machineStoreInst : machine.Store S) (s : S) (child : obj.Tcb)
@@ -22658,7 +22728,7 @@ def objects.set_child_name_loop1
     (s, w)
 
 /-- [fl4_core::objects::set_child_name]:
-    Source: 'crates/fl4-core/src/objects.rs', lines 535:0-554:1 -/
+    Source: 'crates/fl4-core/src/objects.rs', lines 536:0-555:1 -/
 def objects.set_child_name
   {S : Type _} (machineStoreInst : machine.Store S) (s : S) (child : obj.Tcb)
   (parent : obj.Tcb) :
@@ -22675,7 +22745,7 @@ def objects.set_child_name
   else ok s
 
 /-- [fl4_core::objects::create_object]:
-    Source: 'crates/fl4-core/src/objects.rs', lines 453:0-504:1
+    Source: 'crates/fl4-core/src/objects.rs', lines 454:0-505:1
     Visibility: public -/
 def objects.create_object
   {S : Type _} {A : Type _} (machineStoreInst : machine.Store S)
@@ -22929,7 +22999,7 @@ def objects.create_object
                                   a)
 
 /-- [fl4_core::objects::create_new_objects]: loop body 0:
-    Source: 'crates/fl4-core/src/objects.rs', lines 575:4-579:5
+    Source: 'crates/fl4-core/src/objects.rs', lines 576:4-580:5
     Visibility: public -/
 @[rust_loop_body]
 def objects.create_new_objects_loop.body
@@ -22956,7 +23026,7 @@ def objects.create_new_objects_loop.body
   else ok (done (s, a))
 
 /-- [fl4_core::objects::create_new_objects]: loop 0:
-    Source: 'crates/fl4-core/src/objects.rs', lines 575:4-579:5
+    Source: 'crates/fl4-core/src/objects.rs', lines 576:4-580:5
     Visibility: public -/
 @[rust_loop]
 def objects.create_new_objects_loop
@@ -22974,7 +23044,7 @@ def objects.create_new_objects_loop
     (s, a, i)
 
 /-- [fl4_core::objects::create_new_objects]:
-    Source: 'crates/fl4-core/src/objects.rs', lines 558:0-580:1
+    Source: 'crates/fl4-core/src/objects.rs', lines 559:0-581:1
     Visibility: public -/
 def objects.create_new_objects
   {S : Type _} {A : Type _} (machineStoreInst : machine.Store S)
@@ -25149,7 +25219,7 @@ def syscall.reply_error
   msg.set_msg_info machineStoreInst s3 t mi
 
 /-- [fl4_core::vspace::with_mapping]:
-    Source: 'crates/fl4-core/src/vspace.rs', lines 834:0-842:1 -/
+    Source: 'crates/fl4-core/src/vspace.rs', lines 846:0-854:1 -/
 def vspace.with_mapping
   (c : capability.Cap) (mapped : Bool) (asid : Std.U64) (vaddr : Std.U64) :
   Result capability.Cap
@@ -25197,7 +25267,7 @@ def vspace.failed_lookup
     lf)))
 
 /-- [fl4_core::vspace::table_entry_slot]:
-    Source: 'crates/fl4-core/src/vspace.rs', lines 791:0-803:1 -/
+    Source: 'crates/fl4-core/src/vspace.rs', lines 803:0-815:1 -/
 def vspace.table_entry_slot
   {S : Type _} (machineStoreInst : machine.Store S) (s : S) (root : Std.U64)
   (vaddr : Std.U64) (level : Std.U64) :
@@ -25374,7 +25444,7 @@ def vspace.make_user_table
   ok (i6 ||| i7)
 
 /-- [fl4_core::vspace::decode_table_map]:
-    Source: 'crates/fl4-core/src/vspace.rs', lines 806:0-832:1 -/
+    Source: 'crates/fl4-core/src/vspace.rs', lines 818:0-844:1 -/
 def vspace.decode_table_map
   {S : Type _} {A : Type _} (machineStoreInst : machine.Store S)
   (machineArchInst : machine.Arch A) (s : S) (a : A) (length : Std.U64)
@@ -25448,7 +25518,7 @@ def vspace.decode_table_map
          ok (r, s, a)
 
 /-- [fl4_core::vspace::decode_table_unmap]:
-    Source: 'crates/fl4-core/src/vspace.rs', lines 770:0-788:1 -/
+    Source: 'crates/fl4-core/src/vspace.rs', lines 782:0-800:1 -/
 def vspace.decode_table_unmap
   {S : Type _} {A : Type _} (machineStoreInst : machine.Store S)
   (machineArchInst : machine.Arch A) (s : S) (a : A) (slot : obj.Slot)
@@ -25489,7 +25559,7 @@ def vspace.decode_table_unmap
       a)
 
 /-- [fl4_core::vspace::as_table]:
-    Source: 'crates/fl4-core/src/vspace.rs', lines 726:0-737:1 -/
+    Source: 'crates/fl4-core/src/vspace.rs', lines 738:0-749:1 -/
 def vspace.as_table
   (c : capability.Cap) : Result (Option vspace.TableCap) := do
   match c with
@@ -25549,7 +25619,7 @@ def vspace.as_table
   | capability.Cap.IoPort _ _ _ => ok none
 
 /-- [fl4_core::vspace::decode_table]:
-    Source: 'crates/fl4-core/src/vspace.rs', lines 740:0-767:1 -/
+    Source: 'crates/fl4-core/src/vspace.rs', lines 752:0-779:1 -/
 def vspace.decode_table
   {S : Type _} {A : Type _} (machineStoreInst : machine.Store S)
   (machineArchInst : machine.Arch A) (s : S) (a : A) (lbl : Std.U64)
@@ -25588,7 +25658,7 @@ def vspace.decode_table
            ok (r, s, a)
 
 /-- [fl4_core::vspace::insert_subframes]: loop body 0:
-    Source: 'crates/fl4-core/src/vspace.rs', lines 698:4-710:5 -/
+    Source: 'crates/fl4-core/src/vspace.rs', lines 710:4-722:5 -/
 @[rust_loop_body]
 def vspace.insert_subframes_loop.body
   {S : Type _} (machineStoreInst : machine.Store S) (src : obj.Slot)
@@ -25610,7 +25680,7 @@ def vspace.insert_subframes_loop.body
   else ok (done s)
 
 /-- [fl4_core::vspace::insert_subframes]: loop 0:
-    Source: 'crates/fl4-core/src/vspace.rs', lines 698:4-710:5 -/
+    Source: 'crates/fl4-core/src/vspace.rs', lines 710:4-722:5 -/
 @[rust_loop]
 def vspace.insert_subframes_loop
   {S : Type _} (machineStoreInst : machine.Store S) (s : S) (src : obj.Slot)
@@ -25624,7 +25694,7 @@ def vspace.insert_subframes_loop
     (s, i)
 
 /-- [fl4_core::vspace::insert_subframes]:
-    Source: 'crates/fl4-core/src/vspace.rs', lines 696:0-711:1 -/
+    Source: 'crates/fl4-core/src/vspace.rs', lines 708:0-723:1 -/
 @[reducible]
 def vspace.insert_subframes
   {S : Type _} (machineStoreInst : machine.Store S) (s : S) (src : obj.Slot)
@@ -25636,7 +25706,7 @@ def vspace.insert_subframes
     0#u64
 
 /-- [fl4_core::vspace::ensure_empty_run]: loop body 0:
-    Source: 'crates/fl4-core/src/vspace.rs', lines 689:4-694:1 -/
+    Source: 'crates/fl4-core/src/vspace.rs', lines 701:4-706:1 -/
 @[rust_loop_body]
 def vspace.ensure_empty_run_loop.body
   {S : Type _} (machineStoreInst : machine.Store S) (s : S) (dest : Std.U64)
@@ -25661,7 +25731,7 @@ def vspace.ensure_empty_run_loop.body
   else ok (done (core.result.Result.Ok ()))
 
 /-- [fl4_core::vspace::ensure_empty_run]: loop 0:
-    Source: 'crates/fl4-core/src/vspace.rs', lines 689:4-694:1 -/
+    Source: 'crates/fl4-core/src/vspace.rs', lines 701:4-706:1 -/
 @[rust_loop]
 def vspace.ensure_empty_run_loop
   {S : Type _} (machineStoreInst : machine.Store S) (s : S) (dest : Std.U64)
@@ -25674,7 +25744,7 @@ def vspace.ensure_empty_run_loop
     i
 
 /-- [fl4_core::vspace::ensure_empty_run]:
-    Source: 'crates/fl4-core/src/vspace.rs', lines 687:0-694:1 -/
+    Source: 'crates/fl4-core/src/vspace.rs', lines 699:0-706:1 -/
 @[reducible]
 def vspace.ensure_empty_run
   {S : Type _} (machineStoreInst : machine.Store S) (s : S) (dest : Std.U64)
@@ -25684,7 +25754,7 @@ def vspace.ensure_empty_run
   vspace.ensure_empty_run_loop machineStoreInst s dest first count 0#u64
 
 /-- [fl4_core::vspace::cnode_of]:
-    Source: 'crates/fl4-core/src/vspace.rs', lines 626:0-631:1 -/
+    Source: 'crates/fl4-core/src/vspace.rs', lines 638:0-643:1 -/
 def vspace.cnode_of
   (c : capability.Cap) : Result (Option (Std.U64 × Std.U64)) := do
   match c with
@@ -25714,7 +25784,7 @@ def vspace.cnode_of
   | capability.Cap.IoPort _ _ _ => ok none
 
 /-- [fl4_core::vspace::subframe_dest]:
-    Source: 'crates/fl4-core/src/vspace.rs', lines 668:0-685:1 -/
+    Source: 'crates/fl4-core/src/vspace.rs', lines 680:0-697:1 -/
 def vspace.subframe_dest
   {S : Type _} (machineStoreInst : machine.Store S) (s : S)
   (node_slot : obj.Slot) (node_index : Std.U64) (node_depth : Std.U64)
@@ -25779,7 +25849,7 @@ def vspace.subframe_dest
         else ok (core.result.Result.Ok dest)
 
 /-- [fl4_core::vspace::large_ram_frame]:
-    Source: 'crates/fl4-core/src/vspace.rs', lines 618:0-623:1 -/
+    Source: 'crates/fl4-core/src/vspace.rs', lines 630:0-635:1 -/
 def vspace.large_ram_frame
   (c : capability.Cap) : Result (Option (Std.U64 × Std.U64)) := do
   match c with
@@ -25816,7 +25886,7 @@ def vspace.large_ram_frame
   | capability.Cap.IoPort _ _ _ => ok none
 
 /-- [fl4_core::vspace::derive_subframe]:
-    Source: 'crates/fl4-core/src/vspace.rs', lines 634:0-664:1 -/
+    Source: 'crates/fl4-core/src/vspace.rs', lines 646:0-676:1 -/
 def vspace.derive_subframe
   {S : Type _} {A : Type _} (machineStoreInst : machine.Store S)
   (machineArchInst : machine.Arch A) (s : S) (a : A) (length : Std.U64)
@@ -25901,7 +25971,7 @@ def vspace.derive_subframe
          ok (r, s, a)
 
 /-- [fl4_core::vspace::mapped_entry]:
-    Source: 'crates/fl4-core/src/vspace.rs', lines 582:0-596:1 -/
+    Source: 'crates/fl4-core/src/vspace.rs', lines 594:0-608:1 -/
 def vspace.mapped_entry
   {S : Type _} (machineStoreInst : machine.Store S) (s : S)
   (f : vspace.FrameCap) (root : Std.U64) :
@@ -25935,12 +26005,16 @@ def vspace.mapped_entry
         let i3 ← lift (e &&& i2)
         if i3 = 0#u64
         then ok none
-        else if base != pa
-             then ok none
-             else ok (some x)
-      else if base != pa
-           then ok none
-           else ok (some x)
+        else
+          let i4 ← vspace.frame_gpa machineStoreInst s base
+          if i4 != pa
+          then ok none
+          else ok (some x)
+      else
+        let i2 ← vspace.frame_gpa machineStoreInst s base
+        if i2 != pa
+        then ok none
+        else ok (some x)
   | core.result.Result.Err _ => ok none
 
 /-- [fl4_core::vspace::reply1]:
@@ -25968,7 +26042,7 @@ def vspace.reply1
 def vspace.P_ACCESSED : Result Std.U64 := 1#u64 <<< 5#i32
 
 /-- [fl4_core::vspace::decode_test_and_clear_accessed]:
-    Source: 'crates/fl4-core/src/vspace.rs', lines 598:0-615:1 -/
+    Source: 'crates/fl4-core/src/vspace.rs', lines 610:0-627:1 -/
 def vspace.decode_test_and_clear_accessed
   {S : Type _} (machineStoreInst : machine.Store S) (s : S)
   (f : vspace.FrameCap) (call : Bool) :
@@ -26019,7 +26093,7 @@ def vspace.decode_test_and_clear_accessed
          ok (r, s)
 
 /-- [fl4_core::vspace::page_entry_slot]:
-    Source: 'crates/fl4-core/src/vspace.rs', lines 562:0-579:1 -/
+    Source: 'crates/fl4-core/src/vspace.rs', lines 574:0-591:1 -/
 def vspace.page_entry_slot
   {S : Type _} (machineStoreInst : machine.Store S) (s : S) (root : Std.U64)
   (vaddr : Std.U64) (size : capability.FrameSize) :
@@ -26057,6 +26131,26 @@ def vspace.page_entry_slot
         else ok (core.result.Result.Ok x)
       else ok (core.result.Result.Ok x)
   | core.result.Result.Err lf => vspace.failed_lookup Std.U64 lf
+
+/-- [fl4_core::vspace::frame_address]:
+    Source: 'crates/fl4-core/src/vspace.rs', lines 517:0-521:1 -/
+def vspace.frame_address
+  {S : Type _} {A : Type _} (machineStoreInst : machine.Store S)
+  (machineArchInst : machine.Arch A) (s : S) (a : A) (f : vspace.FrameCap) :
+  Result Std.U64
+  := do
+  let pa ← layout.paddr f.ptr
+  let mask ← machineStoreInst.encryption_mask s
+  if mask != 0#u64
+  then
+    if f.is_device
+    then
+      let b ← machineArchInst.private_device_frame a pa
+      if b
+      then ok (pa ||| mask)
+      else ok pa
+    else ok (pa ||| mask)
+  else ok pa
 
 /-- [fl4_core::vspace::mapped_root]:
     Source: 'crates/fl4-core/src/vspace.rs', lines 508:0-513:1 -/
@@ -26266,7 +26360,7 @@ def vspace.make_user_page
   ok (i10 ||| i11)
 
 /-- [fl4_core::vspace::decode_page_map]:
-    Source: 'crates/fl4-core/src/vspace.rs', lines 515:0-558:1 -/
+    Source: 'crates/fl4-core/src/vspace.rs', lines 527:0-570:1 -/
 def vspace.decode_page_map
   {S : Type _} {A : Type _} (machineStoreInst : machine.Store S)
   (machineArchInst : machine.Arch A) (s : S) (a : A) (length : Std.U64)
@@ -26335,7 +26429,9 @@ def vspace.decode_page_map
                     let cf1 ← core.result.Result.Insts.CoreOpsTry.branch r3
                     match cf1 with
                     | core.ops.control_flow.ControlFlow.Continue val =>
-                      let i7 ← layout.paddr f.ptr
+                      let i7 ←
+                        vspace.frame_address machineStoreInst machineArchInst s
+                          a { f with size := fs }
                       let e ←
                         vspace.make_user_page machineStoreInst s i7 attr vm (¬
                           b)
@@ -26401,7 +26497,9 @@ def vspace.decode_page_map
                     let cf1 ← core.result.Result.Insts.CoreOpsTry.branch r3
                     match cf1 with
                     | core.ops.control_flow.ControlFlow.Continue val =>
-                      let i9 ← layout.paddr f.ptr
+                      let i9 ←
+                        vspace.frame_address machineStoreInst machineArchInst s
+                          a { f with size := fs }
                       let e ←
                         vspace.make_user_page machineStoreInst s i9 attr vm (¬
                           b)
@@ -26467,7 +26565,9 @@ def vspace.decode_page_map
                   let cf1 ← core.result.Result.Insts.CoreOpsTry.branch r3
                   match cf1 with
                   | core.ops.control_flow.ControlFlow.Continue val =>
-                    let i9 ← layout.paddr f.ptr
+                    let i9 ←
+                      vspace.frame_address machineStoreInst machineArchInst s a
+                        { f with size := fs }
                     let e ←
                       vspace.make_user_page machineStoreInst s i9 attr vm (¬
                         b)
@@ -26607,7 +26707,7 @@ def vspace.decode_frame
                    ok (r, s, a)
 
 /-- [fl4_core::vspace::decode]: loop body 0:
-    Source: 'crates/fl4-core/src/vspace.rs', lines 886:12-888:13
+    Source: 'crates/fl4-core/src/vspace.rs', lines 898:12-900:13
     Visibility: public -/
 @[rust_loop_body]
 def vspace.decode_loop0.body
@@ -26624,7 +26724,7 @@ def vspace.decode_loop0.body
   else ok (done i)
 
 /-- [fl4_core::vspace::decode]: loop 0:
-    Source: 'crates/fl4-core/src/vspace.rs', lines 886:12-888:13
+    Source: 'crates/fl4-core/src/vspace.rs', lines 898:12-900:13
     Visibility: public -/
 @[rust_loop]
 def vspace.decode_loop0
@@ -26636,7 +26736,7 @@ def vspace.decode_loop0
     i
 
 /-- [fl4_core::vspace::decode]: loop body 1:
-    Source: 'crates/fl4-core/src/vspace.rs', lines 930:12-932:13
+    Source: 'crates/fl4-core/src/vspace.rs', lines 942:12-944:13
     Visibility: public -/
 @[rust_loop_body]
 def vspace.decode_loop1.body
@@ -26661,7 +26761,7 @@ def vspace.decode_loop1.body
   else ok (done i)
 
 /-- [fl4_core::vspace::decode]: loop 1:
-    Source: 'crates/fl4-core/src/vspace.rs', lines 930:12-932:13
+    Source: 'crates/fl4-core/src/vspace.rs', lines 942:12-944:13
     Visibility: public -/
 @[rust_loop]
 def vspace.decode_loop1
@@ -26674,7 +26774,7 @@ def vspace.decode_loop1
     i
 
 /-- [fl4_core::vspace::decode]: loop body 2:
-    Source: 'crates/fl4-core/src/vspace.rs', lines 930:12-932:13
+    Source: 'crates/fl4-core/src/vspace.rs', lines 942:12-944:13
     Visibility: public -/
 @[rust_loop_body]
 def vspace.decode_loop2.body
@@ -26699,7 +26799,7 @@ def vspace.decode_loop2.body
   else ok (done i)
 
 /-- [fl4_core::vspace::decode]: loop 2:
-    Source: 'crates/fl4-core/src/vspace.rs', lines 930:12-932:13
+    Source: 'crates/fl4-core/src/vspace.rs', lines 942:12-944:13
     Visibility: public -/
 @[rust_loop]
 def vspace.decode_loop2
@@ -26712,7 +26812,7 @@ def vspace.decode_loop2
     i
 
 /-- [fl4_core::vspace::decode]:
-    Source: 'crates/fl4-core/src/vspace.rs', lines 846:0-945:1
+    Source: 'crates/fl4-core/src/vspace.rs', lines 858:0-957:1
     Visibility: public -/
 def vspace.decode
   {S : Type _} {A : Type _} (machineStoreInst : machine.Store S)
@@ -30311,11 +30411,11 @@ def vcpu.decode
                            ok (r, s1, a1)
 
 /-- [fl4_core::untyped::RESET_CHUNK]
-    Source: 'crates/fl4-core/src/untyped.rs', lines 162:0-162:31 -/
+    Source: 'crates/fl4-core/src/untyped.rs', lines 192:0-192:31 -/
 @[global_simps, irreducible] def untyped.RESET_CHUNK : Std.U64 := 65536#u64
 
 /-- [fl4_core::untyped::as_untyped]:
-    Source: 'crates/fl4-core/src/untyped.rs', lines 139:0-144:1 -/
+    Source: 'crates/fl4-core/src/untyped.rs', lines 169:0-174:1 -/
 def untyped.as_untyped
   (c : capability.Cap) : Result (Option untyped.UntypedCap) := do
   match c with
@@ -30351,7 +30451,7 @@ def untyped.as_untyped
 @[global_simps, irreducible] def untyped.RESET_CHUNK_BITS : Std.U64 := 16#u64
 
 /-- [fl4_core::untyped::reset_untyped]: loop body 0:
-    Source: 'crates/fl4-core/src/untyped.rs', lines 185:4-194:5 -/
+    Source: 'crates/fl4-core/src/untyped.rs', lines 215:4-224:5 -/
 @[rust_loop_body]
 def untyped.reset_untyped_loop.body
   {S : Type _} {A : Type _} (machineStoreInst : machine.Store S)
@@ -30383,7 +30483,7 @@ def untyped.reset_untyped_loop.body
       ok (done (r1, s3, a1))
 
 /-- [fl4_core::untyped::reset_untyped]: loop 0:
-    Source: 'crates/fl4-core/src/untyped.rs', lines 185:4-194:5 -/
+    Source: 'crates/fl4-core/src/untyped.rs', lines 215:4-224:5 -/
 @[rust_loop]
 def untyped.reset_untyped_loop
   {S : Type _} {A : Type _} (machineStoreInst : machine.Store S)
@@ -30397,7 +30497,7 @@ def untyped.reset_untyped_loop
     (s, a, offset)
 
 /-- [fl4_core::untyped::reset_untyped]:
-    Source: 'crates/fl4-core/src/untyped.rs', lines 165:0-195:1 -/
+    Source: 'crates/fl4-core/src/untyped.rs', lines 195:0-225:1 -/
 def untyped.reset_untyped
   {S : Type _} {A : Type _} (machineStoreInst : machine.Store S)
   (machineArchInst : machine.Arch A) (s : S) (a : A) (slot : obj.Slot) :
@@ -30449,7 +30549,7 @@ def untyped.reset_untyped
             u.ptr u.size_bits u.is_device offset
 
 /-- [fl4_core::untyped::retype]:
-    Source: 'crates/fl4-core/src/untyped.rs', lines 198:0-222:1 -/
+    Source: 'crates/fl4-core/src/untyped.rs', lines 228:0-252:1 -/
 def untyped.retype
   {S : Type _} {A : Type _} (machineStoreInst : machine.Store S)
   (machineArchInst : machine.Arch A) (s : S) (a : A) (slot : obj.Slot)
@@ -30552,7 +30652,7 @@ def untyped.retype
     ok (core.result.Result.Ok (), s2, a1)
 
 /-- [fl4_core::untyped::ensure_empty_slots]: loop body 0:
-    Source: 'crates/fl4-core/src/untyped.rs', lines 151:4-154:5 -/
+    Source: 'crates/fl4-core/src/untyped.rs', lines 181:4-184:5 -/
 @[rust_loop_body]
 def untyped.ensure_empty_slots_loop.body
   {S : Type _} (machineStoreInst : machine.Store S) (s : S) (cnode : Std.U64)
@@ -30573,7 +30673,7 @@ def untyped.ensure_empty_slots_loop.body
   else ok (done r)
 
 /-- [fl4_core::untyped::ensure_empty_slots]: loop 0:
-    Source: 'crates/fl4-core/src/untyped.rs', lines 151:4-154:5 -/
+    Source: 'crates/fl4-core/src/untyped.rs', lines 181:4-184:5 -/
 @[rust_loop]
 def untyped.ensure_empty_slots_loop
   {S : Type _} (machineStoreInst : machine.Store S) (s : S) (cnode : Std.U64)
@@ -30586,7 +30686,7 @@ def untyped.ensure_empty_slots_loop
     (r, i)
 
 /-- [fl4_core::untyped::ensure_empty_slots]:
-    Source: 'crates/fl4-core/src/untyped.rs', lines 148:0-156:1 -/
+    Source: 'crates/fl4-core/src/untyped.rs', lines 178:0-186:1 -/
 @[reducible]
 def untyped.ensure_empty_slots
   {S : Type _} (machineStoreInst : machine.Store S) (s : S) (cnode : Std.U64)
@@ -30597,7 +30697,7 @@ def untyped.ensure_empty_slots
     (core.result.Result.Ok ()) «from»
 
 /-- [fl4_core::untyped::cnode_of]:
-    Source: 'crates/fl4-core/src/untyped.rs', lines 123:0-128:1 -/
+    Source: 'crates/fl4-core/src/untyped.rs', lines 153:0-158:1 -/
 def untyped.cnode_of
   (c : capability.Cap) : Result (Option (Std.U64 × Std.U64)) := do
   match c with
@@ -30633,7 +30733,7 @@ def untyped.cnode_of
 def untyped.RETYPE_FAN_OUT_LIMIT : Std.U64 := 256#u64
 
 /-- [fl4_core::untyped::retype_dest]:
-    Source: 'crates/fl4-core/src/untyped.rs', lines 94:0-121:1 -/
+    Source: 'crates/fl4-core/src/untyped.rs', lines 124:0-151:1 -/
 def untyped.retype_dest
   {S : Type _} (machineStoreInst : machine.Store S) (s : S)
   (root_slot : obj.Slot) (node_index : Std.U64) (node_depth : Std.U64)
@@ -30711,7 +30811,7 @@ def untyped.retype_dest
         Std.U64 (core.convert.FromSame error.Exc) residual
 
 /-- [fl4_core::untyped::retype_size]:
-    Source: 'crates/fl4-core/src/untyped.rs', lines 70:0-91:1 -/
+    Source: 'crates/fl4-core/src/untyped.rs', lines 100:0-121:1 -/
 def untyped.retype_size
   (new_type : Std.U64) (user_size : Std.U64) :
   Result (core.result.Result Std.U64 error.Exc)
@@ -30772,6 +30872,159 @@ def untyped.retype_size
                 else ok (core.result.Result.Ok z)
               else ok (core.result.Result.Ok z)
 
+/-- [fl4_core::untyped::retype_shared]:
+    Source: 'crates/fl4-core/src/untyped.rs', lines 74:0-96:1 -/
+def untyped.retype_shared
+  {S : Type _} {A : Type _} (machineStoreInst : machine.Store S)
+  (machineArchInst : machine.Arch A) (s : S) (a : A) (length : Std.U64)
+  (slot : obj.Slot) (cap : capability.Cap) (buf : Std.U64)
+  (extra : Array obj.Slot 3#usize) :
+  Result ((core.result.Result Unit error.Exc) × S × A)
+  := do
+  if length < 3#u64
+  then let r ← error.truncated Unit
+       ok (r, s, a)
+  else
+    let s1 ← Array.index_usize extra 0#usize
+    let b ← obj.Slot.is_null s1
+    if b
+    then let r ← error.truncated Unit
+         ok (r, s, a)
+    else
+      let o ← untyped.as_untyped cap
+      match o with
+      | none => let r ← error.illegal Unit
+                ok (r, s, a)
+      | some u =>
+        if u.is_device
+        then let r ← error.illegal Unit
+             ok (r, s, a)
+        else
+          if u.size_bits = 12#u64
+          then
+            let r ← cdt.ensure_no_children machineStoreInst s slot
+            let cf ← core.result.Result.Insts.CoreOpsTry.branch r
+            match cf with
+            | core.ops.control_flow.ControlFlow.Continue _ =>
+              let ct ← sched.cur_thread machineStoreInst s
+              let index ← msg.syscall_arg machineStoreInst s ct buf 0#u64
+              let depth ← msg.syscall_arg machineStoreInst s ct buf 1#u64
+              let offset ← msg.syscall_arg machineStoreInst s ct buf 2#u64
+              let r1 ←
+                untyped.retype_dest machineStoreInst s s1 index depth offset
+                  1#u64
+              let cf1 ← core.result.Result.Insts.CoreOpsTry.branch r1
+              match cf1 with
+              | core.ops.control_flow.ControlFlow.Continue val =>
+                let target ← obj.Slot.index val offset
+                let r2 ← cdt.ensure_empty_slot machineStoreInst s target
+                let cf2 ← core.result.Result.Insts.CoreOpsTry.branch r2
+                match cf2 with
+                | core.ops.control_flow.ControlFlow.Continue _ =>
+                  let (b1, a1) ←
+                    machineArchInst.dma_frame a u.ptr u.size_bits true
+                  if b1
+                  then
+                    let s2 ←
+                      sched.set_thread_state machineStoreInst s ct
+                        sched.TS_RESTART
+                    let i ← lift (u.size_bits &&& 63#u64)
+                    let i1 ← 1#u64 <<< i
+                    let s3 ←
+                      obj.Slot.set_cap machineStoreInst slot s2
+                        (capability.Cap.Untyped u.ptr u.size_bits i1 false)
+                    let t ←
+                      if u.size_bits = 12#u64
+                      then ok fl4_abi.consts.object.X86Page4K
+                      else ok fl4_abi.consts.object.X86LargePage
+                    let (frame, s4, a2) ←
+                      objects.create_object machineStoreInst machineArchInst s3
+                        a1 t u.ptr 0#u64 true
+                    let s5 ←
+                      cdt.insert_new_cap machineStoreInst s4 slot target frame
+                    ok (core.result.Result.Ok (), s5, a2)
+                  else let r3 ← error.illegal Unit
+                       ok (r3, s, a1)
+                | core.ops.control_flow.ControlFlow.Break residual =>
+                  let r3 ←
+                    core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
+                      Unit (core.convert.FromSame error.Exc) residual
+                  ok (r3, s, a)
+              | core.ops.control_flow.ControlFlow.Break residual =>
+                let r2 ←
+                  core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
+                    Unit (core.convert.FromSame error.Exc) residual
+                ok (r2, s, a)
+            | core.ops.control_flow.ControlFlow.Break residual =>
+              let r1 ←
+                core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
+                  Unit (core.convert.FromSame error.Exc) residual
+              ok (r1, s, a)
+          else
+            if u.size_bits = 21#u64
+            then
+              let r ← cdt.ensure_no_children machineStoreInst s slot
+              let cf ← core.result.Result.Insts.CoreOpsTry.branch r
+              match cf with
+              | core.ops.control_flow.ControlFlow.Continue _ =>
+                let ct ← sched.cur_thread machineStoreInst s
+                let index ← msg.syscall_arg machineStoreInst s ct buf 0#u64
+                let depth ← msg.syscall_arg machineStoreInst s ct buf 1#u64
+                let offset ← msg.syscall_arg machineStoreInst s ct buf 2#u64
+                let r1 ←
+                  untyped.retype_dest machineStoreInst s s1 index depth offset
+                    1#u64
+                let cf1 ← core.result.Result.Insts.CoreOpsTry.branch r1
+                match cf1 with
+                | core.ops.control_flow.ControlFlow.Continue val =>
+                  let target ← obj.Slot.index val offset
+                  let r2 ← cdt.ensure_empty_slot machineStoreInst s target
+                  let cf2 ← core.result.Result.Insts.CoreOpsTry.branch r2
+                  match cf2 with
+                  | core.ops.control_flow.ControlFlow.Continue _ =>
+                    let (b1, a1) ←
+                      machineArchInst.dma_frame a u.ptr u.size_bits true
+                    if b1
+                    then
+                      let s2 ←
+                        sched.set_thread_state machineStoreInst s ct
+                          sched.TS_RESTART
+                      let i ← lift (u.size_bits &&& 63#u64)
+                      let i1 ← 1#u64 <<< i
+                      let s3 ←
+                        obj.Slot.set_cap machineStoreInst slot s2
+                          (capability.Cap.Untyped u.ptr u.size_bits i1 false)
+                      let t ←
+                        if u.size_bits = 12#u64
+                        then ok fl4_abi.consts.object.X86Page4K
+                        else ok fl4_abi.consts.object.X86LargePage
+                      let (frame, s4, a2) ←
+                        objects.create_object machineStoreInst machineArchInst
+                          s3 a1 t u.ptr 0#u64 true
+                      let s5 ←
+                        cdt.insert_new_cap machineStoreInst s4 slot target
+                          frame
+                      ok (core.result.Result.Ok (), s5, a2)
+                    else let r3 ← error.illegal Unit
+                         ok (r3, s, a1)
+                  | core.ops.control_flow.ControlFlow.Break residual =>
+                    let r3 ←
+                      core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
+                        Unit (core.convert.FromSame error.Exc) residual
+                    ok (r3, s, a)
+                | core.ops.control_flow.ControlFlow.Break residual =>
+                  let r2 ←
+                    core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
+                      Unit (core.convert.FromSame error.Exc) residual
+                  ok (r2, s, a)
+              | core.ops.control_flow.ControlFlow.Break residual =>
+                let r1 ←
+                  core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
+                    Unit (core.convert.FromSame error.Exc) residual
+                ok (r1, s, a)
+            else let r ← error.illegal Unit
+                 ok (r, s, a)
+
 /-- [fl4_core::untyped::align_up]:
     Source: 'crates/fl4-core/src/untyped.rs', lines 19:0-22:1 -/
 def untyped.align_up (v : Std.U64) (align : Std.U64) : Result Std.U64 := do
@@ -30783,7 +31036,7 @@ def untyped.align_up (v : Std.U64) (align : Std.U64) : Result Std.U64 := do
   ok (i2 &&& i3)
 
 /-- [fl4_core::untyped::decode]:
-    Source: 'crates/fl4-core/src/untyped.rs', lines 25:0-66:1
+    Source: 'crates/fl4-core/src/untyped.rs', lines 25:0-69:1
     Visibility: public -/
 def untyped.decode
   {S : Type _} {A : Type _} (machineStoreInst : machine.Store S)
@@ -30793,8 +31046,18 @@ def untyped.decode
   Result ((core.result.Result Unit error.Exc) × S × A)
   := do
   if lbl != fl4_abi.label.UntypedRetype
-  then let r ← error.illegal Unit
-       ok (r, s, a)
+  then
+    if lbl = fl4_abi.label.X86UntypedRetypeShared
+    then
+      let i ← machineStoreInst.encryption_mask s
+      if i != 0#u64
+      then
+        untyped.retype_shared machineStoreInst machineArchInst s a length slot
+          cap buf extra
+      else let r ← error.illegal Unit
+           ok (r, s, a)
+    else let r ← error.illegal Unit
+         ok (r, s, a)
   else
     if length < 6#u64
     then let r ← error.truncated Unit
@@ -39398,14 +39661,14 @@ impl_def tcbqueue.Link.Insts.CoreCmpEq : core.cmp.Eq tcbqueue.Link := {
 }
 
 /-- [fl4_core::untyped::{impl core::clone::Clone for fl4_core::untyped::UntypedCap}::clone]:
-    Source: 'crates/fl4-core/src/untyped.rs', lines 131:9-131:14
+    Source: 'crates/fl4-core/src/untyped.rs', lines 161:9-161:14
     Visibility: public -/
 def untyped.UntypedCap.Insts.CoreCloneClone.clone
   (self : untyped.UntypedCap) : Result untyped.UntypedCap := do
   ok self
 
 /-- Trait implementation: [fl4_core::untyped::{impl core::clone::Clone for fl4_core::untyped::UntypedCap}]
-    Source: 'crates/fl4-core/src/untyped.rs', lines 131:9-131:14 -/
+    Source: 'crates/fl4-core/src/untyped.rs', lines 161:9-161:14 -/
 @[reducible]
 def untyped.UntypedCap.Insts.CoreCloneClone : core.clone.Clone
   untyped.UntypedCap := {
@@ -39413,7 +39676,7 @@ def untyped.UntypedCap.Insts.CoreCloneClone : core.clone.Clone
 }
 
 /-- Trait implementation: [fl4_core::untyped::{impl core::marker::Copy for fl4_core::untyped::UntypedCap}]
-    Source: 'crates/fl4-core/src/untyped.rs', lines 131:16-131:20 -/
+    Source: 'crates/fl4-core/src/untyped.rs', lines 161:16-161:20 -/
 @[reducible]
 def untyped.UntypedCap.Insts.CoreMarkerCopy : core.marker.Copy
   untyped.UntypedCap := {
@@ -39421,7 +39684,7 @@ def untyped.UntypedCap.Insts.CoreMarkerCopy : core.marker.Copy
 }
 
 /-- [fl4_core::untyped::_]
-    Source: 'crates/fl4-core/src/untyped.rs', lines 163:0-163:60 -/
+    Source: 'crates/fl4-core/src/untyped.rs', lines 193:0-193:60 -/
 @[global_simps, irreducible]
 def untyped._ : Result Unit := do
   let i ← 1#u64 <<< untyped.RESET_CHUNK_BITS
@@ -39991,14 +40254,14 @@ def vspace.VRoot.Insts.CoreMarkerCopy : core.marker.Copy vspace.VRoot := {
 }
 
 /-- [fl4_core::vspace::{impl core::clone::Clone for fl4_core::vspace::TableCap}::clone]:
-    Source: 'crates/fl4-core/src/vspace.rs', lines 715:9-715:14
+    Source: 'crates/fl4-core/src/vspace.rs', lines 727:9-727:14
     Visibility: public -/
 def vspace.TableCap.Insts.CoreCloneClone.clone
   (self : vspace.TableCap) : Result vspace.TableCap := do
   ok self
 
 /-- Trait implementation: [fl4_core::vspace::{impl core::clone::Clone for fl4_core::vspace::TableCap}]
-    Source: 'crates/fl4-core/src/vspace.rs', lines 715:9-715:14 -/
+    Source: 'crates/fl4-core/src/vspace.rs', lines 727:9-727:14 -/
 @[reducible]
 def vspace.TableCap.Insts.CoreCloneClone : core.clone.Clone vspace.TableCap
   := {
@@ -40006,7 +40269,7 @@ def vspace.TableCap.Insts.CoreCloneClone : core.clone.Clone vspace.TableCap
 }
 
 /-- Trait implementation: [fl4_core::vspace::{impl core::marker::Copy for fl4_core::vspace::TableCap}]
-    Source: 'crates/fl4-core/src/vspace.rs', lines 715:16-715:20 -/
+    Source: 'crates/fl4-core/src/vspace.rs', lines 727:16-727:20 -/
 @[reducible]
 def vspace.TableCap.Insts.CoreMarkerCopy : core.marker.Copy vspace.TableCap
   := {

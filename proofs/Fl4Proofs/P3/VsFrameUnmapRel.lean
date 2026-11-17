@@ -132,7 +132,7 @@ theorem unmap_page_rel {A : Type} {ar : machine.Arch A} {th : TypedHeap} {P L4 L
           | invalidPTE => intro; rfl
           | smallPagePTE _ _ _ => intro h; exact absurd hp0 h.1
         rw [if_neg hp0]
-        simp only [not_true_eq_false, ↓reduceIte, vspace.frame_base, bind_ok]
+        simp only [not_true_eq_false, ↓reduceIte, vspace.frame_base, frame_gpa_plain, bind_ok]
         rw [hAM]
         obtain ⟨fb, fa, fr, hfx⟩ : ∃ fb fa fr, f (Fl4Spec.ucast 9 (vIdx vaddr 12).bv) = .smallPagePTE fb fa fr := by
           revert hfe2
@@ -244,7 +244,7 @@ theorem unmap_page_rel {A : Type} {ar : machine.Arch A} {th : TypedHeap} {P L4 L
           | pageTablePDE _ _ _ => intro; rfl
           | largePagePDE _ _ _ => intro h; exact absurd hps h.2.1
         rw [if_neg hps]
-        simp only [vspace.frame_base, bind_ok]
+        simp only [vspace.frame_base, frame_gpa_plain, bind_ok]
         obtain ⟨fb, fa, fr, hfx⟩ : ∃ fb fa fr, f (Fl4Spec.ucast 9 (vIdx vaddr 21).bv) = .largePagePDE fb fa fr := by
           revert hfe2
           cases f (Fl4Spec.ucast 9 (vIdx vaddr 21).bv) with
@@ -356,7 +356,7 @@ theorem unmap_page_rel {A : Type} {ar : machine.Arch A} {th : TypedHeap} {P L4 L
           | pageDirectoryPDPTE _ _ _ => intro; rfl
           | hugePagePDPTE _ _ _ => intro h; exact absurd hps h.2.1
         rw [if_neg hps]
-        simp only [vspace.frame_base, bind_ok]
+        simp only [vspace.frame_base, frame_gpa_plain, bind_ok]
         obtain ⟨fb, fa, fr, hfx⟩ : ∃ fb fa fr, f (Fl4Spec.ucast 9 (vIdx vaddr 30).bv) = .hugePagePDPTE fb fa fr := by
           revert hfe2
           cases f (Fl4Spec.ucast 9 (vIdx vaddr 30).bv) with
