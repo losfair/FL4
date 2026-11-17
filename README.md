@@ -40,8 +40,9 @@ FL4 exposes the seL4 VCPU/EPT API and the l4h extensions from patches
 CPUs, firmware-disabled virtualization, missing mitigation microcode or
 capabilities, or the SKIM path on the boot processor, native boot continues
 and retyping VCPU/EPT objects returns `seL4_InvalidArgument` for the type.
-Incompatible application processors or an AP startup timeout halt boot before
-userspace starts; an already-selected backend is not downgraded during AP startup.
+Incompatible enabled application processors or their startup timeouts halt boot
+before userspace starts; an already-selected backend is not downgraded during
+AP startup. Disabled CPU hotplug slots are not started.
 `KernelVTX` and `KernelX86_64VTX64BitGuests` are always enabled in the ABI.
 
 Use `seL4_X86_ASIDPool_Assign` for an EPT root and

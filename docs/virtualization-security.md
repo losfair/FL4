@@ -11,8 +11,8 @@ firmware combinations. Every logical CPU is probed before VM initialization.
 Missing requirements on the boot processor leave VCPU/EPT allocation unavailable
 and produce a boot diagnostic. Native-only boot still applies available
 mitigations and reports the incomplete protection. Incompatible AP capabilities
-or an AP startup timeout halt boot before userspace; see the SMP policy below.
-FL4 does not install firmware/microcode updates.
+or an enabled AP's startup timeout halt boot before userspace; see the SMP policy
+below. FL4 does not install firmware/microcode updates.
 
 ## Predictor boundaries
 
@@ -80,6 +80,13 @@ the existing VMCS/VMCB field and translation caches remain in use.
 
 ## SMT and heterogeneous systems
 
+Only MADT processors with the Enabled flag set are candidates for startup, for
+both local APIC and x2APIC records. Online Capable alone describes a CPU that
+can be enabled during OS runtime, not one ready for boot ([ACPI local APIC
+flags](https://uefi.org/specs/ACPI/6.6/05_ACPI_Software_Programming_Model.html#processor-local-apic-structure)).
+FL4 does not support CPU hotplug; these disabled slots are ignored and do not
+consume the boot CPU limit or trigger startup timeouts.
+
 SRSO-affected AMD and MDS/MMIO-affected Intel use one logical processor per
 physical core. STIBP is enabled when available; an otherwise eligible CPU
 without adequate cross-thread branch protection also uses one thread per core.
@@ -100,10 +107,10 @@ support the common vendor/IBPB operations. An AP requiring stricter SMT
 isolation than the BSP, failing the local mitigation policy, or lacking the
 selected VM backend reports rejection to the BSP and halts. The BSP then halts
 with a diagnostic; other started APs remain behind the boot barrier. Startup
-timeouts also halt the BSP, preventing a late AP from racing userspace or reuse
-of its per-core storage. This deliberately stops boot while VMX/SVM may already
-be active on other cores. Existing VMX capability compatibility checks also
-apply to VCPU migration.
+timeouts for enabled APs also halt the BSP, preventing a late AP from racing
+userspace or reuse of its per-core storage. This deliberately stops boot while
+VMX/SVM may already be active on other cores. Existing VMX capability
+compatibility checks also apply to VCPU migration.
 
 Nested FL4 cannot police the physical host's SMT scheduling or install L0's
 firmware. L0 must supply the hardware isolation and truthful mitigation
@@ -112,6 +119,10 @@ outside FL4's contract; guest-to-kernel and guest-to-VMM prediction boundaries
 are explicitly covered by this change.
 
 ## Validation
+
+Host tests execute the kernel's ACPI parser against LAPIC/x2APIC tables with
+disabled and online-capable slots, including enough slots to fill the CPU array
+if mistakenly admitted. Enabled CPU IDs and IOAPIC discovery must be preserved.
 
 The unit matrix covers RDCL_NO independently of eIBRS, Zen 2/3/4/newer paths,
 microcode revision boundaries, nested feature masking, buffer clearing, and
@@ -143,8 +154,9 @@ FL4_TEST_VERW_FIXTURE=1 FL4_EXPECT_VM=present FL4_TESTS='^FL4VCPU' \
 ```
 
 The fixture is outside the kernel, changes only test QEMU's CPUID, and emits
-an explicit warning. It does not update firmware or establish that VERW clears
-the physical buffers. Never use it with untrusted guests or sensitive data.
+an explicit warning. Its temporary library is removed after QEMU exits, including
+test failures and timeouts. It does not update firmware or establish that VERW
+clears the physical buffers. Never use it with untrusted guests or sensitive data.
 Passing these tests validates instruction/control flow, including repeated
 and failed entries, protected-MSR interception, notifications, invalidations
 and migration. It is not

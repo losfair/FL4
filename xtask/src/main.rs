@@ -106,15 +106,6 @@ fn qemu_cmd(setup: &str, smp: u32, kernel: &Path, initrd: Option<&Path>) -> Comm
             fail("FL4_TEST_AP_REJECT requires FL4_TEST_VERW_FIXTURE=1 and ibpb, lfence, or smt");
         }
     }
-    if env::var("FL4_TEST_VERW_FIXTURE").as_deref() == Ok("1") {
-        // Concurrent test commands must not overwrite a running QEMU's library.
-        let lib = root().join(format!("build/kvm-verw-fixture-{}.so", std::process::id()));
-        fs::create_dir_all(lib.parent().unwrap()).unwrap();
-        run(Command::new("cc").args(["-shared", "-fPIC", "-Wall", "-Wextra", "-Werror"])
-            .arg(root().join("xtask/tests/kvm_verw_fixture.c")).arg("-ldl").arg("-o").arg(&lib));
-        eprintln!("xtask: TEST ONLY VERW_CLEAR fixture; no hardware buffer-clearing security claim");
-        c.env("LD_PRELOAD", &lib);
-    }
     match setup {
         // The IOAPIC runs in QEMU (split irqchip): with KVM's in-kernel
         // IOAPIC, QEMU gives GSI 2 no route, so an HPET timer routed to pin
@@ -203,13 +194,51 @@ fn pin_vcpus() {
     eprintln!("xtask: pinned {} vCPU threads to host CPUs {}", tids.len(), cpus.join(","));
 }
 
+/// Own the test library until QEMU has exited, including timeout/error paths.
+struct QemuTestFixture(PathBuf);
+
+impl Drop for QemuTestFixture {
+    fn drop(&mut self) {
+        let _ = fs::remove_file(&self.0);
+    }
+}
+
+fn qemu_test_fixture(c: &mut Command) -> std::io::Result<Option<QemuTestFixture>> {
+    if env::var("FL4_TEST_VERW_FIXTURE").as_deref() != Ok("1") {
+        return Ok(None);
+    }
+    // Concurrent test commands must not overwrite a running QEMU's library.
+    let lib = root().join(format!("build/kvm-verw-fixture-{}.so", std::process::id()));
+    fs::create_dir_all(lib.parent().unwrap())?;
+    let fixture = QemuTestFixture(lib);
+    let mut cc = Command::new("cc");
+    cc.args(["-shared", "-fPIC", "-Wall", "-Wextra", "-Werror"])
+        .arg(root().join("xtask/tests/kvm_verw_fixture.c")).arg("-ldl").arg("-o").arg(&fixture.0);
+    eprintln!("+ {:?}", cc);
+    let status = cc.status()?;
+    if !status.success() {
+        return Err(std::io::Error::other(format!("fixture compiler failed ({status})")));
+    }
+    eprintln!("xtask: TEST ONLY VERW_CLEAR fixture; no hardware buffer-clearing security claim");
+    c.env("LD_PRELOAD", &fixture.0);
+    Ok(Some(fixture))
+}
+
 /// Run QEMU, echo serial output, stop at `stop` or after `timeout`.
 /// Returns the captured output.
 fn run_qemu(mut c: Command, timeout: u64, stop: &[&str], log: &Path) -> String {
     use std::io::Read;
+    let mut f = fs::File::create(log).unwrap();
+    let fixture = qemu_test_fixture(&mut c).unwrap_or_else(|e| fail(&format!("cannot build QEMU test fixture: {e}")));
     eprintln!("+ {:?}", c);
     let _ = fs::remove_file(qmp_socket());
-    let mut child = c.stdout(Stdio::piped()).stdin(Stdio::null()).spawn().unwrap();
+    let mut child = match c.stdout(Stdio::piped()).stdin(Stdio::null()).spawn() {
+        Ok(child) => child,
+        Err(e) => {
+            drop(fixture);
+            fail(&format!("cannot run {:?}: {e}", c));
+        }
+    };
     if env::var_os("FL4_PIN").is_some() {
         std::thread::spawn(pin_vcpus);
     }
@@ -230,7 +259,6 @@ fn run_qemu(mut c: Command, timeout: u64, stop: &[&str], log: &Path) -> String {
     });
     let start = Instant::now();
     let mut all = Vec::new();
-    let mut f = fs::File::create(log).unwrap();
     'outer: loop {
         match rx.recv_timeout(Duration::from_millis(200)) {
             Ok(b) => {
@@ -265,6 +293,7 @@ fn run_qemu(mut c: Command, timeout: u64, stop: &[&str], log: &Path) -> String {
     }
     child.kill().ok();
     child.wait().ok();
+    drop(fixture);
     String::from_utf8_lossy(&all).into_owned()
 }
 

@@ -7,6 +7,7 @@ pub const RSDP_LEN: usize = 36;
 
 pub struct Info {
     pub rsdp: [u8; RSDP_LEN],
+    /// Only processors enabled at boot, excluding disabled hotplug slots.
     pub cpus: [u32; MAX_CPUS],
     pub n_cpus: usize,
     pub ioapics: [u64; MAX_IOAPICS],
@@ -101,9 +102,10 @@ fn parse_madt(t: u64, info: &mut Info) {
         }
         match ty {
             0 => {
-                // Processor local APIC: enabled or online-capable.
+                // Only Enabled (bit 0) means ready for boot. Online Capable
+                // (bit 1) alone requires runtime hotplug, which we do not support.
                 let flags = rd32(p + 4);
-                if flags & 3 != 0 && info.n_cpus < MAX_CPUS {
+                if flags & 1 != 0 && info.n_cpus < MAX_CPUS {
                     info.cpus[info.n_cpus] = rd8(p + 3) as u32;
                     info.n_cpus += 1;
                 }
@@ -115,8 +117,9 @@ fn parse_madt(t: u64, info: &mut Info) {
                 }
             }
             9 => {
+                // Processor local x2APIC uses the same Enabled flag.
                 let flags = rd32(p + 8);
-                if flags & 3 != 0 && info.n_cpus < MAX_CPUS {
+                if flags & 1 != 0 && info.n_cpus < MAX_CPUS {
                     info.cpus[info.n_cpus] = rd32(p + 4);
                     info.n_cpus += 1;
                 }
