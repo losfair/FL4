@@ -314,7 +314,7 @@ fn attempts<E: EntryEnv>(
 ) -> (bool, bool) {
     use fl4_store::tx;
     let cpu = env.cpu();
-    let attempts = if env.prefer_serial() { 0 } else { TX_ATTEMPTS };
+    let max_attempts = if env.prefer_serial() { 0 } else { TX_ATTEMPTS };
     let mut a = env.arch();
     if !env.multi() {
         body(&mut env.store(false), &mut a);
@@ -327,7 +327,7 @@ fn attempts<E: EntryEnv>(
             stalled.set(true);
         }
     };
-    if attempts != 0 && gate.opportunistic_acquire(env.mem(), cpu, wait) {
+    if max_attempts != 0 && gate.opportunistic_acquire(env.mem(), cpu, wait) {
         env.count(Count::Serial);
         env.holding_gate();
         if stalled.get() && !irq {
@@ -337,7 +337,7 @@ fn attempts<E: EntryEnv>(
         env.entry_done();
         return (true, true);
     }
-    for _ in 0..attempts {
+    for _ in 0..max_attempts {
         gate.enter_tx(env.mem(), cpu, wait);
         if stalled.get() && !irq {
             gate.leave_tx(env.mem(), cpu);

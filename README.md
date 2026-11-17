@@ -60,6 +60,10 @@ the root's lifetime bitmap does not write the hardware page table again.
 VMX uses no VPID. SVM retains ASID 1 only for the last VCPU/root on each
 core. VCPU switches, migration, retype, failed entry, nested invalidation,
 explicit TLB flushes and software paging writes force a flush before reuse.
+Guest-linear translations can survive SVM entries. A VMM that edits guest
+page tables or emulates translation-invalidating operations (such as INVLPG,
+INVPCID or a task switch) must call `seL4_X86_VCPU_FlushTLB` before reentry,
+unless a software paging-register write already requested the flush.
 VMCB clean bits track both software writes and hardware's exit state.
 The host VMLOAD image is refreshed when FS/GS selectors or bases change
 (on every entry with the dangerous-MSR API); AMD entry avoids VMX-only

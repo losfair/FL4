@@ -356,11 +356,21 @@ extern "C" fn fl4_entry(f: &mut Frame) {
     } else {
         0
     };
+    // Only a VMEnter that can reach vcpu::enter needs the serial gate.
+    // Invalid or trapped calls retain ordinary probe/transaction admission.
+    // These caller-owned reads are only a hint: dispatch rechecks them,
+    // and a remote stall still cancels the entry before its body runs.
+    let serial = v == VEC_SYSCALL
+        && f.rdx as i64 == fl4_abi::syscall::SysVMEnter
+        && fl4_arch_x86_64::vm::backend() != 0
+        && {
+            let s = store();
+            let t = sched::cur_thread(&s);
+            t.flags(&s) & fl4_abi::consts::tcb_flag::TRAP_SYSCALLS == 0
+                && fl4_core::vcpu::bound(&s, t) != 0
+        };
     // An interrupt is handled even if a stall cancelled the entry: it has
     // been accepted and needs its EOI.
-    // VMEnter always needs the serial gate. Avoid a transaction that
-    // would only request serial fallback in vcpu::enter.
-    let serial = v == VEC_SYSCALL && f.rdx as i64 == fl4_abi::syscall::SysVMEnter;
     run_entry(irq, serial, |s, a| {
         if s.tx {
             dispatch_entry(&mut s.specialize::<true>(), a, v, irq, f.rdx as i64, f.error, cr2, dr6);

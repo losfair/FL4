@@ -659,10 +659,10 @@ pub fn run<S: Store>(s: &mut S, v: u64, tcb: u64, root: u64) -> u64 {
         };
         vcpu::set(s, v, svm::CLEAN, clean);
         vcpu::set(s, v, svm::RAX, run.regs[0]);
-        // TR, LDTR and the syscall/SYSENTER MSRs are fixed after core
-        // initialization. FS/GS selectors and bases are the only VMLOAD
-        // state normal user code can change. Inspect the real bases, even
-        // without FSGSBASE: loading a selector can change them as well.
+        // TR, LDTR, KERNEL_GS_BASE and the syscall/SYSENTER MSRs are fixed
+        // per core after initialization. FS/GS selectors and bases are the
+        // only VMLOAD state normal user code can change. Inspect the real
+        // bases, even without FSGSBASE: loading a selector can change them.
         let (fs, gs): (u16, u16);
         unsafe {
             asm!("mov {:x}, fs", "mov {:x}, gs", out(reg) fs, out(reg) gs,
