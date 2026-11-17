@@ -37,7 +37,7 @@ Host dependencies live in `$FL4_DEPS` (default `~/Projects/fl4-deps`):
 
 The x86_64 image detects base AMD Secure Encrypted Virtualization (SEV) at
 boot. Kernel and userspace RAM, page tables, boot modules and firmware ACPI
-data stay private. Device MMIO uses shared mappings. The serial banner shows
+data start private. Device MMIO uses shared mappings. The serial banner shows
 the active C-bit. SEV-ES, SEV-SNP and nested virtualization inside an SEV
 guest are outside the supported configuration.
 
@@ -142,7 +142,7 @@ FL4_EXPECT_VM=present FL4_TESTS='^FL4VCPU' cargo xtask fl4test --smp 1 --setup k
 FL4_P0_STRICT=1 cargo xtask gate
 ```
 
-All 1,052 extracted core functions have checked totality proofs with zero
+All 1,053 extracted core functions have checked totality proofs with zero
 `sorry`s in P0. For SEV, `sev_frame_address` proves that leaf entries select
 the requested visibility and decode to the original GPA. The native P1/P3
 l4v model uses plain guest physical addresses.

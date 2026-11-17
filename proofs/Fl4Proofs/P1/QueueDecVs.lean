@@ -216,6 +216,7 @@ theorem vspace.page_entry_slot.vs {V : U64 → Prop} {s0 : S} (Pd : DelPlaceAt s
 theorem vspace.mapped_entry.vs {V : U64 → Prop} {s0 : S} (Pd : DelPlaceAt st T Cs Ω H Sg Rp Scs Nt Z V s0) {s : S}
     (hf : Fr0 st T Cs Ω H Sg Scs Z s0 s) (hb : BXI st T Cs Ω H Sg Rp Scs Nt Z Ac s) (f : vspace.FrameCap) (root : U64) :
     vspace.mapped_entry st s f root ⦃ o => ∀ x, o = some x → V x ⦄ := by
+  have hS : P0.StoreTotal st := L.total
   unfold vspace.mapped_entry
   refine WP.spec_bind (P0.layout.paddr.p0 _) fun pa _ => ?_
   refine WP.spec_bind (Pₘ := fun _ => True) (by cases f.size <;> exact (WP.spec_ok _).2 trivial) fun large _ => ?_
