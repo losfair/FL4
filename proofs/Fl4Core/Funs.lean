@@ -22242,7 +22242,7 @@ def vcpu.CR0_OWNED : Result Std.U64 := do
 @[global_simps, irreducible]
 def vcpu.CR4_ALLOWED : Result Std.U64 := do
   let i ← 1#u64 <<< 16#i32
-  let i1 ← lift (8191#u64 ||| i)
+  let i1 ← lift (4095#u64 ||| i)
   let i2 ← 1#u64 <<< 17#i32
   let i3 ← lift (i1 ||| i2)
   let i4 ← 1#u64 <<< 18#i32
@@ -31002,91 +31002,97 @@ def untyped.retype_shared
             let depth ← msg.syscall_arg machineStoreInst s ct buf 2#u64
             let offset ← msg.syscall_arg machineStoreInst s ct buf 3#u64
             let count ← msg.syscall_arg machineStoreInst s ct buf 4#u64
-            let r1 ←
-              untyped.retype_dest machineStoreInst s s1 index depth offset
-                count
-            let cf1 ← core.result.Result.Insts.CoreOpsTry.branch r1
-            match cf1 with
-            | core.ops.control_flow.ControlFlow.Continue val1 =>
+            if count = 0#u64
+            then let r1 ← error.range Unit 1#u64 limit
+                 ok (r1, s, a)
+            else
               if count > limit
-              then let r2 ← error.range Unit 1#u64 limit
-                   ok (r2, s, a)
+              then let r1 ← error.range Unit 1#u64 limit
+                   ok (r1, s, a)
               else
-                let i ← lift (core.num.U64.wrapping_add offset count)
-                let r2 ←
-                  untyped.ensure_empty_slots machineStoreInst s val1 offset i
-                let cf2 ← core.result.Result.Insts.CoreOpsTry.branch r2
-                match cf2 with
-                | core.ops.control_flow.ControlFlow.Continue _ =>
-                  let r3 ← cdt.ensure_no_children machineStoreInst s slot
-                  let reset ← core.result.Result.is_ok r3
-                  let used ← if reset
-                               then ok 0#u64
-                               else ok u.free_index
-                  let r4 ← untyped.shared_extent u used bits count
-                  let cf3 ← core.result.Result.Insts.CoreOpsTry.branch r4
-                  match cf3 with
-                  | core.ops.control_flow.ControlFlow.Continue val2 =>
-                    let (base, bytes, free_index) := val2
-                    let b1 ← machineArchInst.dma_ram a base bytes
-                    if b1
-                    then
-                      let s2 ←
-                        sched.set_thread_state machineStoreInst s ct
-                          sched.TS_RESTART
-                      if reset
+                let r1 ←
+                  untyped.retype_dest machineStoreInst s s1 index depth offset
+                    count
+                let cf1 ← core.result.Result.Insts.CoreOpsTry.branch r1
+                match cf1 with
+                | core.ops.control_flow.ControlFlow.Continue val1 =>
+                  let i ← lift (core.num.U64.wrapping_add offset count)
+                  let r2 ←
+                    untyped.ensure_empty_slots machineStoreInst s val1 offset i
+                  let cf2 ← core.result.Result.Insts.CoreOpsTry.branch r2
+                  match cf2 with
+                  | core.ops.control_flow.ControlFlow.Continue _ =>
+                    let r3 ← cdt.ensure_no_children machineStoreInst s slot
+                    let reset ← core.result.Result.is_ok r3
+                    let used ← if reset
+                                 then ok 0#u64
+                                 else ok u.free_index
+                    let r4 ← untyped.shared_extent u used bits count
+                    let cf3 ← core.result.Result.Insts.CoreOpsTry.branch r4
+                    match cf3 with
+                    | core.ops.control_flow.ControlFlow.Continue val2 =>
+                      let (base, bytes, free_index) := val2
+                      let b1 ← machineArchInst.dma_ram a base bytes
+                      if b1
                       then
-                        let (r5, s3, a1) ←
-                          untyped.reset_untyped machineStoreInst
-                            machineArchInst s2 a slot
-                        let cf4 ←
-                          core.result.Result.Insts.CoreOpsTry.branch r5
-                        match cf4 with
-                        | core.ops.control_flow.ControlFlow.Continue _ =>
-                          let a2 ←
-                            machineArchInst.dma_frame a1 base bytes true
-                          let s4 ←
-                            obj.Slot.set_cap machineStoreInst slot s3
+                        let s2 ←
+                          sched.set_thread_state machineStoreInst s ct
+                            sched.TS_RESTART
+                        if reset
+                        then
+                          let (r5, s3, a1) ←
+                            untyped.reset_untyped machineStoreInst
+                              machineArchInst s2 a slot
+                          let cf4 ←
+                            core.result.Result.Insts.CoreOpsTry.branch r5
+                          match cf4 with
+                          | core.ops.control_flow.ControlFlow.Continue _ =>
+                            let a2 ←
+                              machineArchInst.dma_frame a1 base bytes true
+                            let s4 ←
+                              obj.Slot.set_cap machineStoreInst slot s3
+                                (capability.Cap.Untyped u.ptr u.size_bits
+                                free_index false)
+                            let (s5, a3) ←
+                              objects.create_new_objects machineStoreInst
+                                machineArchInst s4 a2 kind slot val1 offset
+                                count base 0#u64 true
+                            ok (core.result.Result.Ok (), s5, a3)
+                          | core.ops.control_flow.ControlFlow.Break residual =>
+                            let r6 ←
+                              core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
+                                Unit (core.convert.FromSame error.Exc) residual
+                            ok (r6, s3, a1)
+                        else
+                          let a1 ←
+                            machineArchInst.dma_frame a base bytes true
+                          let s3 ←
+                            obj.Slot.set_cap machineStoreInst slot s2
                               (capability.Cap.Untyped u.ptr u.size_bits
                               free_index false)
-                          let (s5, a3) ←
+                          let (s4, a2) ←
                             objects.create_new_objects machineStoreInst
-                              machineArchInst s4 a2 kind slot val1 offset count
+                              machineArchInst s3 a1 kind slot val1 offset count
                               base 0#u64 true
-                          ok (core.result.Result.Ok (), s5, a3)
-                        | core.ops.control_flow.ControlFlow.Break residual =>
-                          let r6 ←
-                            core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
-                              Unit (core.convert.FromSame error.Exc) residual
-                          ok (r6, s3, a1)
+                          ok (core.result.Result.Ok (), s4, a2)
                       else
-                        let a1 ← machineArchInst.dma_frame a base bytes true
-                        let s3 ←
-                          obj.Slot.set_cap machineStoreInst slot s2
-                            (capability.Cap.Untyped u.ptr u.size_bits
-                            free_index false)
-                        let (s4, a2) ←
-                          objects.create_new_objects machineStoreInst
-                            machineArchInst s3 a1 kind slot val1 offset count
-                            base 0#u64 true
-                        ok (core.result.Result.Ok (), s4, a2)
-                    else let r5 ← error.invalid_cap Unit 0#u64
-                         ok (r5, s, a)
+                        let r5 ← error.invalid_cap Unit 0#u64
+                        ok (r5, s, a)
+                    | core.ops.control_flow.ControlFlow.Break residual =>
+                      let r5 ←
+                        core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
+                          Unit (core.convert.FromSame error.Exc) residual
+                      ok (r5, s, a)
                   | core.ops.control_flow.ControlFlow.Break residual =>
-                    let r5 ←
+                    let r3 ←
                       core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
                         Unit (core.convert.FromSame error.Exc) residual
-                    ok (r5, s, a)
+                    ok (r3, s, a)
                 | core.ops.control_flow.ControlFlow.Break residual =>
-                  let r3 ←
+                  let r2 ←
                     core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
                       Unit (core.convert.FromSame error.Exc) residual
-                  ok (r3, s, a)
-            | core.ops.control_flow.ControlFlow.Break residual =>
-              let r2 ←
-                core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
-                  Unit (core.convert.FromSame error.Exc) residual
-              ok (r2, s, a)
+                  ok (r2, s, a)
           | core.ops.control_flow.ControlFlow.Break residual =>
             let r1 ←
               core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual

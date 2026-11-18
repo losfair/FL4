@@ -168,6 +168,11 @@ fn sharing_checks_the_untyped_and_destination_before_changing_visibility() {
     s.frame_masks = (1 << 51, 0);
     t.set_reg(&mut s, reg::R10, 13);
     assert!(matches!(share(&mut s, &mut a), Err(Exc::Sys(SysError::InvalidArgument { .. }))));
+    for (bits, count, max) in [(21, 0, 1), (21, 2, 1), (21, 300, 1), (12, 0, 256), (12, 257, 256)] {
+        t.set_reg(&mut s, reg::R10, bits);
+        s.write(0x40000 + 5 * 8, count);
+        assert!(share(&mut s, &mut a) == Err(Exc::Sys(SysError::RangeError { min: 1, max })));
+    }
     t.set_reg(&mut s, reg::R10, 12);
     let second = Slot::index(dest.0, 1);
     second.set_cap(&mut s, Cap::Domain);

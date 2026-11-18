@@ -193,6 +193,11 @@ static void exercise_batch(seL4_CPtr ram)
     seL4_CPtr ordinary = retype(source, seL4_X86_4K, 0, 1);
     seL4_CPtr first = next_slot;
     next_slot += 4;
+    const seL4_Word invalid_counts[] = {0, 2, 300};
+    for (unsigned i = 0; i < sizeof(invalid_counts) / sizeof(invalid_counts[0]); i++) {
+        CHECK(seL4_Untyped_RetypeShared(source, 21, ROOT, 0, 0, first, invalid_counts[i]) == seL4_RangeError);
+        CHECK(seL4_GetMR(0) == 1 && seL4_GetMR(1) == 1);
+    }
     CHECK(!seL4_Untyped_RetypeShared(source, 12, ROOT, 0, 0, first, 3));
     CHECK(!seL4_Untyped_RetypeShared(source, 12, ROOT, 0, 0, first + 3, 1));
     for (unsigned i = 0; i < 4; i++) {

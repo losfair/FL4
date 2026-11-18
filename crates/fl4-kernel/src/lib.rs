@@ -239,7 +239,8 @@ pub extern "C" fn fl4_boot(magic: u32, info: u32, private_mask: u64) -> ! {
         cr4 |= 1 << 8;
     }
     cpu::write_cr4(cr4);
-    let (kernel_root, window_top) = paging::init(nx, spec::skim());
+    let gpa_top = sev::gpa_top(cpu::max_paddr(), private_mask);
+    let (kernel_root, window_top) = paging::init(nx, spec::skim(), gpa_top);
     let stack_top = percpu::stack_top(0);
     gdt::init_idt();
     gdt::init_core(0, stack_top);
@@ -259,8 +260,7 @@ pub extern "C" fn fl4_boot(magic: u32, info: u32, private_mask: u64) -> ! {
         None => fail("no ACPI tables"),
     };
     pic::disable();
-    let apic_base = apic::base_paddr();
-    apic::enable(sev::mmio_ptr(apic_base, PAGE, window_top).unwrap_or_else(|| fail("local APIC outside the physical window")));
+    let apic_base = apic::enable(window_top).unwrap_or_else(|| fail("local APIC outside the physical window"));
     apic::write(apic::REG_SVR, (1 << 8) | 0xff);
     apic::write(apic::REG_LVT_LINT0, 1 << 16);
     apic::write(apic::REG_LVT_LINT1, 1 << 16);
@@ -311,10 +311,8 @@ pub extern "C" fn fl4_boot(magic: u32, info: u32, private_mask: u64) -> ! {
     // half (P3's `UtWin`: every untyped at or above PPTR_BASE). Nothing
     // goes past what the CPU can address either (MAXPHYADDR): a mapping
     // of it would set reserved bits in a paging, EPT or NPT entry.
-    let max_paddr = if private_mask == 0 { cpu::max_paddr() } else { cpu::max_paddr().min(private_mask) };
-    let ram_top = bootmem::top(&[PADDR_TOP, window_top, max_paddr]);
-    let device_top = bootmem::top(&[PADDR_TOP, PADDR_USER_DEVICE_TOP, max_paddr]);
-    let ram = bootmem::ram(mb.mmap[..mb.n_mmap].iter().map(|e| (e.base, e.len, e.ty)), HIGHMEM_PADDR, ram_top);
+    let device_top = bootmem::top(&[PADDR_TOP, PADDR_USER_DEVICE_TOP, gpa_top]);
+    let ram = bootmem::ram(mb.mmap[..mb.n_mmap].iter().map(|e| (e.base, e.len, e.ty)), HIGHMEM_PADDR, window_top);
 
     // The root task: the first module, loaded into RAM above everything
     // else (seL4 `load_boot_module`).

@@ -26,26 +26,42 @@ pub fn has_x2apic() -> bool {
     cpuid(1, 0).ecx & (1 << 21) != 0
 }
 
-pub fn base_paddr() -> u64 {
-    rdmsr(msr::APIC_BASE) & 0x000f_ffff_ffff_f000
-}
-
 pub fn is_x2apic() -> bool {
     X2APIC.load(Ordering::Relaxed)
 }
 
-/// Enable the local APIC. `mmio` is where the xAPIC page is mapped; it is
-/// used only when x2APIC is unavailable.
-pub fn enable(mmio: u64) {
-    let base = rdmsr(msr::APIC_BASE);
-    let firmware_x2 = base & (1 << 10) != 0;
-    if has_x2apic() || firmware_x2 {
-        wrmsr(msr::APIC_BASE, base | (1 << 11) | (1 << 10));
-        X2APIC.store(true, Ordering::Relaxed);
+const BASE_ADDR_MASK: u64 = 0x000f_ffff_ffff_f000;
+const X2_ENABLE: u64 = 1 << 10;
+
+#[derive(Debug, PartialEq, Eq)]
+enum Registers {
+    Msr,
+    Mmio(u64),
+}
+
+fn registers(base: u64, cpu_x2: bool, window_top: u64) -> Option<Registers> {
+    if cpu_x2 || base & X2_ENABLE != 0 {
+        Some(Registers::Msr)
     } else {
-        wrmsr(msr::APIC_BASE, base | (1 << 11));
-        MMIO.store(mmio, Ordering::Relaxed);
+        crate::sev::mmio_ptr(base & BASE_ADDR_MASK, 4096, window_top).map(Registers::Mmio)
     }
+}
+
+/// Enable this core's APIC and return its physical base for boot memory
+/// reservation. Only xAPIC requires a mapped register page.
+pub fn enable(window_top: u64) -> Option<u64> {
+    let base = rdmsr(msr::APIC_BASE);
+    match registers(base, has_x2apic(), window_top)? {
+        Registers::Msr => {
+            wrmsr(msr::APIC_BASE, base | (1 << 11) | X2_ENABLE);
+            X2APIC.store(true, Ordering::Relaxed);
+        }
+        Registers::Mmio(mmio) => {
+            wrmsr(msr::APIC_BASE, base | (1 << 11));
+            MMIO.store(mmio, Ordering::Relaxed);
+        }
+    }
+    Some(base & BASE_ADDR_MASK)
 }
 
 #[cfg(not(test))]
@@ -159,6 +175,19 @@ pub fn send_ipi(dest: u32, icr_lo: u32) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_xapic_needs_a_mapped_register_page() {
+        let top = 16 << 30;
+        assert_eq!(registers(top, true, top), Some(Registers::Msr));
+        assert_eq!(registers(top | X2_ENABLE, false, top), Some(Registers::Msr));
+        assert_eq!(registers(top, false, top), None);
+        let last_page = top - 4096;
+        assert_eq!(
+            registers(last_page | (1 << 11), false, top),
+            Some(Registers::Mmio(fl4_core::layout::pptr(last_page)))
+        );
+    }
 
     fn set_in_service(v: u32) {
         let r = REG_ISR + (v / 32) * 0x10;

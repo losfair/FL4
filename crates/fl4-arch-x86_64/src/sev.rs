@@ -17,6 +17,13 @@ pub fn init(mask: u64) { MASK.store(mask, Ordering::Relaxed); }
 
 pub fn mask() -> u64 { MASK.load(Ordering::Relaxed) }
 
+/// End of the contiguous GPA range below both MAXPHYADDR and the C-bit.
+/// AMD APM vol. 2 §15.34.6 applies PhysAddrReduction to the system physical
+/// address after nested translation. The guest uses its advertised width.
+pub fn gpa_top(max_paddr: u64, private_mask: u64) -> u64 {
+    if private_mask == 0 { max_paddr } else { max_paddr.min(private_mask) }
+}
+
 fn shared_ptr(pa: u64) -> u64 {
     if mask() == 0 { pptr(pa) } else { SHARED_BASE + pa }
 }
@@ -93,6 +100,14 @@ pub fn transition(base: u64, bytes: u64, shared: bool) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn contiguous_gpas_stop_at_the_guest_width_or_the_visibility_bit() {
+        assert_eq!(gpa_top(1 << 52, 0), 1 << 52);
+        assert_eq!(gpa_top(1 << 52, 1 << 51), 1 << 51);
+        assert_eq!(gpa_top(1 << 48, 1 << 39), 1 << 39);
+        assert_eq!(gpa_top(1 << 36, 1 << 51), 1 << 36);
+    }
 
     #[test]
     fn uninstalled_memory_and_mmio_bounds() {

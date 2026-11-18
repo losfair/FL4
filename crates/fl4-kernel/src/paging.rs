@@ -116,14 +116,14 @@ fn map_image(pd: &mut Table, pts: &mut [Table; IMAGE_PTS], start: u64, end: u64,
 /// window (what fl4-core uses as the kernel root) and the top of the
 /// physical memory the window maps. With the skim window the window's
 /// mappings are not global, so none survives a switch to user tables.
-pub fn init(nx: bool, skim: bool) -> (u64, u64) {
+pub fn init(nx: bool, skim: bool, gpa_top: u64) -> (u64, u64) {
     let t = unsafe { &mut *TABLES.0.get() };
     let nx_bit = if nx { NX } else { 0 };
     let wg = if skim { 0 } else { G };
     let huge = has_huge_pages();
     let max = if huge { PADDR_TOP } else { (SMALL_WINDOW_GIB as u64) << 30 };
     let mask = sev::mask();
-    let window_top = if mask == 0 { max } else { max.min(mask) };
+    let window_top = max.min(gpa_top);
     let flags = P | RW | PS | wg | nx_bit;
     // SEV always encrypts page-table walks (including CR3). The C-bit on
     // a leaf selects the data view. Keep the kernel window private and use

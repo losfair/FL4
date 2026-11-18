@@ -106,8 +106,8 @@ fn retype_shared<S: Store, A: Arch>(s: &mut S, a: &mut A, length: u64, slot: Slo
     let depth = msg::syscall_arg(s, ct, buf, 2);
     let offset = msg::syscall_arg(s, ct, buf, 3);
     let count = msg::syscall_arg(s, ct, buf, 4);
+    if count == 0 || count > limit { return range(1, limit); }
     let dest = retype_dest(s, extra[0], index, depth, offset, count)?;
-    if count > limit { return range(1, limit); }
     ensure_empty_slots(s, dest, offset, offset.wrapping_add(count))?;
 
     let reset = cdt::ensure_no_children(s, slot).is_ok();
