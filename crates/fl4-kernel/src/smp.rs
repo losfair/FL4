@@ -2,7 +2,7 @@
 use crate::{entry, gdt, kprintln, paging};
 use core::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use fl4_arch_x86_64::arch::TIMER_VECTOR;
-use fl4_arch_x86_64::{apic, cpu, fpu, percpu, pit, smp, timer};
+use fl4_arch_x86_64::{apic, cpu, fpu, percpu, pit, sev::snp, smp, timer};
 use fl4_core::layout::{pptr, MAX_NODES};
 use fl4_core::sched;
 
@@ -62,13 +62,18 @@ const _: () = assert!(
 /// limit. Returns the number of cores running, the boot core included.
 pub fn start_aps(apic_ids: &[u32], f: Features) -> usize {
     unsafe { FEATURES = f };
+    let snp_guest = snp::active();
+    if snp_guest && !snp::ap_creation() {
+        kprintln!("FL4: SNP hypervisor does not advertise AP creation; using one core");
+        return 1;
+    }
     let max = (MAX_NODES as usize).min(percpu::MAX_CPUS);
     let bsp = percpu::apic_id(percpu::cpu_index());
     let smt_shift = fl4_arch_x86_64::spec::smt_shift();
     let tramp = unsafe { &fl4_ap_trampoline as *const u8 };
     let len = unsafe { &fl4_ap_trampoline_end as *const u8 as usize } - tramp as usize;
     let data_off = unsafe { &fl4_ap_data as *const u8 as usize } - tramp as usize;
-    let boot_root = paging::ap_boot_root();
+    let boot_root = if snp_guest { 0 } else { paging::ap_boot_root() };
     let mut next = 1;
     for &id in apic_ids {
         if next >= max || !fl4_arch_x86_64::spec::allow_ap(
@@ -77,22 +82,26 @@ pub fn start_aps(apic_ids: &[u32], f: Features) -> usize {
         }
         let c = next;
         let stack_top = percpu::stack_top(c);
-        unsafe {
-            core::ptr::copy_nonoverlapping(tramp, pptr(AP_BASE) as *mut u8, len);
-            let d = (pptr(AP_BASE) as usize + data_off) as *mut u64;
-            d.write_volatile(boot_root);
-            d.add(1).write_volatile((1 << 8) | if f.efer_nx { 1 << 11 } else { 0 });
-            d.add(2).write_volatile(stack_top);
-            d.add(3).write_volatile(fl4_ap_main as *const () as u64);
-            d.add(4).write_volatile(c as u64);
-        }
         let before = smp::num_online();
-        // INIT, then two STARTUPs with the trampoline's page number.
-        apic::send_ipi(id, 0x4500);
-        pit::wait(pit_us(10_000), || {});
-        for _ in 0..2 {
-            apic::send_ipi(id, 0x4600 | (AP_BASE >> 12) as u32);
-            wait_us(200);
+        if snp_guest {
+            crate::snp::start_ap(c, id, stack_top, fl4_ap_main as *const () as u64);
+        } else {
+            unsafe {
+                core::ptr::copy_nonoverlapping(tramp, pptr(AP_BASE) as *mut u8, len);
+                let d = (pptr(AP_BASE) as usize + data_off) as *mut u64;
+                d.write_volatile(boot_root);
+                d.add(1).write_volatile((1 << 8) | if f.efer_nx { 1 << 11 } else { 0 });
+                d.add(2).write_volatile(stack_top);
+                d.add(3).write_volatile(fl4_ap_main as *const () as u64);
+                d.add(4).write_volatile(c as u64);
+            }
+            // INIT, then two STARTUPs with the trampoline's page number.
+            apic::send_ipi(id, 0x4500);
+            pit::wait(pit_us(10_000), || {});
+            for _ in 0..2 {
+                apic::send_ipi(id, 0x4600 | (AP_BASE >> 12) as u32);
+                wait_us(200);
+            }
         }
         let deadline = cpu::rdtsc() + timer::us_to_ticks(100_000);
         while smp::num_online() == before && AP_REJECTED.load(Ordering::Acquire) == 0
@@ -130,6 +139,7 @@ pub fn release_aps() {
 #[no_mangle]
 extern "C" fn fl4_ap_main(c: u64) -> ! {
     let f = unsafe { FEATURES };
+    if snp::active() { snp::register_cpu(); }
     cpu::write_cr3(paging::root_paddr());
     cpu::write_cr4(f.cr4);
     let stack_top = percpu::stack_top(c as usize);

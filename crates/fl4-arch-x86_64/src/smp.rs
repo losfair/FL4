@@ -15,6 +15,7 @@ pub const CALL_FLUSH_TLB: u64 = 3;
 pub const CALL_FPU_DROP: u64 = 5;
 pub const CALL_EPT: u64 = 6;
 pub const CALL_FPU_RELEASE: u64 = 7;
+pub const CALL_SNP_INVLPG: u64 = 8;
 
 /// Kernel entries by how they ran, on all cores (DESIGN.md §7).
 pub static TX_COMMITS: AtomicU64 = AtomicU64::new(0);
@@ -99,6 +100,7 @@ pub fn service(stall: impl FnOnce()) -> bool {
         CALL_EPT => crate::vm::invalidate_local(a0),
         CALL_FPU_DROP => crate::fpu::forget_local(a0),
         CALL_FPU_RELEASE => crate::fpu::release_local(a0),
+        CALL_SNP_INVLPG => crate::sev::invalidate_aliases(a0, a1),
         _ => {}
     }
     CALL.pending.fetch_and(!me, Ordering::AcqRel);

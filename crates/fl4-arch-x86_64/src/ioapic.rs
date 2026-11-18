@@ -62,8 +62,8 @@ fn disable_interrupts() -> bool {
 fn read(i: usize, reg: u32) -> u32 {
     let b = BASE[i].load(Ordering::Relaxed);
     unsafe {
-        core::ptr::write_volatile(b as *mut u32, reg);
-        core::ptr::read_volatile((b + 0x10) as *const u32)
+        crate::sev::write_mmio32(b, reg);
+        crate::sev::read_mmio32(b + 0x10)
     }
 }
 
@@ -71,8 +71,8 @@ fn read(i: usize, reg: u32) -> u32 {
 fn write(i: usize, reg: u32, v: u32) {
     let b = BASE[i].load(Ordering::Relaxed);
     unsafe {
-        core::ptr::write_volatile(b as *mut u32, reg);
-        core::ptr::write_volatile((b + 0x10) as *mut u32, v);
+        crate::sev::write_mmio32(b, reg);
+        crate::sev::write_mmio32(b + 0x10, v);
     }
 }
 

@@ -122,6 +122,27 @@ pub fn init_idt() {
     }
 }
 
+/// The SNP handoff needs #VC before setting up the per-core state. Only
+/// expose that gate until the full IDT and its IST stacks are ready.
+static mut BOOT_IDT: Idt = Idt([0; 512]);
+pub const BOOT_IDT_LIMIT: u16 = 30 * 16 - 1;
+
+pub fn boot_idt_base() -> u64 {
+    core::ptr::addr_of!(BOOT_IDT) as u64
+}
+
+pub fn load_boot_vc() {
+    let a = core::ptr::addr_of_mut!(BOOT_IDT).cast::<u64>();
+    let h = unsafe { &fl4_vectors as *const u8 as u64 + 16 * 29 };
+    let lo = (h & 0xffff) | ((KERNEL_CS as u64) << 16) | (0x8e << 40) | (((h >> 16) & 0xffff) << 48);
+    let ip = Pointer { limit: BOOT_IDT_LIMIT, base: a as u64 };
+    unsafe {
+        a.add(58).write(lo);
+        a.add(59).write(h >> 32);
+        asm!("lidt [{}]", in(reg) &ip, options(readonly, nostack, preserves_flags));
+    }
+}
+
 /// Load the GDT, TSS and IDT on core `cpu`, with `stack_top` as the
 /// kernel stack entries from user mode move to, and set up SYSCALL.
 pub fn init_core(cpu: usize, stack_top: u64) {

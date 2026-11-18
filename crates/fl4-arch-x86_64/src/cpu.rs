@@ -3,11 +3,18 @@ use core::arch::asm;
 
 #[inline]
 pub fn outb(port: u16, v: u8) {
+    if crate::sev::snp::active() {
+        crate::sev::snp::port(port, 1, false, u32::from(v));
+        return;
+    }
     unsafe { asm!("out dx, al", in("dx") port, in("al") v, options(nomem, nostack, preserves_flags)) }
 }
 
 #[inline]
 pub fn inb(port: u16) -> u8 {
+    if crate::sev::snp::active() {
+        return crate::sev::snp::port(port, 1, true, 0) as u8;
+    }
     let v: u8;
     unsafe { asm!("in al, dx", in("dx") port, out("al") v, options(nomem, nostack, preserves_flags)) }
     v
@@ -15,11 +22,18 @@ pub fn inb(port: u16) -> u8 {
 
 #[inline]
 pub fn outw(port: u16, v: u16) {
+    if crate::sev::snp::active() {
+        crate::sev::snp::port(port, 2, false, u32::from(v));
+        return;
+    }
     unsafe { asm!("out dx, ax", in("dx") port, in("ax") v, options(nomem, nostack, preserves_flags)) }
 }
 
 #[inline]
 pub fn inw(port: u16) -> u16 {
+    if crate::sev::snp::active() {
+        return crate::sev::snp::port(port, 2, true, 0) as u16;
+    }
     let v: u16;
     unsafe { asm!("in ax, dx", in("dx") port, out("ax") v, options(nomem, nostack, preserves_flags)) }
     v
@@ -27,11 +41,18 @@ pub fn inw(port: u16) -> u16 {
 
 #[inline]
 pub fn outl(port: u16, v: u32) {
+    if crate::sev::snp::active() {
+        crate::sev::snp::port(port, 4, false, u32::from(v));
+        return;
+    }
     unsafe { asm!("out dx, eax", in("dx") port, in("eax") v, options(nomem, nostack, preserves_flags)) }
 }
 
 #[inline]
 pub fn inl(port: u16) -> u32 {
+    if crate::sev::snp::active() {
+        return crate::sev::snp::port(port, 4, true, 0) as u32;
+    }
     let v: u32;
     unsafe { asm!("in eax, dx", in("dx") port, out("eax") v, options(nomem, nostack, preserves_flags)) }
     v
@@ -47,6 +68,7 @@ pub struct Cpuid {
 
 #[inline]
 pub fn cpuid(leaf: u32, sub: u32) -> Cpuid {
+    if let Some(r) = crate::sev::snp::cpuid(leaf, sub) { return r; }
     let r = core::arch::x86_64::__cpuid_count(leaf, sub);
     Cpuid { eax: r.eax, ebx: r.ebx, ecx: r.ecx, edx: r.edx }
 }
@@ -225,7 +247,7 @@ pub fn write_dr6(v: u64) {
 }
 
 pub fn write_dr7(v: u64) {
-    unsafe { asm!("mov dr7, {}", in(reg) v, options(nostack, preserves_flags)) }
+    unsafe { asm!("mov dr7, rax", in("rax") v, options(nostack, preserves_flags)) }
 }
 
 pub fn write_dr(i: u64, v: u64) {

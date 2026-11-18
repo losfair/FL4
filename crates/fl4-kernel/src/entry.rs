@@ -137,6 +137,12 @@ fn save_user(s: &mut PhysStore, f: &Frame) {
 }
 
 fn kernel_fault(f: &Frame) -> ! {
+    if fl4_arch_x86_64::sev::snp::active() {
+        // Injected exceptions must not send private registers or RAM to
+        // a hypervisor-controlled console.
+        kprintln!("FL4: SNP kernel exception {:#x} error {:#x}", f.vector, f.error);
+        fl4_arch_x86_64::sev::snp::terminate(0);
+    }
     kprintln!(
         "rax {:#x} rbx {:#x} rcx {:#x} rdx {:#x} rsi {:#x} rdi {:#x} rbp {:#x}\nr8 {:#x} r9 {:#x} r10 {:#x} r11 {:#x} r12 {:#x} r13 {:#x} r14 {:#x} r15 {:#x}",
         f.rax, f.rbx, f.rcx, f.rdx, f.rsi, f.rdi, f.rbp, f.r8, f.r9, f.r10, f.r11, f.r12, f.r13, f.r14, f.r15
@@ -319,6 +325,24 @@ fn deferred_user_debug(f: &Frame) -> bool {
 #[no_mangle]
 extern "C" fn fl4_entry(f: &mut Frame) -> u64 {
     let v = f.vector;
+    if v == 29 && fl4_arch_x86_64::sev::snp::active() {
+        if f.cs & 3 == 0 {
+            crate::snp::vc(f);
+            return 0;
+        }
+        // A second core can otherwise remove a table while #VC walks
+        // the active user's mappings. Save the interrupted state first:
+        // a remote stall can cancel this entry and restart it later.
+        save_user(&mut store(), f);
+        if !lock() || percpu::get().vspace_stale.get() {
+            exit();
+        }
+        if crate::snp::user_vc(f) {
+            save_user(&mut store(), f);
+            exit();
+        }
+        unlock();
+    }
     let irq = (VEC_IRQ_MIN..=VEC_IRQ_MAX).contains(&v);
     if f.cs & 3 == 0 {
         let pc = percpu::get();
@@ -621,7 +645,7 @@ const TRACE_N: usize = 8192;
 static TRACE: crate::trace::Trace<TRACE_N> = crate::trace::Trace::new();
 
 fn trace(f: &Frame) {
-    if !fl4_abi::config::DEBUG_BUILD {
+    if !fl4_abi::config::DEBUG_BUILD || fl4_arch_x86_64::sev::snp::active() {
         return;
     }
     let s = store();

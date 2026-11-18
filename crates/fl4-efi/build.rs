@@ -23,5 +23,14 @@ fn main() {
         }
         _ => s += "pub static ROOTSERVER: &[u8] = &[];\n",
     }
+    if env::var("CARGO_CFG_TARGET_ARCH").as_deref() == Ok("x86_64") {
+        println!("cargo:rerun-if-env-changed=FL4_BOOT_MODULE");
+        if let Ok(p) = env::var("FL4_BOOT_MODULE") {
+            println!("cargo:rerun-if-changed={p}");
+            s += &format!("pub static MODULE: &[u8] = include_bytes!({p:?});\n");
+        } else {
+            s += "pub static MODULE: &[u8] = &[];\n";
+        }
+    }
     fs::write(out.join("embedded.rs"), s).unwrap();
 }

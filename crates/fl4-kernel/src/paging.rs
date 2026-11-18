@@ -7,6 +7,7 @@
 //! data not executable.
 use fl4_arch_x86_64::sev;
 use core::cell::UnsafeCell;
+use core::sync::atomic::{AtomicU64, Ordering};
 use fl4_arch_x86_64::cpu::{cpuid, write_cr3};
 use fl4_core::layout::{PADDR_TOP, PPTR_BASE};
 
@@ -89,9 +90,19 @@ fn sym(s: &u8) -> u64 {
     s as *const u8 as u64
 }
 
+static IMAGE_DELTA: AtomicU64 = AtomicU64::new(0);
+
+pub fn set_image_delta(delta: u64) {
+    IMAGE_DELTA.store(delta, Ordering::Relaxed);
+}
+
 /// Physical address of something in the kernel image.
 pub fn image_paddr(v: u64) -> u64 {
-    v - KERNEL_OFFSET
+    v - KERNEL_OFFSET + IMAGE_DELTA.load(Ordering::Relaxed)
+}
+
+pub fn text_bounds() -> (u64, u64) {
+    unsafe { (sym(&__text_start), sym(&__text_end)) }
 }
 
 pub fn has_huge_pages() -> bool {
@@ -101,14 +112,15 @@ pub fn has_huge_pages() -> bool {
 /// Map the image's pages from virtual `start` to `end` with `flags` into
 /// `pd`, with page tables from `pts`.
 fn map_image(pd: &mut Table, pts: &mut [Table; IMAGE_PTS], start: u64, end: u64, flags: u64) {
-    let mut pa = image_paddr(start) & !0xfff;
-    let end = image_paddr(end + 0xfff) & !0xfff;
-    while pa < end {
-        let pd_i = (pa >> 21) as usize;
+    let mut off = (start - KERNEL_OFFSET) & !0xfff;
+    let end = (end - KERNEL_OFFSET + 0xfff) & !0xfff;
+    let delta = IMAGE_DELTA.load(Ordering::Relaxed);
+    while off < end {
+        let pd_i = (off >> 21) as usize;
         assert!(pd_i < IMAGE_PTS, "FL4: kernel image too large for its page tables");
-        pts[pd_i].0[((pa >> 12) & 511) as usize] = pa | flags | sev::mask();
+        pts[pd_i].0[((off >> 12) & 511) as usize] = (delta + off) | flags | sev::mask();
         pd.0[pd_i] = image_paddr(&pts[pd_i] as *const Table as u64) | P | RW;
-        pa += 4096;
+        off += 4096;
     }
 }
 
@@ -128,8 +140,7 @@ pub fn init(nx: bool, skim: bool, gpa_top: u64) -> (u64, u64) {
     // SEV always encrypts page-table walks (including CR3). The C-bit on
     // a leaf selects the data view. Keep the kernel window private and use
     // a second supervisor-only, NX window for MMIO and DMA transitions.
-    // These permanent superpage aliases rely on base SEV. SNP and TDX would
-    // need accepted-RAM tracking, page-state changes and split mappings.
+    // SNP additionally changes the RMP state before using the new alias.
     let n = (window_top >> 30) as usize;
     for g in 0..n {
         let base = (g as u64) << 30;

@@ -69,7 +69,7 @@ pub fn read(reg: u32) -> u32 {
     if is_x2apic() {
         rdmsr(0x800 + (reg >> 4)) as u32
     } else {
-        unsafe { core::ptr::read_volatile((MMIO.load(Ordering::Relaxed) + reg as u64) as *const u32) }
+        unsafe { crate::sev::read_mmio32(MMIO.load(Ordering::Relaxed) + reg as u64) }
     }
 }
 
@@ -78,7 +78,7 @@ pub fn write(reg: u32, v: u32) {
     if is_x2apic() {
         wrmsr(0x800 + (reg >> 4), v as u64)
     } else {
-        unsafe { core::ptr::write_volatile((MMIO.load(Ordering::Relaxed) + reg as u64) as *mut u32, v) }
+        unsafe { crate::sev::write_mmio32(MMIO.load(Ordering::Relaxed) + reg as u64, v) }
     }
 }
 

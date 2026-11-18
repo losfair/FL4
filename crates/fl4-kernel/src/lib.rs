@@ -11,6 +11,7 @@ mod mb2;
 mod mboot;
 mod paging;
 mod smp;
+mod snp;
 mod trace;
 
 use core::cell::UnsafeCell;
@@ -204,12 +205,18 @@ fn cpu_features() -> (bool, bool, bool) {
 }
 
 #[no_mangle]
-pub extern "C" fn fl4_boot(magic: u32, info: u32, private_mask: u64) -> ! {
+pub extern "C" fn fl4_boot(magic: u32, info: u32, private_mask: u64, cpuid_page: u64, delta: u64) -> ! {
+    paging::set_image_delta(delta);
+    sev::init(private_mask);
+    if cpuid_page != 0 {
+        gdt::load_boot_vc();
+        snp::init(cpuid_page);
+    }
     serial::init();
     kprintln!("FL4: seL4 17.0 (MCS) API kernel, x86_64");
-    sev::init(private_mask);
     if private_mask != 0 {
-        kprintln!("FL4: AMD SEV guest, C-bit {}", private_mask.trailing_zeros());
+        let technology = if sev::snp::active() { "SEV-SNP" } else { "SEV" };
+        kprintln!("FL4: AMD {} guest, C-bit {}", technology, private_mask.trailing_zeros());
     }
     let mb = match mboot::parse(magic, info as u64) {
         Some(b) => b,
@@ -330,7 +337,15 @@ pub extern "C" fn fl4_boot(magic: u32, info: u32, private_mask: u64) -> ! {
         Some(l) => l,
         None => fail("root task is not a loadable x86_64 ELF image"),
     };
-    let load = match ram.find(mods_end, layout.size()) {
+    let image_bytes = layout.size() + mb.modules[1..mb.n_modules].iter()
+        .map(|m| (m.end - m.start).div_ceil(PAGE) * PAGE).sum::<u64>();
+    let load = match ram.find(mods_end, image_bytes).or_else(|| {
+        // EFI allocates the handoff as a unit and may put it at the top
+        // of the last usable range. Search below it as well.
+        if delta == 0 { return None; }
+        ram.find(HIGHMEM_PADDR, image_bytes)
+            .filter(|&base| base + image_bytes <= KERNEL_PHYS_START + delta)
+    }) {
         Some(p) => p,
         None => fail("no memory for the root task"),
     };
@@ -340,7 +355,7 @@ pub extern "C" fn fl4_boot(magic: u32, info: u32, private_mask: u64) -> ! {
     // Device memory never covers the kernel's image and statics, the boot
     // modules or the root task, whatever the memory map says about them
     // (a loader may report its own allocations as reserved).
-    let reserved = [(KERNEL_PHYS_START, mods_end), (image.p_start, image.p_end), (apic_base, apic_base + PAGE)];
+    let reserved = [(KERNEL_PHYS_START + delta, mods_end), (image.p_start, image.p_end), (apic_base, apic_base + PAGE)];
     let ioapics = acpi.ioapics[..acpi.n_ioapics].iter().map(|&b| (b, b + IOAPIC_WINDOW));
     let mut dev = bootmem::device(&ram, device_top, reserved.into_iter().chain(ioapics));
     // The framebuffer console (l4h 0020), if asked for: only on device
@@ -358,6 +373,14 @@ pub extern "C" fn fl4_boot(magic: u32, info: u32, private_mask: u64) -> ! {
     // without clearing.
     let st = unsafe { &mut *STATICS.0.get() };
     let mods = keep_modules(&mb, image.p_end, &ram, &mut st.mods);
+    if sev::snp::active() {
+        // Keep firmware RAM, including the SNP secrets, out of device caps.
+        for e in &mb.mmap[..mb.n_mmap] {
+            if matches!(e.ty, 1 | 3 | 4) {
+                dev.remove(e.base & !(PAGE - 1), e.base.saturating_add(e.len).saturating_add(PAGE - 1) & !(PAGE - 1));
+            }
+        }
+    }
     dev.add(image.p_end, mods);
     if fb_console {
         let ok = match fb {
@@ -373,7 +396,7 @@ pub extern "C" fn fl4_boot(magic: u32, info: u32, private_mask: u64) -> ! {
         }
     }
     let mut free = ram;
-    free.remove(KERNEL_PHYS_START, mods_end);
+    free.remove(KERNEL_PHYS_START + delta, mods_end);
     free.remove(image.p_start, mods);
 
     let extra_len = build_extra_bi(&mut st.extra.0, &acpi, &mb, &st.mods);

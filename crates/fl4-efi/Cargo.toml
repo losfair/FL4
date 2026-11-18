@@ -1,6 +1,6 @@
 [package]
 name = "fl4-efi"
-description = "FL4's UEFI loader for AArch64 (trusted): loads the embedded kernel and the root task"
+description = "FL4's UEFI loader (trusted): loads the embedded kernel and the root task"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -10,5 +10,5 @@ name = "fl4-efi"
 test = false
 bench = false
 
-[dependencies]
+[target.'cfg(target_arch = "aarch64")'.dependencies]
 fl4-bootinfo = { path = "../fl4-bootinfo" }

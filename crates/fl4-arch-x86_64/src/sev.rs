@@ -1,10 +1,13 @@
-//! Base AMD SEV guest memory. Physical addresses in capabilities, BootInfo
+//! AMD SEV guest memory. Physical addresses in capabilities, BootInfo
 //! and device descriptors are always GPAs without the page-table C-bit.
 use core::arch::asm;
 use core::ptr;
 use core::sync::atomic::{AtomicPtr, AtomicU64, Ordering};
 use fl4_core::boot::Region;
 use fl4_core::layout::{paddr, pptr};
+
+pub mod mmio;
+pub mod snp;
 
 static MASK: AtomicU64 = AtomicU64::new(0);
 
@@ -31,6 +34,26 @@ fn shared_ptr(pa: u64) -> u64 {
 /// Only form a direct-window pointer after the complete MMIO span fits.
 pub fn mmio_ptr(pa: u64, bytes: u64, window_top: u64) -> Option<u64> {
     (bytes != 0 && pa < window_top && bytes <= window_top - pa).then(|| shared_ptr(pa))
+}
+
+/// # Safety
+/// The caller owns the MMIO register at a validated device-window address.
+pub unsafe fn read_mmio32(addr: u64) -> u32 {
+    if snp::active() {
+        snp::mmio(addr - SHARED_BASE, 4, None) as u32
+    } else {
+        unsafe { ptr::read_volatile(addr as *const u32) }
+    }
+}
+
+/// # Safety
+/// The caller owns the MMIO register at a validated device-window address.
+pub unsafe fn write_mmio32(addr: u64, value: u32) {
+    if snp::active() {
+        snp::mmio(addr - SHARED_BASE, 4, Some(value as u64));
+    } else {
+        unsafe { ptr::write_volatile(addr as *mut u32, value) }
+    }
 }
 
 /// Installed once before the BSP releases the APs. RAM handed to userspace
@@ -85,16 +108,36 @@ fn flush(base: u64, bytes: u64, optimized: bool) {
 /// and its synchronous shootdown. A new shared range must reach memory even
 /// when its first consumer uses uncached loads or non-snooping DMA.
 pub fn transition(base: u64, bytes: u64, shared: bool) {
+    transition_inner(base, bytes, shared, true);
+}
+
+fn transition_inner(base: u64, bytes: u64, shared: bool, shootdown: bool) {
     let alias = shared_ptr(paddr(base));
     let (old, new) = if shared { (base, alias) } else { (alias, base) };
     let optimized = crate::cpu::cpuid(7, 0).ebx & (1 << 23) != 0;
     unsafe { asm!("mfence", options(nostack, preserves_flags)); }
     flush(old, bytes, optimized);
+    if snp::active() {
+        invalidate_aliases(base, bytes);
+        if shootdown {
+            crate::smp::remote_call(crate::smp::CALL_SNP_INVLPG, base, bytes, crate::smp::online_mask());
+        }
+        snp::change_state(base, paddr(base), bytes, shared);
+    }
     unsafe {
         ptr::write_bytes(new as *mut u8, 0, bytes as usize);
         asm!("mfence", options(nostack, preserves_flags));
     }
     if shared { flush(new, bytes, optimized); }
+}
+
+/// Used by both ends of a synchronous shootdown before an RMP change.
+pub(crate) fn invalidate_aliases(base: u64, bytes: u64) {
+    let alias = shared_ptr(paddr(base));
+    for offset in (0..bytes).step_by(4096) {
+        crate::cpu::invlpg(base + offset);
+        crate::cpu::invlpg(alias + offset);
+    }
 }
 
 #[cfg(test)]

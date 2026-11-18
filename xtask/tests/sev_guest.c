@@ -1,4 +1,4 @@
-/* Freestanding root task for the GCE SEV smoke test. Its only NVMe command
+/* Freestanding root task for the GCE SEV and SNP smoke tests. Its only NVMe command
  * is Identify Controller. Boot firmware has already finished using the disk. */
 #include <stddef.h>
 #include <stdint.h>
@@ -225,6 +225,12 @@ void run(seL4_BootInfo *boot)
     seL4_SetTLSBase(tls[7]);
 #endif
     bi = boot;
+#ifdef FL4_TEST_SNP
+    unsigned eax, ebx, ecx, edx;
+    __asm__ volatile ("cpuid" : "=a"(eax), "=b"(ebx), "=c"(ecx), "=d"(edx) : "a"(0), "c"(0));
+    CHECK(eax >= 1 && ebx == 0x68747541 && edx == 0x69746e65 && ecx == 0x444d4163);
+    say("SEV test: userspace CPUID passed\n");
+#endif
     seL4_SetIPCBuffer(bi->ipcBuffer);
     next_slot = bi->empty.start;
     seL4_CPtr ram = bi->untyped.start;

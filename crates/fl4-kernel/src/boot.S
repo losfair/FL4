@@ -138,6 +138,8 @@ long_entry:
     shlq $32, %rdx
     xorl %ebp, %ebp
     movabsq $fl4_boot, %rax
+    xorl %ecx, %ecx
+    xorl %r8d, %r8d
     call *%rax
 .Lhalt:
     hlt
@@ -168,3 +170,31 @@ boot_stack32_top:
     .global boot_stack_top
 boot_stack: .skip 65536
 boot_stack_top:
+
+    /* Entry from the x86 EFI loader, already on private long-mode tables.
+     * The EFI stack, GDT and IDT may be outside the new mappings. */
+    .section .efi.entry, "ax"
+    .code64
+    movabsq $boot_stack_top, %rsp
+    leaq fl4_efi_gdt(%rip), %rax
+    pushq %rax
+    pushq $0
+    movw $31, 6(%rsp)
+    lgdt 6(%rsp)
+    addq $16, %rsp
+    pushq $0x10
+    leaq .Lefi_cs(%rip), %rax
+    pushq %rax
+    lretq
+.Lefi_cs:
+    movw $0x18, %ax
+    movw %ax, %ds
+    movw %ax, %es
+    movw %ax, %ss
+    xorl %ebp, %ebp
+    call fl4_boot
+    ud2
+    .align 8
+    .global fl4_efi_gdt
+fl4_efi_gdt:
+    .quad 0, 0, 0x00af9a000000ffff, 0x00cf92000000ffff
