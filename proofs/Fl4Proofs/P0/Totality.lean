@@ -10,7 +10,7 @@ namespace Fl4Proofs.P0
 open fl4_core
 
 structure StoreTotal {S : Type _} (st : machine.Store S) : Prop where
-  encryption_mask : ∀ s, st.encryption_mask s ⦃ _ => True ⦄
+  frame_masks : ∀ s, st.frame_masks s ⦃ _ => True ⦄
   read : ∀ s a, st.read s a ⦃ _ => True ⦄
   read_pair : ∀ s a, st.read_pair s a ⦃ _ => True ⦄
   write : ∀ s a v, st.write s a v ⦃ _ => True ⦄
@@ -21,6 +21,7 @@ structure StoreTotal {S : Type _} (st : machine.Store S) : Prop where
 
 structure ArchTotal {A : Type _} (ar : machine.Arch A) : Prop where
   private_device_frame : ∀ a p, ar.private_device_frame a p ⦃ _ => True ⦄
+  dma_ram : ∀ a p b, ar.dma_ram a p b ⦃ _ => True ⦄
   dma_frame : ∀ a p b d, ar.dma_frame a p b d ⦃ _ => True ⦄
   virtualization : ∀ a, ar.virtualization a ⦃ _ => True ⦄
   vcpu_capability : ∀ a f, ar.vcpu_capability a f ⦃ _ => True ⦄
@@ -61,7 +62,7 @@ structure ArchTotal {A : Type _} (ar : machine.Arch A) : Prop where
 -- `ArchTotal` premise from the context.
 section
 variable {S : Type _} {st : machine.Store S}
-@[step] theorem StoreTotal.encryption_mask_spec (h : StoreTotal st) s : st.encryption_mask s ⦃ _ => True ⦄ := h.encryption_mask s
+@[step] theorem StoreTotal.frame_masks_spec (h : StoreTotal st) s : st.frame_masks s ⦃ _ => True ⦄ := h.frame_masks s
 @[step] theorem StoreTotal.read_spec (h : StoreTotal st) s a : st.read s a ⦃ _ => True ⦄ := h.read s a
 @[step] theorem StoreTotal.read_pair_spec (h : StoreTotal st) s a : st.read_pair s a ⦃ _ => True ⦄ := h.read_pair s a
 @[step] theorem StoreTotal.write_spec (h : StoreTotal st) s a v : st.write s a v ⦃ _ => True ⦄ := h.write s a v
@@ -74,6 +75,7 @@ end
 section
 variable {A : Type _} {ar : machine.Arch A}
 @[step] theorem ArchTotal.private_device_frame_spec (h : ArchTotal ar) a p : ar.private_device_frame a p ⦃ _ => True ⦄ := h.private_device_frame a p
+@[step] theorem ArchTotal.dma_ram_spec (h : ArchTotal ar) a p b : ar.dma_ram a p b ⦃ _ => True ⦄ := h.dma_ram a p b
 @[step] theorem ArchTotal.dma_frame_spec (h : ArchTotal ar) a p b d : ar.dma_frame a p b d ⦃ _ => True ⦄ := h.dma_frame a p b d
 @[step] theorem ArchTotal.virtualization_spec (h : ArchTotal ar) a : ar.virtualization a ⦃ _ => True ⦄ := h.virtualization a
 @[step] theorem ArchTotal.vcpu_capability_spec (h : ArchTotal ar) a f : ar.vcpu_capability a f ⦃ _ => True ⦄ := h.vcpu_capability a f

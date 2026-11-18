@@ -145,3 +145,9 @@
     unfold vcpu.revoke_ports_loop.body
     p0_body
   · trivial
+
+@[step] theorem untyped.shared_extent.p0 (u : untyped.UntypedCap) (used : Std.U64) (bits : Std.U64) (count : Std.U64) :
+    untyped.shared_extent u used bits count ⦃ _ => True ⦄ := by
+  unfold untyped.shared_extent
+  simp only [lift, bind_ok]
+  p0_split

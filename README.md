@@ -146,11 +146,12 @@ FL4_EXPECT_VM=present FL4_TESTS='^FL4VCPU' cargo xtask fl4test --smp 1 --setup k
 FL4_P0_STRICT=1 cargo xtask gate
 ```
 
-All 1,053 extracted core functions have checked totality proofs with zero
-`sorry`s in P0. For SEV, `sev_frame_address` proves that leaf entries select
-the requested visibility and decode to the original GPA. The native P1/P3
-l4v model uses plain guest physical addresses.
-Its semantic scope excludes SEV memory sharing, VMEnter, SetEPTRoot, EPT
+P0 checks totality for every extracted core function. For guest memory,
+`guest_pte_roundtrip` proves that constructing a 4 KiB, 2 MiB or 1 GiB
+leaf, extracting its address and removing the visibility bits recovers the
+frame's aligned GPA. The store laws admit private and shared address masks.
+The native l4v page and untyped refinements assume plain frame addresses.
+The l4v semantic scope excludes SEV memory sharing, VMEnter, SetEPTRoot, EPT
 mapping, guest-root ASID assignment, and VCPU/EPT refinement. The entry/exit
 assembly and architecture backend are trusted. See [DESIGN.md §9](DESIGN.md#9-proof-plan) for the exact claims.
 

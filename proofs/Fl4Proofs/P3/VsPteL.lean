@@ -66,6 +66,86 @@ theorem attrs_mem' (attr : U64) :
   cases h0 : attr.bv.getLsbD 0 <;> cases h1 : attr.bv.getLsbD 1 <;> cases h2 : attr.bv.getLsbD 2 <;>
     simp [Set.mem_sdiff, Set.mem_insert_iff]
 
+/-- The address field retained by each hardware leaf format. -/
+def leafMask : capability.FrameSize → BitVec 64
+  | .Small => 0x000fffffffff_f000
+  | .Large => 0x000fffffffe0_0000
+  | .Huge => 0x000fffffc000_0000
+
+private def largeLeaf : capability.FrameSize → Bool
+  | .Small => false
+  | _ => true
+
+private theorem pte_base_bits (addr flags mask : BitVec 64)
+    (ha : addr &&& mask = addr) (hf : flags &&& mask = 0)
+    (hm : 4503599627366400#64 &&& mask = mask) :
+    ((addr &&& 4503599627366400#64) ||| flags) &&& mask = addr := by
+  rw [BitVec.and_or_distrib_right, BitVec.and_assoc, hm, ha, hf]; simp
+
+/-- Constructing the actual PTE and extracting its base preserves every
+aligned address bit, including a visibility bit that lies in the leaf field. -/
+theorem leaf_base_roundtrip {S : Type} {st : machine.Store S} [LawfulStore st]
+    (s : S) (addr attr rights : U64) (sz : capability.FrameSize)
+    (ha : addr.bv &&& leafMask sz = addr.bv) :
+    vspace.make_user_page st s addr attr rights (largeLeaf sz)
+      ⦃ e => vspace.frame_base e sz = ok addr ⦄ := by
+  cases sz with
+  | Small =>
+    refine WP.spec_mono (make_user_page_4k s addr attr rights) ?_
+    rintro e ⟨xd, he⟩
+    apply congrArg Result.ok
+    apply eq_of_bv
+    unfold vspace.ADDR_MASK
+    change e.bv &&& 4503599627366400#64 = addr.bv
+    rw [he]
+    exact pte_base_bits _ _ _ ha (lowBits_bits _ _ _ _ _ _).2.2.2.2.2.2 (by decide)
+  | Large =>
+    refine WP.spec_mono (make_user_page_large s addr attr rights) ?_
+    rintro e ⟨xd, he⟩
+    apply congrArg Result.ok
+    apply eq_of_bv
+    change e.bv &&& 4503599625273344#64 = addr.bv
+    rw [he]
+    exact pte_base_bits _ _ _ ha (lowBitsL_bits _ _ _ _ _ _).2.2.2.2.2.2.2.1 (by decide)
+  | Huge =>
+    refine WP.spec_mono (make_user_page_large s addr attr rights) ?_
+    rintro e ⟨xd, he⟩
+    apply congrArg Result.ok
+    apply eq_of_bv
+    change e.bv &&& 4503598553628672#64 = addr.bv
+    rw [he]
+    exact pte_base_bits _ _ _ ha (lowBitsL_bits _ _ _ _ _ _).2.2.2.2.2.2.2.2 (by decide)
+
+/-- For either visibility-bit polarity and all leaf sizes, the GPA recovered
+through the constructed PTE is the one held by the frame capability. -/
+theorem guest_pte_roundtrip {S A : Type} {st : machine.Store S} [LawfulStore st] (ar : machine.Arch A)
+    (s : S) (a : A) (f : vspace.FrameCap) (pa priv sh attr rights : U64) (fw : Bool)
+    (hp : layout.paddr f.ptr = ok pa) (hm : st.frame_masks s = ok (priv, sh))
+    (hen : priv ||| sh ≠ 0#u64) (hg : pa.bv &&& (priv.bv ||| sh.bv) = 0)
+    (hd : ar.private_device_frame a pa = ok fw) (ha : pa.bv &&& leafMask f.size = pa.bv)
+    (hpriv : priv.bv &&& leafMask .Huge = priv.bv) (hsh : sh.bv &&& leafMask .Huge = sh.bv) :
+    (do let leaf ← vspace.frame_address st ar s a f
+        let e ← vspace.make_user_page st s leaf attr rights (largeLeaf f.size)
+        let b ← vspace.frame_base e f.size
+        vspace.frame_gpa st s b) ⦃ p => p = pa ⦄ := by
+  let tag := if f.is_device && !fw then sh else priv
+  obtain ⟨he, hr⟩ := sev_frame_address st ar s a f pa priv sh fw hp hm hen hg hd
+  have htag : tag.bv &&& leafMask .Huge = tag.bv := by dsimp [tag]; split <;> assumption
+  have ht : tag.bv &&& leafMask f.size = tag.bv := by
+    calc tag.bv &&& leafMask f.size = (tag.bv &&& leafMask .Huge) &&& leafMask f.size := by rw [htag]
+         _ = tag.bv := by rw [BitVec.and_assoc, show leafMask .Huge &&& leafMask f.size = leafMask .Huge by cases f.size <;> decide, htag]
+  have halign : (pa.bv ||| tag.bv : BitVec 64) &&& leafMask f.size = pa.bv ||| tag.bv := by
+    rw [BitVec.and_or_distrib_right, ha, ht]
+  rw [he]
+  simp only [bind_ok]
+  refine WP.spec_bind (leaf_base_roundtrip s (pa ||| tag) attr rights f.size halign) ?_
+  intro e hb
+  rw [hb]
+  simp only [bind_ok]
+  change vspace.frame_gpa st s (pa ||| tag) = ok pa at hr
+  rw [hr]
+  exact (WP.spec_ok _).2 rfl
+
 /-- Low bits of an address with the given mask. -/
 theorem masked_low {p : U64} {m : U64} (hp : (p &&& m) = p) {k : Nat} (hm : m.bv.getLsbD k = false) :
     p.bv.getLsbD k = false := by
