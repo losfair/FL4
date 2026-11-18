@@ -14,7 +14,7 @@ use fl4_arch_x86_64::smp;
 use core::sync::atomic::{AtomicU64, Ordering};
 
 core::arch::global_asm!(
-    include_str!("../../fl4-arch-x86_64/src/spec.S"), include_str!("sysret.S"), include_str!("entry.S"),
+    include_str!("../../fl4-arch-x86_64/src/spec.S"), include_str!("sysret.S"), include_str!("bad_iret.S"), include_str!("entry.S"),
     spec_ibpb = const fl4_arch_x86_64::spec::policy::IBPB,
     spec_rsb = const fl4_arch_x86_64::spec::policy::RSB,
     spec_pbrsb = const fl4_arch_x86_64::spec::policy::PBRSB,
@@ -28,6 +28,8 @@ core::arch::global_asm!(
 extern "C" {
     fn fl4_restore_user(regs: u64, stack_top: u64, cr3: u64) -> !;
     fn fl4_idle(stack_top: u64) -> !;
+    static fl4_idle_loop: u8;
+    static fl4_idle_end: u8;
     static fl4_vectors: u8;
     static fl4_common_entry: u8;
 }
@@ -133,6 +135,30 @@ fn save_user(s: &mut PhysStore, f: &Frame) {
         pc.gs_base.set(cpu::gs_base());
         w(s, reg::FS_BASE, pc.fs_base.get());
         w(s, reg::GS_BASE, pc.gs_base.get());
+    }
+}
+
+/// An IST always lands at a fixed stack top. If it overwrote a live
+/// frame, the fresh frame is usable for termination only. An IRQ taken
+/// with IF clear is also invalid, including after a switch to another IST.
+#[no_mangle]
+extern "C" fn fl4_snp_kernel_entry_stack(f: &Frame) -> u64 {
+    let Some(stack) = crate::gdt::snp_ist(f as *const Frame as u64, f.vector as usize) else {
+        return 0;
+    };
+    if stack.contains(&f.rsp) || (f.vector >= 32 && f.rflags & RFLAGS_IF == 0) {
+        fl4_arch_x86_64::sev::snp::terminate(0);
+    }
+    // The idle loop has reset RSP to the kernel stack top and keeps
+    // nothing on that stack. Dispatch a waking IRQ there, leaving the
+    // small IST available for landing and for the IRET frame.
+    let idle_start = core::ptr::addr_of!(fl4_idle_loop) as u64;
+    let idle_end = core::ptr::addr_of!(fl4_idle_end) as u64;
+    let top = percpu::stack_top(percpu::cpu_index());
+    if f.vector >= 32 && f.rsp == top && (idle_start..idle_end).contains(&f.rip) {
+        top
+    } else {
+        0
     }
 }
 
@@ -589,11 +615,19 @@ pub fn exit() -> ! {
                 continue;
             }
         }
-        let core = s.cur_cpu();
-        let idle = ct.0 == node_get(s, core, node::IDLE_THREAD);
         // Another core invalidated the ASID this core ran: if it was
         // deleted, run the current thread on what its VSpace cap now names
         // (the kernel's tables, where it faults), not on the deleted ones.
+        // That reads the thread's cap, the ASID table and a pool, which a
+        // serial entry on another core may be deleting (and the memory
+        // reused) unless this core holds the gate: after a transaction, or
+        // from the idle loop, it does not.
+        if percpu::get().vspace_stale.get() && smp::multi() && !percpu::get().gate_held.get() {
+            lock();
+            continue;
+        }
+        let core = s.cur_cpu();
+        let idle = ct.0 == node_get(s, core, node::IDLE_THREAD);
         if percpu::get().vspace_stale.replace(false) {
             let mut a = PhysArch;
             if idle {

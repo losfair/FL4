@@ -495,6 +495,13 @@ pub fn clear_free<M: Mem>(cpu: u64, m: &M, addr: u64, len: u64) {
     }
     if ok {
         t.wv = wv;
+        // The lock bits must reach other cores before any zero does (the
+        // seqlock writer's barrier): a lock's CAS is acquire-only and the
+        // clock's release orders nothing after it, so on AArch64 a plain
+        // store here could become visible first, and a reader that began
+        // before this clear would load a zero between two loads of the old
+        // version. A compiler barrier on x86_64 (TSO).
+        m.fence(Ordering::Release);
         m.clear(addr, len);
         // Buffered writes into the region came before the clear.
         for k in 0..t.nw {
@@ -571,6 +578,8 @@ pub fn commit<M: Mem>(cpu: u64, m: &M) -> bool {
         }
     }
     t.wv = wv;
+    // Locks before data, as in `clear_free` (the seqlock writer's barrier).
+    m.fence(Ordering::Release);
     for k in 0..t.nw {
         let i = t.worder[k] as usize;
         m.store(t.wkey[i], t.wval[i]);
@@ -859,6 +868,82 @@ mod tests {
             end(0);
             assert_eq!(m.load(frame + 0x800), 0xdead, "a live frame was cleared");
             assert_eq!(m.load(touch), 4096);
+        }
+    }
+
+    /// A memory that lets a lock's store wait, as AArch64 may: the lock
+    /// CAS (acquire only) and the clock's release order nothing after them,
+    /// so a later plain store can reach other cores first. Locks become
+    /// visible at the next release (or stronger) fence or store. The first
+    /// store to `target` runs a read of it on core 1, whose transaction
+    /// began before the writer's.
+    struct HeldLocks {
+        m: SparseMem,
+        held: core::cell::RefCell<std::vec::Vec<(usize, u64)>>,
+        target: u64,
+        seen: core::cell::Cell<Option<(u64, bool)>>,
+    }
+
+    impl Mem for HeldLocks {
+        fn load(&self, addr: u64) -> u64 { self.m.load(addr) }
+        fn store(&self, addr: u64, v: u64) {
+            self.m.store(addr, v);
+            if addr == self.target && self.seen.get().is_none() {
+                let r = read(1, self, addr);
+                self.seen.set(Some((r, doomed(1))));
+            }
+        }
+        fn a_load(&self, a: &AtomicU64, o: Ordering) -> u64 {
+            let p = a as *const AtomicU64 as usize;
+            if let Some(&(_, v)) = self.held.borrow().iter().find(|h| h.0 == p) {
+                return v;
+            }
+            a.load(o)
+        }
+        fn a_store(&self, a: &AtomicU64, v: u64, o: Ordering) {
+            let p = a as *const AtomicU64 as usize;
+            let mut h = self.held.borrow_mut();
+            if o == Ordering::Relaxed { h.retain(|x| x.0 != p) } else { h.clear() }
+            a.store(v, o)
+        }
+        fn a_cas(&self, a: &AtomicU64, old: u64, new: u64, ok: Ordering, err: Ordering) -> Result<u64, u64> {
+            let r = a.compare_exchange(old, new, ok, err);
+            if r.is_ok() {
+                self.held.borrow_mut().push((a as *const AtomicU64 as usize, old));
+            }
+            r
+        }
+        fn fence(&self, o: Ordering) {
+            if o != Ordering::Acquire {
+                self.held.borrow_mut().clear();
+            }
+            core::sync::atomic::fence(o)
+        }
+    }
+
+    /// A commit's or an in-place clear's data must not reach a reader before
+    /// the lock bits: the reader would accept it under the old version (a
+    /// read-only transaction then commits a snapshot no state ever had).
+    #[test]
+    fn writers_publish_their_locks_before_their_data() {
+        let _test = TEST_LOCK.lock().unwrap();
+        for clear in [false, true] {
+            let target = 0x1e0000;
+            let m = HeldLocks { m: SparseMem::default(), held: Default::default(), target, seen: Default::default() };
+            m.m.store(target, 5);
+            begin(1, &m);
+            begin(0, &m);
+            if clear {
+                clear_free(0, &m, target, STRIPE_BYTES);
+                assert!(!doomed(0));
+            } else {
+                write(0, target, 6);
+            }
+            assert!(commit(0, &m));
+            end(0);
+            let (v, doom) = m.seen.get().expect("the writer stored no data");
+            assert!(doom || v == 5, "a reader saw {v} under the version before the {}", if clear { "clear" } else { "commit" });
+            end(1);
         }
     }
 

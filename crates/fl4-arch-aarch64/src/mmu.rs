@@ -6,7 +6,8 @@ use fl4_core::layout;
 
 /// Physical ranges the kernel window maps (for cache maintenance through
 /// it), set at boot.
-const MAX_RANGES: usize = 64;
+/// As many as the kernel's window can have (fl4-kernel-aarch64 `fl4_boot`).
+const MAX_RANGES: usize = 128;
 static RANGES: [(AtomicU64, AtomicU64); MAX_RANGES] = [const { (AtomicU64::new(0), AtomicU64::new(0)) }; MAX_RANGES];
 static NRANGES: AtomicUsize = AtomicUsize::new(0);
 
@@ -19,7 +20,9 @@ pub fn add_window_range(start: u64, end: u64) {
     }
 }
 
-fn in_window(start: u64, len: u64) -> bool {
+/// `[start, start + len)` (physical) lies in one range the kernel window
+/// maps.
+pub fn in_window(start: u64, len: u64) -> bool {
     let n = NRANGES.load(Ordering::Acquire);
     (0..n).any(|i| {
         let s = RANGES[i].0.load(Ordering::Relaxed);
@@ -38,24 +41,42 @@ fn in_window(start: u64, len: u64) -> bool {
 /// An invalidation counts itself before it broadcasts; a switch that
 /// installs an ASID's new root follows the reassignment under the serial
 /// gate, so it sees the count of the invalidation that retired the ASID.
+///
+/// As on x86_64 (tlb.rs), a switch publishes the core's new TTBR0 value,
+/// then reads the count; an invalidation bumps the count, then reads which
+/// cores run the ASID (`cores_on`). Both are sequentially consistent, so
+/// either the invalidating core sees the switching one and calls it, or
+/// the switching core sees the new count and flushes.
 static ASID_GEN: AtomicU64 = AtomicU64::new(0);
+
+/// The empty user table (fl4-core's `ks::KERNEL_ROOT`, kernel virtual),
+/// which a core runs with ASID 0 once the ASID it ran is retired.
+static EMPTY_ROOT: AtomicU64 = AtomicU64::new(0);
+
+/// Set once at boot, before any core runs user code.
+pub fn set_empty_root(root: u64) {
+    EMPTY_ROOT.store(root, Ordering::Relaxed);
+}
 
 /// Run on the address space `root` (kernel virtual) with `asid`.
 pub fn switch(root: u64, asid: u64) {
     let v = layout::paddr(root) | (asid << 48);
-    let pc = percpu::get();
-    let g = ASID_GEN.load(Ordering::SeqCst);
-    if pc.ttbr0 != v {
+    let me = percpu::cpu_index();
+    if percpu::ttbr0(me) != v {
         crate::msr!("ttbr0_el1", v);
         cpu::isb();
-        pc.ttbr0 = v;
     }
+    // Publish before reading the count (module comment); also when the
+    // value is unchanged, which costs one store.
+    percpu::set_ttbr0(v);
+    let g = ASID_GEN.load(Ordering::SeqCst);
     // Also when the value is unchanged: a root freed and made again at
     // the same address can take back the same ASID.
-    if pc.asid_gen != g {
+    let pc = percpu::get();
+    if pc.asid_gen.get() != g {
         // After the switch, so the old tables cannot refill it.
         unsafe { core::arch::asm!("tlbi vmalle1", "dsb nsh", "isb", options(nostack)) };
-        pc.asid_gen = g;
+        pc.asid_gen.set(g);
     }
 }
 
@@ -87,8 +108,7 @@ pub fn cores_on(asid: u64) -> u64 {
     let online = crate::smp::online_mask();
     let mut m = 0;
     for c in 0..percpu::MAX_CPUS {
-        let ttbr0 = unsafe { core::ptr::read_volatile(&percpu::get_for(c).ttbr0) };
-        if c != me && online & (1 << c) != 0 && ttbr0 >> 48 == asid {
+        if c != me && online & (1 << c) != 0 && percpu::ttbr0(c) >> 48 == asid {
             m |= 1 << c;
         }
     }
@@ -96,13 +116,18 @@ pub fn cores_on(asid: u64) -> u64 {
 }
 
 /// Remote side of `invalidate_asid` (`smp::CALL_ASID`): the broadcast
-/// invalidation has run, but if the ASID was deleted this core still
-/// walks the deleted tables, which can be reused. The exit sets the
-/// address space again from the current thread's VSpace cap.
+/// invalidation has run, but if the ASID was deleted its tables can be
+/// freed and reused as soon as the call returns, while this core goes on
+/// in the kernel with TTBR0 on them: its table walker may still walk them
+/// (speculatively too), refilling the TLB from whatever they have become
+/// and, with hardware access flags, setting bit 10 of words in them. So
+/// it leaves them now for the empty table with ASID 0 (whose switch, the
+/// count having moved, also flushes this core's TLB), and the exit sets
+/// the address space again from the current thread's VSpace cap.
 pub fn retired(asid: u64) {
-    let pc = percpu::get();
-    if pc.ttbr0 >> 48 == asid {
-        pc.vspace_stale = true;
+    if percpu::ttbr0(percpu::cpu_index()) >> 48 == asid {
+        switch(EMPTY_ROOT.load(Ordering::Relaxed), 0);
+        percpu::get().vspace_stale.set(true);
     }
 }
 
@@ -121,7 +146,7 @@ pub fn cache_op(op: u64, root: u64, asid: u64, vaddr: u64, len: u64, paddr: u64)
     let (va, switched) = if in_window(paddr, len) {
         (layout::pptr(paddr), None)
     } else {
-        let old = percpu::get().ttbr0;
+        let old = percpu::ttbr0(percpu::cpu_index());
         switch(root, asid);
         (vaddr, Some(old))
     };
@@ -137,6 +162,6 @@ pub fn cache_op(op: u64, root: u64, asid: u64, vaddr: u64, len: u64, paddr: u64)
     if let Some(old) = switched {
         crate::msr!("ttbr0_el1", old);
         cpu::isb();
-        percpu::get().ttbr0 = old;
+        percpu::set_ttbr0(old);
     }
 }

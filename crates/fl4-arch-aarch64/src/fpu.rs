@@ -23,15 +23,15 @@ fn use_count(t: u64) -> *mut u8 {
 pub fn init() {
     crate::msr!("cpacr_el1", FPEN_EL0_TRAP);
     crate::cpu::isb();
-    percpu::get().fp_enabled = false;
+    percpu::get().fp_enabled.set(false);
 }
 
 fn set_enabled(on: bool) {
     let pc = percpu::get();
-    if pc.fp_enabled != on {
+    if pc.fp_enabled.get() != on {
         crate::msr!("cpacr_el1", if on { FPEN_NONE } else { FPEN_EL0_TRAP });
         crate::cpu::isb();
-        pc.fp_enabled = on;
+        pc.fp_enabled.set(on);
     }
 }
 
@@ -109,8 +109,7 @@ pub fn switch_to(t: u64, fpu_disabled: bool) {
         set_enabled(false);
         return;
     }
-    let pc = percpu::get();
-    if pc.fpu_owner == t {
+    if owner() == t {
         set_enabled(true);
         return;
     }
@@ -124,13 +123,22 @@ pub fn switch_to(t: u64, fpu_disabled: bool) {
     load(t);
 }
 
+/// The TCB whose state this core's registers hold (0 = none).
+fn owner() -> u64 {
+    percpu::fpu_owner(percpu::cpu_index())
+}
+
+/// Ownership moves only after the registers were saved, and with release
+/// order (`percpu::set_fpu_owner`): a core that no longer sees a thread as
+/// the owner here (`owner_core`, acquire) reads its saved image, which must
+/// hold the saved registers, not what the TCB held before.
 fn load(t: u64) {
-    let pc = percpu::get();
-    if pc.fpu_owner != 0 {
-        save(pc.fpu_owner);
+    let old = owner();
+    if old != 0 {
+        save(old);
     }
     restore(t);
-    percpu::get().fpu_owner = t;
+    percpu::set_fpu_owner(t);
 }
 
 /// An FP/SIMD trap from thread `t`: give it the registers.
@@ -140,23 +148,22 @@ pub fn lazy_load(t: u64) {
         core::ptr::write_volatile(use_count(t), n.saturating_add(1).max(1));
     }
     set_enabled(true);
-    if percpu::get().fpu_owner != t {
+    if owner() != t {
         load(t);
     }
 }
 
 /// Write `t`'s state back to its TCB if it is live on this core.
 fn flush_local(t: u64) {
-    if percpu::get().fpu_owner == t {
+    if owner() == t {
         save(t);
     }
 }
 
 /// Forget `t`'s state if it is live on this core.
 pub fn forget_local(t: u64) {
-    let pc = percpu::get();
-    if pc.fpu_owner == t {
-        pc.fpu_owner = 0;
+    if owner() == t {
+        percpu::set_fpu_owner(0);
     }
 }
 
@@ -167,16 +174,15 @@ pub fn forget_local(t: u64) {
 /// other thread on this core had it trapped already, as a thread that does
 /// not own the registers runs so.
 pub fn release_local(t: u64) {
-    let pc = percpu::get();
-    if pc.fpu_owner == t {
+    if owner() == t {
         save(t);
-        pc.fpu_owner = 0;
+        percpu::set_fpu_owner(0);
         set_enabled(false);
     }
 }
 
 fn owner_core(t: u64) -> Option<usize> {
-    (0..percpu::MAX_CPUS).find(|&c| unsafe { core::ptr::read_volatile(&percpu::get_for(c).fpu_owner) } == t)
+    (0..percpu::MAX_CPUS).find(|&c| percpu::fpu_owner(c) == t)
 }
 
 pub fn is_live(t: u64) -> bool {

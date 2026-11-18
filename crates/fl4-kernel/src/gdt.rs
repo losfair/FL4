@@ -129,6 +129,25 @@ fn ist_index(vector: usize, snp: bool) -> u64 {
     }
 }
 
+/// Bounds of the trusted runtime IST the given frame arrived on. The
+/// boot IDT can deliver #VC before any runtime IST has been installed.
+pub fn snp_ist(frame: u64, vector: usize) -> Option<core::ops::Range<u64>> {
+    let base = unsafe { core::ptr::addr_of!((*TABLES.0.get()).cpus) as u64 };
+    if frame.wrapping_sub(base) >= (MAX_CPUS * SKIM_CPU_SIZE) as u64 {
+        return None;
+    }
+    let core = frame & !(SKIM_CPU_SIZE as u64 - 1);
+    let index = ist_index(vector, true) as usize - 1;
+    let (offset, bytes) = if index < IST_VECTORS.len() {
+        (core::mem::offset_of!(SkimCpu, ist) + index * STACK_BYTES, STACK_BYTES)
+    } else {
+        (core::mem::offset_of!(SkimCpu, snp_ist) + (index - IST_VECTORS.len()) * SNP_STACK_BYTES, SNP_STACK_BYTES)
+    };
+    let start = core + offset as u64;
+    let bounds = start..start + bytes as u64;
+    bounds.contains(&frame).then_some(bounds)
+}
+
 /// Fill the IDT (shared by all cores).
 pub fn init_idt() {
     let t = unsafe { &mut *TABLES.0.get() };

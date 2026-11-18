@@ -17,7 +17,10 @@ const SHARED_BUFFER: u64 = 0x800;
 const VALID: usize = 0x3f0;
 const VERSION: usize = 0xffa;
 
-static CPUID_PAGE: AtomicU64 = AtomicU64::new(0);
+// Also read by the assembly entry path to identify an SNP guest.
+#[no_mangle]
+#[cfg_attr(target_os = "none", link_section = ".bss.skim")]
+static FL4_SNP_CPUID_PAGE: AtomicU64 = AtomicU64::new(0);
 static FEATURES: AtomicU64 = AtomicU64::new(0);
 // Read by the entry and return stubs, including on skim page tables.
 #[no_mangle]
@@ -64,7 +67,7 @@ struct CpuidPage {
 }
 
 pub fn active() -> bool {
-    CPUID_PAGE.load(Ordering::Relaxed) != 0
+    FL4_SNP_CPUID_PAGE.load(Ordering::Relaxed) != 0
 }
 
 fn vmgexit() {
@@ -98,7 +101,7 @@ pub unsafe fn init(cpuid: u64, ghcb: u64) {
     if count == 0 || count > 64 {
         terminate(0);
     }
-    CPUID_PAGE.store(cpuid, Ordering::Relaxed);
+    FL4_SNP_CPUID_PAGE.store(cpuid, Ordering::Relaxed);
     let info = msr_request(0x002);
     if info & 0xfff != 0x001 || (info >> 48) < 2 || ((info >> 32) & 0xffff) > 2 {
         terminate(1);
@@ -144,7 +147,7 @@ pub fn start_cpu(apic: u32, vmsa: u64, features: u64) {
 /// Read launch-validated feature bits. The hypervisor-present bit and
 /// XCR0-dependent XSAVE sizes are synthesized from local state.
 pub fn cpuid(function: u32, sub: u32) -> Option<Cpuid> {
-    let ptr = CPUID_PAGE.load(Ordering::Relaxed);
+    let ptr = FL4_SNP_CPUID_PAGE.load(Ordering::Relaxed);
     if ptr == 0 {
         return None;
     }

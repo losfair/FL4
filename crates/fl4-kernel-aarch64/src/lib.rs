@@ -45,6 +45,8 @@ macro_rules! kprintln {
 }
 
 const PAGE: u64 = 4096;
+// The loader's bounds (fl4-bootinfo) are the kernel's window and user space.
+const _: () = assert!(fl4_bootinfo::LOAD_TOP == PADDR_TOP && fl4_bootinfo::USER_END == fl4_abi::consts::USER_TOP + 1);
 const IDLE_STRIDE: usize = 8192;
 /// Extra BootInfo beyond the device tree.
 const EXTRA_FIXED: u64 = 4096;
@@ -399,6 +401,8 @@ pub extern "C" fn fl4_boot(off: u64) -> ! {
     let mut s = entry::store();
     s.zero(ks_base, ks::SIZE);
     ks_set(&mut s, ks::KERNEL_ROOT, paging::empty_root());
+    // Where a core goes when another retires the ASID it runs (mmu.rs).
+    fl4_arch_aarch64::mmu::set_empty_root(paging::empty_root());
     let mut a = PhysArch;
     if let Err(e) = fl4_core::boot::create_root_task(&mut s, &mut a, &mut p) {
         let why = match e {

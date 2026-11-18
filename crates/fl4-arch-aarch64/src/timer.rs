@@ -45,7 +45,7 @@ pub fn now() -> u64 {
 
 /// Interrupt at counter value `ticks` (or at once if it passed).
 pub fn set_deadline(ticks: u64) {
-    percpu::get().armed = ticks;
+    percpu::get().armed.set(ticks);
     crate::msr!("cntv_cval_el0", if ticks == 0 { 1 } else { ticks });
     crate::msr!("cntv_ctl_el0", CTL_ENABLE);
     crate::cpu::isb();
@@ -62,7 +62,7 @@ pub fn quiesce() {
 /// timer is armed for a deadline still ahead, which replaced the one
 /// that fired. The kernel need not run then.
 pub fn early() -> bool {
-    let armed = percpu::get().armed;
+    let armed = percpu::get().armed.get();
     armed != 0 && now() < armed
 }
 

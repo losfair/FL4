@@ -34,6 +34,14 @@ static PCID: AtomicBool = AtomicBool::new(false);
 static SKIM: AtomicBool = AtomicBool::new(false);
 static INVPCID: AtomicBool = AtomicBool::new(false);
 static GEN: [AtomicU64; GENS] = [const { AtomicU64::new(0) }; GENS];
+/// Physical address of the root `set_kernel_vm_root` runs (fl4-core's
+/// `ks::KERNEL_ROOT`): the kernel's tables, or with the skim window their
+/// template. Set once at boot, before any core runs user code.
+static KERNEL_ROOT: AtomicU64 = AtomicU64::new(0);
+
+pub fn set_kernel_root(paddr: u64) {
+    KERNEL_ROOT.store(paddr, Ordering::Relaxed);
+}
 
 /// A PCID of this core: the ASID it holds and the generation it saw.
 #[derive(Clone, Copy)]
@@ -234,12 +242,19 @@ pub fn remote_invalidate_page(asid: u64, vaddr: u64) {
     }
 }
 
-/// If the ASID was deleted, this core still runs its tables, which can be
-/// reused once the call returns: the exit sets the address space again
-/// from the current thread's VSpace cap.
+/// If the ASID was deleted, its tables can be freed and reused as soon as
+/// the call returns, while this core goes on in the kernel (waiting for
+/// the gate, finishing its entry): without the skim window it runs on
+/// them, kernel half included, and the CPU may walk them (speculatively
+/// too) whatever they have become. So it leaves them now, for the
+/// kernel's root with ASID 0 (`set_kernel_vm_root`), and the exit sets the
+/// address space again from the current thread's VSpace cap. With the
+/// skim window the kernel is on its own tables already; the switch then
+/// only replaces what the exit would load.
 pub fn remote_invalidate_asid(asid: u64) {
     if percpu::current_asid(percpu::cpu_index()) == asid {
         local_invalidate_asid(asid);
+        switch(KERNEL_ROOT.load(Ordering::Relaxed), 0);
         percpu::get().vspace_stale.set(true);
     }
 }

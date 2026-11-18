@@ -153,9 +153,8 @@ pub fn find_redistributor(base: u64, len: u64) -> Option<u64> {
 
 /// The calling core's interface. GICv3: `gicr` is its redistributor.
 pub fn init_cpu(gicr: u64) {
-    let pc = percpu::get();
     if version() == 3 {
-        pc.gicr = gicr;
+        percpu::set_gicr(gicr);
         // Wake the redistributor.
         let w = rd(gicr + GICR_WAKER) & !(1 << 1);
         wr(gicr + GICR_WAKER, w);
@@ -197,7 +196,7 @@ pub fn init_cpu(gicr: u64) {
         let mut t = rd(d + GICD_ITARGETSR);
         t |= t >> 16;
         t |= t >> 8;
-        pc.gic_cpu = (t & 0xff) as u64;
+        percpu::set_gic_cpu((t & 0xff) as u64);
         let c = GICC.load(Ordering::Relaxed);
         wr(c + GICC_PMR, 0xff);
         wr(c + GICC_BPR, 0);
@@ -276,7 +275,7 @@ pub fn pending() -> bool {
 /// None when they cannot be reached from here (GICv2, another core).
 fn banked_base(core: u64) -> Option<u64> {
     if version() == 3 {
-        let r = percpu::get_for(core as usize).gicr;
+        let r = percpu::gicr(core as usize);
         if r == 0 {
             None
         } else {
@@ -330,18 +329,20 @@ pub fn route(id: u64, core: u64) {
         return;
     }
     if version() == 3 {
-        wr64(gicd() + GICD_IROUTER + id * 8, percpu::get_for(core as usize).mpidr);
+        wr64(gicd() + GICD_IROUTER + id * 8, percpu::mpidr(core as usize));
     } else {
-        wr8(gicd() + GICD_ITARGETSR + id, percpu::get_for(core as usize).gic_cpu as u8);
+        wr8(gicd() + GICD_ITARGETSR + id, percpu::gic_cpu(core as usize) as u8);
     }
 }
 
 /// Send SGI `id` to `core`.
 pub fn send_sgi(id: u64, core: u64) {
-    let target = percpu::get_for(core as usize);
+    let c = core as usize;
+    // Everything this core wrote (a remote call's arguments, a woken
+    // thread's state, page tables) before the SGI can reach the target.
     cpu::dsb_ish();
     if version() == 3 {
-        let m = target.mpidr;
+        let m = percpu::mpidr(c);
         let aff0 = m & 0xff;
         let v = (id << 24)
             | (((m >> 8) & 0xff) << 16)
@@ -352,6 +353,6 @@ pub fn send_sgi(id: u64, core: u64) {
         msr_s("s3_0_c12_c11_5", v);
         cpu::isb();
     } else {
-        wr(gicd() + GICD_SGIR, ((target.gic_cpu as u32) << 16) | id as u32);
+        wr(gicd() + GICD_SGIR, ((percpu::gic_cpu(c) as u32) << 16) | id as u32);
     }
 }

@@ -98,7 +98,7 @@ pub fn start_aps(mpidrs: &[u64], ttbr1: u64) -> usize {
         }
         let c = next;
         let stack_top = percpu::init_stack(c);
-        percpu::get_for(c).mpidr = m;
+        percpu::set_mpidr(c, m);
         unsafe {
             params.write_volatile(paging::ident_ttbr0());
             params.add(1).write_volatile(ttbr1);

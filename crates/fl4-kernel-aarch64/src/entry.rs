@@ -58,15 +58,15 @@ pub fn lock() -> bool {
                 stalled.set(true);
             }
         });
-        percpu::get().gate_held = true;
+        percpu::get().gate_held.set(true);
     }
     !stalled.get()
 }
 
 fn unlock() {
     let pc = percpu::get();
-    if pc.gate_held {
-        pc.gate_held = false;
+    if pc.gate_held.get() {
+        pc.gate_held.set(false);
         GATE.release(&Phys);
     }
 }
@@ -97,9 +97,9 @@ impl fl4_sync::EntryEnv for KernelEnv {
     }
     fn set_tx(&self, on: bool) {
         let pc = percpu::get();
-        pc.tx = on;
+        pc.tx.set(on);
         if on {
-            pc.held_used = false;
+            pc.held_used.set(false);
         }
     }
     fn finish_effects(&self, committed: bool) {
@@ -111,21 +111,21 @@ impl fl4_sync::EntryEnv for KernelEnv {
     }
     fn entry_done(&self) {
         let pc = percpu::get();
-        if pc.held_used {
-            pc.held_irq = percpu::NO_IRQ;
+        if pc.held_used.get() {
+            pc.held_irq.set(percpu::NO_IRQ);
         }
-        pc.held_used = false;
+        pc.held_used.set(false);
     }
     fn unhandled_irq(&self) -> Option<u64> {
         let pc = percpu::get();
-        let v = core::mem::replace(&mut pc.held_irq, percpu::NO_IRQ);
-        pc.held_used = false;
+        let v = pc.held_irq.replace(percpu::NO_IRQ);
+        pc.held_used.set(false);
         (v != percpu::NO_IRQ).then_some(v)
     }
     fn holding_gate(&self) {
         let pc = percpu::get();
-        pc.gate_held = true;
-        pc.held_used = false;
+        pc.gate_held.set(true);
+        pc.held_used.set(false);
     }
     fn count(&self, what: fl4_sync::Count) {
         if !fl4_abi::config::DEBUG_BUILD {
@@ -172,7 +172,7 @@ fn take_irq() -> Option<u64> {
     if raw == gic::SPURIOUS || id >= 1020 {
         return None;
     }
-    percpu::get().iar = raw;
+    percpu::get().iar.set(raw);
     if id == irq::TIMER_ID {
         // A stale timer interrupt (l4h 0012): the deadline it was for has
         // been replaced by a later one.
@@ -242,6 +242,22 @@ extern "C" fn fl4_entry(kind: u64, esr: u64, far: u64) -> ! {
 
 #[inline(always)]
 fn dispatch<S: Store>(s: &mut S, a: &mut PhysArch, ec: u64, esr: u64, far: u64, elr: u64, number: i64) {
+    // As on x86_64 (fl4-kernel entry.rs `dispatch_entry`): l4v's
+    // ThreadControlCaps (TCB_SetSpace, _Configure) installs a running
+    // thread's new VSpace root without switching to it. When the current
+    // thread's root cap changed in an entry that did not switch threads,
+    // switch to its new root here, in the entry, rather than letting it go
+    // on in the address space it gave up.
+    let ct = sched::cur_thread(s);
+    let vroot = ct.slot(tl::SLOT_VTABLE).cap(s);
+    dispatch_handler(s, a, ec, esr, far, elr, number);
+    if sched::cur_thread(s) == ct && ct.slot(tl::SLOT_VTABLE).cap(s) != vroot {
+        fl4_core::vspace::set_vm_root(s, a, ct);
+    }
+}
+
+#[inline(always)]
+fn dispatch_handler<S: Store>(s: &mut S, a: &mut PhysArch, ec: u64, esr: u64, far: u64, elr: u64, number: i64) {
     match ec {
         EC_SVC64 => syscall::handle_syscall(s, a, number),
         EC_DABT_LOW => syscall::handle_vm_fault(s, a, far, esr),
@@ -256,7 +272,7 @@ fn dispatch<S: Store>(s: &mut S, a: &mut PhysArch, ec: u64, esr: u64, far: u64, 
 /// An interrupt while this core idled.
 #[no_mangle]
 extern "C" fn fl4_kernel_irq() -> ! {
-    percpu::get().idle = false;
+    percpu::get().idle.set(false);
     if let Some(irq) = take_irq() {
         run_entry(true, |s, a| syscall::handle_interrupt_entry(s, a, irq));
     }
@@ -272,59 +288,65 @@ extern "C" fn fl4_kernel_fault(esr: u64, far: u64, elr: u64, sp: u64) -> ! {
 /// Leave the kernel to the current thread (or the idle loop), giving up
 /// the serial gate.
 pub fn exit() -> ! {
-    let s = &mut store().specialize::<false>();
-    let ct = sched::cur_thread(s);
-    let core = s.cur_cpu();
-    let idle = ct.0 == node_get(s, core, node::IDLE_THREAD);
-    // The ASID this core ran was invalidated by another core: if it was
-    // deleted, run the current thread on what its VSpace cap now names
-    // (the empty table, where it faults), not on the deleted tables.
-    let pc = percpu::get();
-    if pc.vspace_stale {
-        pc.vspace_stale = false;
-        let mut a = PhysArch;
-        if idle {
-            fl4_core::vspace::set_kernel_vm_root(s, &mut a);
-        } else {
-            fl4_core::vspace::set_vm_root(s, &mut a, ct);
+    loop {
+        let s = &mut store().specialize::<false>();
+        let pc = percpu::get();
+        // The ASID this core ran was invalidated by another core: if it was
+        // deleted, run the current thread on what its VSpace cap now names
+        // (the empty table, where it faults), not on the deleted tables.
+        // That reads the thread's cap, the ASID table and a pool, which a
+        // serial entry on another core may be deleting (and the memory
+        // reused) unless this core holds the gate: after a transaction, or
+        // from the idle loop, it does not. Taking it may cancel the entry
+        // (a stall): start over with whatever thread is current then.
+        if pc.vspace_stale.get() && smp::multi() && !pc.gate_held.get() {
+            lock();
+            continue;
         }
+        let ct = sched::cur_thread(s);
+        let core = s.cur_cpu();
+        let idle = ct.0 == node_get(s, core, node::IDLE_THREAD);
+        if pc.vspace_stale.replace(false) {
+            let mut a = PhysArch;
+            if idle {
+                fl4_core::vspace::set_kernel_vm_root(s, &mut a);
+            } else {
+                fl4_core::vspace::set_vm_root(s, &mut a, ct);
+            }
+        }
+        // Page-table writes this entry made reach the table walkers of
+        // every core before the gate opens to the next entry, and before
+        // this core sleeps (a WFI need not drain its stores).
+        mmu::publish_tables();
+        unlock();
+        if idle {
+            pc.idle.set(true);
+            unsafe { fl4_idle(pc.stack_top.load(core::sync::atomic::Ordering::Relaxed)) }
+        }
+        fpu::switch_to(ct.0, ct.flags(s) & fl4_abi::consts::tcb_flag::FPU_DISABLED != 0);
+        mmu::publish_tables();
+        unsafe { fl4_restore_user(ct.0 + tl::REGS) }
     }
-    unlock();
-    if idle {
-        percpu::get().idle = true;
-        unsafe { fl4_idle(percpu::get().stack_top) }
-    }
-    fpu::switch_to(ct.0, ct.flags(s) & fl4_abi::consts::tcb_flag::FPU_DISABLED != 0);
-    mmu::publish_tables();
-    unsafe { fl4_restore_user(ct.0 + tl::REGS) }
 }
 
+// Every core records here, outside the gate: the x86_64 kernel's ring,
+// which never waits (a busy ring drops the entry, a busy dump is skipped).
+#[path = "../../fl4-kernel/src/trace.rs"]
+mod ring;
+
 const TRACE_N: usize = 4096;
-static mut TRACE: [[u64; 6]; TRACE_N] = [[0; 6]; TRACE_N];
-static mut TRACE_I: usize = 0;
+static TRACE: ring::Trace<TRACE_N> = ring::Trace::new();
 
 fn trace(kind: u64, esr: u64, elr: u64, tcb: u64, s: &PhysStore) {
     if !fl4_abi::config::DEBUG_BUILD {
         return;
     }
     let t = Tcb(tcb);
-    let e = [kind, esr, elr, t.reg(s, reg::X7), t.reg(s, reg::X0), tcb];
-    unsafe {
-        let i = TRACE_I;
-        if i >= 2 && (TRACE[(i - 1) % TRACE_N] == e || TRACE[(i - 2) % TRACE_N] == e) {
-            return;
-        }
-        TRACE[i % TRACE_N] = e;
-        TRACE_I = i + 1;
-    }
+    TRACE.record([kind, esr, elr, t.reg(s, reg::X7), t.reg(s, reg::X0), tcb, 0, 0]);
 }
 
 pub fn dump_trace() {
-    unsafe {
-        let n = TRACE_I;
-        for i in n.saturating_sub(32)..n {
-            let t = TRACE[i % TRACE_N];
-            kprintln!("  #{} kind {} esr {:#x} pc {:#x} x7 {} x0 {:#x} tcb {:#x}", i, t[0], t[1], t[2], t[3] as i64, t[4], t[5]);
-        }
-    }
+    TRACE.visit_recent(32, |i, t| {
+        kprintln!("  #{} kind {} esr {:#x} pc {:#x} x7 {} x0 {:#x} tcb {:#x}", i, t[0], t[1], t[2], t[3] as i64, t[4], t[5]);
+    });
 }

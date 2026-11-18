@@ -28,7 +28,7 @@ pub enum Effect {
 pub const MAX_EFFECTS: usize = 64;
 
 fn in_tx() -> bool {
-    percpu::get().tx
+    percpu::get().tx.get()
 }
 
 fn serial_needed() {
@@ -37,14 +37,15 @@ fn serial_needed() {
 
 fn defer(e: Effect) -> bool {
     let pc = percpu::get();
-    if !pc.tx {
+    if !pc.tx.get() {
         return false;
     }
-    if pc.neffects == MAX_EFFECTS {
+    let n = pc.neffects.get();
+    if n == MAX_EFFECTS {
         serial_needed();
     } else {
-        pc.effects[pc.neffects] = e;
-        pc.neffects += 1;
+        pc.effects[n].set(e);
+        pc.neffects.set(n + 1);
     }
     true
 }
@@ -54,9 +55,9 @@ fn mask(irq: u64, m: bool) {
 }
 
 pub fn apply_effects() {
-    let n = percpu::get().neffects;
+    let n = percpu::get().neffects.get();
     for i in 0..n {
-        match percpu::get().effects[i] {
+        match percpu::get().effects[i].get() {
             Effect::Deadline(t) => timer::set_deadline(t),
             Effect::Mask(irq, m) => mask(irq, m),
             Effect::Ack(raw) => gic::eoi(raw),
@@ -65,16 +66,16 @@ pub fn apply_effects() {
             Effect::Putc(c) => serial::putc(c),
         }
     }
-    percpu::get().neffects = 0;
+    percpu::get().neffects.set(0);
 }
 
 pub fn discard_effects() {
-    percpu::get().neffects = 0;
+    percpu::get().neffects.set(0);
 }
 
 /// The raw acknowledge value to end `irq` with.
 fn eoi_value(irq: u64) -> u64 {
-    let raw = percpu::get().iar;
+    let raw = percpu::get().iar.get();
     if raw & 0x3ff == irq::id(irq) {
         raw
     } else {
@@ -103,7 +104,7 @@ pub fn poll_irq() -> u64 {
     if id == irq::TIMER_ID {
         timer::quiesce();
     }
-    percpu::get().iar = raw;
+    percpu::get().iar.set(raw);
     irq::of(id, percpu::cpu_index() as u64)
 }
 
@@ -136,14 +137,13 @@ impl Arch for PhysArch {
     /// transaction that reruns sees it again.
     fn take_pending_irq(&mut self) -> u64 {
         let pc = percpu::get();
-        if pc.held_irq != percpu::NO_IRQ {
-            pc.held_used = true;
-            return pc.held_irq;
+        if pc.held_irq.get() != percpu::NO_IRQ {
+            pc.held_used.set(true);
+            return pc.held_irq.get();
         }
         let v = poll_irq();
-        let pc = percpu::get();
-        pc.held_irq = if v == fl4_core::syscall::NO_IRQ { percpu::NO_IRQ } else { v };
-        pc.held_used = pc.held_irq != percpu::NO_IRQ;
+        pc.held_irq.set(if v == fl4_core::syscall::NO_IRQ { percpu::NO_IRQ } else { v });
+        pc.held_used.set(pc.held_irq.get() != percpu::NO_IRQ);
         v
     }
     fn mask_irq(&mut self, irq: u64, m: bool) {

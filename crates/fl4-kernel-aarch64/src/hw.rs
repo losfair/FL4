@@ -1,8 +1,10 @@
 //! Finding the hardware (DESIGN.md §3): the GIC, the cores, the console
 //! UART, the PSCI conduit and the timer, from the ACPI tables (MADT, GTDT,
 //! SPCR, FADT) when UEFI passed them, otherwise from the device tree. The
-//! tables are read through the kernel window.
-use fl4_arch_aarch64::{serial, smp};
+//! tables are read through the kernel window: only those it maps, and
+//! only inside the lengths they give (a table the window does not reach
+//! is skipped, as is a malformed one, rather than faulting at boot).
+use fl4_arch_aarch64::{mmu, serial, smp};
 use fl4_core::layout::pptr;
 
 pub const MAX_CPUS: usize = 64;
@@ -89,6 +91,11 @@ fn be32(p: u64) -> u32 {
     u32::from_be(rd32(p))
 }
 
+/// `len` bytes at physical `p` can be read through the window.
+fn mapped(p: u64, len: u64) -> bool {
+    mmu::in_window(p, len)
+}
+
 fn checksum(p: u64, len: u64) -> bool {
     let mut s: u8 = 0;
     for i in 0..len {
@@ -99,18 +106,31 @@ fn checksum(p: u64, len: u64) -> bool {
 
 // ---- ACPI ------------------------------------------------------------------
 
+/// A table's header (36 bytes) and then all of it is in the window.
+fn table_len(t: u64) -> Option<u64> {
+    if !mapped(t, 36) {
+        return None;
+    }
+    let len = rd32(t + 4) as u64;
+    (len >= 36 && mapped(t, len)).then_some(len)
+}
+
 fn acpi_tables(rsdp: u64, mut f: impl FnMut(&[u8; 4], u64, u64)) -> bool {
-    if rd64(rsdp) != u64::from_le_bytes(*b"RSD PTR ") || !checksum(rsdp, 20) {
+    if !mapped(rsdp, RSDP_LEN as u64) || rd64(rsdp) != u64::from_le_bytes(*b"RSD PTR ") || !checksum(rsdp, 20) {
         return false;
     }
     let (root, entry) = if rd8(rsdp + 15) >= 2 && rd64(rsdp + 24) != 0 { (rd64(rsdp + 24), 8) } else { (rd32(rsdp + 16) as u64, 4) };
-    let len = rd32(root + 4) as u64;
+    let len = match table_len(root) {
+        Some(l) => l,
+        None => return false,
+    };
     let mut off = 36;
     while off + entry <= len {
         let t = if entry == 8 { rd64(root + off) } else { rd32(root + off) as u64 };
-        let tl = rd32(t + 4) as u64;
-        let sig = rd32(t).to_le_bytes();
-        f(&sig, t, tl);
+        if let Some(tl) = table_len(t) {
+            let sig = rd32(t).to_le_bytes();
+            f(&sig, t, tl);
+        }
         off += entry;
     }
     true
@@ -125,7 +145,7 @@ fn parse_acpi(rsdp: u64, hw: &mut Hw) -> bool {
             while off + 2 <= len {
                 let ty = rd8(t + off);
                 let l = rd8(t + off + 1) as u64;
-                if l < 2 {
+                if l < 2 || off + l > len {
                     break;
                 }
                 let e = t + off;
@@ -234,26 +254,44 @@ struct Prop {
     len: u64,
 }
 
-/// A NUL-terminated string at physical `p` (at most 256 bytes) as a slice
-/// through the window.
-fn cstr(p: u64) -> &'static [u8] {
+/// A NUL-terminated string at physical `p` (at most 256 bytes, and none
+/// at or after `end`) as a slice through the window.
+fn cstr(p: u64, end: u64) -> &'static [u8] {
     let mut n = 0;
-    while n < 256 && rd8(p + n) != 0 {
+    while n < 256 && p + n < end && rd8(p + n) != 0 {
         n += 1;
     }
     unsafe { core::slice::from_raw_parts(pptr(p) as *const u8, n as usize) }
 }
 
+/// The value of property `p` as a string.
+fn prop_str(p: &Prop) -> &'static [u8] {
+    cstr(p.val, p.val + p.len)
+}
+
+/// The blob at `dtb`, if the window holds all of it and its header is
+/// sound (`fl4_bootinfo::fdt_header`).
+fn fdt(dtb: u64) -> Option<fl4_bootinfo::Fdt> {
+    if !mapped(dtb, 40) {
+        return None;
+    }
+    let mut h = [0u8; 40];
+    for (i, b) in h.iter_mut().enumerate() {
+        *b = rd8(dtb + i as u64);
+    }
+    let f = fl4_bootinfo::fdt_header(&h)?;
+    mapped(dtb, f.total).then_some(f)
+}
+
 /// Walk every property of the blob at `dtb`.
 fn fdt_walk(dtb: u64, mut f: impl FnMut(&Prop)) -> bool {
-    if be32(dtb) != 0xd00d_feed {
-        return false;
-    }
-    let off_struct = be32(dtb + 8) as u64;
-    let off_strings = be32(dtb + 12) as u64;
-    let size_struct = be32(dtb + 36) as u64;
-    let mut p = dtb + off_struct;
-    let end = p + size_struct;
+    let h = match fdt(dtb) {
+        Some(h) => h,
+        None => return false,
+    };
+    let mut p = dtb + h.structs.0;
+    let end = dtb + h.structs.1;
+    let (strings, strings_end) = (dtb + h.strings.0, dtb + h.strings.1);
     let mut stack: [&'static [u8]; MAX_DEPTH] = [&[]; MAX_DEPTH];
     let mut depth = 0usize;
     while p + 4 <= end {
@@ -261,7 +299,7 @@ fn fdt_walk(dtb: u64, mut f: impl FnMut(&Prop)) -> bool {
         p += 4;
         match tok {
             FDT_BEGIN_NODE => {
-                let name = cstr(p);
+                let name = cstr(p, end);
                 p = (p + name.len() as u64 + 1 + 3) & !3;
                 if depth < MAX_DEPTH {
                     stack[depth] = name;
@@ -272,14 +310,20 @@ fn fdt_walk(dtb: u64, mut f: impl FnMut(&Prop)) -> bool {
                 depth = depth.saturating_sub(1);
             }
             FDT_PROP => {
+                if p + 8 > end {
+                    return false;
+                }
                 let len = be32(p) as u64;
                 let nameoff = be32(p + 4) as u64;
                 let val = p + 8;
+                if len > end - val || nameoff >= strings_end - strings {
+                    return false;
+                }
                 p = (val + len + 3) & !3;
                 if depth > 0 && depth <= MAX_DEPTH {
                     let node = stack[depth - 1];
                     let parent = if depth >= 2 { stack[depth - 2] } else { &[] };
-                    f(&Prop { depth, node, parent, name: cstr(dtb + off_strings + nameoff), val, len });
+                    f(&Prop { depth, node, parent, name: cstr(strings + nameoff, strings_end), val, len });
                 }
             }
             FDT_NOP => {}
@@ -296,7 +340,7 @@ fn has_compat(p: &Prop, want: &[u8]) -> bool {
     }
     let mut i = 0;
     while i < p.len {
-        let s = cstr(p.val + i);
+        let s = cstr(p.val + i, p.val + p.len);
         if s == want {
             return true;
         }
@@ -333,17 +377,17 @@ fn parse_dt(dtb: u64, hw: &mut Hw) -> bool {
     let mut stdout: &'static [u8] = &[];
     let mut psci_method: &'static [u8] = &[];
     let ok = fdt_walk(dtb, |p| {
-        if p.depth == 1 && p.name == b"#address-cells" {
+        if p.depth == 1 && p.name == b"#address-cells" && p.len >= 4 {
             ac = be32(p.val) as u64;
         }
-        if p.depth == 1 && p.name == b"#size-cells" {
+        if p.depth == 1 && p.name == b"#size-cells" && p.len >= 4 {
             sc = be32(p.val) as u64;
         }
         if p.node == b"chosen" && p.name == b"stdout-path" {
-            stdout = cstr(p.val);
+            stdout = prop_str(p);
         }
         if p.node.starts_with(b"psci") && p.name == b"method" {
-            psci_method = cstr(p.val);
+            psci_method = prop_str(p);
         }
     });
     if !ok {
@@ -421,7 +465,7 @@ fn parse_dt(dtb: u64, hw: &mut Hw) -> bool {
             if p.parent == b"cpus" {
                 // A core's reg is its MPIDR affinity (#address-cells of
                 // /cpus, 1 or 2).
-                if p.node.starts_with(b"cpu@") {
+                if p.node.starts_with(b"cpu@") && p.len >= 4 {
                     let v = if p.len >= 8 { cells(p.val, 2) } else { cells(p.val, 1) };
                     hw.add_cpu(v & 0xff_00ff_ffff);
                 }
@@ -473,14 +517,15 @@ pub fn discover(rsdp: u64, dtb: u64) -> Option<Hw> {
 /// can be far less than the header's total size (QEMU pads its blob to
 /// 1 MiB, more than sel4test's heap holds for a copy).
 pub fn dtb_size(dtb: u64) -> u64 {
-    if be32(dtb) != 0xd00d_feed {
-        return 0;
-    }
-    let total = be32(dtb + 4) as u64;
-    let structs = be32(dtb + 8) as u64 + be32(dtb + 36) as u64;
-    let strings = be32(dtb + 12) as u64 + be32(dtb + 32) as u64;
+    let h = match fdt(dtb) {
+        Some(h) => h,
+        None => return 0,
+    };
+    let total = h.total;
+    let structs = h.structs.1;
+    let strings = h.strings.1;
     // The memory reservation block ends with an all-zero entry.
-    let mut rsv = be32(dtb + 16) as u64;
+    let mut rsv = h.rsv;
     while rsv + 16 <= total && (be32(dtb + rsv) | be32(dtb + rsv + 4) | be32(dtb + rsv + 8) | be32(dtb + rsv + 12)) != 0 {
         rsv += 16;
     }

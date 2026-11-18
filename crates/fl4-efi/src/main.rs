@@ -8,7 +8,9 @@
 use core::arch::asm;
 use core::ffi::c_void;
 #[cfg(target_arch = "aarch64")]
-use fl4_bootinfo::{mem, BootInfo, MemRegion, Module, RootTask, KERNEL_VBASE, MAGIC, VERSION};
+use fl4_bootinfo::elf::{self, Layout};
+#[cfg(target_arch = "aarch64")]
+use fl4_bootinfo::{mem, BootInfo, MemRegion, Module, RootTask, KERNEL_VBASE, LOAD_TOP, MAGIC, USER_END, VERSION};
 
 mod embedded {
     include!(concat!(env!("OUT_DIR"), "/embedded.rs"));
@@ -191,9 +193,13 @@ const PAGE: u64 = 4096;
 #[cfg(target_arch = "aarch64")]
 const MB2: u64 = 2 << 20;
 
+/// Allocate loader data within the architecture's boot address range.
 fn alloc_pages(n: u64) -> u64 {
-    let mut p = 0u64;
-    let r = (bs().allocate_pages)(0, 2, n as usize, &mut p);
+    #[cfg(target_arch = "aarch64")]
+    let mut p = LOAD_TOP - 1;
+    #[cfg(target_arch = "x86_64")]
+    let mut p = (1u64 << 32) - 1;
+    let r = (bs().allocate_pages)(1, 2, n as usize, &mut p);
     if r != SUCCESS {
         fail("out of memory");
     }
@@ -217,6 +223,7 @@ fn alloc_aligned(len: u64) -> u64 {
     a
 }
 
+#[cfg(target_arch = "x86_64")]
 fn rd16(b: &[u8], o: usize) -> u64 {
     u16::from_le_bytes([b[o], b[o + 1]]) as u64
 }
@@ -229,34 +236,12 @@ fn rd64(b: &[u8], o: usize) -> u64 {
     u64::from_le_bytes(b[o..o + 8].try_into().unwrap())
 }
 
+/// Load the image `elf::check` accepted as `l` at `dest` (physical, the
+/// image's `l.size()` bytes).
 #[cfg(target_arch = "aarch64")]
-/// An AArch64 ELF64's loadable segments: (offset, vaddr, filesz, memsz).
-fn segments(elf: &[u8], mut f: impl FnMut(u64, u64, u64, u64)) -> bool {
-    if elf.len() < 64 || &elf[0..4] != b"\x7fELF" || elf[4] != 2 || rd16(elf, 18) != 183 {
-        return false;
-    }
-    let phoff = rd64(elf, 32) as usize;
-    let phentsize = rd16(elf, 54) as usize;
-    let phnum = rd16(elf, 56) as usize;
-    for i in 0..phnum {
-        let ph = phoff + i * phentsize;
-        if ph + 56 > elf.len() || rd32(elf, ph) != 1 {
-            continue;
-        }
-        f(rd64(elf, ph + 8), rd64(elf, ph + 16), rd64(elf, ph + 32), rd64(elf, ph + 40));
-    }
-    true
-}
-
-/// Load `elf` at `dest` (physical) for virtual `v_start`.
-#[cfg(target_arch = "aarch64")]
-fn load_segments(elf: &[u8], dest: u64, v_start: u64, len: u64) {
-    unsafe { core::ptr::write_bytes(dest as *mut u8, 0, len as usize) };
-    segments(elf, |off, vaddr, filesz, _| {
-        let n = filesz as usize;
-        let src = &elf[off as usize..off as usize + n];
-        unsafe { core::ptr::copy_nonoverlapping(src.as_ptr(), (dest + (vaddr - v_start)) as *mut u8, n) };
-    });
+fn load_segments(elf: &[u8], l: &Layout, dest: u64) {
+    let d = unsafe { core::slice::from_raw_parts_mut(dest as *mut u8, l.size() as usize) };
+    elf::load(elf, l, d);
 }
 
 #[cfg(target_arch = "aarch64")]
@@ -353,29 +338,50 @@ fn config_table(g: Guid) -> u64 {
     0
 }
 
+/// Pages for the loader's page tables: two roots, and for each mapping a
+/// level 1 and a level 2 table per 512 GiB and 1 GiB it touches (the
+/// region is far smaller than 1 GiB, but may cross either boundary).
+#[cfg(target_arch = "aarch64")]
+const TABLE_PAGES: u64 = 10;
+
 /// The loader's page tables in the kernel region: the region mapped at
 /// its own address (TTBR0) and at KERNEL_VBASE (TTBR1), in 2 MiB blocks,
 /// normal memory (MAIR index 0), executable.
 #[cfg(target_arch = "aarch64")]
 fn build_tables(tables: u64, pa: u64, len: u64) -> (u64, u64) {
-    let t = |i: u64| tables + i * PAGE;
-    unsafe { core::ptr::write_bytes(tables as *mut u8, 0, 6 * PAGE as usize) };
-    let w = |table: u64, idx: u64, v: u64| unsafe { ((table + (idx & 511) * 8) as *mut u64).write_volatile(v) };
-    let table_desc = |p: u64| p | 3;
+    unsafe { core::ptr::write_bytes(tables as *mut u8, 0, (TABLE_PAGES * PAGE) as usize) };
+    let mut used = 2;
+    let mut alloc = || {
+        if used == TABLE_PAGES {
+            fail("boot page tables exhausted");
+        }
+        used += 1;
+        tables + (used - 1) * PAGE
+    };
+    let slot = |table: u64, va: u64, shift: u64| (table + ((va >> shift) & 511) * 8) as *mut u64;
     // Normal, inner shareable, access flag, EL1 read-write.
     let block = |p: u64| p | 1 | (3 << 8) | (1 << 10);
-    let map = |root: u64, l1: u64, l2: u64, va: u64| {
-        w(root, va >> 39, table_desc(l1));
-        w(l1, va >> 30, table_desc(l2));
+    let mut next = |table: u64, va: u64, shift: u64| {
+        let e = slot(table, va, shift);
+        let v = unsafe { e.read_volatile() };
+        if v & 1 != 0 {
+            return v & 0x0000_ffff_ffff_f000;
+        }
+        let t = alloc();
+        unsafe { e.write_volatile(t | 3) };
+        t
+    };
+    for (root, va) in [(tables, pa), (tables + PAGE, KERNEL_VBASE)] {
         let mut off = 0;
         while off < len {
-            w(l2, (va + off) >> 21, block(pa + off));
+            let v = va + off;
+            let l1 = next(root, v, 39);
+            let l2 = next(l1, v, 30);
+            unsafe { slot(l2, v, 21).write_volatile(block(pa + off)) };
             off += MB2;
         }
-    };
-    map(t(0), t(1), t(2), pa);
-    map(t(3), t(4), t(5), KERNEL_VBASE);
-    (t(0), t(3))
+    }
+    (tables, tables + PAGE)
 }
 
 /// Leave the loader for the kernel: caches and MMU off at this exception
@@ -439,17 +445,18 @@ extern "efiapi" fn efi_main(image: Handle, system: *mut SystemTable) -> Status {
 
     // The kernel region: image, boot tables, boot record.
     let kernel = embedded::KERNEL;
-    let mut k_end = 0;
-    if !segments(kernel, |_, vaddr, _, memsz| k_end = k_end.max(vaddr + memsz)) || k_end <= KERNEL_VBASE {
-        fail("no AArch64 kernel image built in");
-    }
-    let image_len = (k_end - KERNEL_VBASE + PAGE - 1) & !(PAGE - 1);
+    let kl = match elf::check(kernel, KERNEL_VBASE, u64::MAX) {
+        // The region starts with the image's first byte at KERNEL_VBASE.
+        Some(l) => Layout { v_start: KERNEL_VBASE, ..l },
+        None => fail("no AArch64 kernel image built in"),
+    };
+    let image_len = kl.size();
     let tables_off = image_len;
-    let bi_off = tables_off + 6 * PAGE;
+    let bi_off = tables_off + TABLE_PAGES * PAGE;
     let bi_len = (core::mem::size_of::<BootInfo>() as u64 + PAGE - 1) & !(PAGE - 1);
     let region_len = (bi_off + bi_len + MB2 - 1) & !(MB2 - 1);
     let region = alloc_aligned(region_len);
-    load_segments(kernel, region, KERNEL_VBASE, image_len);
+    load_segments(kernel, &kl, region);
     let (ttbr0, ttbr1) = build_tables(region + tables_off, region, region_len);
     let bi = unsafe { &mut *((region + bi_off) as *mut BootInfo) };
     unsafe { core::ptr::write_bytes(bi as *mut BootInfo as *mut u8, 0, core::mem::size_of::<BootInfo>()) };
@@ -501,19 +508,15 @@ extern "efiapi" fn efi_main(image: Handle, system: *mut SystemTable) -> Status {
         }
         None => embedded::ROOTSERVER,
     };
-    let (mut v_lo, mut v_hi) = (u64::MAX, 0);
-    if !segments(root_file, |_, vaddr, _, memsz| {
-        v_lo = v_lo.min(vaddr);
-        v_hi = v_hi.max(vaddr + memsz);
-    }) || v_hi <= v_lo
-    {
-        fail("no AArch64 root task (pass rootserver=\\path)");
-    }
-    let v_start = v_lo & !(PAGE - 1);
-    let v_end = (v_hi + PAGE - 1) & !(PAGE - 1);
-    let root_pa = alloc_pages((v_end - v_start) / PAGE);
-    load_segments(root_file, root_pa, v_start, v_end - v_start);
-    bi.root = RootTask { p_start: root_pa, p_end: root_pa + (v_end - v_start), v_start, entry: rd64(root_file, 24) };
+    // A file from the boot volume: checked before anything is copied (a
+    // segment with more file than memory bytes would overrun its pages).
+    let rl = match elf::check(root_file, 0, USER_END) {
+        Some(l) => l,
+        None => fail("no valid AArch64 root task (pass rootserver=\\path)"),
+    };
+    let root_pa = alloc_pages(rl.size() / PAGE);
+    load_segments(root_file, &rl, root_pa);
+    bi.root = RootTask { p_start: root_pa, p_end: root_pa + rl.size(), v_start: rl.v_start, entry: rl.entry };
 
     bi.rsdp = config_table(ACPI_20);
     if bi.rsdp == 0 {

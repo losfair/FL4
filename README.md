@@ -48,9 +48,10 @@ ACPI data start private. Device MMIO uses shared mappings. The serial banner
 shows the active technology and C-bit.
 
 SEV-SNP boots at VMPL0 through FL4's x86_64 UEFI loader with firmware-accepted
-RAM and standard interrupt delivery. It uses the firmware's SNP
-CPUID page, GHCB v2 for virtual device access, and guest-created VMSAs for
-secondary CPUs when the hypervisor advertises AP creation. Userspace MMIO
+RAM and standard interrupt delivery. The loader requires the base SNP
+feature set and rejects optional SEV_STATUS bits such as DebugSwap. It uses
+the firmware's SNP CPUID page, GHCB v2 for virtual device access, and
+guest-created VMSAs for secondary CPUs when the hypervisor advertises AP creation. Userspace MMIO
 emulates scalar 8-, 16-, 32- and 64-bit MOV accesses and byte and word
 MOVZX reads. Use ordinary scalar loads and stores in drivers. The SNP
 kernel forwards intercepted APIC and timer MSRs. Other intercepted MSRs

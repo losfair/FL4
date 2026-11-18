@@ -464,6 +464,8 @@ pub extern "C" fn fl4_boot(magic: u32, info: u32, private_mask: u64, cpuid_page:
         kernel_root
     };
     ks_set(&mut s, ks::KERNEL_ROOT, template);
+    // Where a core goes when another deletes the ASID it runs (tlb.rs).
+    tlb::set_kernel_root(template.wrapping_sub(fl4_core::layout::PPTR_BASE));
     ks_set(&mut s, ks::FEATURES, if nx { ks::FEATURE_NX } else { 0 });
     let mut a = PhysArch;
     if let Err(e) = fl4_core::boot::create_root_task(&mut s, &mut a, &mut p) {

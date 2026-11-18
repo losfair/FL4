@@ -116,7 +116,13 @@ fn memory_kind(ty: u64, attributes: u64) -> u32 {
     }
 }
 
-fn memory_map(info: &mut Info, map: &[u8], stride: usize, cpuid: u64, secrets: u64) {
+fn memory_map(
+    info: &mut Info,
+    map: &[u8],
+    stride: usize,
+    cpuid: u64,
+    secrets: u64,
+) -> Result<(), &'static str> {
     let tag = info.tag(6, 8);
     write(tag, &24u32.to_le_bytes());
     let mut count = 0;
@@ -124,13 +130,14 @@ fn memory_map(info: &mut Info, map: &[u8], stride: usize, cpuid: u64, secrets: u
     let mut emit = |(base, bytes, kind): (u64, u64, u32)| {
         count += 1;
         if count > MAX_MMAP || info.used + 24 + 8 > INFO_BYTES {
-            fail("EFI memory map has too many regions for FL4");
+            return Err("EFI memory map has too many regions for FL4");
         }
         let p = info.base + info.used;
         write(p, &base.to_le_bytes());
         write(p + 8, &bytes.to_le_bytes());
         write(p + 16, &(kind as u64).to_le_bytes());
         info.used += 24;
+        Ok(())
     };
     for d in map.chunks_exact(stride) {
         let base = rd64(d, 8);
@@ -148,12 +155,12 @@ fn memory_map(info: &mut Info, map: &[u8], stride: usize, cpuid: u64, secrets: u
                 previous = Some((start, len + bytes, ty));
                 continue;
             }
-            emit((start, len, ty));
+            emit((start, len, ty))?;
         }
         previous = Some((base, bytes, kind));
     }
     if let Some(last) = previous {
-        emit(last);
+        emit(last)?;
     }
     write(
         tag - 4,
@@ -161,6 +168,18 @@ fn memory_map(info: &mut Info, map: &[u8], stride: usize, cpuid: u64, secrets: u
     );
     info.tag(0, 0);
     write(info.base, &(info.used as u32).to_le_bytes());
+    Ok(())
+}
+
+/// After the first ExitBootServices call, the console protocol may have
+/// shut down even if firmware returned an error. Halt without using it.
+fn handoff_failed(attempt: usize, message: &str) -> ! {
+    if attempt == 0 {
+        fail(message);
+    }
+    loop {
+        unsafe { asm!("cli; hlt", options(nomem, nostack)) };
+    }
 }
 
 fn tables(pa: u64, delta: u64, mask: u64, end: u64) {
@@ -379,19 +398,21 @@ extern "efiapi" fn efi_main(image: Handle, system: *mut SystemTable) -> Status {
             &mut version,
         ) != SUCCESS
         {
-            fail("GetMemoryMap");
+            handoff_failed(attempt, "GetMemoryMap");
         }
         if stride < 40 || size % stride != 0 {
-            fail("invalid EFI memory map");
+            handoff_failed(attempt, "invalid EFI memory map");
         }
         let map = unsafe { core::slice::from_raw_parts(buffer as *const u8, size) };
         info.used = tags_end;
-        memory_map(&mut info, map, stride, cpuid, secrets);
+        if let Err(message) = memory_map(&mut info, map, stride, cpuid, secrets) {
+            handoff_failed(attempt, message);
+        }
         if (bs().exit_boot_services)(image, key) == SUCCESS {
             break;
         }
         if attempt == 7 {
-            fail("ExitBootServices");
+            handoff_failed(attempt, "ExitBootServices");
         }
     }
     unsafe {

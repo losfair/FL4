@@ -132,13 +132,29 @@ fl4_common_entry:
 .Lcr3_done:
     /* From user mode: move the frame to the kernel stack. The entry area
      * holding this stack is size-aligned; its third word is the top of
-     * the core's kernel stack. */
+     * the core's kernel stack. A fault of an IRET to user mode belongs to
+     * the user (bad_iret.S) and goes the same way. */
+    /* Validate the original hardware frame before bad-IRET fixup can
+     * replace its saved RSP, or Rust can enter a returning IRQ path. */
+    cmpq $0, FL4_SNP_CPUID_PAGE(%rip)
+    je .Lcheck_user
     testb $3, 18*8(%rbp)
-    jz .Lon_stack
+    jnz .Lfrom_user
+    movq %rbp, %rdi
+    call fl4_snp_kernel_entry_stack
+    testq %rax, %rax
+    jnz .Lmove_frame
+.Lcheck_user:
+    testb $3, 18*8(%rbp)
+    jnz .Lfrom_user
+    fl4_bad_iret .Lcommon_iret, .Lrestore_iret, .Lfrom_user
+    jmp .Lon_stack
+.Lfrom_user:
     movq %rbp, %rax
     andq $-{skim_cpu_size}, %rax
-    movq 16(%rax), %rdi
-    subq $22*8, %rdi
+    movq 16(%rax), %rax
+.Lmove_frame:
+    leaq -22*8(%rax), %rdi
     xorl %ecx, %ecx
 .Lcopy_in:
     movq (%rbp,%rcx,8), %rdx
@@ -156,6 +172,14 @@ fl4_common_entry:
      * came from (the kernel stack copy is never mapped for user code). */
     cmpq %rsp, %rbp
     je .Lframe_back
+    /* SNP's full kernel mapping lets IRET use the kernel-stack copy.
+     * Returning from IST6 to userspace on IST6 would let a bad IRET
+     * overwrite its own frame when #GP or #SS also lands there. */
+    cmpq $0, FL4_SNP_CPUID_PAGE(%rip)
+    je .Lcopy_back
+    cmpq $0, FL4_KERNEL_CR3(%rip)
+    je .Lframe_back
+.Lcopy_back:
     xorl %ecx, %ecx
 .Lcopy_out:
     movq (%rsp,%rcx,8), %rdx
@@ -210,6 +234,7 @@ fl4_common_entry:
     fl4_clear_buffers
     cmpb $0, FL4_SNP_POISONED(%rip)
     jne .Lpoisoned
+.Lcommon_iret:
     iretq
 
 /* Once another SNP vCPU reports a fatal error, do not resume guests or
@@ -274,6 +299,7 @@ fl4_restore_user:
     fl4_clear_buffers
     cmpb $0, FL4_SNP_POISONED(%rip)
     jne .Lpoisoned
+.Lrestore_iret:
     iretq
 
 3:  /* SYSRET path. The frame on the entry stack: user rsp, cr3, rdi. */
@@ -314,12 +340,14 @@ fl4_restore_user:
     sysretq
 
 /* fl4_idle(stack_top: u64) -> !: the idle thread, on the kernel stack and
- * the kernel's tables. Interrupts arrive in kernel mode on this stack and
- * never return here. */
+ * the kernel's tables. SNP interrupts land on an IST and move here before
+ * running the handler. A timer acknowledged early can resume this loop. */
     .align 16
     .global fl4_idle
 fl4_idle:
     movq %rdi, %rsp
+    .global fl4_idle_loop
+fl4_idle_loop:
 1:
     cmpb $0, FL4_SNP_POISONED(%rip)
     jne .Lpoisoned
@@ -328,5 +356,7 @@ fl4_idle:
     hlt
     cli
     jmp 1b
+    .global fl4_idle_end
+fl4_idle_end:
 
     .text
