@@ -160,6 +160,12 @@ pub fn cpuid(function: u32, sub: u32) -> Option<Cpuid> {
                 && (function != 0xd || sub > 1 || (l.xcr0 <= 1 && l.xss == 0))
         })
     };
+    // These architectural feature leaves ignore ECX on hardware. In
+    // particular, libc issues CPUID(0) and CPUID(1) with ECX unspecified.
+    let sub = match function {
+        0 | 1 | 0x8000_0000..=0x8000_0008 => 0,
+        _ => sub,
+    };
     let entry = find(function, sub);
     let mut r = entry.map_or(
         Cpuid {

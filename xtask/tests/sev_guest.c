@@ -229,6 +229,13 @@ void run(seL4_BootInfo *boot)
     unsigned eax, ebx, ecx, edx;
     __asm__ volatile ("cpuid" : "=a"(eax), "=b"(ebx), "=c"(ecx), "=d"(edx) : "a"(0), "c"(0));
     CHECK(eax >= 1 && ebx == 0x68747541 && edx == 0x69746e65 && ecx == 0x444d4163);
+    for (unsigned leaf = 0; leaf <= 1; leaf++) {
+        unsigned a, b, c, d;
+        __asm__ volatile ("cpuid" : "=a"(a), "=b"(b), "=c"(c), "=d"(d) : "a"(leaf), "c"(0));
+        __asm__ volatile ("cpuid" : "=a"(eax), "=b"(ebx), "=c"(ecx), "=d"(edx)
+                          : "a"(leaf), "c"(0x12345678));
+        CHECK(eax == a && ebx == b && ecx == c && edx == d);
+    }
     say("SEV test: userspace CPUID passed\n");
 #endif
     seL4_SetIPCBuffer(bi->ipcBuffer);
