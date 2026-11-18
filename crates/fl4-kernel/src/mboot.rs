@@ -7,6 +7,7 @@ pub const MB2_MAGIC: u32 = 0x36d7_6289;
 pub const MAX_MMAP: usize = 50;
 /// The root task's image and up to eight more modules (l4h 0021).
 pub const MAX_MODULES: usize = 9;
+const MODULE_NAME_LEN: usize = 64;
 
 #[derive(Clone, Copy, Default)]
 pub struct MemRegion {
@@ -15,13 +16,17 @@ pub struct MemRegion {
     pub ty: u32,
 }
 
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Copy)]
 pub struct Module {
     pub start: u64,
     pub end: u64,
-    /// The boot loader's string for the module (a C string's physical
-    /// address), or 0.
-    pub name: u64,
+    /// NUL-terminated name for seL4_X86_BootModules_t. Own the bytes before
+    /// starting APs: their trampoline can overwrite the boot loader's data.
+    pub name: [u8; MODULE_NAME_LEN],
+}
+
+impl Module {
+    const EMPTY: Self = Self { start: 0, end: 0, name: [0; MODULE_NAME_LEN] };
 }
 
 pub struct BootInfo {
@@ -67,8 +72,8 @@ fn rd64(p: u64) -> u64 {
 impl BootInfo {
     /// Note a module. One that ends before it starts is ignored (l4h 0021:
     /// its 32-bit difference looks positive), as are any past the limit.
-    fn add_module(&mut self, m: Module) {
-        if m.end < m.start {
+    fn add_module(&mut self, start: u64, end: u64, name_addr: u64, name_len: u64) {
+        if end < start {
             crate::kprintln!("FL4: boot module ends before it starts: ignored");
             return;
         }
@@ -76,7 +81,18 @@ impl BootInfo {
             crate::kprintln!("FL4: more than {} boot modules: the rest are ignored", MAX_MODULES - 1);
             return;
         }
-        self.modules[self.n_modules] = m;
+        let mut module = Module { start, end, ..Module::EMPTY };
+        if name_addr != 0 {
+            let limit = name_len.min((MODULE_NAME_LEN - 1) as u64);
+            for i in 0..limit {
+                let byte = rd8(name_addr + i);
+                if byte == 0 {
+                    break;
+                }
+                module.name[i as usize] = byte;
+            }
+        }
+        self.modules[self.n_modules] = module;
         self.n_modules += 1;
     }
 }
@@ -114,23 +130,8 @@ pub fn has_option(b: &BootInfo, opt: &[u8]) -> bool {
     }
 }
 
-/// The module's name, NUL-terminated and cut to fit `out`.
-pub fn module_name(m: &Module, out: &mut [u8]) {
-    let mut i = 0;
-    if m.name != 0 {
-        while i + 1 < out.len() && rd8(m.name + i as u64) != 0 {
-            out[i] = rd8(m.name + i as u64);
-            i += 1;
-        }
-    }
-    while i < out.len() {
-        out[i] = 0;
-        i += 1;
-    }
-}
-
 pub fn parse(magic: u32, info: u64) -> Option<BootInfo> {
-    let mut b = BootInfo { mmap: [MemRegion::default(); MAX_MMAP], n_mmap: 0, modules: [Module::default(); MAX_MODULES], n_modules: 0, rsdp: None, cmdline: 0, fb: None };
+    let mut b = BootInfo { mmap: [MemRegion::default(); MAX_MMAP], n_mmap: 0, modules: [Module::EMPTY; MAX_MODULES], n_modules: 0, rsdp: None, cmdline: 0, fb: None };
     if magic == MB1_MAGIC {
         let flags = rd32(info);
         if flags & (1 << 2) != 0 {
@@ -144,7 +145,7 @@ pub fn parse(magic: u32, info: u64) -> Option<BootInfo> {
             let addr = rd32(info + 24) as u64;
             for i in 0..n {
                 let m = addr + 16 * i;
-                b.add_module(Module { start: rd32(m) as u64, end: rd32(m + 4) as u64, name: rd32(m + 8) as u64 });
+                b.add_module(rd32(m) as u64, rd32(m + 4) as u64, rd32(m + 8) as u64, MODULE_NAME_LEN as u64);
             }
         }
         if flags & (1 << 6) == 0 {
@@ -164,7 +165,7 @@ pub fn parse(magic: u32, info: u64) -> Option<BootInfo> {
         crate::mb2::tags(info, rd32, |t, ty, size| match ty {
             1 => b.cmdline = t + 8,
             8 => b.fb = Some(Framebuffer { addr: rd64(t + 8), pitch: rd32(t + 16), width: rd32(t + 20), height: rd32(t + 24), bpp: rd8(t + 28), ty: rd8(t + 29) }),
-            3 => b.add_module(Module { start: rd32(t + 8) as u64, end: rd32(t + 12) as u64, name: t + 16 }),
+            3 if size >= 16 => b.add_module(rd32(t + 8) as u64, rd32(t + 12) as u64, t + 16, size - 16),
             6 => {
                 let esz = rd32(t + 8) as u64;
                 let mut e = t + 16;

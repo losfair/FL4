@@ -214,9 +214,7 @@ fn build_extra_bi(buf: &mut [u8], a: &acpi::Info, mb: &mboot::BootInfo, k: &Kept
         for i in 0..k.n {
             put_bytes(buf, &mut off, &k.paddr[i].to_le_bytes());
             put_bytes(buf, &mut off, &k.size[i].to_le_bytes());
-            let mut name = [0u8; 64];
-            mboot::module_name(&mb.modules[i + 1], &mut name);
-            put_bytes(buf, &mut off, &name);
+            put_bytes(buf, &mut off, &mb.modules[i + 1].name);
         }
     }
     off
@@ -307,6 +305,10 @@ pub extern "C" fn fl4_boot(magic: u32, info: u32) -> ! {
     );
     kprintln!("FL4: speculation mitigations: {}; PCIDs {}", spec::describe(), if tlb::pcid() { "on" } else { "off" });
 
+    // Read the boot loader's command line before the AP trampoline can
+    // overwrite it.
+    let fb_console = mboot::has_option(&mb, b"fb_console");
+
     // The other cores, if any (each sets itself up and waits).
     let ncpus = smp::start_aps(&acpi.cpus[..acpi.n_cpus], smp::Features { cr4: cpu::read_cr4(), efer_nx: nx });
     if ncpus > 1 {
@@ -356,7 +358,7 @@ pub extern "C" fn fl4_boot(magic: u32, info: u32) -> ! {
     dev.add(image.p_end, mods);
     // The framebuffer console (l4h 0020), if asked for: never on RAM or low
     // memory (which holds the APs' boot code).
-    if mboot::has_option(&mb, b"fb_console") {
+    if fb_console {
         let ok = match mb.fb {
             Some(f) => {
                 let end = f.addr.saturating_add(f.pitch as u64 * f.height as u64);
