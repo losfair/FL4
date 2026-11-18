@@ -145,6 +145,7 @@ fn main() {
     labels(&config, &ifaces.join("object-api-sel4-arch-x86_64.xml"), &mut all, &mut disabled);
     let n_sel4_arch = all.len();
     labels(&config, &ifaces.join("object-api-arch-x86.xml"), &mut all, &mut disabled);
+    labels(&config, &ifaces.join("object-api-extensions.xml"), &mut all, &mut disabled);
     writeln!(o, "/// Invocation labels (`seL4_MessageInfo` label field).").unwrap();
     writeln!(o, "#[allow(non_upper_case_globals)]\npub mod label {{").unwrap();
     for (i, l) in all.iter().enumerate() {

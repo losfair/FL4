@@ -578,7 +578,7 @@ mod tests {
             type M = Atomics;
             fn cpu(&self) -> u64 { 0 }
             fn multi(&self) -> bool { true }
-            fn store(&self, tx: bool) -> Self::S { fl4_store::PhysStore { ks_base: 0, cpu: 0, tx } }
+            fn store(&self, tx: bool) -> Self::S { fl4_store::PhysStore { frame_masks: (0, 0), ks_base: 0, cpu: 0, tx } }
             fn arch(&self) -> NoopArch { NoopArch }
             fn mem(&self) -> &Atomics { &Atomics }
             fn service_remote(&self) -> bool { false }

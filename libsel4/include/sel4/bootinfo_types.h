@@ -108,6 +108,7 @@ typedef enum {
     SEL4_BOOTINFO_HEADER_FDT                = 6, /* device tree */
     SEL4_BOOTINFO_HEADER_AARCH64_ID_REGS    = 7, /* seL4_AArch64IdRegs */
     SEL4_BOOTINFO_HEADER_X86_BOOT_MODULES   = 8, /* seL4_X86_BootModules */
+    SEL4_BOOTINFO_HEADER_SHARED_DMA         = 9, /* Header only. DMA requires RetypeShared frames. */
     /* Add more IDs here, the two elements below must always be at the end. */
     SEL4_BOOTINFO_HEADER_NUM,
     SEL4_FORCE_LONG_ENUM(seL4_BootInfoID)

@@ -261,9 +261,7 @@ pub mod ks {
     pub const FEATURES: u64 = 72;
     pub const FEATURE_NX: u64 = 1;
     pub const VCPU_HEAD: u64 = 80;
-    /// Immutable native page-table C-bit for the physical store.
-    pub const ENCRYPTION_MASK: u64 = 88;
-    // Bytes 96..192 are free.
+    // Bytes 88..192 are free.
     /// Domain schedule: (domain, duration) pairs.
     pub const DOM_SCHEDULE: u64 = 24 * WORD;
     pub const IRQ_STATE: u64 = DOM_SCHEDULE + NUM_DOMAIN_SCHEDULES * 2 * WORD;

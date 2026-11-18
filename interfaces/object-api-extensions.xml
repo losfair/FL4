@@ -1,0 +1,28 @@
+<?xml version="1.0" ?>
+<api name="FL4Extensions">
+    <interface name="seL4_Untyped" manual_name="Untyped" cap_description="Untyped RAM capability.">
+        <method id="UntypedRetypeShared" name="RetypeShared" manual_name="Retype Shared">
+            <brief>Allocate zeroed frames that a hypervisor or DMA device can access.</brief>
+            <description>
+                Allocates contiguous frames from the source RAM untyped using its normal watermark.
+                Each frame has a separate capability. Stop DMA before deleting its last capability
+                or revoking the source. Final deletion restores private, zeroed RAM.
+                SEL4_BOOTINFO_HEADER_SHARED_DMA indicates that DMA requires shared frames.
+            </description>
+            <param dir="in" name="size_bits" type="seL4_Word" description="Frame size in bits (12 or 21)"/>
+            <param dir="in" name="root" type="seL4_CNode" description="Root of the destination CSpace"/>
+            <param dir="in" name="node_index" type="seL4_Word" description="Destination CNode index"/>
+            <param dir="in" name="node_depth" type="seL4_Word" description="Depth of the destination lookup"/>
+            <param dir="in" name="node_offset" type="seL4_Word" description="First destination slot"/>
+            <param dir="in" name="num_objects" type="seL4_Word" description="Number of frames to allocate"/>
+            <error name="seL4_IllegalOperation" description="Guest memory sharing is unavailable."/>
+            <error name="seL4_InvalidCapability" description="The source does not designate shareable RAM."/>
+            <error name="seL4_InvalidArgument" description="The requested frame size is unsupported."/>
+            <error name="seL4_TruncatedMessage" description="A required argument or destination root is missing."/>
+            <error name="seL4_RangeError" description="The destination window is invalid or the request exceeds 256 frames or 2 MiB."/>
+            <error name="seL4_NotEnoughMemory" description="The aligned frames do not fit in the remaining RAM."/>
+            <error name="seL4_DeleteFirst" description="A destination slot is occupied."/>
+            <error name="seL4_FailedLookup" description="The destination CNode could not be resolved."/>
+        </method>
+    </interface>
+</api>

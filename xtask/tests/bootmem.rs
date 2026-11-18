@@ -157,3 +157,17 @@ fn device_untypeds_stay_in_the_kernel_window_and_below_maxphyaddr() {
         }
     }
 }
+
+#[test]
+fn fragmented_firmware_keeps_visibility_boundaries_in_gpa_order() {
+    let mut firmware = bootmem::RangeList::<129>::new();
+    for i in (0..65).rev() { firmware.add((2*i+1)*4096, (2*i+2)*4096); }
+    let dev = [Region { start: 0, end: 130*4096 }];
+    let mut parts = Vec::new();
+    bootmem::device_regions(&dev, &firmware.r[..firmware.n], |r, private| parts.push((r, private)));
+    assert_eq!(parts.len(), 130);
+    for (i, (r, private)) in parts.into_iter().enumerate() {
+        assert_eq!(r, Region { start: i as u64*4096, end: (i as u64+1)*4096 });
+        assert_eq!(private, i % 2 == 1);
+    }
+}

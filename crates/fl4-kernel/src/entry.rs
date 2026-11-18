@@ -92,7 +92,7 @@ pub fn set_ks_base(b: u64) {
 /// Direct access to kernel memory (one core, the serial gate, or this
 /// core's own thread context).
 pub fn store() -> PhysStore {
-    PhysStore { ks_base: unsafe { KS_BASE }, cpu: percpu::cpu_index() as u64, tx: false }
+    PhysStore { frame_masks: (fl4_arch_x86_64::sev::mask(), 0), ks_base: unsafe { KS_BASE }, cpu: percpu::cpu_index() as u64, tx: false }
 }
 
 fn save_user(s: &mut PhysStore, f: &Frame) {
@@ -208,7 +208,7 @@ impl fl4_sync::EntryEnv for KernelEnv {
         self.serial
     }
     fn store(&self, tx: bool) -> PhysStore {
-        PhysStore { ks_base: unsafe { KS_BASE }, cpu: self.cpu(), tx }
+        PhysStore { frame_masks: (fl4_arch_x86_64::sev::mask(), 0), ks_base: unsafe { KS_BASE }, cpu: self.cpu(), tx }
     }
     fn arch(&self) -> PhysArch {
         PhysArch

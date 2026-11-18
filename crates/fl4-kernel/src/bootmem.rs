@@ -6,14 +6,16 @@ use fl4_core::boot::Region;
 const PAGE: u64 = 4096;
 
 /// A small sorted list of half-open physical ranges.
-pub struct Ranges {
-    pub r: [Region; 64],
+pub type Ranges = RangeList<64>;
+
+pub struct RangeList<const N: usize> {
+    pub r: [Region; N],
     pub n: usize,
 }
 
-impl Ranges {
-    pub const fn new() -> Ranges {
-        Ranges { r: [Region::EMPTY; 64], n: 0 }
+impl<const N: usize> RangeList<N> {
+    pub const fn new() -> Self {
+        Self { r: [Region::EMPTY; N], n: 0 }
     }
 
     pub fn add(&mut self, start: u64, end: u64) {
@@ -44,7 +46,7 @@ impl Ranges {
     }
 
     pub fn remove(&mut self, start: u64, end: u64) {
-        let mut res = Ranges::new();
+        let mut res = Self::new();
         for j in 0..self.n {
             let c = self.r[j];
             if c.end <= start || c.start >= end {
@@ -112,4 +114,21 @@ pub fn device(ram: &Ranges, top: u64, reserved: impl IntoIterator<Item = (u64, u
         dev.remove(start & !(PAGE - 1), end.saturating_add(PAGE - 1) & !(PAGE - 1));
     }
     dev
+}
+
+/// Partition each device range at firmware RAM boundaries. Both inputs are
+/// ordered and coalesced. Each emitted range has a single visibility state.
+pub fn device_regions(dev: &[Region], firmware: &[Region], mut emit: impl FnMut(Region, bool)) {
+    for r in dev {
+        let mut start = r.start;
+        for f in firmware {
+            let lo = start.max(f.start);
+            let hi = r.end.min(f.end);
+            if lo >= hi { continue; }
+            if start < lo { emit(Region { start, end: lo }, false); }
+            emit(Region { start: lo, end: hi }, true);
+            start = hi;
+        }
+        if start < r.end { emit(Region { start, end: r.end }, false); }
+    }
 }

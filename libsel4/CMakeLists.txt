@@ -76,9 +76,19 @@ gen_invocation_header(
     LIBSEL4 SEL4ARCH
 )
 
+# FL4 extensions follow all upstream labels so existing binaries keep their ABI.
+set(arch_api "${CMAKE_CURRENT_SOURCE_DIR}/arch_include/${KernelArch}/interfaces/object-api-arch.xml")
+set(extension_api "${CMAKE_CURRENT_SOURCE_DIR}/include/interfaces/object-api-extensions.xml")
+set(arch_labels "${CMAKE_CURRENT_BINARY_DIR}/arch-invocation-labels.xml")
+add_custom_command(
+    OUTPUT "${arch_labels}"
+    COMMAND "${PYTHON3}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/append_interfaces.py" "${arch_api}" "${extension_api}" "${arch_labels}"
+    DEPENDS "${arch_api}" "${extension_api}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/append_interfaces.py"
+    VERBATIM
+)
 gen_invocation_header(
     OUTPUT arch_include/${KernelArch}/sel4/arch/invocation.h
-    XML "${CMAKE_CURRENT_SOURCE_DIR}/arch_include/${KernelArch}/interfaces/object-api-arch.xml"
+    XML "${arch_labels}"
     LIBSEL4 ARCH
 )
 
@@ -150,6 +160,7 @@ set(interface_xmls
     "${CMAKE_CURRENT_SOURCE_DIR}/sel4_arch_include/${KernelSel4Arch}/interfaces/object-api-sel4-arch.xml"
     "${CMAKE_CURRENT_SOURCE_DIR}/arch_include/${KernelArch}/interfaces/object-api-arch.xml"
     "${CMAKE_CURRENT_SOURCE_DIR}/include/interfaces/object-api.xml"
+    "${extension_api}"
 )
 
 add_custom_command(

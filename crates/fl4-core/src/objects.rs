@@ -253,6 +253,15 @@ pub fn derive_cap<S: Store>(s: &S, slot: Slot, c: Cap) -> KResult<Cap> {
     }
 }
 
+/// Firmware and MMIO frames also carry the device flag. Only a frame in
+/// allocatable RAM can have been created by RetypeShared.
+fn retire_dma_frame<S: Store, A: Arch>(s: &S, a: &mut A, ptr: u64, size: FrameSize) {
+    if crate::machine::sharing_enabled(s) {
+        let bytes = 1u64 << (size.bits() & 63);
+        if a.dma_ram(ptr, bytes) { a.dma_frame(ptr, bytes, false); }
+    }
+}
+
 /// seL4 `finaliseCap`: returns (remainder, cleanup info).
 pub fn finalise_cap<S: Store, A: Arch>(s: &mut S, a: &mut A, c: Cap, fin: bool, exposed: bool) -> (Cap, Cap) {
     let _ = exposed;
@@ -274,7 +283,7 @@ pub fn finalise_cap_object<S: Store, A: Arch>(s: &mut S, a: &mut A, c: Cap, fin:
             if mapped && asid != 0 {
                 if is_ept { crate::ept::unmap(s, a, asid, vaddr, ptr, size.bits(), false); } else { vspace::unmap_page(s, a, size, asid, vaddr, ptr); }
             }
-            if fin && is_device && s.encryption_mask() != 0 { a.dma_frame(ptr, size.bits(), false); }
+            if fin && is_device { retire_dma_frame(s, a, ptr, size); }
             (Cap::Null, Cap::Null)
         }
         Cap::PageTable { ptr, mapped, asid, vaddr } => {

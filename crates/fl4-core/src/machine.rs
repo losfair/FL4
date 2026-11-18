@@ -8,8 +8,8 @@
 
 /// Kernel memory.
 pub trait Store {
-    /// Native page-table encryption bit, or zero on an ordinary machine.
-    fn encryption_mask(&self) -> u64 { 0 }
+    /// Address bits for (private, shared) page-table leaves. Both are zero on native hardware.
+    fn frame_masks(&self) -> (u64, u64) { (0, 0) }
     /// Read the aligned word at `addr`.
     fn read(&self, addr: u64) -> u64;
     /// Read two adjacent words. A store may validate them together when
@@ -32,16 +32,22 @@ pub trait Store {
     fn cur_cpu(&self) -> u64;
 }
 
+/// Native hardware has no visibility bits in either page-table representation.
+pub fn sharing_enabled<S: Store>(s: &S) -> bool {
+    let (private, shared) = s.frame_masks();
+    private | shared != 0
+}
+
 /// Machine operations the kernel logic needs. Implemented by the x86_64
 /// backend on hardware and by the simulator.
 pub trait Arch {
     /// Firmware data and kept boot modules can have device caps backed by
     /// private RAM. Called only for device frames in an encrypted guest.
     fn private_device_frame(&self, _paddr: u64) -> bool { false }
-    /// Change the representation of an exclusively owned DMA frame and zero
-    /// its new contents. Returns false when guest memory sharing is unavailable.
-    /// On release, ordinary MMIO and firmware addresses are ignored.
-    fn dma_frame(&mut self, _ptr: u64, _size_bits: u64, _shared: bool) -> bool { false }
+    /// Whether the entire range is ordinary RAM available for DMA allocation.
+    fn dma_ram(&self, _ptr: u64, _bytes: u64) -> bool { false }
+    /// Change and zero an exclusively owned range already checked by dma_ram.
+    fn dma_frame(&mut self, _ptr: u64, _bytes: u64, _shared: bool) {}
     /// Runtime virtualization backend: 0 unavailable, 1 VMX, 2 SVM.
     fn virtualization(&self) -> u64 { 0 }
     /// VMX capability MSR, host XCR0 (0), or canonical-address width (1).

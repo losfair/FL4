@@ -4,7 +4,7 @@
 //! the upper half), 8x8 glyphs scaled 1x2, and wraps to the top of its area
 //! rather than scrolling, so it never reads the framebuffer.
 use core::sync::atomic::{AtomicU64, Ordering};
-use crate::sev::shared_ptr;
+use crate::sev::mmio_ptr;
 
 /// Printable ASCII, 0x20 to 0x7e.
 static FONT: [[u8; 8]; 95] = [
@@ -121,15 +121,13 @@ const FB_TYPE_RGB: u8 = 1;
 /// Use the framebuffer at `paddr` as a console if it is a 24- or 32-bit
 /// RGB one of at least 640x400 below 4 GiB. The caller checks that it is
 /// not RAM.
-pub fn init(paddr: u64, pitch: u32, width: u32, height: u32, bpp: u8, ty: u8) -> bool {
+pub fn init(paddr: u64, window_top: u64, pitch: u32, width: u32, height: u32, bpp: u8, ty: u8) -> bool {
     let size = pitch as u64 * height as u64;
     let bytes = bpp as u64 / 8;
     if ty != FB_TYPE_RGB || (bpp != 24 && bpp != 32) || width < 640 || height < 400 || (pitch as u64) < width as u64 * bytes {
         return false;
     }
-    if paddr >= 1 << 32 || size > (1 << 32) - paddr {
-        return false;
-    }
+    let Some(base) = mmio_ptr(paddr, size, window_top.min(1 << 32)) else { return false };
     PITCH.store(pitch as u64, Ordering::Relaxed);
     BYTES.store(bytes, Ordering::Relaxed);
     COLS.store(width as u64 / 8, Ordering::Relaxed);
@@ -137,7 +135,7 @@ pub fn init(paddr: u64, pitch: u32, width: u32, height: u32, bpp: u8, ty: u8) ->
     TOP.store(top, Ordering::Relaxed);
     ROWS.store(height as u64 / 16 - top, Ordering::Relaxed);
     CURSOR.store(0, Ordering::Relaxed);
-    BASE.store(shared_ptr(paddr), Ordering::Release);
+    BASE.store(base, Ordering::Release);
     true
 }
 

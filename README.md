@@ -41,21 +41,25 @@ data start private. Device MMIO uses shared mappings. The serial banner shows
 the active C-bit. SEV-ES, SEV-SNP and nested virtualization inside an SEV
 guest are outside the supported configuration.
 
-Userspace drivers can allocate DMA buffers with
-`seL4_Untyped_RetypeShared(source, root, node_index, node_depth, node_offset)`.
-The source must be a childless 4 KiB or 2 MiB RAM untyped. The destination is
-an empty CNode slot, addressed as in `seL4_Untyped_Retype`. Supply zero for
-both index and depth to allocate directly into the supplied root CNode.
+The extra BootInfo record `SEL4_BOOTINFO_HEADER_SHARED_DMA` tells drivers
+that DMA requires shared RAM. Drivers allocate buffers with
+`seL4_Untyped_RetypeShared(source, size_bits, root, node_index, node_depth, node_offset, num_objects)`.
+The call takes ordinary RAM from the same allocation watermark as
+`seL4_Untyped_Retype`. It creates up to 256 contiguous 4 KiB frames or one
+2 MiB frame per call and installs one cap per consecutive empty destination
+slot. Zero index and depth address the supplied root CNode directly.
 
-The new frame starts zeroed. Every copy of its capability maps the same
-shared bytes. `seL4_X86_Page_GetAddress` gives the device's guest physical
-address. [Userspace NVMe example](xtask/tests/sev_guest.c)
+The frames start zeroed, including for uncached access. Copies of a frame cap
+share its visibility. `seL4_X86_Page_GetAddress` returns the GPA to program
+into the device. [Userspace NVMe example](xtask/tests/sev_guest.c)
 
-Shared frames have device-frame restrictions, including exclusion
-from IPC buffers and subframe derivation. Stop device DMA before revoking the
-source or deleting the last frame cap. The kernel flushes the old cache lines
-and zeros the private frame before reuse. With SEV disabled the call returns
-`seL4_IllegalOperation`, and drivers can use ordinary RAM for DMA. [AMD memory encryption](https://docs.kernel.org/arch/x86/amd-memory-encryption.html)
+Shared frames have device-frame restrictions, including exclusion from IPC
+buffers and subframe derivation. Stop DMA before revoking the source or
+deleting the last frame cap. Final deletion unmaps the frame, flushes the
+shared alias, and zeros the private memory before reuse. On native hardware
+drivers use ordinary RAM and the invocation returns `seL4_IllegalOperation`.
+In an SEV guest a device untyped returns `seL4_InvalidCapability` and an
+unsupported frame size returns `seL4_InvalidArgument`. [AMD memory encryption](https://docs.kernel.org/arch/x86/amd-memory-encryption.html)
 
 `xtask/scripts/sev-smoke-image.sh` builds `build/sev-smoke/fl4-sev.tar.gz`
 with a GRUB EFI loader and a test root task. The script requires the sel4test

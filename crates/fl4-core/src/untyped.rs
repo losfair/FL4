@@ -3,7 +3,7 @@
 use crate::capability::Cap;
 use crate::cdt;
 use crate::cspace;
-use crate::error::{illegal, invalid_arg, range, truncated, Exc, KResult, LookupFault, SysError};
+use crate::error::{illegal, invalid_arg, invalid_cap, range, truncated, Exc, KResult, LookupFault, SysError};
 use crate::machine::{Arch, Store};
 use crate::msg;
 use crate::obj::Slot;
@@ -24,7 +24,7 @@ fn align_up(v: u64, align: u64) -> u64 {
 /// seL4 `decodeUntypedInvocation`.
 pub fn decode<S: Store, A: Arch>(s: &mut S, a: &mut A, lbl: u64, length: u64, slot: Slot, cap: Cap, buf: u64, extra: &[Slot; 3]) -> KResult<()> {
     if lbl != label::UntypedRetype {
-        if lbl == label::X86UntypedRetypeShared && s.encryption_mask() != 0 {
+        if lbl == label::UntypedRetypeShared && crate::machine::sharing_enabled(s) {
             return retype_shared(s, a, length, slot, cap, buf, extra);
         }
         return illegal();
@@ -68,30 +68,46 @@ pub fn decode<S: Store, A: Arch>(s: &mut S, a: &mut A, lbl: u64, length: u64, sl
     retype(s, a, slot, reset, aligned, new_type, user_size, dest, node_offset, node_window, device)
 }
 
-/// Turn a whole, childless RAM untyped into one zeroed DMA frame. Device-frame
-/// semantics preclude kernel IPC-buffer and subframe aliases. All copies remain
-/// in the untyped's derivation tree and use the same shared representation.
+/// Allocate zeroed device frames from ordinary RAM. Use the same watermark,
+/// derivation tree and destination-slot checks as Retype. Validate the entire
+/// batch before resetting the untyped or changing any page's representation.
 fn retype_shared<S: Store, A: Arch>(s: &mut S, a: &mut A, length: u64, slot: Slot, cap: Cap, buf: u64, extra: &[Slot; 3]) -> KResult<()> {
-    if length < 3 || extra[0].is_null() { return truncated(); }
+    if length < 5 || extra[0].is_null() { return truncated(); }
     let u = match as_untyped(cap) {
-        Some(u) if !u.is_device && (u.size_bits == 12 || u.size_bits == 21) => u,
-        _ => return illegal(),
+        Some(u) if !u.is_device => u,
+        _ => return invalid_cap(0),
     };
-    cdt::ensure_no_children(s, slot)?;
     let ct = sched::cur_thread(s);
-    let index = msg::syscall_arg(s, ct, buf, 0);
-    let depth = msg::syscall_arg(s, ct, buf, 1);
-    let offset = msg::syscall_arg(s, ct, buf, 2);
-    let dest = retype_dest(s, extra[0], index, depth, offset, 1)?;
-    let target = Slot::index(dest, offset);
-    cdt::ensure_empty_slot(s, target)?;
-    if !a.dma_frame(u.ptr, u.size_bits, true) { return illegal(); }
+    let bits = msg::syscall_arg(s, ct, buf, 0);
+    let kind = match bits {
+        12 => ot::X86Page4K,
+        21 => ot::X86LargePage,
+        _ => return invalid_arg(0),
+    };
+    let index = msg::syscall_arg(s, ct, buf, 1);
+    let depth = msg::syscall_arg(s, ct, buf, 2);
+    let offset = msg::syscall_arg(s, ct, buf, 3);
+    let count = msg::syscall_arg(s, ct, buf, 4);
+    let dest = retype_dest(s, extra[0], index, depth, offset, count)?;
+    // One serial cache transition covers at most 2 MiB.
+    if bits == 21 && count > 1 { return range(1, 1); }
+    ensure_empty_slots(s, dest, offset, offset.wrapping_add(count))?;
 
+    let reset = cdt::ensure_no_children(s, slot).is_ok();
+    let used = if reset { 0 } else { u.free_index };
+    let base = align_up(u.ptr.wrapping_add(used), bits);
+    let block = 1u64 << (u.size_bits & 63);
+    let bytes = count << (bits & 63);
+    let start = base.wrapping_sub(u.ptr);
+    if start > block || bytes > block.wrapping_sub(start) {
+        return Err(Exc::Sys(SysError::NotEnoughMemory { bytes: block.saturating_sub(used) }));
+    }
+    if !a.dma_ram(base, bytes) { return invalid_cap(0); }
     sched::set_thread_state(s, ct, sched::TS_RESTART);
-    slot.set_cap(s, Cap::Untyped { ptr: u.ptr, size_bits: u.size_bits, free_index: 1u64 << (u.size_bits & 63), is_device: false });
-    let t = if u.size_bits == 12 { ot::X86Page4K } else { ot::X86LargePage };
-    let frame = objects::create_object(s, a, t, u.ptr, 0, true);
-    cdt::insert_new_cap(s, slot, target, frame);
+    if reset { reset_untyped(s, a, slot)?; }
+    a.dma_frame(base, bytes, true);
+    slot.set_cap(s, Cap::Untyped { ptr: u.ptr, size_bits: u.size_bits, free_index: start.wrapping_add(bytes), is_device: false });
+    objects::create_new_objects(s, a, kind, slot, dest, offset, count, base, 0, true);
     Ok(())
 }
 

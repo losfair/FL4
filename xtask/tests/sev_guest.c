@@ -65,7 +65,7 @@ static seL4_CPtr device_frames(uint64_t pa, unsigned target_bits)
             if (pa - base >= half) { base += half; parent++; }
         }
         CHECK(base == pa);
-        CHECK(seL4_Untyped_RetypeShared(parent, ROOT, 0, 0, next_slot) == seL4_IllegalOperation);
+        CHECK(seL4_Untyped_RetypeShared(parent, 12, ROOT, 0, 0, next_slot, 1) == seL4_InvalidCapability);
         seL4_CPtr f = retype(parent, seL4_X86_4K, 0, 1u << (target_bits - 12));
         CHECK(address(f) == pa);
         return f;
@@ -77,9 +77,14 @@ static seL4_CPtr device_frames(uint64_t pa, unsigned target_bits)
 static void check_module(void)
 {
     const char *extra = (const char *)bi + seL4_BootInfoFrameSize;
+    int found_dma = 0, found_module = 0;
     for (size_t pos = 0; pos < bi->extraLen;) {
         const seL4_BootInfoHeader *header = (const void *)(extra + pos);
         CHECK(header->len >= sizeof(*header) && header->len <= bi->extraLen - pos);
+        if (header->id == SEL4_BOOTINFO_HEADER_SHARED_DMA) {
+            CHECK(header->len == sizeof(*header));
+            found_dma = 1;
+        }
         if (header->id == SEL4_BOOTINFO_HEADER_X86_BOOT_MODULES) {
             const seL4_X86_BootModules_t *modules = (const void *)header;
             CHECK(modules->count == 1 && modules->modules[0].size == 8);
@@ -87,11 +92,11 @@ static void check_module(void)
             uintptr_t va = small_va + 0x3000;
             map(f, va, seL4_X86_Default_VMAttributes);
             for (unsigned i = 0; i < 8; i++) CHECK(((volatile char *)va)[i] == "FL4 SEV!"[i]);
-            return;
+            found_module = 1;
         }
         pos += header->len;
     }
-    CHECK(0);
+    CHECK(found_dma && found_module);
 }
 
 static void ready(volatile uint32_t *status, unsigned wanted)
@@ -162,13 +167,13 @@ static void exercise(seL4_CPtr ram, unsigned bits, uintptr_t va)
     map(ordinary, va, seL4_X86_Default_VMAttributes);
     *page = 0x123456789abcdef0ULL;
     seL4_CPtr shared = next_slot++;
-    CHECK(seL4_Untyped_RetypeShared(source, ROOT, 0, 0, shared) == seL4_RevokeFirst);
+    CHECK(seL4_Untyped_RetypeShared(source, bits, ROOT, 0, 0, shared, 1) == seL4_NotEnoughMemory);
     CHECK(!seL4_CNode_Revoke(ROOT, source, 64));
-    CHECK(!seL4_Untyped_RetypeShared(source, ROOT, 0, 0, shared));
+    CHECK(!seL4_Untyped_RetypeShared(source, bits, ROOT, 0, 0, shared, 1));
     CHECK(address(shared) == pa);
     seL4_CPtr copy = next_slot++;
     CHECK(!seL4_CNode_Copy(ROOT, copy, 64, ROOT, shared, 64, seL4_AllRights));
-    map(copy, va, seL4_X86_Default_VMAttributes);
+    map(copy, va, bits == 12 ? seL4_X86_Uncacheable : seL4_X86_Default_VMAttributes);
     CHECK(!seL4_CNode_Delete(ROOT, shared, 64));
     CHECK(*page == 0);
     if (bits == 21) identify(pa);
@@ -180,6 +185,30 @@ static void exercise(seL4_CPtr ram, unsigned bits, uintptr_t va)
     CHECK(*page == 0);
     *page = 42;
     CHECK(*page == 42);
+}
+
+static void exercise_batch(seL4_CPtr ram)
+{
+    seL4_CPtr source = retype(ram, seL4_UntypedObject, 15, 1);
+    seL4_CPtr ordinary = retype(source, seL4_X86_4K, 0, 1);
+    seL4_CPtr first = next_slot;
+    next_slot += 4;
+    CHECK(!seL4_Untyped_RetypeShared(source, 12, ROOT, 0, 0, first, 3));
+    CHECK(!seL4_Untyped_RetypeShared(source, 12, ROOT, 0, 0, first + 3, 1));
+    for (unsigned i = 0; i < 4; i++) {
+        CHECK(address(first + i) == address(ordinary) + (i + 1) * 4096);
+        map(first + i, small_va + 0x10000 + i * 4096, seL4_X86_Uncacheable);
+        volatile uint64_t *p = (void *)(small_va + 0x10000 + i * 4096);
+        for (unsigned j = 0; j < 512; j++) { CHECK(p[j] == 0); p[j] = i + 1; }
+    }
+    CHECK(!seL4_CNode_Revoke(ROOT, source, 64));
+    seL4_CPtr replacement = retype(source, seL4_X86_4K, 0, 5);
+    for (unsigned i = 1; i < 5; i++) {
+        uintptr_t va = small_va + 0x10000 + (i - 1) * 4096;
+        map(replacement + i, va, seL4_X86_Default_VMAttributes);
+        for (unsigned j = 0; j < 512; j++) CHECK(((volatile uint64_t *)va)[j] == 0);
+    }
+    say("SEV test: batch DMA allocation and uncached reuse passed\n");
 }
 
 void run(seL4_BootInfo *boot)
@@ -203,6 +232,7 @@ void run(seL4_BootInfo *boot)
     seL4_CPtr pt = retype(ram, seL4_X86_PageTableObject, 0, 1);
     CHECK(!seL4_X86_PageTable_Map(pt, VSPACE, small_va, seL4_X86_Default_VMAttributes));
     check_module();
+    exercise_batch(ram);
     exercise(ram, 12, small_va + 0x2000);
     exercise(ram, 21, large_va);
     say("SEV test: shared and private frame lifecycle passed\n");

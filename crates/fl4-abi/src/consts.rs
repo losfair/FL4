@@ -159,4 +159,5 @@ pub mod bootinfo_header {
     pub const FDT: u64 = 6;
     pub const AARCH64_ID_REGS: u64 = 7;
     pub const X86_BOOT_MODULES: u64 = 8;
+    pub const SHARED_DMA: u64 = 9;
 }

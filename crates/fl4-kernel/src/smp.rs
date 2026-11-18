@@ -22,6 +22,7 @@ static BOOT_DONE: AtomicBool = AtomicBool::new(false);
 static AP_REJECTED: AtomicU8 = AtomicU8::new(0);
 const REJECT_SPEC: u8 = 1;
 const REJECT_VM: u8 = 2;
+const REJECT_APIC: u8 = 3;
 
 fn reject_ap(reason: u8) -> ! {
     AP_REJECTED.store(reason, Ordering::Release);
@@ -32,10 +33,11 @@ fn reject_ap(reason: u8) -> ! {
 #[derive(Clone, Copy)]
 pub struct Features {
     pub cr4: u64,
+    pub window_top: u64,
     pub efer_nx: bool,
 }
 
-static mut FEATURES: Features = Features { cr4: 0, efer_nx: false };
+static mut FEATURES: Features = Features { window_top: 0, cr4: 0, efer_nx: false };
 
 /// PIT ticks for about `us` microseconds.
 fn pit_us(us: u64) -> u16 {
@@ -99,10 +101,10 @@ pub fn start_aps(apic_ids: &[u32], f: Features) -> usize {
         }
         let rejected = AP_REJECTED.load(Ordering::Acquire);
         if rejected != 0 {
-            kprintln!("FL4: rejecting AP with APIC id {}: {}", id, if rejected == REJECT_SPEC {
-                "speculation capabilities differ between cores"
-            } else {
-                "virtualization features differ between cores"
+            kprintln!("FL4: rejecting AP with APIC id {}: {}", id, match rejected {
+                REJECT_SPEC => "speculation capabilities differ between cores",
+                REJECT_APIC => "local APIC outside the physical window",
+                _ => "virtualization features differ between cores",
             });
             // VMX/SVM may already be active on other cores. Keep them at
             // BOOT_DONE and halt the BSP; never publish a partial backend.
@@ -137,7 +139,8 @@ extern "C" fn fl4_ap_main(c: u64) -> ! {
     if !fl4_arch_x86_64::spec::init_core(false) { reject_ap(REJECT_SPEC); }
     if !fl4_arch_x86_64::vm::init(false) { reject_ap(REJECT_VM); }
     percpu::get().cr3.set(paging::root_paddr());
-    apic::enable(fl4_arch_x86_64::sev::shared_ptr(apic::base_paddr()));
+    let Some(mmio) = fl4_arch_x86_64::sev::mmio_ptr(apic::base_paddr(), 4096, f.window_top) else { reject_ap(REJECT_APIC) };
+    apic::enable(mmio);
     apic::write(apic::REG_SVR, (1 << 8) | 0xff);
     apic::write(apic::REG_LVT_LINT0, 1 << 16);
     apic::write(apic::REG_LVT_LINT1, 1 << 16);

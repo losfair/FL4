@@ -11,10 +11,11 @@ use std::collections::BTreeMap;
 struct Memory {
     words: BTreeMap<u64, u64>,
     cpu: u64,
+    frame_masks: (u64, u64),
     writes: usize,
 }
 impl Store for Memory {
-    fn encryption_mask(&self) -> u64 { self.read(self.ks_base() + ks::ENCRYPTION_MASK) }
+    fn frame_masks(&self) -> (u64, u64) { self.frame_masks }
     fn read(&self, a: u64) -> u64 {
         *self.words.get(&a).unwrap_or(&0)
     }
@@ -44,9 +45,9 @@ struct Machine {
     dma_transitions: Vec<(u64, u64, bool)>,
 }
 impl Arch for Machine {
-    fn dma_frame(&mut self, base: u64, bits: u64, shared: bool) -> bool {
-        self.dma_transitions.push((base, bits, shared));
-        true
+    fn dma_ram(&self, _: u64, _: u64) -> bool { true }
+    fn dma_frame(&mut self, base: u64, bytes: u64, shared: bool) {
+        self.dma_transitions.push((base, bytes, shared));
     }
     fn virtualization(&self) -> u64 {
         self.backend
@@ -148,7 +149,7 @@ fn fixture(backend: u64) -> (Memory, Machine, Tcb, u64) {
 
 #[test]
 fn sharing_checks_the_untyped_and_destination_before_changing_visibility() {
-    let (mut s, mut a, _, _) = fixture(0);
+    let (mut s, mut a, t, _) = fixture(0);
     let ptr = layout::pptr(0x200000);
     let cap = Cap::Untyped { ptr, size_bits: 12, free_index: 0, is_device: false };
     let source = Slot(0x30000);
@@ -157,12 +158,26 @@ fn sharing_checks_the_untyped_and_destination_before_changing_visibility() {
     source.set_cap(&mut s, cap);
     source.set_next_flags(&mut s, Slot(0), true, true);
     root.set_cap(&mut s, Cap::CNode { ptr: dest.0, radix: 4, guard_size: 60, guard: 0 });
+    t.set_reg(&mut s, reg::R10, 12);
+    s.write(0x40000 + 5 * 8, 1);
     let share = |s: &mut Memory, a: &mut Machine| {
         let cap = source.cap(s);
-        fl4_core::untyped::decode(s, a, label::X86UntypedRetypeShared, 3, source, cap, 0, &[root, Slot(0), Slot(0)])
+        fl4_core::untyped::decode(s, a, label::UntypedRetypeShared, 5, source, cap, 0x40000, &[root, Slot(0), Slot(0)])
     };
     assert!(matches!(share(&mut s, &mut a), Err(Exc::Sys(SysError::IllegalOperation))));
-    ks_set(&mut s, ks::ENCRYPTION_MASK, 1 << 51);
+    s.frame_masks = (1 << 51, 0);
+    t.set_reg(&mut s, reg::R10, 13);
+    assert!(matches!(share(&mut s, &mut a), Err(Exc::Sys(SysError::InvalidArgument { .. }))));
+    t.set_reg(&mut s, reg::R10, 12);
+    let second = Slot::index(dest.0, 1);
+    second.set_cap(&mut s, Cap::Domain);
+    s.write(0x40000 + 5 * 8, 2);
+    assert!(matches!(share(&mut s, &mut a), Err(Exc::Sys(SysError::DeleteFirst))));
+    assert!(matches!(dest.cap(&s), Cap::Null));
+    assert!(source.cap(&s) == cap);
+    assert!(a.dma_transitions.is_empty());
+    second.set_cap(&mut s, Cap::Null);
+    s.write(0x40000 + 5 * 8, 1);
     dest.set_cap(&mut s, Cap::Domain);
     assert!(matches!(share(&mut s, &mut a), Err(Exc::Sys(SysError::DeleteFirst))));
     assert!(source.cap(&s) == cap);
@@ -171,12 +186,13 @@ fn sharing_checks_the_untyped_and_destination_before_changing_visibility() {
     dest.set_cap(&mut s, Cap::Null);
     assert!(share(&mut s, &mut a).is_ok());
     assert!(matches!(dest.cap(&s), Cap::Frame { ptr: p, is_device: true, size: FrameSize::Small, .. } if p == ptr));
-    assert!(matches!(share(&mut s, &mut a), Err(Exc::Sys(SysError::RevokeFirst))));
+    t.set_reg(&mut s, reg::R15, 1);
+    assert!(matches!(share(&mut s, &mut a), Err(Exc::Sys(SysError::NotEnoughMemory { .. }))));
     let child = dest.cap(&s);
     objects::finalise_cap_object(&mut s, &mut a, child, false);
-    assert_eq!(a.dma_transitions, [(ptr, 12, true)]);
+    assert_eq!(a.dma_transitions, [(ptr, 4096, true)]);
     assert!(fl4_core::cdt::delete(&mut s, &mut a, dest, true).is_ok());
-    assert_eq!(a.dma_transitions, [(ptr, 12, true), (ptr, 12, false)]);
+    assert_eq!(a.dma_transitions, [(ptr, 4096, true), (ptr, 4096, false)]);
 }
 
 #[test]

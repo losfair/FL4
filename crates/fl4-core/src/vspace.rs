@@ -520,12 +520,14 @@ fn mapped_root(c: Cap) -> Option<VRoot> {
 /// CR3 and table pointers, like cap pointers and GetAddress, remain plain GPAs.
 fn frame_address<S: Store, A: Arch>(s: &S, a: &A, f: FrameCap) -> u64 {
     let pa = layout::paddr(f.ptr);
-    let mask = s.encryption_mask();
-    if mask != 0 && (!f.is_device || a.private_device_frame(pa)) { pa | mask } else { pa }
+    let (private, shared) = s.frame_masks();
+    if private | shared == 0 { return pa; }
+    pa | if !f.is_device || a.private_device_frame(pa) { private } else { shared }
 }
 
 fn frame_gpa<S: Store>(s: &S, address: u64) -> u64 {
-    address & !s.encryption_mask()
+    let (private, shared) = s.frame_masks();
+    address & !(private | shared)
 }
 
 fn decode_page_map<S: Store, A: Arch>(s: &mut S, a: &mut A, length: u64, slot: Slot, f: FrameCap, buf: u64, ex: &[Slot; 3]) -> KResult<()> {

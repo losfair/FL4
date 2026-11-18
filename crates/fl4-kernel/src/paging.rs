@@ -128,6 +128,8 @@ pub fn init(nx: bool, skim: bool) -> (u64, u64) {
     // SEV always encrypts page-table walks (including CR3). The C-bit on
     // a leaf selects the data view. Keep the kernel window private and use
     // a second supervisor-only, NX window for MMIO and DMA transitions.
+    // These permanent superpage aliases rely on base SEV. SNP and TDX would
+    // need accepted-RAM tracking, page-state changes and split mappings.
     let n = (window_top >> 30) as usize;
     for g in 0..n {
         let base = (g as u64) << 30;
