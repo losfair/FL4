@@ -103,18 +103,26 @@ fn translate(va: u64, access: Access) -> Option<u64> {
     None
 }
 
+fn user_next_rip(rip: u64, length: u64) -> Option<u64> {
+    rip.checked_add(length)
+        .filter(|&next| next <= fl4_abi::consts::USER_TOP)
+}
+
 pub fn user_vc(f: &mut Frame) -> bool {
     let fetch = |off| {
         let pa = translate(f.rip.checked_add(off)?, Access::Execute)?;
         Some(unsafe { (pptr(pa) as *const u8).read_volatile() })
     };
     if f.error == 0x72 && fetch(0) == Some(0x0f) && fetch(1) == Some(0xa2) {
+        let Some(next) = user_next_rip(f.rip, 2) else {
+            return false;
+        };
         let result = cpu::cpuid(f.rax as u32, f.rcx as u32);
         f.rax = result.eax as u64;
         f.rbx = result.ebx as u64;
         f.rcx = result.ecx as u64;
         f.rdx = result.edx as u64;
-        f.rip += 2;
+        f.rip = next;
         return true;
     }
     if f.error == 0x6e
@@ -122,10 +130,13 @@ pub fn user_vc(f: &mut Frame) -> bool {
         && fetch(1) == Some(0x31)
         && cpu::read_cr4() & 4 == 0
     {
+        let Some(next) = user_next_rip(f.rip, 2) else {
+            return false;
+        };
         let tsc = snp::rdtsc();
         f.rax = tsc as u32 as u64;
         f.rdx = tsc >> 32;
-        f.rip += 2;
+        f.rip = next;
         return true;
     }
     if f.error != 0x400 {
@@ -139,6 +150,9 @@ pub fn user_vc(f: &mut Frame) -> bool {
     ];
     let values = core::array::from_fn(|i| *gprs[i]);
     let Some(access) = mmio::decode(f.rip, &values, fetch) else {
+        return false;
+    };
+    let Some(next) = user_next_rip(f.rip, access.length) else {
         return false;
     };
     // Never let a single GHCB operation cross a page boundary. Consult
@@ -158,16 +172,21 @@ pub fn user_vc(f: &mut Frame) -> bool {
         mmio::Operation::Write(value) => {
             snp::mmio(pa, access.bytes, Some(value & mask));
         }
-        mmio::Operation::Read { register, shift } => {
+        mmio::Operation::Read {
+            register,
+            shift,
+            dest_bytes,
+        } => {
             let value = snp::mmio(pa, access.bytes, None) & mask;
-            *gprs[register] = if access.bytes >= 4 {
+            *gprs[register] = if dest_bytes >= 4 {
                 value
             } else {
-                (values[register] & !(mask << shift)) | (value << shift)
+                let dest_mask = u64::MAX >> (64 - 8 * dest_bytes);
+                (values[register] & !(dest_mask << shift)) | (value << shift)
             };
         }
     }
-    f.rip += access.length;
+    f.rip = next;
     true
 }
 

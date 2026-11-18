@@ -71,9 +71,14 @@ impl<const N: usize> RangeList<N> {
     /// The lowest page-aligned address from `min` on where one range holds
     /// `size` bytes (seL4 `find_load_paddr`).
     pub fn find(&self, min: u64, size: u64) -> Option<u64> {
-        (0..self.n).find_map(|j| {
-            let start = self.r[j].start.max(min).checked_add(PAGE - 1)? & !(PAGE - 1);
-            (start.checked_add(size)? <= self.r[j].end).then_some(start)
+        self.find_below(min, size, u64::MAX)
+    }
+
+    /// As with find, with an additional exclusive upper bound on the span.
+    pub fn find_below(&self, min: u64, size: u64, top: u64) -> Option<u64> {
+        self.r[..self.n].iter().find_map(|r| {
+            let start = r.start.max(min).checked_add(PAGE - 1)? & !(PAGE - 1);
+            (start.checked_add(size)? <= r.end.min(top)).then_some(start)
         })
     }
 }

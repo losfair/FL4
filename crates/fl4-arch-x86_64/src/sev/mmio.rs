@@ -1,4 +1,4 @@
-//! Scalar MOV forms for SNP MMIO faults in 64-bit userspace. The caller
+//! Scalar MOV and MOVZX forms for SNP MMIO faults in 64-bit userspace. The caller
 //! fetches instruction bytes from executable private mappings and validates
 //! the resulting memory operand against its user page tables.
 #[derive(Debug, PartialEq, Eq)]
@@ -11,7 +11,11 @@ pub struct Access {
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum Operation {
-    Read { register: usize, shift: u8 },
+    Read {
+        register: usize,
+        shift: u8,
+        dest_bytes: u64,
+    },
     Write(u64),
 }
 
@@ -57,13 +61,24 @@ pub fn decode(
     } else {
         0
     };
-    let bytes = match opcode {
-        0x88 | 0x8a | 0xc6 => 1,
-        0x89 | 0x8b | 0xc7 if rex & 8 != 0 => 8,
-        0x89 | 0x8b | 0xc7 if word => 2,
-        0x89 | 0x8b | 0xc7 => 4,
+    let operand_bytes = if rex & 8 != 0 {
+        8
+    } else if word {
+        2
+    } else {
+        4
+    };
+    let movzx = opcode == 0x0f;
+    if movzx {
+        opcode = i.byte()?;
+    }
+    let bytes = match (movzx, opcode) {
+        (true, 0xb6) | (false, 0x88 | 0x8a | 0xc6) => 1,
+        (true, 0xb7) => 2,
+        (false, 0x89 | 0x8b | 0xc7) => operand_bytes,
         _ => return None,
     };
+    let dest_bytes = if movzx { operand_bytes } else { bytes };
     let modrm = i.byte()?;
     let mode = modrm >> 6;
     if mode == 3 {
@@ -100,13 +115,17 @@ pub fn decode(
     } else if mode == 1 {
         address = address.wrapping_add(i.byte()? as i8 as i64 as u64);
     }
-    let (register, shift) = if rex == 0 && bytes == 1 && reg >= 4 {
+    let (register, shift) = if !movzx && rex == 0 && bytes == 1 && reg >= 4 {
         (reg - 4, 8)
     } else {
         (reg | ((rex & 4) << 1) as usize, 0)
     };
     let op = match opcode {
-        0x8a | 0x8b => Operation::Read { register, shift },
+        0x8a | 0x8b | 0xb6 | 0xb7 => Operation::Read {
+            register,
+            shift,
+            dest_bytes,
+        },
         0x88 | 0x89 => Operation::Write(registers[register] >> shift),
         _ if reg != 0 => return None,
         _ if bytes == 8 => Operation::Write(i.immediate(4)? as i32 as i64 as u64),
@@ -141,7 +160,8 @@ mod tests {
                 length: 7,
                 op: Operation::Read {
                     register: 0,
-                    shift: 0
+                    shift: 0,
+                    dest_bytes: 4,
                 },
             })
         );
@@ -162,6 +182,33 @@ mod tests {
                 length: 11,
                 op: Operation::Write(1),
             })
+        );
+    }
+
+    #[test]
+    fn decodes_movzx_destination_width_and_register() {
+        let mut regs = [0; 16];
+        regs[0] = 0x1000;
+        let decode = |b: &[u8]| decode(0, &regs, |i| b.get(i as usize).copied()).unwrap();
+        let byte = decode(&[0x0f, 0xb6, 0x20]); // movzbl (%rax), %esp
+        assert_eq!(byte.bytes, 1);
+        assert_eq!(
+            byte.op,
+            Operation::Read {
+                register: 4,
+                shift: 0,
+                dest_bytes: 4
+            }
+        );
+        let word = decode(&[0x4c, 0x0f, 0xb7, 0x00]); // movzwq (%rax), %r8
+        assert_eq!(word.bytes, 2);
+        assert_eq!(
+            word.op,
+            Operation::Read {
+                register: 8,
+                shift: 0,
+                dest_bytes: 8
+            }
         );
     }
 

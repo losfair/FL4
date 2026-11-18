@@ -19,6 +19,14 @@ const VERSION: usize = 0xffa;
 
 static CPUID_PAGE: AtomicU64 = AtomicU64::new(0);
 static FEATURES: AtomicU64 = AtomicU64::new(0);
+static POISONED: AtomicBool = AtomicBool::new(false);
+
+#[inline]
+pub fn halt_if_poisoned() {
+    if POISONED.load(Ordering::Acquire) {
+        cpu::halt_forever();
+    }
+}
 
 struct Channel {
     gpa: AtomicU64,
@@ -67,6 +75,11 @@ fn msr_request(request: u64) -> u64 {
 }
 
 pub fn terminate(reason: u8) -> ! {
+    // Standard delivery allows a hostile host to ignore the exit. Every
+    // CPU checks this flag at kernel entry and before leaving the kernel.
+    if POISONED.swap(true, Ordering::AcqRel) {
+        cpu::halt_forever();
+    }
     cpu::wrmsr(GHCB_MSR, 0x100 | ((reason as u64) << 16));
     vmgexit();
     cpu::halt_forever()
@@ -141,7 +154,8 @@ pub fn cpuid(function: u32, sub: u32) -> Option<Cpuid> {
                 && (function != 0xd || sub > 1 || (l.xcr0 <= 1 && l.xss == 0))
         })
     };
-    let mut r = find(function, sub).map_or(
+    let entry = find(function, sub);
+    let mut r = entry.map_or(
         Cpuid {
             eax: 0,
             ebx: 0,
@@ -155,11 +169,25 @@ pub fn cpuid(function: u32, sub: u32) -> Option<Cpuid> {
             edx: l.edx,
         },
     );
+    if entry.is_some() {
+        let apic_id = percpu::apic_id(percpu::cpu_index());
+        match function {
+            1 => r.ebx = (r.ebx & 0x00ff_ffff) | ((apic_id & 0xff) << 24),
+            0xb | 0x1f => r.edx = apic_id,
+            0x8000_001e => {
+                r.eax = apic_id;
+                let threads = ((r.ebx >> 8) & 0xff) + 1;
+                let core_id = apic_id >> (32 - (threads - 1).leading_zeros());
+                r.ebx = (r.ebx & !0xff) | (core_id & 0xff);
+            }
+            _ => {}
+        }
+    }
     let osxsave = cpu::read_cr4() & (1 << 18) != 0;
     if function == 1 {
         r.ecx = (r.ecx & !(1 << 27)) | ((osxsave as u32) << 27) | (1 << 31);
     }
-    if function == 0xd && sub <= 1 && find(function, sub).is_some() {
+    if function == 0xd && sub <= 1 && entry.is_some() {
         let xcr0 = if osxsave { cpu::xgetbv(0) } else { 1 };
         let mut size = 576;
         for i in 2..64 {

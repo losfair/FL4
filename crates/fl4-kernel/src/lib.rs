@@ -343,8 +343,7 @@ pub extern "C" fn fl4_boot(magic: u32, info: u32, private_mask: u64, cpuid_page:
         // EFI allocates the handoff as a unit and may put it at the top
         // of the last usable range. Search below it as well.
         if delta == 0 { return None; }
-        ram.find(HIGHMEM_PADDR, image_bytes)
-            .filter(|&base| base + image_bytes <= KERNEL_PHYS_START + delta)
+        ram.find_below(HIGHMEM_PADDR, image_bytes, KERNEL_PHYS_START + delta)
     }) {
         Some(p) => p,
         None => fail("no memory for the root task"),

@@ -34,6 +34,10 @@ struct Idt([u64; 512]);
 /// during #DB (or the reverse) does not overwrite the other's frame.
 const IST_VECTORS: [usize; 4] = [2, 1, 18, 8]; // NMI, #DB, #MC, #DF
 const STACK_BYTES: usize = 4096;
+const SNP_STACK_BYTES: usize = 8192;
+
+#[repr(C, align(4096))]
+struct SnpStack([u8; SNP_STACK_BYTES]);
 
 #[repr(C, align(4096))]
 struct Stack([u8; STACK_BYTES]);
@@ -47,7 +51,7 @@ struct Stack([u8; STACK_BYTES]);
 /// to the core's kernel stack in KSTACKS (`gs_block[2]`), which the user's
 /// tables do not map. entry.S finds the area from the stack pointer: areas
 /// are `size_of::<SkimCpu>()`-aligned, a power of two.
-#[repr(C, align(32768))]
+#[repr(C, align(65536))]
 struct SkimCpu {
     /// KERNEL_GS_BASE points here: entry stack top, a scratch word for
     /// SYSCALL, kernel stack top, core index.
@@ -56,6 +60,7 @@ struct SkimCpu {
     tss: Tss,
     entry_stack: Stack,
     ist: [Stack; 4],
+    snp_ist: [SnpStack; 3],
 }
 
 pub const SKIM_CPU_SIZE: usize = core::mem::size_of::<SkimCpu>();
@@ -81,6 +86,7 @@ static TABLES: Cell = Cell(UnsafeCell::new(SkimTables {
             tss: Tss([0; 26]),
             entry_stack: Stack([0; STACK_BYTES]),
             ist: [const { Stack([0; STACK_BYTES]) }; 4],
+            snp_ist: [const { SnpStack([0; SNP_STACK_BYTES]) }; 3],
         }
     }; MAX_CPUS],
 }));
@@ -108,14 +114,30 @@ fn user_gate(v: usize) -> bool {
     v == 3 || (0xa0..0xff).contains(&v)
 }
 
+/// SNP standard injection permits the VMM to deliver an exception during
+/// the SYSCALL/SYSRET windows with a user-controlled RSP. Every vector
+/// needs a hardware stack switch, including vectors normally masked by
+/// IF. Use separate stacks for #VC, other exceptions, and IRQ/trap gates:
+/// an interrupt or an exception handler may itself access GHCB devices.
+fn ist_index(vector: usize, snp: bool) -> u64 {
+    if let Some(i) = IST_VECTORS.iter().position(|&v| v == vector) { return i as u64 + 1; }
+    if !snp { return 0; }
+    match vector {
+        29 => 5,
+        0..32 => 6,
+        _ => 7,
+    }
+}
+
 /// Fill the IDT (shared by all cores).
 pub fn init_idt() {
     let t = unsafe { &mut *TABLES.0.get() };
     let base = unsafe { &fl4_vectors as *const u8 as u64 };
+    let snp = fl4_arch_x86_64::sev::snp::active();
     for v in 0..256 {
         let h = base + 16 * v as u64;
         let dpl: u64 = if user_gate(v) { 3 } else { 0 };
-        let ist = IST_VECTORS.iter().position(|&x| x == v).map_or(0, |i| i as u64 + 1);
+        let ist = ist_index(v, snp);
         let lo = (h & 0xffff) | ((KERNEL_CS as u64) << 16) | (ist << 32) | ((0x8e | (dpl << 5)) << 40) | (((h >> 16) & 0xffff) << 48);
         t.idt.0[2 * v] = lo;
         t.idt.0[2 * v + 1] = h >> 32;
@@ -169,6 +191,13 @@ pub fn init_core(cpu: usize, stack_top: u64) {
         let top = c.ist[i].0.as_ptr() as u64 + STACK_BYTES as u64;
         tss.0[9 + 2 * i] = top as u32;
         tss.0[10 + 2 * i] = (top >> 32) as u32;
+    }
+    if fl4_arch_x86_64::sev::snp::active() {
+        for (i, stack) in c.snp_ist.iter().enumerate() {
+            let top = stack.0.as_ptr() as u64 + SNP_STACK_BYTES as u64;
+            tss.0[17 + 2 * i] = top as u32;
+            tss.0[18 + 2 * i] = (top >> 32) as u32;
+        }
     }
     // No I/O permission bitmap: the base is past the limit.
     tss.0[25] = 104 << 16;

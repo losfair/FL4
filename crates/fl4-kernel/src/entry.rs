@@ -136,6 +136,14 @@ fn save_user(s: &mut PhysStore, f: &Frame) {
     }
 }
 
+#[no_mangle]
+extern "C" fn fl4_bad_entry_frame() -> ! {
+    if fl4_arch_x86_64::sev::snp::active() {
+        fl4_arch_x86_64::sev::snp::terminate(0);
+    }
+    cpu::halt_forever()
+}
+
 fn kernel_fault(f: &Frame) -> ! {
     if fl4_arch_x86_64::sev::snp::active() {
         // Injected exceptions must not send private registers or RAM to
@@ -324,6 +332,7 @@ fn deferred_user_debug(f: &Frame) -> bool {
 /// entry interrupted).
 #[no_mangle]
 extern "C" fn fl4_entry(f: &mut Frame) -> u64 {
+    fl4_arch_x86_64::sev::snp::halt_if_poisoned();
     let v = f.vector;
     if v == 29 && fl4_arch_x86_64::sev::snp::active() {
         if f.cs & 3 == 0 {
@@ -420,7 +429,7 @@ extern "C" fn fl4_entry(f: &mut Frame) -> u64 {
     }
     // The bench profile's MSR syscalls (DESIGN.md §3) touch only the
     // caller's registers and the MSR: answered here, outside the core.
-    if fl4_abi::config::KERNEL_X86_DANGEROUS_MSR && v == VEC_SYSCALL {
+    if fl4_abi::config::KERNEL_X86_DANGEROUS_MSR && v == VEC_SYSCALL && !fl4_arch_x86_64::sev::snp::active() {
         let n = f.rdx as i64;
         if n == fl4_abi::syscall::SysX86DangerousRDMSR {
             f.r10 = cpu::rdmsr(f.rdi as u32);
@@ -532,6 +541,7 @@ fn dispatch_handler<S: fl4_core::machine::Store>(
 /// context no other core changes without stalling this one first.
 pub fn exit() -> ! {
     loop {
+        fl4_arch_x86_64::sev::snp::halt_if_poisoned();
         // Exit never runs in a transaction. Use the direct specialization
         // for guest entry/exit and scheduling, as syscall dispatch does.
         let s = &mut store().specialize::<false>();

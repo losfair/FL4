@@ -15,6 +15,8 @@ const LINK_BASE: u64 = 0x10_0000;
 const MB_MAGIC: u64 = 0x36d7_6289;
 const TABLE_BYTES: u64 = 10 * PAGE;
 const INFO_BYTES: u64 = 4 * PAGE;
+// Match the kernel's mboot::MAX_MMAP after adjacent descriptors are merged.
+const MAX_MMAP: u64 = 128;
 
 fn alloc_low(bytes: u64) -> u64 {
     let mut address = TOP - 1;
@@ -33,14 +35,20 @@ fn sev() -> (u64, u64, u64) {
     if leaf.eax & 2 == 0 {
         return (0, 0, 0);
     }
-    let lo: u32;
-    unsafe { asm!("rdmsr", in("ecx") 0xc001_0131u32, out("eax") lo, out("edx") _) };
-    if lo & 1 == 0 {
+    let (lo, hi): (u32, u32);
+    unsafe { asm!("rdmsr", in("ecx") 0xc001_0131u32, out("eax") lo, out("edx") hi) };
+    let status = ((hi as u64) << 32) | lo as u64;
+    if status & 1 == 0 {
         return (0, 0, 0);
     }
     let mut cpuid_page = 0;
     let mut secrets_page = 0;
-    if lo & 4 != 0 {
+    if status & 4 != 0 {
+        // This implementation uses the base SNP ABI with standard delivery.
+        // Other SEV_FEATURES can change address, injection or VMSA semantics.
+        if status != 7 {
+            fail("unsupported SEV-SNP status bits");
+        }
         let blob = config_table(SNP_BLOB);
         if blob == 0 {
             fail("missing SNP firmware CPUID table");
@@ -59,7 +67,7 @@ fn sev() -> (u64, u64, u64) {
         {
             fail("invalid SNP firmware CPUID table");
         }
-    } else if lo & 2 != 0 {
+    } else if status & 2 != 0 {
         fail("SEV-ES without SNP");
     }
     let bit = leaf.ebx & 63;
@@ -108,6 +116,53 @@ fn memory_kind(ty: u64, attributes: u64) -> u32 {
     }
 }
 
+fn memory_map(info: &mut Info, map: &[u8], stride: usize, cpuid: u64, secrets: u64) {
+    let tag = info.tag(6, 8);
+    write(tag, &24u32.to_le_bytes());
+    let mut count = 0;
+    let mut previous: Option<(u64, u64, u32)> = None;
+    let mut emit = |(base, bytes, kind): (u64, u64, u32)| {
+        count += 1;
+        if count > MAX_MMAP || info.used + 24 + 8 > INFO_BYTES {
+            fail("EFI memory map has too many regions for FL4");
+        }
+        let p = info.base + info.used;
+        write(p, &base.to_le_bytes());
+        write(p + 8, &bytes.to_le_bytes());
+        write(p + 16, &(kind as u64).to_le_bytes());
+        info.used += 24;
+    };
+    for d in map.chunks_exact(stride) {
+        let base = rd64(d, 8);
+        let bytes = rd64(d, 24) * PAGE;
+        let sensitive = [cpuid, secrets]
+            .into_iter()
+            .any(|page| page != 0 && base <= page && page - base < bytes);
+        let kind = if sensitive {
+            4
+        } else {
+            memory_kind(rd32(d, 0), rd64(d, 32))
+        };
+        if let Some((start, len, ty)) = previous {
+            if start + len == base && ty == kind {
+                previous = Some((start, len + bytes, ty));
+                continue;
+            }
+            emit((start, len, ty));
+        }
+        previous = Some((base, bytes, kind));
+    }
+    if let Some(last) = previous {
+        emit(last);
+    }
+    write(
+        tag - 4,
+        &((info.base + info.used - (tag - 8)) as u32).to_le_bytes(),
+    );
+    info.tag(0, 0);
+    write(info.base, &(info.used as u32).to_le_bytes());
+}
+
 fn tables(pa: u64, delta: u64, mask: u64, end: u64) {
     let t = |i| pa + i * PAGE;
     let e = |i, slot, value: u64| write(t(i) + slot * 8, &value.to_le_bytes());
@@ -138,6 +193,32 @@ fn tables(pa: u64, delta: u64, mask: u64, end: u64) {
     }
 }
 
+/// The linker emits a named section for the long-mode entry. The ELF
+/// entry point remains the 32-bit Multiboot entry, even in a stripped ELF.
+fn long_mode_entry(kernel: &[u8]) -> Option<u64> {
+    let table = rd64(kernel, 40) as usize;
+    let stride = rd16(kernel, 58) as usize;
+    let count = rd16(kernel, 60) as usize;
+    let names = rd16(kernel, 62) as usize;
+    if stride < 64 || names >= count {
+        return None;
+    }
+    let end = table.checked_add(stride.checked_mul(count)?)?;
+    let sections = kernel.get(table..end)?.chunks_exact(stride);
+    let strings = sections.clone().nth(names)?;
+    let start = rd64(strings, 24) as usize;
+    let end = start.checked_add(rd64(strings, 32) as usize)?;
+    let names = kernel.get(start..end)?;
+    let entry = sections
+        .filter(|s| rd64(s, 8) & 6 == 6 && rd64(s, 32) != 0)
+        .find(|s| {
+            names
+                .get(rd32(s, 0) as usize..)
+                .is_some_and(|name| name.starts_with(b".efi.entry\0"))
+        })?;
+    Some(rd64(entry, 16))
+}
+
 #[no_mangle]
 extern "efiapi" fn efi_main(image: Handle, system: *mut SystemTable) -> Status {
     unsafe { ST = system };
@@ -163,10 +244,14 @@ extern "efiapi" fn efi_main(image: Handle, system: *mut SystemTable) -> Status {
         .map(|p| rd64(p, 24) + rd64(p, 40))
         .max()
         .unwrap_or(0);
-    let entry = segments
-        .clone()
-        .find(|p| rd64(p, 16) >= KERNEL_OFFSET && rd32(p, 4) & 1 != 0)
-        .map(|p| rd64(p, 16))
+    let entry = long_mode_entry(kernel)
+        .filter(|&entry| {
+            entry >= KERNEL_OFFSET
+                && segments.clone().any(|p| {
+                    let base = rd64(p, 16);
+                    rd32(p, 4) & 1 != 0 && entry >= base && entry - base < rd64(p, 32)
+                })
+        })
         .unwrap_or_else(|| fail("no long-mode kernel entry"));
     let mut li = core::ptr::null_mut();
     if (bs().handle_protocol)(image, &LOADED_IMAGE, &mut li) != SUCCESS {
@@ -283,6 +368,7 @@ extern "efiapi" fn efi_main(image: Handle, system: *mut SystemTable) -> Status {
     }
     let capacity = size + 16 * stride;
     let buffer = alloc_pages((capacity as u64).div_ceil(PAGE));
+    let tags_end = info.used;
     for attempt in 0..8 {
         size = capacity;
         if (bs().get_memory_map)(
@@ -295,6 +381,12 @@ extern "efiapi" fn efi_main(image: Handle, system: *mut SystemTable) -> Status {
         {
             fail("GetMemoryMap");
         }
+        if stride < 40 || size % stride != 0 {
+            fail("invalid EFI memory map");
+        }
+        let map = unsafe { core::slice::from_raw_parts(buffer as *const u8, size) };
+        info.used = tags_end;
+        memory_map(&mut info, map, stride, cpuid, secrets);
         if (bs().exit_boot_services)(image, key) == SUCCESS {
             break;
         }
@@ -302,47 +394,6 @@ extern "efiapi" fn efi_main(image: Handle, system: *mut SystemTable) -> Status {
             fail("ExitBootServices");
         }
     }
-    let map = unsafe { core::slice::from_raw_parts(buffer as *const u8, size) };
-    let tag = info.tag(6, 8);
-    write(tag, &24u32.to_le_bytes());
-    let mut previous: Option<(u64, u64, u32)> = None;
-    let mut emit = |(base, bytes, kind): (u64, u64, u32)| {
-        assert!(info.used + 24 <= INFO_BYTES);
-        let p = info.base + info.used;
-        write(p, &base.to_le_bytes());
-        write(p + 8, &bytes.to_le_bytes());
-        write(p + 16, &kind.to_le_bytes());
-        info.used += 24;
-    };
-    for d in map.chunks_exact(stride) {
-        let base = rd64(d, 8);
-        let bytes = rd64(d, 24) * PAGE;
-        let sensitive = [cpuid, secrets]
-            .into_iter()
-            .any(|page| page != 0 && base <= page && page - base < bytes);
-        let kind = if sensitive {
-            4
-        } else {
-            memory_kind(rd32(d, 0), rd64(d, 32))
-        };
-        if let Some((start, len, ty)) = previous {
-            if start + len == base && ty == kind {
-                previous = Some((start, len + bytes, ty));
-                continue;
-            }
-            emit((start, len, ty));
-        }
-        previous = Some((base, bytes, kind));
-    }
-    if let Some(last) = previous {
-        emit(last);
-    }
-    write(
-        tag - 4,
-        &((info.base + info.used - (tag - 8)) as u32).to_le_bytes(),
-    );
-    info.tag(0, 0);
-    write(info.base, &(info.used as u32).to_le_bytes());
     unsafe {
         asm!(
             "cli",

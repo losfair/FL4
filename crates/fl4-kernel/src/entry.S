@@ -92,6 +92,16 @@ fl4_common_entry:
     pushq %r14
     pushq %r15
     cld
+    /* A wrong injection type can give an error-code vector a frame
+     * without an error code. Reject an invalid CS before the common path
+     * can mistake that malformed frame for a user entry and relocate it. */
+    cmpw $0x10, 18*8(%rsp)
+    je .Lframe_cs_ok
+    cmpw $0x33, 18*8(%rsp)
+    je .Lframe_cs_ok
+    call fl4_bad_entry_frame
+    ud2
+.Lframe_cs_ok:
     movl FL4_SPEC_ENTRY(%rip), %r11d
     fl4_spec_barrier %r11d
     fl4_clear_guest_gprs

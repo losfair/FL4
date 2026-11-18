@@ -37,13 +37,14 @@ SECTIONS
      * functions that start at them rather than the boundaries. */
     .text : AT(ADDR(.text) - KERNEL_OFFSET) {
         HIDDEN(__text_start = .);
-        KEEP(*(.efi.entry))
-        . = ALIGN(4096);
         HIDDEN(__skim_text_start = .);
         *(.skim.text .skim.text.*)
         . = ALIGN(4096);
         HIDDEN(__skim_text_end = .);
         *(.text .text.*)
+    } :text
+    .efi.entry : AT(ADDR(.efi.entry) - KERNEL_OFFSET) {
+        KEEP(*(.efi.entry))
         HIDDEN(__text_end = .);
     } :text
     . = ALIGN(4096);
