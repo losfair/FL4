@@ -54,8 +54,8 @@ secondary CPUs when the hypervisor advertises AP creation. Userspace MMIO
 emulates scalar 8-, 16-, 32- and 64-bit MOV accesses and byte and word
 MOVZX reads. Use ordinary scalar loads and stores in drivers. The SNP
 kernel forwards intercepted APIC and timer MSRs. Other intercepted MSRs
-fail closed, and the benchmark profile's raw MSR syscalls are disabled. Standalone SEV-ES, guest attestation and nested virtualization are
-outside the supported configuration. [AMD GHCB specification](https://docs.amd.com/api/khub/documents/oJly8EPzLO1Bt7ncrkCytw/content)
+fail closed, and the benchmark profile's raw MSR syscalls are disabled.
+Standalone SEV-ES, guest attestation and nested virtualization are outside the supported configuration. [AMD GHCB specification](https://docs.amd.com/api/khub/documents/oJly8EPzLO1Bt7ncrkCytw/content)
 
 The extra BootInfo record `SEL4_BOOTINFO_HEADER_SHARED_DMA` tells drivers
 that DMA requires shared RAM. Drivers allocate buffers with

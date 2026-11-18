@@ -99,9 +99,12 @@ fl4_common_entry:
     je .Lframe_cs_ok
     cmpw $0x33, 18*8(%rsp)
     je .Lframe_cs_ok
+    andq $-16, %rsp
     call fl4_bad_entry_frame
     ud2
 .Lframe_cs_ok:
+    cmpb $0, FL4_SNP_POISONED(%rip)
+    jne .Lpoisoned
     movl FL4_SPEC_ENTRY(%rip), %r11d
     fl4_spec_barrier %r11d
     fl4_clear_guest_gprs
@@ -205,7 +208,16 @@ fl4_common_entry:
     movq $0, -128(%rsp)
     movq $0, -136(%rsp)
     fl4_clear_buffers
+    cmpb $0, FL4_SNP_POISONED(%rip)
+    jne .Lpoisoned
     iretq
+
+/* Once another SNP vCPU reports a fatal error, do not resume guests or
+ * enter the normal kernel path. This code and flag are mapped everywhere. */
+.Lpoisoned:
+    cli
+    hlt
+    jmp .Lpoisoned
 
 /* fl4_restore_user(regs: *const u64, stack_top: u64, cr3: u64) -> !
  * regs is a TCB's register array (fl4_core::layout::reg order); stack_top
@@ -260,6 +272,8 @@ fl4_restore_user:
     movq $0, (%rsp)
     addq $8, %rsp
     fl4_clear_buffers
+    cmpb $0, FL4_SNP_POISONED(%rip)
+    jne .Lpoisoned
     iretq
 
 3:  /* SYSRET path. The frame on the entry stack: user rsp, cr3, rdi. */
@@ -295,6 +309,8 @@ fl4_restore_user:
     addq $8, %rsp
     popq %rsp
     fl4_clear_buffers
+    cmpb $0, FL4_SNP_POISONED(%rip)
+    jne .Lpoisoned
     sysretq
 
 /* fl4_idle(stack_top: u64) -> !: the idle thread, on the kernel stack and
@@ -305,6 +321,8 @@ fl4_restore_user:
 fl4_idle:
     movq %rdi, %rsp
 1:
+    cmpb $0, FL4_SNP_POISONED(%rip)
+    jne .Lpoisoned
     fl4_clear_buffers
     sti
     hlt

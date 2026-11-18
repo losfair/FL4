@@ -19,11 +19,14 @@ const VERSION: usize = 0xffa;
 
 static CPUID_PAGE: AtomicU64 = AtomicU64::new(0);
 static FEATURES: AtomicU64 = AtomicU64::new(0);
-static POISONED: AtomicBool = AtomicBool::new(false);
+// Read by the entry and return stubs, including on skim page tables.
+#[no_mangle]
+#[cfg_attr(target_os = "none", link_section = ".bss.skim")]
+static FL4_SNP_POISONED: AtomicBool = AtomicBool::new(false);
 
 #[inline]
 pub fn halt_if_poisoned() {
-    if POISONED.load(Ordering::Acquire) {
+    if FL4_SNP_POISONED.load(Ordering::Acquire) {
         cpu::halt_forever();
     }
 }
@@ -77,7 +80,7 @@ fn msr_request(request: u64) -> u64 {
 pub fn terminate(reason: u8) -> ! {
     // Standard delivery allows a hostile host to ignore the exit. Every
     // CPU checks this flag at kernel entry and before leaving the kernel.
-    if POISONED.swap(true, Ordering::AcqRel) {
+    if FL4_SNP_POISONED.swap(true, Ordering::AcqRel) {
         cpu::halt_forever();
     }
     cpu::wrmsr(GHCB_MSR, 0x100 | ((reason as u64) << 16));

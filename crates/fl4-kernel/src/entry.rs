@@ -332,7 +332,6 @@ fn deferred_user_debug(f: &Frame) -> bool {
 /// entry interrupted).
 #[no_mangle]
 extern "C" fn fl4_entry(f: &mut Frame) -> u64 {
-    fl4_arch_x86_64::sev::snp::halt_if_poisoned();
     let v = f.vector;
     if v == 29 && fl4_arch_x86_64::sev::snp::active() {
         if f.cs & 3 == 0 {
