@@ -822,7 +822,11 @@ fn uefi(o: &Opts) {
                   menuentry fl4 {\n  multiboot2 /boot/kernel\n  module2 /boot/rootserver\n  boot\n}\n";
     fs::write(&cfg, script).unwrap();
     run(Command::new("grub-mkstandalone")
-        .args(["-O", "x86_64-efi", "--modules=multiboot2 serial terminal normal", "-o"])
+        .args([
+            "-O", "x86_64-efi", "--locales=", "--fonts=",
+            "--install-modules=multiboot2 serial terminal normal memdisk tar",
+            "--modules=multiboot2 serial terminal normal", "-o",
+        ])
         .arg(esp.join("BOOTX64.EFI"))
         .arg(format!("boot/grub/grub.cfg={}", cfg.display()))
         .arg(format!("boot/kernel={}", b.join("images/kernel-x86_64-pc99").display()))

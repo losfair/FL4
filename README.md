@@ -47,7 +47,8 @@ on x86_64. Kernel and userspace RAM, page tables, boot modules and firmware
 ACPI data start private. Device MMIO uses shared mappings. The serial banner
 shows the active technology and C-bit.
 
-SEV-SNP boots through FL4's x86_64 UEFI loader. It uses the firmware's SNP
+SEV-SNP boots at VMPL0 through FL4's x86_64 UEFI loader with firmware-accepted
+RAM and standard interrupt delivery. It uses the firmware's SNP
 CPUID page, GHCB v2 for virtual device access, and guest-created VMSAs for
 secondary CPUs when the hypervisor advertises AP creation. Userspace MMIO
 emulates scalar 8-, 16-, 32- and 64-bit MOV instructions when the access
@@ -75,6 +76,18 @@ returning it to private use. On native hardware
 drivers use ordinary RAM and the invocation returns `seL4_IllegalOperation`.
 In an SEV guest a device untyped returns `seL4_InvalidCapability` and an
 unsupported frame size returns `seL4_InvalidArgument`. [AMD memory encryption](https://docs.kernel.org/arch/x86/amd-memory-encryption.html)
+
+To build an SNP EFI executable with your own x86_64 root task, use:
+
+```sh
+cargo xtask kernel
+FL4_KERNEL_ELF="$PWD/build/kernel.elf" \
+FL4_ROOTSERVER_ELF="/absolute/path/to/rootserver.elf" \
+cargo build --release -p fl4-efi --target x86_64-unknown-uefi
+```
+
+Copy `target/x86_64-unknown-uefi/release/fl4-efi.efi` to
+`/EFI/BOOT/BOOTX64.EFI` on the EFI system partition.
 
 `xtask/scripts/sev-smoke-image.sh sev` builds `build/sev-smoke/fl4-sev.tar.gz`
 with GRUB. Use `xtask/scripts/sev-smoke-image.sh snp` to build
