@@ -100,7 +100,7 @@ def TacHyp (L4 L3 L2 L1 : Set U64) (s : S) (σ : Fl4Spec.State Unit) (ct : U64) 
 /-- **`TestAndClearAccessed`'s decode checks** against the model's, for any
 post `Q`: the errors are the model's; on success, the model's slot, and
 FL4 clears the accessed bit of a page-table word and replies 1 or 0. -/
-theorem tac_gen {P L4 L3 L2 L1 : Set U64} (s : S) (σ : Fl4Spec.State Unit)
+theorem tac_gen [Fl4Proofs.P1.PlainStore st] {P L4 L3 L2 L1 : Set U64} (s : S) (σ : Fl4Spec.State Unit)
     (hR : VsRel P (L.mem s) (L.ksb s) σ) (hPt : PtRel L4 L3 L2 L1 (L.mem s) σ) (hPP : PtPlaced L4 L3 L2 L1)
     (hPI : PoolsIn P L4 (L.mem s)) (ct : U64) (hct : sched.cur_thread st s = ok ct)
     (f : vspace.FrameCap) (call : Bool) (Q : core.result.Result Unit error.Exc × S → Prop)
@@ -251,7 +251,7 @@ theorem tac_gen {P L4 L3 L2 L1 : Set U64} (s : S) (σ : Fl4Spec.State Unit)
         exact (WP.spec_ok _).2 h
 
 /-- **Frame `TestAndClearAccessed`** (`DecOKR`, the reply `TacHyp`). -/
-theorem decode_invocation_frame_tac {P L4 L3 L2 L1 : Set U64} (s : S) (ar : A) (σ : Fl4Spec.State Unit)
+theorem decode_invocation_frame_tac [Fl4Proofs.P1.PlainStore st] {P L4 L3 L2 L1 : Set U64} (s : S) (ar : A) (σ : Fl4Spec.State Unit)
     (hR : VsRel P (L.mem s) (L.ksb s) σ) (hPt : PtRel L4 L3 L2 L1 (L.mem s) σ) (hPP : PtPlaced L4 L3 L2 L1)
     (hPI : PoolsIn P L4 (L.mem s))
     (lbl : U64) (slbl : Fl4Spec.Data) (hlbl : FrameLabel lbl slbl)
@@ -429,7 +429,7 @@ theorem decode_invocation_frame_getaddrX {X : S → A → Fl4Spec.State Unit →
 
 /-- **Frame `TestAndClearAccessed` keeping `X`** (`DecOKRMX`, the reply `TacHypX`; `X` after the
 accessed-bit clear given). -/
-theorem decode_invocation_frame_tacX {X : S → A → Fl4Spec.State Unit → Prop} {P L4 L3 L2 L1 : Set U64} (s : S) (ar : A) (σ : Fl4Spec.State Unit)
+theorem decode_invocation_frame_tacX [Fl4Proofs.P1.PlainStore st] {X : S → A → Fl4Spec.State Unit → Prop} {P L4 L3 L2 L1 : Set U64} (s : S) (ar : A) (σ : Fl4Spec.State Unit)
     (hR : VsRel P (L.mem s) (L.ksb s) σ) (hPt : PtRel L4 L3 L2 L1 (L.mem s) σ) (hPP : PtPlaced L4 L3 L2 L1)
     (hPI : PoolsIn P L4 (L.mem s))
     (lbl : U64) (slbl : Fl4Spec.Data) (hlbl : FrameLabel lbl slbl)

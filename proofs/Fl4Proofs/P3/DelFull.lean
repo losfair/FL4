@@ -23,7 +23,7 @@ variable {S : Type} {st : machine.Store S} [L : P1.LawfulStore st] {A : Type} (a
 
 /-- **`delete(slot, true)` refines `cap_delete`**, with `W` and the
 readiness `Rd` threaded. -/
-theorem delete_fullWR (W Wp : S → A → Fl4Spec.State Unit → MdbGhost → Prop)
+theorem delete_fullWR [Fl4Proofs.P1.PlainStore st] (W Wp : S → A → Fl4Spec.State Unit → MdbGhost → Prop)
     (Rd : S → A → Fl4Spec.State Unit → MdbGhost → U64 → Prop) (th : TypedHeap) (hP : Placed th)
     (hF : FinalHyp (L := L) th) (hH : DelHypsWR (L := L) arI W Wp Rd th)
     (K : Nat) (hK : ∀ p r, th p = some (.cnode r) → 2 ^ r ≤ K) (hK6 : 6 ≤ K)
@@ -67,7 +67,7 @@ theorem delete_fullWR (W Wp : S → A → Fl4Spec.State Unit → MdbGhost → Pr
     exact ⟨σ1, G1, hDS1, hps1, hcd1, hmS1, Or.inr ⟨by trivial, capDelete_err (rd_cte_err hrd)⟩, hW1⟩
 
 /-- **`delete(slot, true)` refines `cap_delete`**, with `W` threaded. -/
-theorem delete_fullW (W : S → A → Fl4Spec.State Unit → MdbGhost → Prop) (th : TypedHeap) (hP : Placed th)
+theorem delete_fullW [Fl4Proofs.P1.PlainStore st] (W : S → A → Fl4Spec.State Unit → MdbGhost → Prop) (th : TypedHeap) (hP : Placed th)
     (hF : FinalHyp (L := L) th) (hH : DelHypsW (L := L) arI W th)
     (K : Nat) (hK : ∀ p r, th p = some (.cnode r) → 2 ^ r ≤ K) (hK6 : 6 ≤ K)
     (sl : Fl4Spec.CslotPtr) (hA : AbsSlot th sl) (s : S) (a : A) (σ : Fl4Spec.State Unit) (G : MdbGhost)
@@ -85,7 +85,7 @@ theorem delete_fullW (W : S → A → Fl4Spec.State Unit → MdbGhost → Prop) 
     fun _ ⟨σ', G', h1, h2, h3, h4, h5, h6⟩ => ⟨σ', G', h1, h2, h3, h4, h5, WPost_self.1 h6⟩
 
 /-- **`delete(slot, true)` refines `cap_delete`.** -/
-theorem delete_full (th : TypedHeap) (hP : Placed th) (hF : FinalHyp (L := L) th)
+theorem delete_full [Fl4Proofs.P1.PlainStore st] (th : TypedHeap) (hP : Placed th) (hF : FinalHyp (L := L) th)
     (hO : FinObjHyp (L := L) arI th) (hPP : PPHypD (L := L) arI th) (hPD : PostDelHyp (L := L) arI th)
     (K : Nat) (hK : ∀ p r, th p = some (.cnode r) → 2 ^ r ≤ K) (hK6 : 6 ≤ K)
     (sl : Fl4Spec.CslotPtr) (hA : AbsSlot th sl) (s : S) (a : A) (σ : Fl4Spec.State Unit) (G : MdbGhost)
@@ -129,7 +129,7 @@ theorem psiD_slotsSame {th : TypedHeap} : ∀ m m' G, MdbLinks th m G → SlotsS
 /-- **`DelHyp` holds** for the measure `psiD` and the invariant `DelE`,
 from the hypotheses on finality, the object-specific finalisations, the
 preemption points and `post_cap_deletion`. -/
-theorem delHyp_full (th : TypedHeap) (hP : Placed th) (hF : FinalHyp (L := L) th)
+theorem delHyp_full [Fl4Proofs.P1.PlainStore st] (th : TypedHeap) (hP : Placed th) (hF : FinalHyp (L := L) th)
     (hO : FinObjHyp (L := L) arI th) (hPP : PPHypD (L := L) arI th) (hPD : PostDelHyp (L := L) arI th)
     (K : Nat) (hK : ∀ p r, th p = some (.cnode r) → 2 ^ r ≤ K) (hK6 : 6 ≤ K) :
     DelHyp (L := L) arI psiD th (DelE (L := L) th K) := by
@@ -150,7 +150,7 @@ theorem delHyp_full (th : TypedHeap) (hP : Placed th) (hF : FinalHyp (L := L) th
 
 /-- **`DelHypW` holds** for the measure `psiD` and the invariant `DelE` with
 `W` (W-threading, with the readiness `Rd`). -/
-theorem delHyp_fullWR (W Wp : S → A → Fl4Spec.State Unit → MdbGhost → Prop)
+theorem delHyp_fullWR [Fl4Proofs.P1.PlainStore st] (W Wp : S → A → Fl4Spec.State Unit → MdbGhost → Prop)
     (Rd : S → A → Fl4Spec.State Unit → MdbGhost → U64 → Prop) (th : TypedHeap) (hP : Placed th)
     (hF : FinalHyp (L := L) th) (hH : DelHypsWR (L := L) arI W Wp Rd th)
     (K : Nat) (hK : ∀ p r, th p = some (.cnode r) → 2 ^ r ≤ K) (hK6 : 6 ≤ K) :
@@ -173,7 +173,7 @@ theorem delHyp_fullWR (W Wp : S → A → Fl4Spec.State Unit → MdbGhost → Pr
 
 /-- **`DelHypW` holds** for the measure `psiD` and the invariant `DelE` with
 `W` (W-threading). -/
-theorem delHyp_fullW (W : S → A → Fl4Spec.State Unit → MdbGhost → Prop) (th : TypedHeap) (hP : Placed th)
+theorem delHyp_fullW [Fl4Proofs.P1.PlainStore st] (W : S → A → Fl4Spec.State Unit → MdbGhost → Prop) (th : TypedHeap) (hP : Placed th)
     (hF : FinalHyp (L := L) th) (hH : DelHypsW (L := L) arI W th)
     (K : Nat) (hK : ∀ p r, th p = some (.cnode r) → 2 ^ r ≤ K) (hK6 : 6 ≤ K) :
     DelHypW (L := L) arI psiD th (fun s a σ G => DelE (L := L) th K s σ ∧ W s a σ G)

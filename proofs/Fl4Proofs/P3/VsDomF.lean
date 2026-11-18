@@ -491,7 +491,7 @@ theorem decode_invocation_asid_pool_capD (th : TypedHeap) (s : S) (ar : A) (σ :
 
 set_option maxHeartbeats 8000000 in
 /-- **A frame cap, every label, with the domain schedule** (`DecOKDM`, or `DecOKR` for `GetAddress` and `TestAndClearAccessed`). -/
-theorem decode_invocation_frame_capD (th : TypedHeap) (s : S) (ar : A) (σ : Fl4Spec.State Unit)
+theorem decode_invocation_frame_capD [Fl4Proofs.P1.PlainStore st] (th : TypedHeap) (s : S) (ar : A) (σ : Fl4Spec.State Unit)
     (G : MdbGhost) (hCR : CRel th (L.mem s) σ G) (hFI : FinInv th (L.mem s) σ G) (hU : UtInv (L.mem s) G)
     (hMO : MdbOKV (L.ksb s) (L.mem s) G) (hDR : DomRel (L.mem s) (L.ksb s) σ)
     {P L4 L3 L2 L1 N T C E R : Set U64} {B : Set (U64 × Fl4Spec.Word)} {c : U64} {AR : A → Fl4Spec.Cr3 → Prop}

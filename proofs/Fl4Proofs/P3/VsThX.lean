@@ -291,7 +291,7 @@ theorem decode_invocation_asid_pool_thX (th : TypedHeap) (s : S) (ar : A) (σ : 
 set_option maxHeartbeats 8000000 in
 /-- **The domain-schedule frame of a frame cap's decode**, its label neither
 `GetAddress` nor `TestAndClearAccessed` (from `decode_invocation_frame_capD`). -/
-theorem domFrame_frame (th : TypedHeap) (s : S) (ar : A) (σ : Fl4Spec.State Unit)
+theorem domFrame_frame [Fl4Proofs.P1.PlainStore st] (th : TypedHeap) (s : S) (ar : A) (σ : Fl4Spec.State Unit)
     (G : MdbGhost) (hCR : CRel th (L.mem s) σ G) (hFI : FinInv th (L.mem s) σ G) (hU : UtInv (L.mem s) G)
     (hMO : MdbOKV (L.ksb s) (L.mem s) G)
     {P L4 L3 L2 L1 N T C E R : Set U64} {B : Set (U64 × Fl4Spec.Word)} {c : U64} {AR : A → Fl4Spec.Cr3 → Prop}
@@ -382,7 +382,7 @@ set_option maxHeartbeats 8000000 in
 /-- **A frame cap at `FinXR`** (`VsThX`), every label: `GetAddress` and
 `TestAndClearAccessed` reply in the decode (`DecOKRMX`). `hlGA`: the ABI's
 `GetAddress` label is the only one the spec reads as `x64PageGetAddress`. -/
-theorem decode_invocation_frame_thX (th : TypedHeap) (s : S) (ar : A) (σ : Fl4Spec.State Unit)
+theorem decode_invocation_frame_thX [Fl4Proofs.P1.PlainStore st] (th : TypedHeap) (s : S) (ar : A) (σ : Fl4Spec.State Unit)
     (G : MdbGhost) (hCR : CRel th (L.mem s) σ G) (hFI : FinInv th (L.mem s) σ G)
     (hU : UtInv (L.mem s) G) (hMO : MdbOKV (L.ksb s) (L.mem s) G)
     {P L4 L3 L2 L1 N T C E R : Set U64} {B : Set (U64 × Fl4Spec.Word)} {c : U64} {AR : A → Fl4Spec.Cr3 → Prop}

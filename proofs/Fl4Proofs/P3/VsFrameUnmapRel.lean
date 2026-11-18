@@ -65,7 +65,7 @@ variable {S : Type} {st : machine.Store S} [L : LawfulStore st]
 
 set_option maxRecDepth 8000 in
 /-- **`unmap_page`** refines l4v `unmap_page` (see the module docstring). -/
-theorem unmap_page_rel {A : Type} {ar : machine.Arch A} {th : TypedHeap} {P L4 L3 L2 L1 : Set U64}
+theorem unmap_page_rel [Fl4Proofs.P1.PlainStore st] {A : Type} {ar : machine.Arch A} {th : TypedHeap} {P L4 L3 L2 L1 : Set U64}
     {SR : S → A → Fl4Spec.State Unit → Prop} (hH : VsUnmapPageHyps st A ar L3 L2 L1 SR)
     (s : S) (a : A) (σ : Fl4Spec.State Unit) (hPl : Placed th) (hPP : PtPlaced L4 L3 L2 L1)
     (hPS : ∀ b, PtWAll L4 L3 L2 L1 b → ¬ SlotW th b) (hVP : VsPlaced P (L.ksb s))
@@ -448,7 +448,7 @@ def frameACapG (f : vspace.FrameCap) : Fl4Spec.ArchCap :=
     (if f.mapped then some (f.asid.bv, f.vaddr.bv) else none)
 
 /-- **Frame `Unmap` refines l4v** (decode, `Restart`, `perform_page_invocation`). -/
-theorem frame_unmap_rel {A : Type} {ar : machine.Arch A} {th : TypedHeap} {P L4 L3 L2 L1 : Set U64}
+theorem frame_unmap_rel [Fl4Proofs.P1.PlainStore st] {A : Type} {ar : machine.Arch A} {th : TypedHeap} {P L4 L3 L2 L1 : Set U64}
     {SR : S → A → Fl4Spec.State Unit → Prop} (hH : VsFrameUnmapHyps st A ar th P L4 L3 L2 L1 SR)
     (s : S) (a : A) (σ : Fl4Spec.State Unit) (hPl : Placed th) (hVP : VsPlaced P (L.ksb s))
     (hD : VsSlotsDisj th P (L.ksb s)) (hPP : PtPlaced L4 L3 L2 L1)

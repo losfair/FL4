@@ -131,7 +131,7 @@ macro "fl4_break" : tactic => `(tactic| simp only [↓reduceIte, core.result.Res
   core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual, core.convert.FromSame,
   core.convert.FromSame.from, bind_tc_ok])
 
-theorem untyped_decode_refines_with (bitsApi : Fl4Spec.ApiObjectType → Nat → Nat) {A : Type} (arI : machine.Arch A) (th : TypedHeap) (s : S) (ar : A)
+theorem untyped_decode_refines_with [Fl4Proofs.P1.PlainStore st] (bitsApi : Fl4Spec.ApiObjectType → Nat → Nat) {A : Type} (arI : machine.Arch A) (th : TypedHeap) (s : S) (ar : A)
     (σ : Fl4Spec.State Unit) (G : MdbGhost)
     (hR : StateRel th (L.mem s) σ) (hV : SlotsValid th (L.mem s)) (hP : Placed th)
     (hM : MdbLinks th (L.mem s) G) (hC : CdtRel th (L.mem s) σ G) (hI : MdbInv (L.mem s) G)
@@ -164,7 +164,7 @@ theorem untyped_decode_refines_with (bitsApi : Fl4Spec.ApiObjectType → Nat →
   by_cases hl : lbl = fl4_abi.label.UntypedRetype
   swap
   · have : (lbl != fl4_abi.label.UntypedRetype) = true := by simpa using hl
-    simp only [this, L.encryption_mask_eq, bind_ok, bne_self_eq_false, Bool.false_eq_true, ↓reduceIte, ite_self, error.illegal]
+    simp only [this, P1.plain_sharing, bind_ok, bne_self_eq_false, Bool.false_eq_true, ↓reduceIte, ite_self, error.illegal]
     apply UPost.err (e := .Sys .IllegalOperation) (e' := .illegalOperation) _ trivial
     have : ¬ Fl4Spec.genInvocationType slbl = .untypedRetype := fun h => hl (hlbl.1 h)
     simp only [Fl4Spec.NonDetE.unlessE, this, ↓reduceIte]
@@ -476,7 +476,7 @@ theorem untyped_decode_refines_with (bitsApi : Fl4Spec.ApiObjectType → Nat →
 
 /-- **FL4's `untyped::decode` refines l4v `decode_untyped_invocation`** for
 native types except the TCB (whose size FL4 changes, Fl4Spec/Ext/TcbSize.lean). -/
-theorem untyped_decode_refines {A : Type} (arI : machine.Arch A) (th : TypedHeap) (s : S) (ar : A)
+theorem untyped_decode_refines [Fl4Proofs.P1.PlainStore st] {A : Type} (arI : machine.Arch A) (th : TypedHeap) (s : S) (ar : A)
     (σ : Fl4Spec.State Unit) (G : MdbGhost)
     (hR : StateRel th (L.mem s) σ) (hV : SlotsValid th (L.mem s)) (hP : Placed th)
     (hM : MdbLinks th (L.mem s) G) (hC : CdtRel th (L.mem s) σ G) (hI : MdbInv (L.mem s) G)
@@ -509,7 +509,7 @@ theorem untyped_decode_refines {A : Type} (arI : machine.Arch A) (th : TypedHeap
 
 /-- **FL4's `untyped::decode` refines FL4's `decode_untyped_invocation`**
 (the spec's with 4 KiB TCBs, Fl4Spec/Ext/TcbSize.lean), for native types. -/
-theorem untyped_decode_refines_fl4 {A : Type} (arI : machine.Arch A) (th : TypedHeap) (s : S) (ar : A)
+theorem untyped_decode_refines_fl4 [Fl4Proofs.P1.PlainStore st] {A : Type} (arI : machine.Arch A) (th : TypedHeap) (s : S) (ar : A)
     (σ : Fl4Spec.State Unit) (G : MdbGhost)
     (hR : StateRel th (L.mem s) σ) (hV : SlotsValid th (L.mem s)) (hP : Placed th)
     (hM : MdbLinks th (L.mem s) G) (hC : CdtRel th (L.mem s) σ G) (hI : MdbInv (L.mem s) G)

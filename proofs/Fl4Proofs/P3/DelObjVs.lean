@@ -45,7 +45,7 @@ theorem isVsFin_of_rest {c : capability.Cap} (hk : FinRestK c) (hf : FinObjKind 
     · exact (h7 (Or.inr (Or.inr ⟨_, _, _, _, _, _, _, rfl⟩))).elim
 
 /-- **The VSpace caps' case of `FinWorkHyp`.** -/
-theorem finWorkAt_rest (th : TypedHeap) (hV : VsFinCoupling (L := L) arI th) :
+theorem finWorkAt_rest [Fl4Proofs.P1.PlainStore st] (th : TypedHeap) (hV : VsFinCoupling (L := L) arI th) :
     FinWorkAt (L := L) arI FinRestK th := by
   intro s a σ G sl c hk hDS hA hc hfk hw
   obtain ⟨P, L4, L3, L2, L1, SR, hH, hX⟩ := hV s a σ G hDS

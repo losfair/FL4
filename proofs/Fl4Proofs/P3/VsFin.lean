@@ -178,6 +178,7 @@ theorem VsPdInnerHyps.fin (hH : VsPdInnerHyps st A ar L3 SR) : VsPdInnerHyps st 
 
 theorem VsPdptInnerHyps.fin (hH : VsPdptInnerHyps st A ar L4 SR) :
     VsPdptInnerHyps st A ar L4 (FinSR st SR W s0 σ0) where
+  flushPSKeep := fun s a σ asid h => WP.spec_mono (hH.flushPSKeep s a σ asid h.1) fun _ hS => ⟨hS, h.2⟩
   pml4Stable := fin_stab (fun b ⟨q, hq, i, hi, e⟩ => hW b ⟨q, Or.inl hq, i, hi, e⟩)
     (fun _ _ h => by obtain ⟨p, f, f', hk, rfl⟩ := h; exact ⟨KFoot.arch hk _, rfl⟩) hH.pml4Stable
   flushAllOK := hH.flushAllOK
@@ -408,7 +409,7 @@ theorem fin_pdpt (hH : VsPdptInnerHyps st A ar L4 SR) (s : S) (a : A) (σ : Fl4S
 set_option maxHeartbeats 1000000 in
 /-- **A mapped frame cap** (final or not): `unmap_page` (l4v `unmap_page`); no
 cap slot written. -/
-theorem fin_frame (hH : VsUnmapPageHyps st A ar L3 L2 L1 SR) (s : S) (a : A) (σ : Fl4Spec.State Unit)
+theorem fin_frame [Fl4Proofs.P1.PlainStore st] (hH : VsUnmapPageHyps st A ar L3 L2 L1 SR) (s : S) (a : A) (σ : Fl4Spec.State Unit)
     (G : MdbGhost) (sl : Fl4Spec.CslotPtr) (hDS : DState (L := L) th s σ G) (hA : AbsSlot th sl)
     (hX : VsFinCtx st th P L4 L3 L2 L1 SR s a σ G)
     (p : U64) (sz : capability.FrameSize) (rt : U64) (d : Bool) (asid va : U64) (b : Bool)
@@ -419,7 +420,7 @@ theorem fin_frame (hH : VsUnmapPageHyps st A ar L3 L2 L1 SR) (s : S) (a : A) (σ
   have hok := hX.vc.at hDS.1.2.2.1 hA.isSlot hc (by simp)
   simp only [VCapOK] at hok
   have h0 : asid ≠ 0#u64 := by simpa using hok.1
-  simp only [objects.finalise_cap, objects.finalise_cap_object, L.encryption_mask_eq, bind_ok, ↓reduceIte,
+  simp only [objects.finalise_cap, objects.finalise_cap_object, plain_retire, bind_ok, ↓reduceIte,
     bne_iff_ne, ne_eq, h0, not_false_eq_true, not_true_eq_false, Bool.false_eq_true, ite_self]
   refine WP.spec_bind (unmap_page_rel (hH.fin (W := PtWAll L4 L3 L2 L1) (s0 := s) (σ0 := σ) (fun _ h => h)) s a σ hX.pl hX.pp hX.ps hX.vp
     hX.pv hX.x.2.2.2.1 ⟨FinSR.init hX.x.1, hDS.1.1, hDS.1.2.1, hX.x.2.1, hX.x.2.2.1⟩ sz asid va p h0) ?_
@@ -487,7 +488,7 @@ structure VsFinHyps (st : machine.Store S) [L : LawfulStore st] (A : Type) (ar :
 /-- **The VSpace half of `FinWorkHyp`**: a final table, PML4 or ASID pool
 cap, or a mapped frame cap; no cap slot written (`SlotsSame`); `FinX`
 kept. -/
-theorem vs_fin (hH : VsFinHyps st A ar th P L4 L3 L2 L1 SR) (s : S) (a : A) (σ : Fl4Spec.State Unit)
+theorem vs_fin [Fl4Proofs.P1.PlainStore st] (hH : VsFinHyps st A ar th P L4 L3 L2 L1 SR) (s : S) (a : A) (σ : Fl4Spec.State Unit)
     (G : MdbGhost) (sl : Fl4Spec.CslotPtr) (hDS : DState (L := L) th s σ G) (hA : AbsSlot th sl)
     (hX : VsFinCtx st th P L4 L3 L2 L1 SR s a σ G)
     (c : capability.Cap) (hc : capAt (L.mem s) (cslotAddr sl) = ok c) (hv : IsVsFin c) (b : Bool)
@@ -556,7 +557,7 @@ theorem vsFinHyps_top (hA : ArchRefines arI AR) :
 /-- **The VSpace half of `FinWorkHyp` at `TopSR`**: the placement from
 `TopPlaced`; `FinX` (`TopSR`, `VsRel`, `PtRel`, `PoolsIn`, `CurOK`) kept; no
 cap slot written. -/
-theorem vs_fin_top (hA : ArchRefines arI AR) (s : S) (a : A) (σ : Fl4Spec.State Unit) (G : MdbGhost)
+theorem vs_fin_top [Fl4Proofs.P1.PlainStore st] (hA : ArchRefines arI AR) (s : S) (a : A) (σ : Fl4Spec.State Unit) (G : MdbGhost)
     (sl : Fl4Spec.CslotPtr) (hDS : DState (L := L) th s σ G) (hAs : AbsSlot th sl)
     (hX : FinX st th P L4 L3 L2 L1 (TopSR st th P L4 L3 L2 L1 N T C E R B c AR) s a σ)
     (hVC : VsCapsIn P L4 L3 L2 L1 (L.mem s) G)

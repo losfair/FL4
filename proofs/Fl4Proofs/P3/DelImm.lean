@@ -154,7 +154,7 @@ theorem nuX_le {K : Nat} {th : TypedHeap} (hK : ∀ p r, th p = some (.cnode r) 
   · exact le_refl _
 
 /-- **FL4's immediate finalisation loop refines `finalise_slot slot True`.** -/
-theorem immediate_loop (W Wp : S → A → Fl4Spec.State Unit → MdbGhost → Prop)
+theorem immediate_loop [Fl4Proofs.P1.PlainStore st] (W Wp : S → A → Fl4Spec.State Unit → MdbGhost → Prop)
     (Rd : S → A → Fl4Spec.State Unit → MdbGhost → U64 → Prop) (th : TypedHeap) (hP : Placed th)
     (hF : FinalHyp (L := L) th) (hH : DelHypsWR (L := L) arI W Wp Rd th)
     (K : Nat) (hK : ∀ p r, th p = some (.cnode r) → 2 ^ r ≤ K) (hK6 : 6 ≤ K)

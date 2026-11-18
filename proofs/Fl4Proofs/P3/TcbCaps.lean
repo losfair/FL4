@@ -523,7 +523,7 @@ TCB `t`, the new cap `nc` derived from the cap at the source slot): FL4's
 `delete(slot, true)` against `cap_delete`, then the checks and the insert
 (`install_after`). The deletion's hypotheses are `DelRound`'s; the CSpace
 is small enough for its fuel (`hB`). -/
-theorem install_tcb_cap_refinesW (W : S → A → Fl4Spec.State Unit → MdbGhost → Prop) (th : TypedHeap) (hP : Placed th)
+theorem install_tcb_cap_refinesW [Fl4Proofs.P1.PlainStore st] (W : S → A → Fl4Spec.State Unit → MdbGhost → Prop) (th : TypedHeap) (hP : Placed th)
     (hH : DelHypsW (L := L) arI W th)
     (K : Nat) (hK : ∀ p r, th p = some (.cnode r) → 2 ^ r ≤ K) (hK6 : 6 ≤ K)
     (hB : ∀ m G, MdbLinks th m G → psiD m G * (K + 1) + K < 2 ^ 64 - 1)
@@ -583,7 +583,7 @@ theorem install_tcb_cap_refinesW (W : S → A → Fl4Spec.State Unit → MdbGhos
         bind_ok, bind_tc_ok, WP.spec_ok]
       exact ⟨σ1, G1, Or.inr ⟨rfl, mem_bindE_err hmem⟩, hDS1, hW1⟩
 
-theorem install_tcb_cap_refinesQ {Q : (U64 → U64) → MdbGhost → Prop} (hQ : ∀ m G m' G', MdbStep m G m' G' → Q m G → Q m' G') (th : TypedHeap) (hP : Placed th) (hO : FinObjHyp (L := L) arI th)
+theorem install_tcb_cap_refinesQ [Fl4Proofs.P1.PlainStore st] {Q : (U64 → U64) → MdbGhost → Prop} (hQ : ∀ m G m' G', MdbStep m G m' G' → Q m G → Q m' G') (th : TypedHeap) (hP : Placed th) (hO : FinObjHyp (L := L) arI th)
     (hPP : PPHypD (L := L) arI th) (hPD : PostDelHyp (L := L) arI th)
     (K : Nat) (hK : ∀ p r, th p = some (.cnode r) → 2 ^ r ≤ K) (hK6 : 6 ≤ K)
     (hB : ∀ m G, MdbLinks th m G → psiD m G * (K + 1) + K < 2 ^ 64 - 1)
@@ -938,7 +938,7 @@ theorem tcb_slot_buffer (t : U64) :
 /-- **`tcb::install_buffer` refines l4v `install_tcb_frame_cap`**: the
 delete of the buffer slot, the IPC buffer word and the scheduler (`BufHyp`,
 P1's), the frame cap's checks and insert. -/
-theorem install_buffer_refinesW (W : S → A → Fl4Spec.State Unit → MdbGhost → Prop) (th : TypedHeap) (hP : Placed th)
+theorem install_buffer_refinesW [Fl4Proofs.P1.PlainStore st] (W : S → A → Fl4Spec.State Unit → MdbGhost → Prop) (th : TypedHeap) (hP : Placed th)
     (hH : DelHypsW (L := L) arI W th)
     (K : Nat) (hK : ∀ p r, th p = some (.cnode r) → 2 ^ r ≤ K) (hK6 : 6 ≤ K)
     (hB : ∀ m G, MdbLinks th m G → psiD m G * (K + 1) + K < 2 ^ 64 - 1)
@@ -1038,7 +1038,7 @@ theorem install_buffer_refinesW (W : S → A → Fl4Spec.State Unit → MdbGhost
         bind_ok, bind_tc_ok, WP.spec_ok]
       exact ⟨σ1, G1, Or.inr ⟨rfl, mem_bindE_err hmem⟩, hDS1, hW1⟩
 
-theorem install_buffer_refinesQ {Q : (U64 → U64) → MdbGhost → Prop} (hQ : ∀ m G m' G', MdbStep m G m' G' → Q m G → Q m' G') (th : TypedHeap) (hP : Placed th) (hO : FinObjHyp (L := L) arI th)
+theorem install_buffer_refinesQ [Fl4Proofs.P1.PlainStore st] {Q : (U64 → U64) → MdbGhost → Prop} (hQ : ∀ m G m' G', MdbStep m G m' G' → Q m G → Q m' G') (th : TypedHeap) (hP : Placed th) (hO : FinObjHyp (L := L) arI th)
     (hPP : PPHypD (L := L) arI th) (hPD : PostDelHyp (L := L) arI th)
     (K : Nat) (hK : ∀ p r, th p = some (.cnode r) → 2 ^ r ≤ K) (hK6 : 6 ≤ K)
     (hB : ∀ m G, MdbLinks th m G → psiD m G * (K + 1) + K < 2 ^ 64 - 1)
@@ -1086,7 +1086,7 @@ section
 variable {S : Type} {st : machine.Store S} [L : P1.LawfulStore st] {A : Type} (arI : machine.Arch A)
 
 /-- `install_tcb_cap_refinesQ` with the new cap's conditions as `NewCapOK`. -/
-theorem install_okW (W : S → A → Fl4Spec.State Unit → MdbGhost → Prop) (th : TypedHeap) (hP : Placed th)
+theorem install_okW [Fl4Proofs.P1.PlainStore st] (W : S → A → Fl4Spec.State Unit → MdbGhost → Prop) (th : TypedHeap) (hP : Placed th)
     (hH : DelHypsW (L := L) arI W th)
     (K : Nat) (hK : ∀ p r, th p = some (.cnode r) → 2 ^ r ≤ K) (hK6 : 6 ≤ K)
     (hB : ∀ m G, MdbLinks th m G → psiD m G * (K + 1) + K < 2 ^ 64 - 1)
@@ -1105,7 +1105,7 @@ theorem install_okW (W : S → A → Fl4Spec.State Unit → MdbGhost → Prop) (
   exact install_tcb_cap_refinesW arI W th hP hH K hK hK6 hB s0 s a σ G hDS hMO t ht n hn idx hidx hcz0 ssl hAs
     nc hwf hcv he hfw hps hls rfl hsh hbd hkey hvk hep
 
-theorem install_okQ {Q : (U64 → U64) → MdbGhost → Prop} (hQ : ∀ m G m' G', MdbStep m G m' G' → Q m G → Q m' G') (th : TypedHeap) (hP : Placed th) (hO : FinObjHyp (L := L) arI th)
+theorem install_okQ [Fl4Proofs.P1.PlainStore st] {Q : (U64 → U64) → MdbGhost → Prop} (hQ : ∀ m G m' G', MdbStep m G m' G' → Q m G → Q m' G') (th : TypedHeap) (hP : Placed th) (hO : FinObjHyp (L := L) arI th)
     (hPP : PPHypD (L := L) arI th) (hPD : PostDelHyp (L := L) arI th)
     (K : Nat) (hK : ∀ p r, th p = some (.cnode r) → 2 ^ r ≤ K) (hK6 : 6 ≤ K)
     (hB : ∀ m G, MdbLinks th m G → psiD m G * (K + 1) + K < 2 ^ 64 - 1)
@@ -1130,7 +1130,7 @@ ThreadControl** (`tcCapsSpec`): each selected install deletes the TCB slot
 invoked cap the thread, inserts it; the IPC buffer's word and the
 scheduler are P1's (`BufHyp`). The new caps are derived from their source
 slots' caps at the start (`NewCapOK`). -/
-theorem thread_control_caps_refinesW (W : S → A → Fl4Spec.State Unit → MdbGhost → Prop) (th : TypedHeap)
+theorem thread_control_caps_refinesW [Fl4Proofs.P1.PlainStore st] (W : S → A → Fl4Spec.State Unit → MdbGhost → Prop) (th : TypedHeap)
     (hP : Placed th) (hH : DelHypsW (L := L) arI W th)
     (K : Nat) (hK : ∀ p r, th p = some (.cnode r) → 2 ^ r ≤ K) (hK6 : 6 ≤ K)
     (hB : ∀ m G, MdbLinks th m G → psiD m G * (K + 1) + K < 2 ^ 64 - 1)
@@ -1191,7 +1191,7 @@ theorem thread_control_caps_refinesW (W : S → A → Fl4Spec.State Unit → Mdb
         (by first | assumption | exact r0) ssl hAs addr ptr (hBuf hU) bc0 bfr hbfr) (fun s1 a1 σ1 G1 hDS1 _ hcz1 hmo1 => ?_)) <;>
   exact inst_doneW ‹DState _ _ _ _› (by first | assumption | exact hMO) (by first | assumption | exact r0)
 
-theorem thread_control_caps_refinesQ {Q : (U64 → U64) → MdbGhost → Prop} (hQ : ∀ m G m' G', MdbStep m G m' G' → Q m G → Q m' G') (th : TypedHeap) (hP : Placed th) (hO : FinObjHyp (L := L) arI th)
+theorem thread_control_caps_refinesQ [Fl4Proofs.P1.PlainStore st] {Q : (U64 → U64) → MdbGhost → Prop} (hQ : ∀ m G m' G', MdbStep m G m' G' → Q m G → Q m' G') (th : TypedHeap) (hP : Placed th) (hO : FinObjHyp (L := L) arI th)
     (hPP : PPHypD (L := L) arI th) (hPD : PostDelHyp (L := L) arI th)
     (K : Nat) (hK : ∀ p r, th p = some (.cnode r) → 2 ^ r ≤ K) (hK6 : 6 ≤ K)
     (hB : ∀ m G, MdbLinks th m G → psiD m G * (K + 1) + K < 2 ^ 64 - 1)
@@ -1226,7 +1226,7 @@ variable {S : Type} {st : machine.Store S} [L : P1.LawfulStore st] {A : Type} (a
 /-- **ThreadControl's cap installs keep the MDB invariants** (`MdbOK`; what
 `TcFrameHyp` asks for the frame invariant, from `MdbOK` before):
 `thread_control_caps_refinesQ` at `MdbOK`, every step an `MdbStep`. -/
-theorem thread_control_caps_mdbOK (th : TypedHeap) (hP : Placed th) (hO : FinObjHyp (L := L) arI th)
+theorem thread_control_caps_mdbOK [Fl4Proofs.P1.PlainStore st] (th : TypedHeap) (hP : Placed th) (hO : FinObjHyp (L := L) arI th)
     (hPP : PPHypD (L := L) arI th) (hPD : PostDelHyp (L := L) arI th)
     (K : Nat) (hK : ∀ p r, th p = some (.cnode r) → 2 ^ r ≤ K) (hK6 : 6 ≤ K)
     (hB : ∀ m G, MdbLinks th m G → psiD m G * (K + 1) + K < 2 ^ 64 - 1)
@@ -1257,7 +1257,7 @@ end
 section
 variable {S : Type} {st : machine.Store S} [L : P1.LawfulStore st] {A : Type} (arI : machine.Arch A)
 
-theorem install_tcb_cap_refines (th : TypedHeap) (hP : Placed th) (hO : FinObjHyp (L := L) arI th)
+theorem install_tcb_cap_refines [Fl4Proofs.P1.PlainStore st] (th : TypedHeap) (hP : Placed th) (hO : FinObjHyp (L := L) arI th)
     (hPP : PPHypD (L := L) arI th) (hPD : PostDelHyp (L := L) arI th)
     (K : Nat) (hK : ∀ p r, th p = some (.cnode r) → 2 ^ r ≤ K) (hK6 : 6 ≤ K)
     (hB : ∀ m G, MdbLinks th m G → psiD m G * (K + 1) + K < 2 ^ 64 - 1)
@@ -1277,7 +1277,7 @@ theorem install_tcb_cap_refines (th : TypedHeap) (hP : Placed th) (hO : FinObjHy
       InstPost (L := L) th t (Fl4Spec.installTcbCap t.bv ssl n (some (absCap nc, (ps.bv, idxs)))) s0 σ res ⦄ :=
   WP.spec_mono (install_tcb_cap_refinesQ arI (Q := fun _ _ => True) (fun _ _ _ _ _ _ => trivial) th hP hO hPP hPD K hK hK6 hB s0 s a σ G hDS trivial t ht n hn idx hidx hcz0 ssl hAs nc hwf hcv he hfw hps hls hsrc0 hsh hbd hkey hv hep) (fun _ h => h.old)
 
-theorem install_buffer_refines (th : TypedHeap) (hP : Placed th) (hO : FinObjHyp (L := L) arI th)
+theorem install_buffer_refines [Fl4Proofs.P1.PlainStore st] (th : TypedHeap) (hP : Placed th) (hO : FinObjHyp (L := L) arI th)
     (hPP : PPHypD (L := L) arI th) (hPD : PostDelHyp (L := L) arI th)
     (K : Nat) (hK : ∀ p r, th p = some (.cnode r) → 2 ^ r ≤ K) (hK6 : 6 ≤ K)
     (hB : ∀ m G, MdbLinks th m G → psiD m G * (K + 1) + K < 2 ^ 64 - 1)
@@ -1292,7 +1292,7 @@ theorem install_buffer_refines (th : TypedHeap) (hP : Placed th) (hO : FinObjHyp
       InstPost (L := L) th t (Fl4Spec.installTcbFrameCap t.bv ssl (some (ptr, frameOf bfr))) s0 σ res ⦄ :=
   WP.spec_mono (install_buffer_refinesQ arI (Q := fun _ _ => True) (fun _ _ _ _ _ _ => trivial) th hP hO hPP hPD K hK hK6 hB s0 s a σ G hDS trivial t ht hcz0 ssl hAs addr ptr hBuf bc0 bfr hbfr) (fun _ h => h.old)
 
-theorem install_ok (th : TypedHeap) (hP : Placed th) (hO : FinObjHyp (L := L) arI th)
+theorem install_ok [Fl4Proofs.P1.PlainStore st] (th : TypedHeap) (hP : Placed th) (hO : FinObjHyp (L := L) arI th)
     (hPP : PPHypD (L := L) arI th) (hPD : PostDelHyp (L := L) arI th)
     (K : Nat) (hK : ∀ p r, th p = some (.cnode r) → 2 ^ r ≤ K) (hK6 : 6 ≤ K)
     (hB : ∀ m G, MdbLinks th m G → psiD m G * (K + 1) + K < 2 ^ 64 - 1)
@@ -1306,7 +1306,7 @@ theorem install_ok (th : TypedHeap) (hP : Placed th) (hO : FinObjHyp (L := L) ar
       InstPost (L := L) th t (Fl4Spec.installTcbCap t.bv ssl n (some (absCap nc, sl))) s0 σ res ⦄ :=
   WP.spec_mono (install_okQ arI (Q := fun _ _ => True) (fun _ _ _ _ _ _ => trivial) th hP hO hPP hPD K hK hK6 hB s0 s a σ G hDS trivial t ht n hn idx hidx hcz0 ssl hAs nc sl hok hep) (fun _ h => h.old)
 
-theorem thread_control_caps_refines (th : TypedHeap) (hP : Placed th) (hO : FinObjHyp (L := L) arI th)
+theorem thread_control_caps_refines [Fl4Proofs.P1.PlainStore st] (th : TypedHeap) (hP : Placed th) (hO : FinObjHyp (L := L) arI th)
     (hPP : PPHypD (L := L) arI th) (hPD : PostDelHyp (L := L) arI th)
     (K : Nat) (hK : ∀ p r, th p = some (.cnode r) → 2 ^ r ≤ K) (hK6 : 6 ≤ K)
     (hB : ∀ m G, MdbLinks th m G → psiD m G * (K + 1) + K < 2 ^ 64 - 1)

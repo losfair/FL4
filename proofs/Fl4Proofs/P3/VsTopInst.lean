@@ -147,6 +147,8 @@ theorem vsPdInnerHyps_top {A : Type} {arI : machine.Arch A} {AR : A → Fl4Spec.
 /-- `VsPdptInnerHyps` for the composite relation. -/
 theorem vsPdptInnerHyps_top {A : Type} {arI : machine.Arch A} {AR : A → Fl4Spec.Cr3 → Prop} (hA : ArchRefines arI AR) :
     VsPdptInnerHyps st A arI L4 (TopSR st th P L4 L3 L2 L1 N T C E R B c AR) where
+  flushPSKeep := fun s a σ asid h => WP.spec_mono (hA.invPS a _ asid h.1.2.2.2.2.2.2) fun _ hAR =>
+    ⟨⟨h.1.1, h.1.2.1, h.1.2.2.1, h.1.2.2.2.1, h.1.2.2.2.2.1, h.1.2.2.2.2.2.1, hAR⟩, h.2⟩
   pml4Stable := fun s s' a σ σ' hS hw hc => pml4Stable_top s s' a σ σ' hS hw hc
   flushAllOK := fun σ vs asid => flushAllOK_top σ vs asid
   flushAllH := fun s a σ vs asid hS => flushAllH_top hA s a σ vs asid hS
@@ -261,7 +263,7 @@ variable {A : Type} (arI : machine.Arch A)
 
 set_option maxHeartbeats 8000000 in
 /-- **A frame cap with the composite relation** (`decode_invocation_frame`; the placement from `TopPlaced`). -/
-theorem decode_invocation_frame_top (th : TypedHeap) (s : S) (ar : A) (σ : Fl4Spec.State Unit)
+theorem decode_invocation_frame_top [Fl4Proofs.P1.PlainStore st] (th : TypedHeap) (s : S) (ar : A) (σ : Fl4Spec.State Unit)
     (G : MdbGhost) (hCR : CRel th (L.mem s) σ G) (hFI : FinInv th (L.mem s) σ G)
     (hMO : MdbOKV (L.ksb s) (L.mem s) G)
     {P L4 L3 L2 L1 N T C E R : Set U64} {B : Set (U64 × Fl4Spec.Word)} {c : U64} {AR : A → Fl4Spec.Cr3 → Prop}

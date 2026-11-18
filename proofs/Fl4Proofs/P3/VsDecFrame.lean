@@ -203,7 +203,7 @@ set_option maxHeartbeats 8000000 in
 /-- **A frame cap**, every label (see the module docstring): `DecOK`, or
 `DecOKR` for the labels that reply in the decode (`GetAddress`,
 `TestAndClearAccessed`). -/
-theorem decode_invocation_frameX (th : TypedHeap) (hP : Placed th) (s : S) (ar : A) (σ : Fl4Spec.State Unit)
+theorem decode_invocation_frameX [Fl4Proofs.P1.PlainStore st] (th : TypedHeap) (hP : Placed th) (s : S) (ar : A) (σ : Fl4Spec.State Unit)
     (G : MdbGhost) (hCR : CRel th (L.mem s) σ G) (hFI : FinInv th (L.mem s) σ G)
     (hMO : MdbOKV (L.ksb s) (L.mem s) G)
     {P L4 L3 L2 L1 : Set U64} {SR : S → A → Fl4Spec.State Unit → Prop}
@@ -363,7 +363,7 @@ theorem decode_invocation_frameX (th : TypedHeap) (hP : Placed th) (s : S) (ar :
 /-- **A frame cap**, every label (see the module docstring): `DecOK`, or
 `DecOKR` for the labels that reply in the decode (`GetAddress`,
 `TestAndClearAccessed`). -/
-theorem decode_invocation_frame (th : TypedHeap) (hP : Placed th) (s : S) (ar : A) (σ : Fl4Spec.State Unit)
+theorem decode_invocation_frame [Fl4Proofs.P1.PlainStore st] (th : TypedHeap) (hP : Placed th) (s : S) (ar : A) (σ : Fl4Spec.State Unit)
     (G : MdbGhost) (hCR : CRel th (L.mem s) σ G) (hFI : FinInv th (L.mem s) σ G)
     (hMO : MdbOKV (L.ksb s) (L.mem s) G)
     {P L4 L3 L2 L1 : Set U64} {SR : S → A → Fl4Spec.State Unit → Prop}

@@ -40,7 +40,7 @@ def FinWorkHyp (th : TypedHeap) : Prop :=
 
 /-- The finalisations without work: FL4's and the spec's return their caps
 and leave the state as it is. -/
-theorem fin_idle (s : S) (a : A) (σ : Fl4Spec.State Unit) (c : capability.Cap) (hk : FinObjKind c) (b : Bool)
+theorem fin_idle [P1.PlainStore st] (s : S) (a : A) (σ : Fl4Spec.State Unit) (c : capability.Cap) (hk : FinObjKind c) (b : Bool)
     (hn : ¬ FinWork c b) :
     ∃ cl, objects.finalise_cap st arI s a c b false = ok ((.Null, cl), s, a) ∧
       ((absCap .Null, absCap cl), σ) ∈ (Fl4Spec.finaliseCap (Z := Unit) (absCap c) b σ).1 ∧
@@ -80,7 +80,7 @@ theorem fin_idle (s : S) (a : A) (σ : Fl4Spec.State Unit) (c : capability.Cap) 
              | (split_ifs <;> exact Set.mem_singleton _)))
 
 /-- **`FinObjHyp` from `FinWorkHyp`.** -/
-theorem finObjHyp_of (th : TypedHeap) (hW : FinWorkHyp (L := L) arI th) : FinObjHyp (L := L) arI th := by
+theorem finObjHyp_of [Fl4Proofs.P1.PlainStore st] (th : TypedHeap) (hW : FinWorkHyp (L := L) arI th) : FinObjHyp (L := L) arI th := by
   intro s a σ G sl c hDS hA hc hk
   by_cases hw : FinWork c (decide (Fl4Spec.isFinalCap' (absCap c) σ))
   · exact hW s a σ G sl c hDS hA hc hk hw

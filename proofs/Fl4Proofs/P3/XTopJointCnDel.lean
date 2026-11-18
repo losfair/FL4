@@ -255,7 +255,7 @@ loop's named steps `JDelParts` [J], `JDelHyp.of_parts`; the preemption point by
 `jPreemptHyp_of`: the platform's `PPPlat` [P] and `PPReady` [J]; the cleanups by `jPostDelHyp_of`:
 the kernel-state layout and the arch IRQ operations [P]), the per-op premise (`JPostHyp` [W]) only at the other labels
 (CancelBadgedSends, the invalid ones). -/
-theorem decode_invocation_cnodeJ_steps (s : S) (ar : A) (σ : Fl4Spec.State Unit)
+theorem decode_invocation_cnodeJ_steps [Fl4Proofs.P1.PlainStore st] (s : S) (ar : A) (σ : Fl4Spec.State Unit)
     (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s ar σ) (hni : Entered σ) (hG : CsGlobal (L := L) arI AR Z.th)
     (hARI : ARIface arI AR) (hT : P0.ArchTotal arI) (hJ : JStepHyps (L := L) arI AR Z.th)
     (hJDP : JDelParts (L := L) arI AR Z.th)

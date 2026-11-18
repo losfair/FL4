@@ -1178,7 +1178,7 @@ work as `SetBpHyp`, `UnsetBpHyp`, `GetBpHyp`, `SingleStepHyp`,
 `SetTimerHyp`, `FpuHyp`, `SetFlagsHyp`; the argument reads `ArgRel`).
 GetBreakpoint, ConfigureSingleStepping and SetFlags called reply in the
 decode: those cases are hypotheses here (`DecOKRM`: `tcb_set_flags_call`). -/
-theorem tcb_decode_ext (th : TypedHeap) (hP : Placed th) (hT : TcHyps (L := L) arI th)
+theorem tcb_decode_ext [Fl4Proofs.P1.PlainStore st] (th : TypedHeap) (hP : Placed th) (hT : TcHyps (L := L) arI th)
     (s : S) (ar : A) (σ : Fl4Spec.State Unit) (G : MdbGhost) (hDS : DState (L := L) th s σ G) (hFR : MdbOKV (L.ksb s) (L.mem s) G)
     (lbl p : U64) (hp : th p = some .tcb) (slbl : Fl4Spec.Data)
     (hlbl : Fl4Spec.genInvocationType slbl = tcbLabelOf lbl)

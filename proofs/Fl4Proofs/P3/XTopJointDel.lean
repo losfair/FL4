@@ -496,7 +496,7 @@ set_option maxHeartbeats 16000000 in
 (`finNtfnJ` when final, nothing otherwise), then the slot emptied
 (`emptyNtfnJ`; the notification dead after a final cap's finalisation,
 P1's `fin_cap_ntfn.dead`, or covered by another cap, `other_ntfn`). -/
-theorem jowes_del {AR : A → Fl4Spec.Cr3 → Prop} {th : TypedHeap} (hUt : DelUtHyp (L := L) (arI := arI) AR th) :
+theorem jowes_del [Fl4Proofs.P1.PlainStore st] {AR : A → Fl4Spec.Cr3 → Prop} {th : TypedHeap} (hUt : DelUtHyp (L := L) (arI := arI) AR th) :
     ∀ (s s' : S) (a a' : A) (σ σ' : Fl4Spec.State Unit) (sl : Fl4Spec.CslotPtr) (p b : U64) (w r : Bool),
       AbsSlot th sl → (∃ q, sl.1 = q.bv ∧ th q = some (.cnode sl.2.length)) →
       capV (L.mem s) (cslotAddr sl) = .Notification p b w r →
@@ -598,7 +598,7 @@ theorem jowes_del {AR : A → Fl4Spec.Cr3 → Prop} {th : TypedHeap} (hUt : DelU
 /-- **`JStepHyps` from the untyped caps' deletion facts alone**
 (`JStepHyps.of_del` with `jowes_del`): the only named premise left of the
 primitive steps' closure is `DelUtHyp` [J]. -/
-theorem JStepHyps.of_ut {AR : A → Fl4Spec.Cr3 → Prop} {th : TypedHeap} (hUt : DelUtHyp (L := L) (arI := arI) AR th) :
+theorem JStepHyps.of_ut [Fl4Proofs.P1.PlainStore st] {AR : A → Fl4Spec.Cr3 → Prop} {th : TypedHeap} (hUt : DelUtHyp (L := L) (arI := arI) AR th) :
     JStepHyps (L := L) arI AR th :=
   JStepHyps.of_del arI (jowes_del hUt)
 

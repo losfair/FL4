@@ -60,7 +60,7 @@ theorem CsGlobal.postDel {AR : A → Fl4Spec.Cr3 → Prop} {th : TypedHeap} (hG 
     (hARI : ARIface arI AR) (hT : P0.ArchTotal arI) : XPostDelHyp (L := L) arI AR th :=
   xPostDelHyp_of arI hARI.toMask hG.lay (maskIrq_total arI hT) (freeIrq_total arI hT)
 
-theorem CsGlobal.delNtfn {AR : A → Fl4Spec.Cr3 → Prop} {th : TypedHeap} (hG : CsGlobal (L := L) arI AR th)
+theorem CsGlobal.delNtfn [Fl4Proofs.P1.PlainStore st] {AR : A → Fl4Spec.Cr3 → Prop} {th : TypedHeap} (hG : CsGlobal (L := L) arI AR th)
     (hARI : ARIface arI AR) (hT : P0.ArchTotal arI) : XDelNtfnHyp (L := L) arI AR th :=
   xDelNtfnHyp_of arI (fun Z h => h ▸ hG.fin.ntfn) (hG.postDel arI hARI hT) hG.delI
 
@@ -173,7 +173,7 @@ below 3 (`NativeScope`'s, [P]) and its facts at every `XTopAt` sets of the
 state ([global]: `KsApart`, `BufWordRel`, `IPlaced`, the endpoint among the
 endpoints), and at the spec state the endpoints' queued threads' facts,
 `ScBack`, `ActReady` (`EpQPre`), the current thread not the switch target; the copies' extra caps (`ExtraRel2`). -/
-theorem decode_invocation_cnodeJAt (s : S) (ar : A) (σ : Fl4Spec.State Unit)
+theorem decode_invocation_cnodeJAt [Fl4Proofs.P1.PlainStore st] (s : S) (ar : A) (σ : Fl4Spec.State Unit)
     (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s ar σ) (hni : Entered σ) (hG : CsGlobal (L := L) arI AR Z.th)
     (hARI : ARIface arI AR) (hT : P0.ArchTotal arI)
     (lbl : U64) (slbl : Fl4Spec.Data) (hlbl : Fl4Spec.genInvocationType slbl = cnodeLabelOf lbl)
@@ -219,7 +219,7 @@ the core's `CUR_THREAD` word outside the objects); the IPC/Sc leaves
 (`TcbXIpc`), the arguments (`ArgRel` [J], five), GetBreakpoint's read (`GetBpHyp`
 [P]), SetFlags' FPU release (`FpuRelXHyp` [P]), ReadFPU's user-frame write (`FpuFrameXHyp`
 [W], `fpuFrameX_of`), SetTimer's footprint from P1's (`JAtZ.timerIns`, `JAtZ.otherTmOK`). -/
-theorem decode_invocation_threadJAt (s : S) (ar : A) (σ : Fl4Spec.State Unit)
+theorem decode_invocation_threadJAt [Fl4Proofs.P1.PlainStore st] (s : S) (ar : A) (σ : Fl4Spec.State Unit)
     (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s ar σ) (hni : Entered σ) (hG : CsGlobal (L := L) arI AR Z.th)
     (hARI : ARIface arI AR) (hT : P0.ArchTotal arI)
     (hA : ∀ s a σ G, WX (L := L) AR Z.th s a σ G → Notif.ActReady σ)
@@ -302,7 +302,7 @@ CSpace relation, `FinInv`, `MdbOKV`, `IrqRel`, the caller's TCB, the arch
 mask and `mask_irq` derived): beyond `JAtZ`, the CSpace globals, the arch
 interface [P], `HandlersActive` [J], the IOAPIC relation (`ArchIrqRel` [P]),
 the scheduler-action word apart from the IRQ states, the invoked slot. -/
-theorem decode_invocation_irq_controlJAt (s : S) (ar : A) (σ : Fl4Spec.State Unit)
+theorem decode_invocation_irq_controlJAt [Fl4Proofs.P1.PlainStore st] (s : S) (ar : A) (σ : Fl4Spec.State Unit)
     (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s ar σ) (hni : Entered σ) (hG : CsGlobal (L := L) arI AR Z.th)
     (hARI : ARIface arI AR) (hT : P0.ArchTotal arI)
     (hHA : HandlersActive (L.mem s) (L.ksb s) Z.G)
@@ -333,7 +333,7 @@ set_option maxHeartbeats 4000000 in
 the CSpace relation, `FinInv`, `MdbOKV`, `IoRel`, the caller's TCB derived):
 beyond `JAtZ`, the CSpace globals, the arch interface [P], `IoPortsAlloc`
 [J], the scheduler-action word apart from the bitmap, the invoked slot. -/
-theorem decode_invocation_ioport_controlJAt (s : S) (ar : A) (σ : Fl4Spec.State Unit)
+theorem decode_invocation_ioport_controlJAt [Fl4Proofs.P1.PlainStore st] (s : S) (ar : A) (σ : Fl4Spec.State Unit)
     (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s ar σ) (hni : Entered σ) (hG : CsGlobal (L := L) arI AR Z.th)
     (hARI : ARIface arI AR) (hT : P0.ArchTotal arI)
     (hPA : IoPortsAlloc (L.mem s) (L.ksb s) Z.G)
@@ -362,7 +362,7 @@ set_option maxHeartbeats 4000000 in
 range's bounds from the invoked cap's `CapWf`, `port_in`/`port_out` total
 from `ArchTotal`): beyond `JAtZ`, the CSpace globals, the arch interface
 [P], the value read (`PortInVal` [P]) when called. -/
-theorem decode_invocation_ioportJAt (s : S) (ar : A) (σ : Fl4Spec.State Unit)
+theorem decode_invocation_ioportJAt [Fl4Proofs.P1.PlainStore st] (s : S) (ar : A) (σ : Fl4Spec.State Unit)
     (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s ar σ) (hni : Entered σ) (hG : CsGlobal (L := L) arI AR Z.th)
     (hARI : ARIface arI AR) (hT : P0.ArchTotal arI)
     (lbl : U64) (slbl : Fl4Spec.Data) (hlbl : PortLabel lbl slbl)
@@ -399,7 +399,7 @@ interface [P], the CSpace-level deletion premises (`FinObjHyp`, `PostDelHyp`,
 `NtfnKeepHyp`) [W], the IRQ's node slot (`IrqSlotOK` [J]), SetIRQHandler's
 extra cap, the domain schedule's placement and P1's deletion facts, the
 invoked slot. -/
-theorem decode_invocation_irq_handlerJAt (s : S) (ar : A) (σ : Fl4Spec.State Unit)
+theorem decode_invocation_irq_handlerJAt [Fl4Proofs.P1.PlainStore st] (s : S) (ar : A) (σ : Fl4Spec.State Unit)
     (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s ar σ) (hni : Entered σ) (hG : CsGlobal (L := L) arI AR Z.th)
     (hARI : ARIface arI AR) (hT : P0.ArchTotal arI)
     (hO : FinObjHyp (L := L) arI Z.th) (hPD : PostDelHyp (L := L) arI Z.th) (hK : NtfnKeepHyp (L := L) arI Z.th)

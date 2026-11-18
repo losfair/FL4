@@ -47,6 +47,18 @@ def UtOkAt (st : machine.Store S) [L : LawfulStore st] (T Cs Ω : Set U64) (H : 
     EntAt st P3Ok s → DecPre st T Cs Ω H Sg Rp Scs Nt Z U Ac s (.Untyped ptr sb fi dev) extra → CapSlotW T Ω Sg slot →
       obj.Slot.cap st slot s = ok (.Untyped ptr sb fi dev) → UtOk s slot (.Untyped ptr sb fi dev) extra
 
+/-- The queue and heap placement obligation of the shared-frame extension.
+It is only reachable on stores that advertise guest memory sharing. -/
+def SharedUtPlace (st : machine.Store S) [L : LawfulStore st] {A : Type _} (ar : machine.Arch A)
+    (Adm : PSets → Prop) (T Cs Ω : Set U64) (H : Heap) (Sg Rp Scs Nt : Set U64) (Z : U64 → Nat) (U : Set U64)
+    (UtOk : S → U64 → capability.Cap → Aeneas.Std.Array obj.Slot 3#usize → Prop) : Prop :=
+  ∀ {Ac : Set U64} {s : S} (a : A) (len slot buf ptr sb fi : U64) (dev : Bool)
+    (extra : Aeneas.Std.Array obj.Slot 3#usize), machine.sharing_enabled st s = ok true →
+    UtOk s slot (.Untyped ptr sb fi dev) extra →
+    DecPre st T Cs Ω H Sg Rp Scs Nt Z U Ac s (.Untyped ptr sb fi dev) extra → CapSlotW T Ω Sg slot →
+    untyped.retype_shared st ar s a len slot (.Untyped ptr sb fi dev) buf extra ⦃ r s' _ =>
+      DecPostG st Adm Cs Ac s r s' ⦄
+
 /-- **The untyped family's retype, the named premise**: after the caller's
 restart (`Cur0` from the decode's start `s0`), the retype the decode
 checked (`UtArgs`) ends over some admissible set tuple (`DecPostG`: the
@@ -54,6 +66,7 @@ heap may grow). -/
 structure UtPlace (st : machine.Store S) [L : LawfulStore st] {A : Type _} (ar : machine.Arch A)
     (Adm : PSets → Prop) (T Cs Ω : Set U64) (H : Heap) (Sg Rp Scs Nt : Set U64) (Z : U64 → Nat) (U : Set U64)
     (UtOk : S → U64 → capability.Cap → Aeneas.Std.Array obj.Slot 3#usize → Prop) : Prop where
+  shared : SharedUtPlace st ar Adm T Cs Ω H Sg Rp Scs Nt Z U UtOk
   retype : ∀ (Ac : Set U64) (s0 s : S) (a : A) (extra : Aeneas.Std.Array obj.Slot 3#usize)
     (slot ptr sb fi : U64) (dev reset : Bool) (aligned nt us dest off win : U64),
     UtOk s0 slot (.Untyped ptr sb fi dev) extra →
@@ -170,8 +183,13 @@ theorem untyped.decode.dec {A : Type _} {ar : machine.Arch A} {Adm : PSets → P
   unfold untyped.decode
   by_cases c1 : (lbl != fl4_abi.label.UntypedRetype) = true
   · rw [if_pos c1]
-    simp only [L.encryption_mask_eq, bind_ok, bne_self_eq_false, Bool.false_eq_true, ↓reduceIte, ite_self]
-    errU
+    split
+    · obtain ⟨b, hb, -⟩ := spec_exists' (P0.machine.sharing_enabled.p0 st s hS)
+      rw [hb]
+      cases b
+      · simp only [bind_ok, Bool.false_eq_true, ↓reduceIte]; errU
+      · simpa only [bind_ok, ↓reduceIte] using Pl.shared a len slot buf ptr sb fi dev extra hb hOk D hslot
+    · errU
   rw [if_neg c1]
   by_cases c2 : len < 6#u64
   · rw [if_pos c2]; errU

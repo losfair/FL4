@@ -59,7 +59,7 @@ abbrev DelBound (th : TypedHeap) : Prop :=
 `tcb_set_timeout_refines`' premises: `XTopAt` with `KsApart`, the typed
 heap's TCBs in `Z.T`, the caller runnable, `DelInv` [J], the deletion's
 premises at `XTop` (`XFinHyps`, `XPreemptHyp`, `XPostDelHyp`) and the bound. -/
-theorem tcb_set_timeoutX {AR : A → Fl4Spec.Cr3 → Prop} {Z : XSets} (s : S) (ar : A) (σ : Fl4Spec.State Unit)
+theorem tcb_set_timeoutX [Fl4Proofs.P1.PlainStore st] {AR : A → Fl4Spec.Cr3 → Prop} {Z : XSets} (s : S) (ar : A) (σ : Fl4Spec.State Unit)
     (hX : XTopAt (L := L) AR Z s ar σ) (hKA : KsApart Z.N Z.T Z.E Z.R Z.B (L.ksb s)) (hC : CurRun σ)
     (hTh : ∀ t, Z.th t = some .tcb → t ∈ Z.T) (hDI : DelInv Z.th (L.mem s))
     (hXF : XFinHyps (L := L) arI AR Z.th) (hXP : XPreemptHyp (L := L) arI AR Z.th)
@@ -82,7 +82,7 @@ theorem tcb_set_timeoutX {AR : A → Fl4Spec.Cr3 → Prop} {Z : XSets} (s : S) (
     fun _ h => h.toX ⟨Z, hX⟩
 
 /-- **TcbXLeaves' SetSpace at `XTop`**, as `tcb_set_timeoutX`. -/
-theorem tcb_set_spaceX {AR : A → Fl4Spec.Cr3 → Prop} {Z : XSets} (s : S) (ar : A) (σ : Fl4Spec.State Unit)
+theorem tcb_set_spaceX [Fl4Proofs.P1.PlainStore st] {AR : A → Fl4Spec.Cr3 → Prop} {Z : XSets} (s : S) (ar : A) (σ : Fl4Spec.State Unit)
     (hX : XTopAt (L := L) AR Z s ar σ) (hKA : KsApart Z.N Z.T Z.E Z.R Z.B (L.ksb s)) (hC : CurRun σ)
     (hTh : ∀ t, Z.th t = some .tcb → t ∈ Z.T) (hDI : DelInv Z.th (L.mem s))
     (hXF : XFinHyps (L := L) arI AR Z.th) (hXP : XPreemptHyp (L := L) arI AR Z.th)
@@ -113,7 +113,7 @@ theorem tcb_set_spaceX {AR : A → Fl4Spec.Cr3 → Prop} {Z : XSets} (s : S) (ar
 
 /-- **TcbXLeaves' SetIPCBuffer at `XTop`**, as `tcb_set_timeoutX`, with the
 IPC-buffer step at `WX` (`BufHypW`). -/
-theorem tcb_set_ipcX {AR : A → Fl4Spec.Cr3 → Prop} {Z : XSets} (s : S) (ar : A) (σ : Fl4Spec.State Unit)
+theorem tcb_set_ipcX [Fl4Proofs.P1.PlainStore st] {AR : A → Fl4Spec.Cr3 → Prop} {Z : XSets} (s : S) (ar : A) (σ : Fl4Spec.State Unit)
     (hX : XTopAt (L := L) AR Z s ar σ) (hKA : KsApart Z.N Z.T Z.E Z.R Z.B (L.ksb s)) (hC : CurRun σ)
     (hTh : ∀ t, Z.th t = some .tcb → t ∈ Z.T) (hDI : DelInv Z.th (L.mem s))
     (hXF : XFinHyps (L := L) arI AR Z.th) (hXP : XPreemptHyp (L := L) arI AR Z.th)
@@ -144,7 +144,7 @@ theorem tcb_set_ipcX {AR : A → Fl4Spec.Cr3 → Prop} {Z : XSets} (s : S) (ar :
 
 /-- **TcbXLeaves' Configure at `XTop`** (its cap installs; MCS Configure has
 no scheduling part), as `tcb_set_ipcX`. -/
-theorem tcb_configureX {AR : A → Fl4Spec.Cr3 → Prop} {Z : XSets} (s : S) (ar : A) (σ : Fl4Spec.State Unit)
+theorem tcb_configureX [Fl4Proofs.P1.PlainStore st] {AR : A → Fl4Spec.Cr3 → Prop} {Z : XSets} (s : S) (ar : A) (σ : Fl4Spec.State Unit)
     (hX : XTopAt (L := L) AR Z s ar σ) (hKA : KsApart Z.N Z.T Z.E Z.R Z.B (L.ksb s)) (hC : CurRun σ)
     (hTh : ∀ t, Z.th t = some .tcb → t ∈ Z.T) (hDI : DelInv Z.th (L.mem s))
     (hXF : XFinHyps (L := L) arI AR Z.th) (hXP : XPreemptHyp (L := L) arI AR Z.th)

@@ -1435,7 +1435,7 @@ def SchedTailHyp (th : TypedHeap) (s : S) (σ : Fl4Spec.State Unit) (ct : U64) :
 fault-handler install (`install_ok`, the CSpace side's) and the scheduler
 step (`SchedTailHyp`), against `invoke_tcb ThreadControlSched`; a preempted
 install is the spec's preempted install. -/
-theorem ssp_tail (th : TypedHeap) (hP : Placed th) (hT : TcHyps (L := L) arI th)
+theorem ssp_tail [Fl4Proofs.P1.PlainStore st] (th : TypedHeap) (hP : Placed th) (hT : TcHyps (L := L) arI th)
     (s : S) (ar : A) (σ : Fl4Spec.State Unit) (G : MdbGhost) (hDS : DState (L := L) th s σ G) (hFR : MdbOKV (L.ksb s) (L.mem s) G)
     (p : U64) (hp : th p = some .tcb) (ct : U64) (hct : sched.cur_thread st s = ok ct)
     (hcur : σ.curThread = ct.bv) (htcb : th ct = some .tcb)
@@ -1542,7 +1542,7 @@ checks of `decode_update_sc` by `SchedRel`, `NtfnStateRel`; the fault
 handler), the restart and `invoke_tcb ThreadControlSched` (`ssp_tail`: the
 CSpace side's install, then `SchedTailHyp`), with the CSpace relation and
 `FinInv` after. -/
-theorem tcb_set_sched_params_refines (th : TypedHeap) (hP : Placed th) (hT : TcHyps (L := L) arI th)
+theorem tcb_set_sched_params_refines [Fl4Proofs.P1.PlainStore st] (th : TypedHeap) (hP : Placed th) (hT : TcHyps (L := L) arI th)
    
     (s : S) (ar : A) (σ : Fl4Spec.State Unit) (G : MdbGhost) (hDS : DState (L := L) th s σ G) (hFR : MdbOKV (L.ksb s) (L.mem s) G)
     (p : U64) (hp : th p = some .tcb) (slbl : Fl4Spec.Data)

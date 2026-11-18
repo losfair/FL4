@@ -50,7 +50,7 @@ theorem postDelHypW_XZ {AR : A → Fl4Spec.Cr3 → Prop} {Z : XSets} {kb : U64}
 
 /-- **A notification cap's finalisation at `WXZ Z`**: when final, from
 `XFinAt FinNtfnK`; otherwise it does nothing (`fin_idle`). -/
-theorem finNtfnW_XZ {AR : A → Fl4Spec.Cr3 → Prop} {Z : XSets} {kb : U64} (hN : XFinAt (L := L) arI FinNtfnK AR Z.th)
+theorem finNtfnW_XZ [Fl4Proofs.P1.PlainStore st] {AR : A → Fl4Spec.Cr3 → Prop} {Z : XSets} {kb : U64} (hN : XFinAt (L := L) arI FinNtfnK AR Z.th)
     (s : S) (a : A) (σ : Fl4Spec.State Unit) (G : MdbGhost) (sl : Fl4Spec.CslotPtr) (p b : U64) (w r : Bool)
     (hDS : DState (L := L) Z.th s σ G) (hW : WXZ (L := L) AR Z kb s a σ G) (hA : AbsSlot Z.th sl)
     (hc : capAt (L.mem s) (cslotAddr sl) = ok (.Notification p b w r)) :
@@ -84,7 +84,7 @@ theorem finNtfnW_XZ {AR : A → Fl4Spec.Cr3 → Prop} {Z : XSets} {kb : U64} (hN
 set_option maxHeartbeats 4000000 in
 /-- **`delete_one` of a notification cap at `XTop`**: DelOne's
 `delete_one_refines` with the invariant `WXZ Z` carried. -/
-theorem delete_one_xtop {AR : A → Fl4Spec.Cr3 → Prop} {Z : XSets} {kb : U64} (hN : XFinAt (L := L) arI FinNtfnK AR Z.th)
+theorem delete_one_xtop [Fl4Proofs.P1.PlainStore st] {AR : A → Fl4Spec.Cr3 → Prop} {Z : XSets} {kb : U64} (hN : XFinAt (L := L) arI FinNtfnK AR Z.th)
     (hXD : XPostDelHyp (L := L) arI AR Z.th)
     (s : S) (a : A) (σ : Fl4Spec.State Unit) (hDS : DState (L := L) Z.th s σ Z.G)
     (hW : WXZ (L := L) AR Z kb s a σ Z.G) {sl : Fl4Spec.CslotPtr} (hA : AbsSlot Z.th sl) {p b : U64} {w r : Bool}
@@ -125,7 +125,7 @@ set_option maxHeartbeats 4000000 in
 notification's finalisation keeping every slot's cap (DelOne's
 `NtfnKeepHyp`), the slot emptied, the others kept, the CSpace state and the
 ghost step. -/
-theorem delete_one_xtopK {AR : A → Fl4Spec.Cr3 → Prop} {Z : XSets} {kb : U64}
+theorem delete_one_xtopK [Fl4Proofs.P1.PlainStore st] {AR : A → Fl4Spec.Cr3 → Prop} {Z : XSets} {kb : U64}
     (hN : XFinAt (L := L) arI FinNtfnK AR Z.th) (hXD : XPostDelHyp (L := L) arI AR Z.th)
     (hKeep : NtfnKeepHyp (L := L) arI Z.th)
     (s : S) (a : A) (σ : Fl4Spec.State Unit) (hDS : DState (L := L) Z.th s σ Z.G)
@@ -169,7 +169,7 @@ theorem delete_one_xtopK {AR : A → Fl4Spec.Cr3 → Prop} {Z : XSets} {kb : U64
 /-- **`XDelNtfnHyp` holds**, from the notification's finalisation at `XTop`
 (`XFinAt FinNtfnK`, `XFinHyps.ntfn`'s shape), the cleanup at `XTop`
 (`XPostDelHyp`) and `DelInv` at the `XTopAt` states [J]. -/
-theorem xDelNtfnHyp_of {AR : A → Fl4Spec.Cr3 → Prop} {th : TypedHeap}
+theorem xDelNtfnHyp_of [Fl4Proofs.P1.PlainStore st] {AR : A → Fl4Spec.Cr3 → Prop} {th : TypedHeap}
     (hN : ∀ Z : XSets, Z.th = th → XFinAt (L := L) arI FinNtfnK AR Z.th)
     (hXD : XPostDelHyp (L := L) arI AR th)
     (hDI : ∀ (Z : XSets) s a σ, Z.th = th → XTopAt (L := L) AR Z s a σ → DelInv th (L.mem s)) :

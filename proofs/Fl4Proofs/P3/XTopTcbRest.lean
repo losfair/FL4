@@ -77,7 +77,7 @@ not the idle thread [J], `ArgRel` [J] for UnsetBreakpoint's argument,
 `ActReady` at `WX` [J], `BufWordRel` (a per-`Z` relation), the core's `CUR_THREAD` word outside
 the objects [J], the deletion premises at `XTop` and `DelBound`, the stall
 the identity at every TCB [P]. -/
-theorem tcbXRest_of {AR : A → Fl4Spec.Cr3 → Prop} {Z : XSets} (s : S) (ar : A)
+theorem tcbXRest_of [Fl4Proofs.P1.PlainStore st] {AR : A → Fl4Spec.Cr3 → Prop} {Z : XSets} (s : S) (ar : A)
     (σ : Fl4Spec.State Unit) (hX : XTopAt (L := L) AR Z s ar σ) (hKA : KsApart Z.N Z.T Z.E Z.R Z.B (L.ksb s))
     (hC : CurRun σ) (hTh : ∀ t, Z.th t = some .tcb → t ∈ Z.T) (hDI : DelInv Z.th (L.mem s))
     (hXF : XFinHyps (L := L) arI AR Z.th) (hXP : XPreemptHyp (L := L) arI AR Z.th)
@@ -158,7 +158,7 @@ set_option maxHeartbeats 4000000 in
 /-- **The Thread cap's `XCap` at `XTop`, every label, from the IPC/Sc
 leaves** (`decode_invocation_threadXC` with `tcbXRest_of`): beyond the
 CSpace labels' premises, `tcbXRest_of`'s. -/
-theorem decode_invocation_threadXL {AR : A → Fl4Spec.Cr3 → Prop} {Z : XSets} (s : S) (ar : A)
+theorem decode_invocation_threadXL [Fl4Proofs.P1.PlainStore st] {AR : A → Fl4Spec.Cr3 → Prop} {Z : XSets} (s : S) (ar : A)
     (σ : Fl4Spec.State Unit) (hX : XTopAt (L := L) AR Z s ar σ) (hKA : KsApart Z.N Z.T Z.E Z.R Z.B (L.ksb s))
     (hC : CurRun σ) (hTh : ∀ t, Z.th t = some .tcb → t ∈ Z.T) (hDI : DelInv Z.th (L.mem s))
     (hXF : XFinHyps (L := L) arI AR Z.th) (hXP : XPreemptHyp (L := L) arI AR Z.th)

@@ -228,7 +228,7 @@ region free (`RegionFree`) and zero (`ZeroRegion`); the current core's
 scheduler-action word outside it; only existing slots original (`horig`);
 and an untyped cap without children unused (`hunused`, as the reset of a
 used region is not covered). -/
-theorem untyped_retype_refines_fl4 {A' : Type} (arI : machine.Arch A') (th : TypedHeap) (s : S) (ar : A')
+theorem untyped_retype_refines_fl4 [Fl4Proofs.P1.PlainStore st] {A' : Type} (arI : machine.Arch A') (th : TypedHeap) (s : S) (ar : A')
     (σ : Fl4Spec.State Unit) (G : MdbGhost)
     (hR : StateRel th (L.mem s) σ) (hV : SlotsValid th (L.mem s)) (hP : Placed th)
     (hM : MdbLinks th (L.mem s) G) (hC : CdtRel th (L.mem s) σ G) (hI : MdbInv (L.mem s) G)

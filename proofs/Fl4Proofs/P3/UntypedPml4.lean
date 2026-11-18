@@ -1423,7 +1423,7 @@ slots, the CNodes of the typed heap and the debug-list head TCB are outside
 the region (l4v: nothing reachable is there); no linked slot is in it and no
 object straddles it; the region is at least 16 bytes; the chunk size is FL4's;
 and the preemption points are opaque (`hppS`, `hPP`). -/
-theorem untyped_retype_refines_fl4P {A' : Type} (arI : machine.Arch A') (th : TypedHeap) (s : S) (ar : A')
+theorem untyped_retype_refines_fl4P [Fl4Proofs.P1.PlainStore st] {A' : Type} (arI : machine.Arch A') (th : TypedHeap) (s : S) (ar : A')
     (σ : Fl4Spec.State Unit) (G : MdbGhost)
     (hR : StateRel th (L.mem s) σ) (hV : SlotsValid th (L.mem s)) (hP : Placed th)
     (hM : MdbLinks th (L.mem s) G) (hC : CdtRel th (L.mem s) σ G) (hI : MdbInv (L.mem s) G)

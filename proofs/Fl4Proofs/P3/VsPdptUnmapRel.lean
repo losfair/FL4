@@ -21,6 +21,8 @@ variable {S : Type} (st : machine.Store S) [L : LawfulStore st]
 /-- The hypotheses of the PDPT unmap (see the module docstrings). -/
 structure VsPdptInnerHyps (A : Type) (ar : machine.Arch A) (L4 : Set U64)
     (SR : S → A → Fl4Spec.State Unit → Prop) : Prop where
+  /-- The post-write paging-structure flush preserves the abstract state. -/
+  flushPSKeep : ∀ s a σ (asid : U64), SR s a σ → ar.invalidate_page_structures a asid ⦃ a' => SR s a' σ ⦄
   pml4Stable : ∀ s s' a σ σ', SR s a σ → WritesIn st s s' (Pml4W L4) → Pml4Step σ σ' → SR s' a σ'
   flushAllOK : ∀ (σ : Fl4Spec.State Unit) (vs : Fl4Spec.ObjRef) (asid : Fl4Spec.Asid),
     ¬ (Fl4Spec.flushPdpt (Z := Unit) vs asid σ).2
@@ -229,7 +231,9 @@ theorem unmap_pdpt_rel {A : Type} {ar : machine.Arch A} {th : TypedHeap} {P L4 L
       obtain ⟨g, hg', -⟩ := hR.pool p hp
       have : p.bv ≠ q.bv := kheap_ne hg' hk (fun _ h1 h2 => by subst h1; cases h2)
       simp [hσs, updK, this]
-    refine (WP.spec_ok _).2 ⟨?_, ?_, σs, ?_, ⟨hSs, hSts, hSVs, hRs, hPts⟩, L.ksb_wr _ _ _⟩
+    refine WP.spec_bind (hH.flushPSKeep s1 a1 σs asid hSs) ?_
+    intro a2 hS2
+    refine (WP.spec_ok _).2 ⟨?_, ?_, σs, ?_, ⟨hS2, hSts, hSVs, hRs, hPts⟩, L.ksb_wr _ _ _⟩
     · rw [hun]
       refine nd_nofail_bind (hH.flushAllOK σ q.bv asid.bv) (fun y hy => ?_)
       obtain ⟨u, σy⟩ := y
@@ -397,7 +401,8 @@ theorem pdpt_unmap_rel {A : Type} {ar : machine.Arch A} {th : TypedHeap} {P L4 L
     let SR' : S → A → Fl4Spec.State Unit → Prop := fun s' a' σ' =>
       SR s' a' σ' ∧ SlotFoot th (L.mem s1) (L.mem s') (cslotAddr (pc.bv, idx)) ∧ KFoot σ1 σ'
     have hH' : VsPdptInnerHyps st A ar L4 SR' :=
-      { pml4Stable := fun s' s'' a' σ' σ'' ⟨h1, h2, h3⟩ hw hst => ⟨hH.pml4Stable _ _ _ _ _ h1 hw hst,
+      { flushPSKeep := fun s a σ asid h => WP.spec_mono (hH.flushPSKeep s a σ asid h.1) fun _ hS => ⟨hS, h.2⟩
+        pml4Stable := fun s' s'' a' σ' σ'' ⟨h1, h2, h3⟩ hw hst => ⟨hH.pml4Stable _ _ _ _ _ h1 hw hst,
           h2.trans (SlotFoot.of_writes hPl hw (fun b ⟨q, hq, i, hi, e⟩ =>
             hPO b ⟨q, Or.inl hq, i, hi, e⟩) _),
           h3.trans (by obtain ⟨p, f, f', hk, rfl⟩ := hst; exact KFoot.arch hk _)⟩

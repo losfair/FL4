@@ -540,7 +540,7 @@ theorem XCap.jat {s : S} {ar : A} {σ : Fl4Spec.State Unit} {lbl length slot : U
 
 set_option maxHeartbeats 4000000 in
 /-- **`decode_invocation_cnodeJAt`, `JAt` after**, with the per-op premise (`JPostHyp` [W]). -/
-theorem decode_invocation_cnodeJ_step (s : S) (ar : A) (σ : Fl4Spec.State Unit)
+theorem decode_invocation_cnodeJ_step [Fl4Proofs.P1.PlainStore st] (s : S) (ar : A) (σ : Fl4Spec.State Unit)
     (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s ar σ) (hni : Entered σ) (hG : CsGlobal (L := L) arI AR Z.th)
     (hARI : ARIface arI AR) (hT : P0.ArchTotal arI)
     (lbl : U64) (slbl : Fl4Spec.Data) (hlbl : Fl4Spec.genInvocationType slbl = cnodeLabelOf lbl)
@@ -601,7 +601,7 @@ theorem decode_invocation_domainJ_step (hcfg : DomConfig) (s : S) (ar : A) (σ :
 
 set_option maxHeartbeats 4000000 in
 /-- **`decode_invocation_threadJAt`, `JAt` after**, with the per-op premise (`JPostHyp` [W]). -/
-theorem decode_invocation_threadJ_step (s : S) (ar : A) (σ : Fl4Spec.State Unit)
+theorem decode_invocation_threadJ_step [Fl4Proofs.P1.PlainStore st] (s : S) (ar : A) (σ : Fl4Spec.State Unit)
     (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s ar σ) (hni : Entered σ) (hG : CsGlobal (L := L) arI AR Z.th)
     (hARI : ARIface arI AR) (hT : P0.ArchTotal arI)
     (hA : ∀ s a σ G, WX (L := L) AR Z.th s a σ G → Notif.ActReady σ)
@@ -646,7 +646,7 @@ theorem decode_invocation_threadJ_step (s : S) (ar : A) (σ : Fl4Spec.State Unit
 
 set_option maxHeartbeats 4000000 in
 /-- **`decode_invocation_ioportJAt`, `JAt` after**, with the per-op premise (`JPostHyp` [W]). -/
-theorem decode_invocation_ioportJ_step (s : S) (ar : A) (σ : Fl4Spec.State Unit)
+theorem decode_invocation_ioportJ_step [Fl4Proofs.P1.PlainStore st] (s : S) (ar : A) (σ : Fl4Spec.State Unit)
     (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s ar σ) (hni : Entered σ) (hG : CsGlobal (L := L) arI AR Z.th)
     (hARI : ARIface arI AR) (hT : P0.ArchTotal arI)
     (lbl : U64) (slbl : Fl4Spec.Data) (hlbl : PortLabel lbl slbl)
@@ -669,7 +669,7 @@ set_option maxHeartbeats 4000000 in
 their primitive steps (`decode_invocation_ioportXS`, `Steps.jat` with
 `JStepHyps`), the per-op premise (`JPostHyp` [W]) only at `In` (64..66,
 whose reply writes the caller's message words). -/
-theorem decode_invocation_ioportJ_steps (s : S) (ar : A) (σ : Fl4Spec.State Unit)
+theorem decode_invocation_ioportJ_steps [Fl4Proofs.P1.PlainStore st] (s : S) (ar : A) (σ : Fl4Spec.State Unit)
     (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s ar σ) (hni : Entered σ) (hG : CsGlobal (L := L) arI AR Z.th)
     (hARI : ARIface arI AR) (hT : P0.ArchTotal arI) (hJ : JStepHyps (L := L) arI AR Z.th)
     (lbl : U64) (slbl : Fl4Spec.Data) (hlbl : PortLabel lbl slbl)

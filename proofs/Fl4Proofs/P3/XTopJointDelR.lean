@@ -202,7 +202,7 @@ structure JDelParts (AR : A → Fl4Spec.Cr3 → Prop) (th : TypedHeap) : Prop wh
 variable {AR : A → Fl4Spec.Cr3 → Prop} {th : TypedHeap}
 
 /-- **A notification cap's finalisation at `J`** (module docstring). -/
-theorem jFinAt_ntfn : JFinAt (L := L) arI AR th NtfnK := by
+theorem jFinAt_ntfn [Fl4Proofs.P1.PlainStore st] : JFinAt (L := L) arI AR th NtfnK := by
   intro Z H Cs kb hth s a σ G sl c hDS hW hA hc _ hn
   obtain ⟨p, b, w, r, rfl⟩ := hn
   subst hth
@@ -246,7 +246,7 @@ theorem isUt_of_finObj {c : capability.Cap} (hk : FinObjKind c) : isUt c = false
 /-- **A non-final cap's finalisation at `J`**, every object cap but frames
 and IO port caps: nothing (`fin_idle`), the slot ready by another cap alike
 it (`other_key`, `EmptyReady.of_cover`). -/
-theorem jFin_nonfinal (Z : XSets) (H : P1.Heap) (Cs : Set U64) (kb : U64) (hth : Z.th = th)
+theorem jFin_nonfinal [Fl4Proofs.P1.PlainStore st] (Z : XSets) (H : P1.Heap) (Cs : Set U64) (kb : U64) (hth : Z.th = th)
     (s : S) (a : A) (σ : Fl4Spec.State Unit) (G : MdbGhost) (sl : Fl4Spec.CslotPtr) (c : capability.Cap)
     (hDS : DState (L := L) th s σ G) (hW : WJ (L := L) arI AR Z H Cs kb s a σ G) (hA : AbsSlot th sl)
     (hc : capAt (L.mem s) (cslotAddr sl) = ok c) (hk : FinObjKind c) (hfi : ¬ FrIoK c)
@@ -290,7 +290,7 @@ theorem jFin_nonfinal (Z : XSets) (H : P1.Heap) (Cs : Set U64) (kb : U64) (hth :
 /-- The object caps' finalisation at `J`, from the notification caps'
 (`jFinAt_ntfn`), the non-final caps' (`jFin_nonfinal`), the final caps'
 (`JDelParts.fin`) and the frame and IO port caps' (`JDelParts.finFrIo`). -/
-theorem finJ (h : JDelParts (L := L) arI AR th) (Z : XSets) (H : P1.Heap) (Cs : Set U64)
+theorem finJ [Fl4Proofs.P1.PlainStore st] (h : JDelParts (L := L) arI AR th) (Z : XSets) (H : P1.Heap) (Cs : Set U64)
     (kb : U64) (hth : Z.th = th) :
     FinObjHypWR (L := L) arI (WJ (L := L) arI AR Z H Cs kb) (RdJ (L := L) (A := A) H) th := by
   intro s a σ G sl c hDS hW hA hc hk _
@@ -409,7 +409,7 @@ theorem emptyHypJ (hUt : JEmptyUtHyp (L := L) arI AR th) (Z : XSets)
   exact ⟨V2, Ac', Lst', D', J.cs_frameV hks hX2 hkb2 hC R, hks.trans hkb⟩
 
 /-- **`JDelHyp` from the named steps** (`delHyp_fullWR` at `WJ`, `RdJ`). -/
-theorem JDelHyp.of_parts (h : JDelParts (L := L) arI AR th) (hpp : JPreemptHyp (L := L) arI AR th)
+theorem JDelHyp.of_parts [Fl4Proofs.P1.PlainStore st] (h : JDelParts (L := L) arI AR th) (hpp : JPreemptHyp (L := L) arI AR th)
     (hpost : JPostDelHyp (L := L) arI AR th) : JDelHyp (L := L) arI AR th := by
   intro Z H Cs kb K hth hK hK6 s a σ G c hCR hE hA hxm
   obtain ⟨V, Ac, Lst, D, J, -⟩ := hE.2

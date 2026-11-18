@@ -26,7 +26,7 @@ def DDPost (W Wp : S → A → Fl4Spec.State Unit → MdbGhost → Prop) (th : T
       (res.1 = .Err .Preempted ∧ RD (.cTEDeleteCall sl false) σ (.error (), σ'))) ∧
     WPost W Wp res.1 res.2.1 res.2.2 σ' G'
 
-theorem delete_deferred_refines (W Wp : S → A → Fl4Spec.State Unit → MdbGhost → Prop)
+theorem delete_deferred_refines [Fl4Proofs.P1.PlainStore st] (W Wp : S → A → Fl4Spec.State Unit → MdbGhost → Prop)
     (Rd : S → A → Fl4Spec.State Unit → MdbGhost → U64 → Prop) (th : TypedHeap)
     (hP : Placed th) (hF : FinalHyp (L := L) th) (hH : DelHypsWR (L := L) arI W Wp Rd th)
     (sl : Fl4Spec.CslotPtr) (hA : AbsSlot th sl) (s : S) (a : A) (σ : Fl4Spec.State Unit) (G : MdbGhost)

@@ -217,7 +217,7 @@ macro "map_tail_L" : tactic => `(tactic| (
     | Ok sl =>
       obtain ⟨hsp, q, hq, rfl, d, hgd, hd⟩ := hsl _ rfl
       simp only [core.result.Result.Insts.CoreOpsTry.branch, bind_ok, layout.paddr]
-      simp only [vspace.frame_address, layout.paddr, L.encryption_mask_eq, bne_self_eq_false, Bool.false_eq_true, ↓reduceIte, bind_ok]
+      simp only [frame_address_plain, layout.paddr, bind_ok]
       refine WP.spec_bind (make_user_page_large s _ _ m) ?_
       rintro e ⟨xd, he⟩
       have hpte := pde_of_make_large (L1 := L1) (vmOk_of hm1 hm3) hpa he
@@ -297,7 +297,7 @@ macro "map_tail_L" : tactic => `(tactic| (
       hdec.trans (mapTailL_unaligned hf (fun h => hal ((al21 a0).2 h))), rfl, rfl⟩)))
 
 /-- **Large Frame `Map` refines l4v** (as `frame_map_rel`). -/
-theorem frame_map_large_rel {A : Type} {ar : machine.Arch A} {th : TypedHeap} {P L4 L3 L2 L1 : Set U64}
+theorem frame_map_large_rel [PlainStore st] {A : Type} {ar : machine.Arch A} {th : TypedHeap} {P L4 L3 L2 L1 : Set U64}
     {SR : S → A → Fl4Spec.State Unit → Prop} (hH : VsFrameHypsL st A ar th P L4 L3 L2 L1 SR)
     (s : S) (a : A) (σ : Fl4Spec.State Unit) (hPl : Placed th) (hVP : VsPlaced P (L.ksb s))
     (hD : VsSlotsDisj th P (L.ksb s)) (hPP : PtPlaced L4 L3 L2 L1)
@@ -611,7 +611,7 @@ macro "map_tail_H" : tactic => `(tactic| (
     | Ok sl =>
       obtain ⟨hsp, q, hq, rfl, d, hgd, hd⟩ := hsl _ rfl
       simp only [core.result.Result.Insts.CoreOpsTry.branch, bind_ok, layout.paddr]
-      simp only [vspace.frame_address, layout.paddr, L.encryption_mask_eq, bne_self_eq_false, Bool.false_eq_true, ↓reduceIte, bind_ok]
+      simp only [frame_address_plain, layout.paddr, bind_ok]
       refine WP.spec_bind (make_user_page_large s _ _ m) ?_
       rintro e ⟨xd, he⟩
       have hpte := pdpte_of_make_huge (L2 := L2) (vmOk_of hm1 hm3) hpa he
@@ -691,7 +691,7 @@ macro "map_tail_H" : tactic => `(tactic| (
       hdec.trans (mapTailH_unaligned hf (fun h => hal ((al30 a0).2 h))), rfl, rfl⟩)))
 
 /-- **Huge Frame `Map` refines l4v** (as `frame_map_rel`). -/
-theorem frame_map_huge_rel {A : Type} {ar : machine.Arch A} {th : TypedHeap} {P L4 L3 L2 L1 : Set U64}
+theorem frame_map_huge_rel [PlainStore st] {A : Type} {ar : machine.Arch A} {th : TypedHeap} {P L4 L3 L2 L1 : Set U64}
     {SR : S → A → Fl4Spec.State Unit → Prop} (hH : VsFrameHypsL st A ar th P L4 L3 L2 L1 SR)
     (s : S) (a : A) (σ : Fl4Spec.State Unit) (hPl : Placed th) (hVP : VsPlaced P (L.ksb s))
     (hD : VsSlotsDisj th P (L.ksb s)) (hPP : PtPlaced L4 L3 L2 L1)

@@ -451,7 +451,7 @@ variable {S : Type} {st : machine.Store S} [L : P1.LawfulStore st] {A : Type} (a
 
 /-- **TcbXLeaves' SetIPCBuffer at `XTop`** with the IPC-buffer step
 discharged (`bufHypW_X`), given `ActReady` at `WX` [J]. -/
-theorem tcb_set_ipcXT {AR : A → Fl4Spec.Cr3 → Prop} {Z : XSets} (s : S) (ar : A) (σ : Fl4Spec.State Unit)
+theorem tcb_set_ipcXT [Fl4Proofs.P1.PlainStore st] {AR : A → Fl4Spec.Cr3 → Prop} {Z : XSets} (s : S) (ar : A) (σ : Fl4Spec.State Unit)
     (hX : XTopAt (L := L) AR Z s ar σ) (hKA : KsApart Z.N Z.T Z.E Z.R Z.B (L.ksb s)) (hC : CurRun σ)
     (hTh : ∀ t, Z.th t = some .tcb → t ∈ Z.T) (hDI : DelInv Z.th (L.mem s))
     (hXF : XFinHyps (L := L) arI AR Z.th) (hXP : XPreemptHyp (L := L) arI AR Z.th)
@@ -478,7 +478,7 @@ theorem tcb_set_ipcXT {AR : A → Fl4Spec.Cr3 → Prop} {Z : XSets} (s : S) (ar 
     buf ct hct args hlen hargs hcur hact hstall call ssl hAs extra x0 x1 x2 hx0 excaps hXc hnc blk don ci buffer
 
 /-- **TcbXLeaves' Configure at `XTop`** with the IPC-buffer step discharged. -/
-theorem tcb_configureXT {AR : A → Fl4Spec.Cr3 → Prop} {Z : XSets} (s : S) (ar : A) (σ : Fl4Spec.State Unit)
+theorem tcb_configureXT [Fl4Proofs.P1.PlainStore st] {AR : A → Fl4Spec.Cr3 → Prop} {Z : XSets} (s : S) (ar : A) (σ : Fl4Spec.State Unit)
     (hX : XTopAt (L := L) AR Z s ar σ) (hKA : KsApart Z.N Z.T Z.E Z.R Z.B (L.ksb s)) (hC : CurRun σ)
     (hTh : ∀ t, Z.th t = some .tcb → t ∈ Z.T) (hDI : DelInv Z.th (L.mem s))
     (hXF : XFinHyps (L := L) arI AR Z.th) (hXP : XPreemptHyp (L := L) arI AR Z.th)

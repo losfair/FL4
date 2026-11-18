@@ -49,14 +49,14 @@ theorem mem_single {α σ : Type} {m : Fl4Spec.NonDet σ α} {s : σ} {x : α ×
     x ∈ (m s).1 := by rw [h]; rfl
 
 /-- On the native memory model a frame cap's finalisation only unmaps it. -/
-theorem finalise_cap_frame_fin (s : S) (a : A) {c : capability.Cap} (hc : isFrame c = true) (b b' : Bool) :
+theorem finalise_cap_frame_fin [Fl4Proofs.P1.PlainStore st] (s : S) (a : A) {c : capability.Cap} (hc : isFrame c = true) (b b' : Bool) :
     objects.finalise_cap st arI s a c b false = objects.finalise_cap st arI s a c b' false := by
   cases c <;> simp [isFrame] at hc
-  simp [objects.finalise_cap, objects.finalise_cap_object, L.encryption_mask_eq]
+  simp [objects.finalise_cap, objects.finalise_cap_object, P1.plain_retire]
 
 /-- **`finalise_cap` refines the spec's `finalise_cap`**, for every non-null
 cap of a slot of the typed heap. -/
-theorem fin_step (W : S → A → Fl4Spec.State Unit → MdbGhost → Prop)
+theorem fin_step [Fl4Proofs.P1.PlainStore st] (W : S → A → Fl4Spec.State Unit → MdbGhost → Prop)
     (Rd : S → A → Fl4Spec.State Unit → MdbGhost → U64 → Prop) (th : TypedHeap)
     (hO : FinObjHypWR (L := L) arI W Rd th) (hRT : RdTrivHyp (L := L) W Rd th) (hF : FinalHyp (L := L) th)
     (hP : Placed th) (s : S) (a : A) (σ : Fl4Spec.State Unit) (G : MdbGhost)

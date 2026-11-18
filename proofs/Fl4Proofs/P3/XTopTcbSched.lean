@@ -1183,7 +1183,7 @@ set_option maxHeartbeats 4000000 in
 restart, the fault-handler install at `WX` (`install_okW`, the deletion's
 premises at `XTop`), then the leaf (`SchedTailXHyp`); a preempted install is
 the spec's preempted install, `XTop` from `WX`. -/
-theorem ssp_tailX {AR : A → Fl4Spec.Cr3 → Prop} {Z : XSets} (s : S) (ar : A) (σ : Fl4Spec.State Unit)
+theorem ssp_tailX [Fl4Proofs.P1.PlainStore st] {AR : A → Fl4Spec.Cr3 → Prop} {Z : XSets} (s : S) (ar : A) (σ : Fl4Spec.State Unit)
     (hX : XTopAt (L := L) AR Z s ar σ) (hKA : KsApart Z.N Z.T Z.E Z.R Z.B (L.ksb s)) (hC : CurRun σ)
     (hTh : ∀ t, Z.th t = some .tcb → t ∈ Z.T) (hDI : DelInv Z.th (L.mem s))
     (hXF : XFinHyps (L := L) arI AR Z.th) (hXP : XPreemptHyp (L := L) arI AR Z.th)
@@ -1258,7 +1258,7 @@ set_option maxHeartbeats 8000000 in
 cap's objects among `Z.T`/`Z.C` [J], no null SC [J], the target not idle
 [J]; the SC checks by the scheduler and notification relations at `XTop`),
 then `ssp_tailX` (the leaf `SchedTailXHyp`, the Sc side's). -/
-theorem tcb_set_sched_paramsX {AR : A → Fl4Spec.Cr3 → Prop} {Z : XSets}
+theorem tcb_set_sched_paramsX [Fl4Proofs.P1.PlainStore st] {AR : A → Fl4Spec.Cr3 → Prop} {Z : XSets}
    
     (s : S) (ar : A) (σ : Fl4Spec.State Unit)
     (hX : XTopAt (L := L) AR Z s ar σ) (hKA : KsApart Z.N Z.T Z.E Z.R Z.B (L.ksb s)) (hC : CurRun σ)

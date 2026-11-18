@@ -55,7 +55,7 @@ theorem slotHypW_X (AR : A → Fl4Spec.Cr3 → Prop) (th : TypedHeap) :
 
 /-- **The object finalisations at `WX`**: those doing work from
 `XFinHyps`, the others leave the state as it is (`fin_idle`). -/
-theorem finObjHypW_X {AR : A → Fl4Spec.Cr3 → Prop} {th : TypedHeap} (hXF : XFinHyps (L := L) arI AR th) :
+theorem finObjHypW_X [Fl4Proofs.P1.PlainStore st] {AR : A → Fl4Spec.Cr3 → Prop} {th : TypedHeap} (hXF : XFinHyps (L := L) arI AR th) :
     FinObjHypW (L := L) arI (WX (L := L) AR th) th := by
   rintro s a σ G sl c hDS ⟨Z, rfl, rfl, hX, hK, hTh⟩ hA hc hk
   by_cases hw : FinWork c (decide (Fl4Spec.isFinalCap' (absCap c) σ))
@@ -109,7 +109,7 @@ theorem postDelHypW_X {AR : A → Fl4Spec.Cr3 → Prop} {th : TypedHeap} (hXD : 
   exact ⟨hS, σ', hm, hCR, Z, rfl, rfl, hX', by rw [hk']; exact hK, hTh⟩
 
 /-- **The deletion's premises at `WX`.** -/
-theorem delHypsW_X {AR : A → Fl4Spec.Cr3 → Prop} {th : TypedHeap} (hXF : XFinHyps (L := L) arI AR th)
+theorem delHypsW_X [Fl4Proofs.P1.PlainStore st] {AR : A → Fl4Spec.Cr3 → Prop} {th : TypedHeap} (hXF : XFinHyps (L := L) arI AR th)
     (hXP : XPreemptHyp (L := L) arI AR th) (hXD : XPostDelHyp (L := L) arI AR th) :
     DelHypsW (L := L) arI (WX (L := L) AR th) th :=
   ⟨finObjHypW_X arI hXF, ppHypDW_X arI hXP, postDelHypW_X arI hXD, slotHypW_X AR th⟩
@@ -163,7 +163,7 @@ and the preemption points at `XTop`: `cnode_revoke_refinesW` at `EX`
 Beyond `decode_invocation_cnode_otherX`'s premises: the deletion's
 premises at `XTop` (`XFinHyps`, `XPreemptHyp`, `XPostDelHyp`), `KsApart`,
 the typed heap's TCBs in `Z.T`, the bound `K` on CNode sizes and `DelE`. -/
-theorem decode_invocation_cnode_revokeX {AR : A → Fl4Spec.Cr3 → Prop} {Z : XSets} (s : S)
+theorem decode_invocation_cnode_revokeX [Fl4Proofs.P1.PlainStore st] {AR : A → Fl4Spec.Cr3 → Prop} {Z : XSets} (s : S)
     (ar : A) (σ : Fl4Spec.State Unit) (hX : XTopAt (L := L) AR Z s ar σ)
     (hKA : KsApart Z.N Z.T Z.E Z.R Z.B (L.ksb s)) (hC : CurRun σ) (hTh : ∀ t, Z.th t = some .tcb → t ∈ Z.T)
     (hXF : XFinHyps (L := L) arI AR Z.th) (hXP : XPreemptHyp (L := L) arI AR Z.th)
@@ -208,7 +208,7 @@ theorem decode_invocation_cnode_revokeX {AR : A → Fl4Spec.Cr3 → Prop} {Z : X
 
 /-- **`CnodeXHyp` at the Delete label** (26), for any cap: as
 `decode_invocation_cnode_revokeX`, by `cnode_delete_refinesW` at `EX`. -/
-theorem decode_invocation_cnode_deleteX {AR : A → Fl4Spec.Cr3 → Prop} {Z : XSets} (s : S)
+theorem decode_invocation_cnode_deleteX [Fl4Proofs.P1.PlainStore st] {AR : A → Fl4Spec.Cr3 → Prop} {Z : XSets} (s : S)
     (ar : A) (σ : Fl4Spec.State Unit) (hX : XTopAt (L := L) AR Z s ar σ)
     (hKA : KsApart Z.N Z.T Z.E Z.R Z.B (L.ksb s)) (hC : CurRun σ) (hTh : ∀ t, Z.th t = some .tcb → t ∈ Z.T)
     (hXF : XFinHyps (L := L) arI AR Z.th) (hXP : XPreemptHyp (L := L) arI AR Z.th)

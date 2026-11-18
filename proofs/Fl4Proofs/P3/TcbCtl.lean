@@ -247,7 +247,7 @@ def TcHyps (th : TypedHeap) : Prop :=
     ∃ K : Nat, (∀ p r, th p = some (.cnode r) → 2 ^ r ≤ K) ∧ 6 ≤ K ∧
       ∀ m G, MdbLinks th m G → psiD m G * (K + 1) + K < 2 ^ 64 - 1
 
-theorem tc_refinesW (W : S → A → Fl4Spec.State Unit → MdbGhost → Prop) (th : TypedHeap) (hP : Placed th)
+theorem tc_refinesW [Fl4Proofs.P1.PlainStore st] (W : S → A → Fl4Spec.State Unit → MdbGhost → Prop) (th : TypedHeap) (hP : Placed th)
     (hH : DelHypsW (L := L) arI W th)
     (hKB : ∃ K : Nat, (∀ p r, th p = some (.cnode r) → 2 ^ r ≤ K) ∧ 6 ≤ K ∧
       ∀ m G, MdbLinks th m G → psiD m G * (K + 1) + K < 2 ^ 64 - 1)
@@ -273,7 +273,7 @@ theorem tc_refinesW (W : S → A → Fl4Spec.State Unit → MdbGhost → Prop) (
     hfh htmh hcr hvr hfhE addr ptr hBuf bc0 bfr hbfr
 
 
-theorem tc_refines (th : TypedHeap) (hP : Placed th) (hT : TcHyps (L := L) arI th)
+theorem tc_refines [Fl4Proofs.P1.PlainStore st] (th : TypedHeap) (hP : Placed th) (hT : TcHyps (L := L) arI th)
     (s : S) (a : A) (σ : Fl4Spec.State Unit) (G : MdbGhost) (hDS : DState (L := L) th s σ G)
     (hMO : MdbOKV (L.ksb s) (L.mem s) G)
     (t : U64) (ht : th t = some .tcb) (ssl : Fl4Spec.CslotPtr) (hAs : AbsSlot th ssl) (flags : U64)
@@ -311,7 +311,7 @@ theorem decode_timeout_eq (s : S) (ar : A) (p : U64) (c : tcb.Ctx)
 /-- **`tcb::decode` at `TCBSetTimeoutEndpoint`** (`TcbOK`): l4v's
 `decode_set_timeout_ep`, the restart and `invoke_tcb ThreadControlCaps`
 installing the timeout handler. -/
-theorem tcb_set_timeout_refinesW (W : S → A → Fl4Spec.State Unit → MdbGhost → Prop) (th : TypedHeap) (hP : Placed th) (hH : DelHypsW (L := L) arI W th)
+theorem tcb_set_timeout_refinesW [Fl4Proofs.P1.PlainStore st] (W : S → A → Fl4Spec.State Unit → MdbGhost → Prop) (th : TypedHeap) (hP : Placed th) (hH : DelHypsW (L := L) arI W th)
     (hKB : ∃ K : Nat, (∀ p r, th p = some (.cnode r) → 2 ^ r ≤ K) ∧ 6 ≤ K ∧
       ∀ m G, MdbLinks th m G → psiD m G * (K + 1) + K < 2 ^ 64 - 1)
     (s : S) (ar : A) (σ : Fl4Spec.State Unit) (G : MdbGhost) (hDS : DState (L := L) th s σ G)
@@ -412,7 +412,7 @@ theorem tcb_set_timeout_refinesW (W : S → A → Fl4Spec.State Unit → MdbGhos
       Fl4Spec.SEMonad Unit Unit)) rfl _) _
 
 
-theorem tcb_set_timeout_refines (th : TypedHeap) (hP : Placed th) (hT : TcHyps (L := L) arI th)
+theorem tcb_set_timeout_refines [Fl4Proofs.P1.PlainStore st] (th : TypedHeap) (hP : Placed th) (hT : TcHyps (L := L) arI th)
     (s : S) (ar : A) (σ : Fl4Spec.State Unit) (G : MdbGhost) (hDS : DState (L := L) th s σ G) (hFR : MdbOKV (L.ksb s) (L.mem s) G)
     (p : U64) (hp : th p = some .tcb) (slbl : Fl4Spec.Data)
     (hlbl : Fl4Spec.genInvocationType slbl = .tcbSetTimeoutEndpoint)
@@ -531,7 +531,7 @@ theorem decode_ipc_eq (s : S) (ar : A) (p : U64) (c : tcb.Ctx)
 `decode_set_ipc_buffer` (the buffer's frame cap derived and checked), the
 restart and `invoke_tcb ThreadControlCaps` installing the buffer; the
 buffer's word and the scheduler are P1's (`BufHyp`, for every address). -/
-theorem tcb_set_ipc_refinesW (W : S → A → Fl4Spec.State Unit → MdbGhost → Prop) (th : TypedHeap) (hP : Placed th) (hH : DelHypsW (L := L) arI W th)
+theorem tcb_set_ipc_refinesW [Fl4Proofs.P1.PlainStore st] (W : S → A → Fl4Spec.State Unit → MdbGhost → Prop) (th : TypedHeap) (hP : Placed th) (hH : DelHypsW (L := L) arI W th)
     (hKB : ∃ K : Nat, (∀ p r, th p = some (.cnode r) → 2 ^ r ≤ K) ∧ 6 ≤ K ∧
       ∀ m G, MdbLinks th m G → psiD m G * (K + 1) + K < 2 ^ 64 - 1)
     (s : S) (ar : A) (σ : Fl4Spec.State Unit) (G : MdbGhost) (hDS : DState (L := L) th s σ G)
@@ -730,7 +730,7 @@ theorem tcb_set_ipc_refinesW (W : S → A → Fl4Spec.State Unit → MdbGhost �
         exact run_bind_error ((run_bind_ok hr' _).trans (run_bind_error hck _)) _
 
 
-theorem tcb_set_ipc_refines (th : TypedHeap) (hP : Placed th) (hT : TcHyps (L := L) arI th)
+theorem tcb_set_ipc_refines [Fl4Proofs.P1.PlainStore st] (th : TypedHeap) (hP : Placed th) (hT : TcHyps (L := L) arI th)
     (s : S) (ar : A) (σ : Fl4Spec.State Unit) (G : MdbGhost) (hDS : DState (L := L) th s σ G) (hFR : MdbOKV (L.ksb s) (L.mem s) G)
     (p : U64) (hp : th p = some .tcb) (hBuf : ∀ v : U64, BufHyp (L := L) (A := A) th p v v.bv)
     (slbl : Fl4Spec.Data) (hlbl : Fl4Spec.genInvocationType slbl = .tcbSetIPCBuffer)
@@ -1138,7 +1138,7 @@ theorem decode_space_eq (s : S) (ar : A) (p : U64) (c : tcb.Ctx)
 (the roots' checks and derivations, `decode_cv_space`, and the fault
 handler), the restart and `invoke_tcb ThreadControlCaps` installing the
 fault handler and the roots. -/
-theorem tcb_set_space_refinesW (W : S → A → Fl4Spec.State Unit → MdbGhost → Prop) (th : TypedHeap) (hP : Placed th) (hH : DelHypsW (L := L) arI W th)
+theorem tcb_set_space_refinesW [Fl4Proofs.P1.PlainStore st] (W : S → A → Fl4Spec.State Unit → MdbGhost → Prop) (th : TypedHeap) (hP : Placed th) (hH : DelHypsW (L := L) arI W th)
     (hKB : ∃ K : Nat, (∀ p r, th p = some (.cnode r) → 2 ^ r ≤ K) ∧ 6 ≤ K ∧
       ∀ m G, MdbLinks th m G → psiD m G * (K + 1) + K < 2 ^ 64 - 1)
     (s : S) (ar : A) (σ : Fl4Spec.State Unit) (G : MdbGhost) (hDS : DState (L := L) th s σ G)
@@ -1299,7 +1299,7 @@ theorem tcb_set_space_refinesW (W : S → A → Fl4Spec.State Unit → MdbGhost 
     exact run_bind_error hcv _
 
 
-theorem tcb_set_space_refines (th : TypedHeap) (hP : Placed th) (hT : TcHyps (L := L) arI th)
+theorem tcb_set_space_refines [Fl4Proofs.P1.PlainStore st] (th : TypedHeap) (hP : Placed th) (hT : TcHyps (L := L) arI th)
     (s : S) (ar : A) (σ : Fl4Spec.State Unit) (G : MdbGhost) (hDS : DState (L := L) th s σ G) (hFR : MdbOKV (L.ksb s) (L.mem s) G)
     (p : U64) (hp : th p = some .tcb)
     (slbl : Fl4Spec.Data) (hlbl : Fl4Spec.genInvocationType slbl = .tcbSetSpace)
@@ -1433,7 +1433,7 @@ theorem decode_configure_eq (s : S) (ar : A) (p : U64) (c : tcb.Ctx)
 MCS `decode_tcb_configure`): the IPC buffer (`decode_set_ipc_buffer`), the
 roots (`decode_cv_space`), the restart and `invoke_tcb ThreadControlCaps`
 installing the roots and the buffer. -/
-theorem tcb_configure_refinesW (W : S → A → Fl4Spec.State Unit → MdbGhost → Prop) (th : TypedHeap) (hP : Placed th) (hH : DelHypsW (L := L) arI W th)
+theorem tcb_configure_refinesW [Fl4Proofs.P1.PlainStore st] (W : S → A → Fl4Spec.State Unit → MdbGhost → Prop) (th : TypedHeap) (hP : Placed th) (hH : DelHypsW (L := L) arI W th)
     (hKB : ∃ K : Nat, (∀ p r, th p = some (.cnode r) → 2 ^ r ≤ K) ∧ 6 ≤ K ∧
       ∀ m G, MdbLinks th m G → psiD m G * (K + 1) + K < 2 ^ 64 - 1)
     (s : S) (ar : A) (σ : Fl4Spec.State Unit) (G : MdbGhost) (hDS : DState (L := L) th s σ G)
@@ -1592,7 +1592,7 @@ theorem tcb_configure_refinesW (W : S → A → Fl4Spec.State Unit → MdbGhost 
     exact run_bind_error hcv _
 
 
-theorem tcb_configure_refines (th : TypedHeap) (hP : Placed th) (hT : TcHyps (L := L) arI th)
+theorem tcb_configure_refines [Fl4Proofs.P1.PlainStore st] (th : TypedHeap) (hP : Placed th) (hT : TcHyps (L := L) arI th)
     (s : S) (ar : A) (σ : Fl4Spec.State Unit) (G : MdbGhost) (hDS : DState (L := L) th s σ G) (hFR : MdbOKV (L.ksb s) (L.mem s) G)
     (p : U64) (hp : th p = some .tcb) (hBuf : ∀ v : U64, BufHyp (L := L) (A := A) th p v v.bv)
     (slbl : Fl4Spec.Data) (hlbl : Fl4Spec.genInvocationType slbl = .tcbConfigure)
@@ -2112,7 +2112,7 @@ scheduler and register work as `TlsResHyp`, `BufHyp`, `ReadRegsHyp`,
 SetMCPriority, SetSchedParams, Suspend, Resume, Bind/UnbindNotification)
 SetFlags (FL4's FPU release and reply) and the FL4 extension labels
 (breakpoints, single stepping, FPU, SetTimer) remain one hypothesis each. -/
-theorem tcb_decode_cspace (th : TypedHeap) (hP : Placed th) (hT : TcHyps (L := L) arI th)
+theorem tcb_decode_cspace [Fl4Proofs.P1.PlainStore st] (th : TypedHeap) (hP : Placed th) (hT : TcHyps (L := L) arI th)
     (s : S) (ar : A) (σ : Fl4Spec.State Unit) (G : MdbGhost) (hDS : DState (L := L) th s σ G) (hFR : MdbOKV (L.ksb s) (L.mem s) G)
     (lbl p : U64) (hp : th p = some .tcb) (slbl : Fl4Spec.Data)
     (hlbl : Fl4Spec.genInvocationType slbl = tcbLabelOf lbl)

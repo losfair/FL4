@@ -1123,14 +1123,16 @@ preemption (a retype without a reset does not fail,
 (`createOK_reset`, the unused region's slots kept, `UtJoint.slots_unused`).
 Named: the kept links (`RegionUnref`), the new TCBs' debug links
 (`UtDbgTcb`), the VT-x types (`UtVtx`). -/
-theorem utRetypeP3_gen {A' : Type} (arI : machine.Arch A') (hA : P0.ArchTotal arI) (H : Heap) (Cs U : Set U64)
+theorem utRetypeP3_gen [P1.PlainStore st] {A' : Type} (arI : machine.Arch A') (hA : P0.ArchTotal arI) (H : Heap) (Cs U : Set U64)
     (Adm : PSets → Prop) (hAdm : ∀ H' : Heap, HeapOK H' → H' 0#u64 = none → Adm (PSets.ofHeap H'))
     (h0Cs : 0#u64 ∈ Cs) (hrcb : Fl4Spec.resetChunkBits = 16) (hppS : PPFrame)
     (P3Ok : S → U64 → capability.Cap → Aeneas.Std.Array obj.Slot 3#usize → Prop)
     (hOk : UtOkRU (L := L) arI H Cs P3Ok) (hDbg : UtDbgTcbP (L := L) arI H Cs P3Ok)
     (hVtx : UtVtxP (L := L) arI H Cs U P3Ok) :
     UtRetypeP3 st arI Adm H.tcbs Cs H.omega H H.frame H.replies H.scs H.ntfns H.scBits U P3Ok := by
-  refine ⟨⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩, hAdm, h0Cs, ?_⟩
+  refine ⟨?_, ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩, hAdm, h0Cs, ?_⟩
+  · intro Ac s a len slot buf ptr sb fi dev extra h
+    simp at h
   intro Ac s0 s a extra slot ptr sb fi dev reset aligned nt us dest off win hP3 hrs hDP hCSW hUA hC0
   by_cases hnt : 13 < nt.val
   · exact hVtx Ac s0 s a extra slot ptr sb fi dev reset aligned nt us dest off win hP3 hrs hDP hCSW hUA hC0 hnt
@@ -1259,7 +1261,7 @@ theorem utRetypeP3_gen {A' : Type} (arI : machine.Arch A') (hA : P0.ArchTotal ar
 
 
 /-- **P1's `UtRetypeP3` with `UtP3Ok` as `P3Ok`** (`utRetypeP3_gen`). -/
-theorem utRetypeP3_of {A' : Type} (arI : machine.Arch A') (hA : P0.ArchTotal arI) (H : Heap) (Cs U : Set U64)
+theorem utRetypeP3_of [Fl4Proofs.P1.PlainStore st] {A' : Type} (arI : machine.Arch A') (hA : P0.ArchTotal arI) (H : Heap) (Cs U : Set U64)
     (Adm : PSets → Prop) (hAdm : ∀ H' : Heap, HeapOK H' → H' 0#u64 = none → Adm (PSets.ofHeap H'))
     (h0Cs : 0#u64 ∈ Cs) (hrcb : Fl4Spec.resetChunkBits = 16) (hppS : PPFrame)
     (hRU : RegionUnref (L := L) arI H Cs) (hDbg : UtDbgTcb (L := L) arI H Cs)

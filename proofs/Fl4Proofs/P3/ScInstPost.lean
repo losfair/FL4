@@ -348,7 +348,7 @@ theorem hRS_of {N Tr C : Set U64} {c : U64} {s : S} {σ : Fl4Spec.State Unit}
 /-- **`tcb::decode` at `TCBSetSchedParams` end to end**
 (`tcb_set_sched_params_refines` with `SchedTailHyp` by
 `schedTailHyp_disch`). -/
-theorem tcb_set_sched_params_refines_disch (hA : P0.ArchTotal arI) (th : TypedHeap) (hP : Placed th)
+theorem tcb_set_sched_params_refines_disch [Fl4Proofs.P1.PlainStore st] (hA : P0.ArchTotal arI) (th : TypedHeap) (hP : Placed th)
     (hT : TcHyps (L := L) arI th)
     (s : S) (ar : A) (σ : Fl4Spec.State Unit) (G : MdbGhost) (hDS : DState (L := L) th s σ G) (hFR : MdbOKV (L.ksb s) (L.mem s) G)
     (p : U64) (hp : th p = some .tcb) (slbl : Fl4Spec.Data)

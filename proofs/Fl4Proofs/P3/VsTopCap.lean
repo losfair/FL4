@@ -163,7 +163,7 @@ theorem decode_invocation_pdpt_cap (th : TypedHeap) (s : S) (ar : A) (σ : Fl4Sp
 
 set_option maxHeartbeats 8000000 in
 /-- **A frame cap, every label, at `TopSR` with `VsCapsIn`** (`decode_invocation_frame_full`; `hfm`, `hpaS`/`hpaL`/`hpaH` and the extra PML4 cap's shape from the invariant). -/
-theorem decode_invocation_frame_cap (th : TypedHeap) (s : S) (ar : A) (σ : Fl4Spec.State Unit)
+theorem decode_invocation_frame_cap [Fl4Proofs.P1.PlainStore st] (th : TypedHeap) (s : S) (ar : A) (σ : Fl4Spec.State Unit)
     (G : MdbGhost) (hCR : CRel th (L.mem s) σ G) (hFI : FinInv th (L.mem s) σ G) (hU : UtInv (L.mem s) G)
     (hMO : MdbOKV (L.ksb s) (L.mem s) G)
     {P L4 L3 L2 L1 N T C E R : Set U64} {B : Set (U64 × Fl4Spec.Word)} {c : U64} {AR : A → Fl4Spec.Cr3 → Prop}

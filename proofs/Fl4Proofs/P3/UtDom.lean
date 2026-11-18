@@ -286,7 +286,7 @@ domain schedule's placement (`DomPlaced`), the current core's node placed,
 total arch operations (the reset's preemption points), and the one named
 premise `UtApart`: the cap's region misses the kernel-global block
 (`JCovD.utApart`). -/
-theorem decDomHyp_untyped {A' : Type} (arI : machine.Arch A') (th : TypedHeap) (s : S) (ar : A')
+theorem decDomHyp_untyped [Fl4Proofs.P1.PlainStore st] {A' : Type} (arI : machine.Arch A') (th : TypedHeap) (s : S) (ar : A')
     (σ : Fl4Spec.State Unit) (G : MdbGhost)
     (hR : StateRel th (L.mem s) σ) (hV : SlotsValid th (L.mem s)) (hP : Placed th)
     (hM : MdbLinks th (L.mem s) G) (hC : CdtRel th (L.mem s) σ G) (hI : MdbInv (L.mem s) G)

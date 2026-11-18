@@ -34,7 +34,7 @@ set_option maxHeartbeats 8000000 in
 (`NtfnKeepHyp` [W]) and, at the `XTopAt` states, the interrupt layout
 (`IntLayout` [P]) and the IRQ node's slots holding null or notification caps
 (`IrqSlotOK` [J], l4v `valid_irq_node`). -/
-theorem xFinIrq_of {AR : A → Fl4Spec.Cr3 → Prop} {th : TypedHeap}
+theorem xFinIrq_of [Fl4Proofs.P1.PlainStore st] {AR : A → Fl4Spec.Cr3 → Prop} {th : TypedHeap}
     (hN : ∀ Z : XSets, Z.th = th → XFinAt (L := L) arI FinNtfnK AR Z.th)
     (hXD : XPostDelHyp (L := L) arI AR th) (hKeep : NtfnKeepHyp (L := L) arI th)
     (hLay : ∀ (Z : XSets) s a σ, Z.th = th → XTopAt (L := L) AR Z s a σ → IntLayout th (L.ksb s))

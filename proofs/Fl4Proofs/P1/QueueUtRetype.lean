@@ -58,6 +58,7 @@ reset. -/
 structure UtRetypeP3 (st : machine.Store S) [L : LawfulStore st] {A : Type _} (ar : machine.Arch A)
     (Adm : PSets → Prop) (T Cs Ω : Set U64) (H : Heap) (Sg Rp Scs Nt : Set U64) (Z : U64 → Nat) (U : Set U64)
     (UtOk : S → U64 → capability.Cap → Aeneas.Std.Array obj.Slot 3#usize → Prop) : Prop where
+  shared : SharedUtPlace st ar Adm T Cs Ω H Sg Rp Scs Nt Z U UtOk
   sets : T = H.tcbs ∧ Ω = H.omega ∧ Sg = H.frame ∧ Rp = H.replies ∧ Scs = H.scs ∧ Nt = H.ntfns ∧ Z = H.scBits
   adm : ∀ H' : Heap, HeapOK H' → H' 0#u64 = none → Adm (PSets.ofHeap H')
   core0 : 0#u64 ∈ Cs
@@ -168,7 +169,8 @@ theorem UtRetypeP3.utPlace {A : Type _} {ar : machine.Arch A} {Adm : PSets → P
     UtPlace st ar Adm T Cs Ω H Sg Rp Scs Nt Z U UtOk := by
   obtain ⟨eT, eΩ, eSg, eRp, eScs, eNt, eZ⟩ := P.sets
   subst eT eΩ eSg eRp eScs eNt eZ
-  refine ⟨fun Ac s0 s a extra slot ptr sb fi dev reset aligned nt us dest off win hOk hrs D hslot hU hC => ?_⟩
+  refine ⟨P.shared,
+    fun Ac s0 s a extra slot ptr sb fi dev reset aligned nt us dest off win hOk hrs D hslot hU hC => ?_⟩
   obtain ⟨hR, hrun⟩ := P.run Ac s0 s a extra slot ptr sb fi dev reset aligned nt us dest off win hOk hrs D hslot hU hC
   obtain ⟨hc0, Ac1, hX, ec, ecs, esc, na, nb, -⟩ := hC
   have hb := hX.blk

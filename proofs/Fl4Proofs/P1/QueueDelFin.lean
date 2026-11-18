@@ -186,14 +186,20 @@ theorem fin_vs {A : Type _} {ar : machine.Arch A} (hA : P0.ArchTotal ar) {V : U6
       · exact W _ (vspace.unmap_page_table.vs hA s a z w x P.vs fun r1 => P.pd Ac' s r1 w h.fr hb)
       · exact K
     · exact K
-  · simp only [objects.finalise_cap, objects.finalise_cap_object, L.encryption_mask_eq, bind_ok,
-      bne_self_eq_false, Bool.false_eq_true, ↓reduceIte, ite_self]
-    split
+  · simp only [objects.finalise_cap, objects.finalise_cap_object, bind_ok, Bool.false_eq_true, ↓reduceIte]
+    apply WP.spec_bind (Pₘ := fun r => WritesIn st s r.1 V)
     · split
-      · exact W _ (vspace.unmap_page.vs hA s a y asid vaddr x P.vs (fun r1 => P.pt Ac' s r1 vaddr h.fr hb)
-          (fun r1 => P.pd Ac' s r1 vaddr h.fr hb) (fun r1 => P.pdpt Ac' s r1 vaddr h.fr hb))
-      · simpa only [bind_ok, uncurry_apply_pair] using K
-    · simpa only [bind_ok, uncurry_apply_pair] using K
+      · split
+        · exact vspace.unmap_page.vs hA s a y asid vaddr x P.vs (fun r1 => P.pt Ac' s r1 vaddr h.fr hb)
+            (fun r1 => P.pd Ac' s r1 vaddr h.fr hb) (fun r1 => P.pdpt Ac' s r1 vaddr h.fr hb)
+        · exact (WP.spec_ok _).2 (WritesIn.refl _ _)
+      · exact (WP.spec_ok _).2 (WritesIn.refl _ _)
+    · rintro ⟨s1, a1⟩ hw
+      cases fin <;> cases w <;> simp only [↓reduceIte, Bool.false_eq_true, uncurry_apply_pair]
+      all_goals first
+        | exact (WP.spec_ok _).2 ⟨h.vs P.vs hw, DelCapOK.null, DelCapOK.null⟩
+        | exact WP.spec_bind (P0.objects.retire_dma_frame.p0 st ar s1 a1 x y L.total hA) fun _ _ =>
+            (WP.spec_ok _).2 ⟨h.vs P.vs hw, DelCapOK.null, DelCapOK.null⟩
   · simp only [objects.finalise_cap, objects.finalise_cap_object, bind_ok]
     split
     · split

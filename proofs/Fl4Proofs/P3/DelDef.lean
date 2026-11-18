@@ -224,7 +224,7 @@ def DefPost (W Wp : S → A → Fl4Spec.State Unit → MdbGhost → Prop)
     WPost W Wp res.1 res.2.1 res.2.2 σ' G'
 
 /-- **FL4's deferred finalisation loop refines `finalise_slot slot False`.** -/
-theorem deferred_loop (W Wp : S → A → Fl4Spec.State Unit → MdbGhost → Prop)
+theorem deferred_loop [Fl4Proofs.P1.PlainStore st] (W Wp : S → A → Fl4Spec.State Unit → MdbGhost → Prop)
     (Rd : S → A → Fl4Spec.State Unit → MdbGhost → U64 → Prop) (th : TypedHeap) (hP : Placed th)
     (hF : FinalHyp (L := L) th) (hH : DelHypsWR (L := L) arI W Wp Rd th)
     (sl : Fl4Spec.CslotPtr) (hA : AbsSlot th sl) (s0 : S) (σ0 : Fl4Spec.State Unit) (G0 : MdbGhost)

@@ -131,7 +131,7 @@ theorem PDERel_clr5 {L1 : Set U64} {w : U64} {x : PDE} (h : PDERel L1 w x) : PDE
 section
 variable {S : Type} {st : machine.Store S} [L : LawfulStore st]
 
-theorem mapped_entry_small {L4 L3 L2 L1 : Set U64} (s : S) (σ : State Unit)
+theorem mapped_entry_small [PlainStore st] {L4 L3 L2 L1 : Set U64} (s : S) (σ : State Unit)
     (hPt : PtRel L4 L3 L2 L1 (L.mem s) σ) (hPP : PtPlaced L4 L3 L2 L1) {r1 : U64} (hr1 : r1 ∈ L4)
     (ptr rt asid vaddr : U64) (dev mp : Bool)
     (hf : ExceptT.run (findVspaceForAsid (Z := Unit) asid.bv) σ = ({(.ok r1.bv, σ)}, False)) :
@@ -196,7 +196,7 @@ theorem mapped_entry_small {L4 L3 L2 L1 : Set U64} (s : S) (σ : State Unit)
       show decide (fb = addrFromPPtr ptr.bv) = true
       rw [decide_eq_true_iff, ← hfb, ← paddr_bv, hadrE]
 
-theorem mapped_entry_large {L4 L3 L2 L1 : Set U64} (s : S) (σ : State Unit)
+theorem mapped_entry_large [PlainStore st] {L4 L3 L2 L1 : Set U64} (s : S) (σ : State Unit)
     (hPt : PtRel L4 L3 L2 L1 (L.mem s) σ) (hPP : PtPlaced L4 L3 L2 L1) {r1 : U64} (hr1 : r1 ∈ L4)
     (ptr rt asid vaddr : U64) (dev mp : Bool)
     (hf : ExceptT.run (findVspaceForAsid (Z := Unit) asid.bv) σ = ({(.ok r1.bv, σ)}, False)) :
@@ -337,7 +337,7 @@ entry's accessed bit (invisible to the relation and to the model) and
 replies with whether it was set, one of the model's answers. FL4 does not
 set `Restart` first; `VsReplyHyps.replyR` matches its reply with l4v's
 `Restart` and reply. -/
-theorem tac_rel {A : Type} {th : TypedHeap} {P L4 L3 L2 L1 : Set U64}
+theorem tac_rel [Fl4Proofs.P1.PlainStore st] {A : Type} {th : TypedHeap} {P L4 L3 L2 L1 : Set U64}
     {SR : S → A → Fl4Spec.State Unit → Prop} (hH : VsTacHyps st A th P L4 L3 L2 L1 SR)
     (s : S) (a : A) (σ : Fl4Spec.State Unit) (hU : UR st th P L4 L3 L2 L1 SR s a σ) (hPl : Placed th)
     (hPP : PtPlaced L4 L3 L2 L1) (hPS : ∀ b, PtWAll L4 L3 L2 L1 b → ¬ SlotW th b) (hVP : VsPlaced P (L.ksb s))
@@ -559,7 +559,7 @@ theorem tac_rel {A : Type} {th : TypedHeap} {P L4 L3 L2 L1 : Set U64}
 
 /-- **Frame `TestAndClearAccessed` (l4h 0023/0029)**, from `decode_frame`
 (see `tac_rel`). -/
-theorem frame_tac_rel {A : Type} {ar : machine.Arch A} {th : TypedHeap} {P L4 L3 L2 L1 : Set U64}
+theorem frame_tac_rel [Fl4Proofs.P1.PlainStore st] {A : Type} {ar : machine.Arch A} {th : TypedHeap} {P L4 L3 L2 L1 : Set U64}
     {SR : S → A → Fl4Spec.State Unit → Prop} (hH : VsTacHyps st A th P L4 L3 L2 L1 SR)
     (s : S) (a : A) (σ : Fl4Spec.State Unit) (hU : UR st th P L4 L3 L2 L1 SR s a σ) (hPl : Placed th)
     (hPP : PtPlaced L4 L3 L2 L1) (hPS : ∀ b, PtWAll L4 L3 L2 L1 b → ¬ SlotW th b) (hVP : VsPlaced P (L.ksb s))

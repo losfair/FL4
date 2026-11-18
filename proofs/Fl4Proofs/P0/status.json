@@ -1,12 +1,13 @@
 {
- "functions": 1053,
- "proved": 1053,
+ "functions": 1058,
+ "proved": 1058,
  "manual": [
   "ept.map_frame",
   "syscall.handle_unknown_syscall",
   "tcb.decode",
   "untyped.decode",
   "untyped.reset_untyped_loop",
+  "untyped.shared_extent",
   "vcpu.decode",
   "vcpu.decode_loop1",
   "vcpu.decode_loop2",

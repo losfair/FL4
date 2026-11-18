@@ -153,7 +153,7 @@ theorem utOkRU_J {H : P1.Heap} {Cs : Set U64} (hRU : RegionUnrefJ (L := L) arI H
 decode's start ⇒ the retype's `CreateOK` (P1's kernel entry). Named:
 `RegionUnrefJ` [J], the new TCBs' debug links and the VT-x types at
 `UtJOk`. -/
-theorem utRetypeP3_ofJ (arI : machine.Arch A) (hA : P0.ArchTotal arI) (H : P1.Heap) (Cs U : Set U64)
+theorem utRetypeP3_ofJ [Fl4Proofs.P1.PlainStore st] (arI : machine.Arch A) (hA : P0.ArchTotal arI) (H : P1.Heap) (Cs U : Set U64)
     (Adm : P1.PSets → Prop) (hAdm : ∀ H' : P1.Heap, P1.HeapOK H' → H' 0#u64 = none → Adm (P1.PSets.ofHeap H'))
     (h0Cs : 0#u64 ∈ Cs) (hrcb : Fl4Spec.resetChunkBits = 16) (hppS : PPFrame)
     (hRU : RegionUnrefJ (L := L) arI H Cs) (hDbg : UtDbgTcbP (L := L) arI H Cs (UtJOk (L := L) arI H Cs))

@@ -349,7 +349,7 @@ theorem decode_invocation_ioport (th : TypedHeap) (hP : Placed th) (s : S) (ar :
 
 /-- **An untyped cap** (`untyped_retype_refines_fl4P`, every object type,
 resets included). -/
-theorem decode_invocation_untyped (th : TypedHeap) (s : S) (ar : A)
+theorem decode_invocation_untyped [Fl4Proofs.P1.PlainStore st] (th : TypedHeap) (s : S) (ar : A)
     (σ : Fl4Spec.State Unit) (G : MdbGhost)
     (hR : StateRel th (L.mem s) σ) (hV : SlotsValid th (L.mem s)) (hP : Placed th)
     (hM : MdbLinks th (L.mem s) G) (hC : CdtRel th (L.mem s) σ G) (hI : MdbInv (L.mem s) G)

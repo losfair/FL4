@@ -70,7 +70,7 @@ structure TcbXRest (X : S → A → Fl4Spec.State Unit → Prop) (s : S) (ar : A
 caller runnable, `DelInv`, the deletion's premises at `XTop`, the bound;
 the extra caps `XcRel`, `NcHyp`; `ActReady` at `WX` for the buffer's
 reschedule), the invoked slot `sl` a slot of the typed heap. -/
-theorem decode_invocation_threadXC {AR : A → Fl4Spec.Cr3 → Prop} {Z : XSets} (s : S) (ar : A)
+theorem decode_invocation_threadXC [Fl4Proofs.P1.PlainStore st] {AR : A → Fl4Spec.Cr3 → Prop} {Z : XSets} (s : S) (ar : A)
     (σ : Fl4Spec.State Unit) (hX : XTopAt (L := L) AR Z s ar σ) (hKA : KsApart Z.N Z.T Z.E Z.R Z.B (L.ksb s))
     (hC : CurRun σ) (hTh : ∀ t, Z.th t = some .tcb → t ∈ Z.T) (hDI : DelInv Z.th (L.mem s))
     (hXF : XFinHyps (L := L) arI AR Z.th) (hXP : XPreemptHyp (L := L) arI AR Z.th)

@@ -29,7 +29,7 @@ theorem delE_restart {th : TypedHeap} {K : Nat} {s s1 : S} {σ σ1 : Fl4Spec.Sta
 
 /-- **CNode Revoke**, decode and invoke, with the deletes of the children
 proved. -/
-theorem cnode_revoke_full (th : TypedHeap) (s : S) (ar : A)
+theorem cnode_revoke_full [Fl4Proofs.P1.PlainStore st] (th : TypedHeap) (s : S) (ar : A)
     (σ : Fl4Spec.State Unit) (G : MdbGhost)
     (hR : StateRel th (L.mem s) σ) (hV : SlotsValid th (L.mem s)) (hP : Placed th)
     (hM : MdbLinks th (L.mem s) G) (hC : CdtRel th (L.mem s) σ G)
@@ -61,7 +61,7 @@ theorem cnode_revoke_full (th : TypedHeap) (s : S) (ar : A)
 
 /-- **CNode Delete**, decode and invoke, for any cap, with the deletion
 proved. -/
-theorem cnode_delete_full (th : TypedHeap) (s : S) (ar : A)
+theorem cnode_delete_full [Fl4Proofs.P1.PlainStore st] (th : TypedHeap) (s : S) (ar : A)
     (σ : Fl4Spec.State Unit) (G : MdbGhost)
     (hR : StateRel th (L.mem s) σ) (hV : SlotsValid th (L.mem s)) (hP : Placed th)
     (hM : MdbLinks th (L.mem s) G) (hC : CdtRel th (L.mem s) σ G)

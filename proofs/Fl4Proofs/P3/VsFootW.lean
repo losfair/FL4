@@ -258,6 +258,7 @@ theorem VsPdUnmapHyps.foot (hPl : Placed th) (hH : VsPdUnmapHyps st A ar th P L4
 
 theorem VsPdptInnerHyps.foot (hH : VsPdptInnerHyps st A ar L4 SR) :
     VsPdptInnerHyps st A ar L4 (FootSR st SR s0 W) where
+  flushPSKeep := fun s a σ asid h => WP.spec_mono (hH.flushPSKeep s a σ asid h.1) fun _ hS => ⟨hS, h.2⟩
   pml4Stable := foot_stab (fun b h => hsub b (pml4W_foot h)) hH.pml4Stable
   flushAllOK := hH.flushAllOK
   flushAllH := fun s a σ vs asid h =>
@@ -332,7 +333,7 @@ variable {S : Type} {st : machine.Store S} [L : LawfulStore st]
 
 set_option maxHeartbeats 4000000 in
 /-- **The footprint of `frame_map_rel`** (`VsFootW`). -/
-theorem frame_map_foot {A : Type} {ar : machine.Arch A} {th : TypedHeap} {P L4 L3 L2 L1 : Set U64}
+theorem frame_map_foot [Fl4Proofs.P1.PlainStore st] {A : Type} {ar : machine.Arch A} {th : TypedHeap} {P L4 L3 L2 L1 : Set U64}
     {SR : S → A → Fl4Spec.State Unit → Prop} (hH : VsFrameHyps st A ar th P L4 L3 L2 L1 SR)
     (s : S) (a : A) (σ : Fl4Spec.State Unit) (hPl : Placed th) (hVP : VsPlaced P (L.ksb s))
     (hD : VsSlotsDisj th P (L.ksb s)) (hPP : PtPlaced L4 L3 L2 L1)
@@ -366,7 +367,7 @@ theorem frame_map_foot {A : Type} {ar : machine.Arch A} {th : TypedHeap} {P L4 L
 
 set_option maxHeartbeats 4000000 in
 /-- **The footprint of `frame_map_large_rel`** (`VsFootW`). -/
-theorem frame_map_large_foot {A : Type} {ar : machine.Arch A} {th : TypedHeap} {P L4 L3 L2 L1 : Set U64}
+theorem frame_map_large_foot [Fl4Proofs.P1.PlainStore st] {A : Type} {ar : machine.Arch A} {th : TypedHeap} {P L4 L3 L2 L1 : Set U64}
     {SR : S → A → Fl4Spec.State Unit → Prop} (hH : VsFrameHypsL st A ar th P L4 L3 L2 L1 SR)
     (s : S) (a : A) (σ : Fl4Spec.State Unit) (hPl : Placed th) (hVP : VsPlaced P (L.ksb s))
     (hD : VsSlotsDisj th P (L.ksb s)) (hPP : PtPlaced L4 L3 L2 L1)
@@ -400,7 +401,7 @@ theorem frame_map_large_foot {A : Type} {ar : machine.Arch A} {th : TypedHeap} {
 
 set_option maxHeartbeats 4000000 in
 /-- **The footprint of `frame_map_huge_rel`** (`VsFootW`). -/
-theorem frame_map_huge_foot {A : Type} {ar : machine.Arch A} {th : TypedHeap} {P L4 L3 L2 L1 : Set U64}
+theorem frame_map_huge_foot [Fl4Proofs.P1.PlainStore st] {A : Type} {ar : machine.Arch A} {th : TypedHeap} {P L4 L3 L2 L1 : Set U64}
     {SR : S → A → Fl4Spec.State Unit → Prop} (hH : VsFrameHypsL st A ar th P L4 L3 L2 L1 SR)
     (s : S) (a : A) (σ : Fl4Spec.State Unit) (hPl : Placed th) (hVP : VsPlaced P (L.ksb s))
     (hD : VsSlotsDisj th P (L.ksb s)) (hPP : PtPlaced L4 L3 L2 L1)
@@ -434,7 +435,7 @@ theorem frame_map_huge_foot {A : Type} {ar : machine.Arch A} {th : TypedHeap} {P
 
 set_option maxHeartbeats 4000000 in
 /-- **The footprint of `frame_unmap_rel`** (`VsFootW`). -/
-theorem frame_unmap_foot {A : Type} {ar : machine.Arch A} {th : TypedHeap} {P L4 L3 L2 L1 : Set U64}
+theorem frame_unmap_foot [Fl4Proofs.P1.PlainStore st] {A : Type} {ar : machine.Arch A} {th : TypedHeap} {P L4 L3 L2 L1 : Set U64}
     {SR : S → A → Fl4Spec.State Unit → Prop} (hH : VsFrameUnmapHyps st A ar th P L4 L3 L2 L1 SR)
     (s : S) (a : A) (σ : Fl4Spec.State Unit) (hPl : Placed th) (hVP : VsPlaced P (L.ksb s))
     (hD : VsSlotsDisj th P (L.ksb s)) (hPP : PtPlaced L4 L3 L2 L1)

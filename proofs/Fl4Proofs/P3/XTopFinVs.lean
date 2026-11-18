@@ -118,7 +118,7 @@ theorem szKeep_finVs {c : capability.Cap} (hv : IsVsFin c) {b : Bool} {σ σ' : 
 
 set_option maxHeartbeats 8000000 in
 /-- **`XFinHyps.rest` holds** (module docstring). -/
-theorem xFinRest_of {AR : A → Fl4Spec.Cr3 → Prop} {th : TypedHeap} (hA : ArchRefines arI AR)
+theorem xFinRest_of [Fl4Proofs.P1.PlainStore st] {AR : A → Fl4Spec.Cr3 → Prop} {th : TypedHeap} (hA : ArchRefines arI AR)
     (hpre : ∀ (Z : XSets) s a σ, Z.th = th → XTopAt (L := L) AR Z s a σ →
       VsCapsIn Z.P Z.L4 Z.L3 Z.L2 Z.L1 (L.mem s) Z.G) :
     XFinAt (L := L) arI FinRestK AR th := by

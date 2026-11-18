@@ -77,7 +77,7 @@ the labels' (each used by its labels only):
   [P], `XDelNtfnHyp` [W];
 * all: `XTopAt` at the typed heap with `KsApart` [J], the typed heap's TCBs
   in `Z.T` [J], the caller runnable (`CurRun`) [J]. -/
-theorem decode_invocation_cnodeX {AR : A → Fl4Spec.Cr3 → Prop} (hAM : ARMask arI AR) {Z : XSets} (s : S)
+theorem decode_invocation_cnodeX [Fl4Proofs.P1.PlainStore st] {AR : A → Fl4Spec.Cr3 → Prop} (hAM : ARMask arI AR) {Z : XSets} (s : S)
     (ar : A) (σ : Fl4Spec.State Unit) (hX : XTopAt (L := L) AR Z s ar σ)
     (hKA : KsApart Z.N Z.T Z.E Z.R Z.B (L.ksb s)) (hC : CurRun σ) (hTh : ∀ t, Z.th t = some .tcb → t ∈ Z.T)
     (hDel : XDelNtfnHyp (L := L) arI AR Z.th)

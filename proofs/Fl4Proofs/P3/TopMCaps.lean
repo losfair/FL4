@@ -303,7 +303,7 @@ theorem decode_invocation_cnodeM (th : TypedHeap) (s : S) (ar : A) (σ : Fl4Spec
 
 /-- **An untyped cap** (`untyped_retype_refines_fl4P`, every object type,
 resets included). -/
-theorem decode_invocation_untypedM (th : TypedHeap) (s : S) (ar : A)
+theorem decode_invocation_untypedM [Fl4Proofs.P1.PlainStore st] (th : TypedHeap) (s : S) (ar : A)
     (σ : Fl4Spec.State Unit) (G : MdbGhost)
     (hR : StateRel th (L.mem s) σ) (hV : SlotsValid th (L.mem s)) (hP : Placed th)
     (hM : MdbLinks th (L.mem s) G) (hC : CdtRel th (L.mem s) σ G) (hI : MdbInv (L.mem s) G)
