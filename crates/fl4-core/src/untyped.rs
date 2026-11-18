@@ -68,6 +68,28 @@ pub fn decode<S: Store, A: Arch>(s: &mut S, a: &mut A, lbl: u64, length: u64, sl
     retype(s, a, slot, reset, aligned, new_type, user_size, dest, node_offset, node_window, device)
 }
 
+/// Frame object type and maximum batch count. Limit each serial cache
+/// transition to 2 MiB as well as the ordinary capability fan-out limit.
+fn shared_frame_spec(bits: u64) -> KResult<(u64, u64)> {
+    match bits {
+        12 => Ok((ot::X86Page4K, RETYPE_FAN_OUT_LIMIT)),
+        21 => Ok((ot::X86LargePage, 1)),
+        _ => invalid_arg(0),
+    }
+}
+
+/// Aligned base, byte length and resulting free index for a checked batch.
+fn shared_extent(u: UntypedCap, used: u64, bits: u64, count: u64) -> KResult<(u64, u64, u64)> {
+    let base = align_up(u.ptr.wrapping_add(used), bits);
+    let block = 1u64 << (u.size_bits & 63);
+    let bytes = count << (bits & 63);
+    let start = base.wrapping_sub(u.ptr);
+    if start > block || bytes > block.wrapping_sub(start) {
+        return Err(Exc::Sys(SysError::NotEnoughMemory { bytes: block.saturating_sub(used) }));
+    }
+    Ok((base, bytes, start.wrapping_add(bytes)))
+}
+
 /// Allocate zeroed device frames from ordinary RAM. Use the same watermark,
 /// derivation tree and destination-slot checks as Retype. Validate the entire
 /// batch before resetting the untyped or changing any page's representation.
@@ -79,34 +101,23 @@ fn retype_shared<S: Store, A: Arch>(s: &mut S, a: &mut A, length: u64, slot: Slo
     };
     let ct = sched::cur_thread(s);
     let bits = msg::syscall_arg(s, ct, buf, 0);
-    let kind = match bits {
-        12 => ot::X86Page4K,
-        21 => ot::X86LargePage,
-        _ => return invalid_arg(0),
-    };
+    let (kind, limit) = shared_frame_spec(bits)?;
     let index = msg::syscall_arg(s, ct, buf, 1);
     let depth = msg::syscall_arg(s, ct, buf, 2);
     let offset = msg::syscall_arg(s, ct, buf, 3);
     let count = msg::syscall_arg(s, ct, buf, 4);
     let dest = retype_dest(s, extra[0], index, depth, offset, count)?;
-    // One serial cache transition covers at most 2 MiB.
-    if bits == 21 && count > 1 { return range(1, 1); }
+    if count > limit { return range(1, limit); }
     ensure_empty_slots(s, dest, offset, offset.wrapping_add(count))?;
 
     let reset = cdt::ensure_no_children(s, slot).is_ok();
     let used = if reset { 0 } else { u.free_index };
-    let base = align_up(u.ptr.wrapping_add(used), bits);
-    let block = 1u64 << (u.size_bits & 63);
-    let bytes = count << (bits & 63);
-    let start = base.wrapping_sub(u.ptr);
-    if start > block || bytes > block.wrapping_sub(start) {
-        return Err(Exc::Sys(SysError::NotEnoughMemory { bytes: block.saturating_sub(used) }));
-    }
+    let (base, bytes, free_index) = shared_extent(u, used, bits, count)?;
     if !a.dma_ram(base, bytes) { return invalid_cap(0); }
     sched::set_thread_state(s, ct, sched::TS_RESTART);
     if reset { reset_untyped(s, a, slot)?; }
     a.dma_frame(base, bytes, true);
-    slot.set_cap(s, Cap::Untyped { ptr: u.ptr, size_bits: u.size_bits, free_index: start.wrapping_add(bytes), is_device: false });
+    slot.set_cap(s, Cap::Untyped { ptr: u.ptr, size_bits: u.size_bits, free_index, is_device: false });
     objects::create_new_objects(s, a, kind, slot, dest, offset, count, base, 0, true);
     Ok(())
 }

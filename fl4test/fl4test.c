@@ -212,6 +212,8 @@ static int test_fpu_read_write(env_t env)
     for (int i = 0; i < 16; i++) {
         frame[160 + i] = 0xa0 + i;
     }
+    /* XSTATE_BV bit 1 marks the XMM payload as present in this image. */
+    frame[512] |= 2;
     uint32_t mxcsr = 0x1f80 | 0xffff0000u;
     memcpy(frame + 24, &mxcsr, 4);
     test_error_eq(seL4_TCB_WriteFPU(get_helper_tcb(&t), fcap, 0), seL4_NoError);

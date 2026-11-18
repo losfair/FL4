@@ -522,7 +522,8 @@ fn frame_address<S: Store, A: Arch>(s: &S, a: &A, f: FrameCap) -> u64 {
     let pa = layout::paddr(f.ptr);
     let (private, shared) = s.frame_masks();
     if private | shared == 0 { return pa; }
-    pa | if !f.is_device || a.private_device_frame(pa) { private } else { shared }
+    if f.is_device && !a.private_device_frame(pa) { return pa | shared; }
+    pa | private
 }
 
 fn frame_gpa<S: Store>(s: &S, address: u64) -> u64 {
