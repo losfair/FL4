@@ -26,6 +26,34 @@ fn alloc_low(bytes: u64) -> u64 {
     address
 }
 
+// Keep the instructions after the CR3 switch inside the new identity map,
+// even if firmware loaded the EFI executable above 4 GiB.
+core::arch::global_asm!(
+    ".section .text",
+    "fl4_handoff:",
+    "mov cr3, rax",
+    "jmp r10",
+    "fl4_handoff_end:",
+);
+
+fn handoff_code() -> u64 {
+    extern "C" {
+        static fl4_handoff: u8;
+        static fl4_handoff_end: u8;
+    }
+    let start = core::ptr::addr_of!(fl4_handoff) as u64;
+    let end = core::ptr::addr_of!(fl4_handoff_end) as u64;
+    let mut address = TOP - 1;
+    // AllocateMaxAddress, EfiLoaderCode: executable in both page tables.
+    if (bs().allocate_pages)(1, 1, 1, &mut address) != SUCCESS {
+        fail("cannot allocate low boot trampoline");
+    }
+    write(address, unsafe {
+        core::slice::from_raw_parts(start as *const u8, (end - start) as usize)
+    });
+    address
+}
+
 fn sev() -> (u64, u64, u64) {
     use core::arch::x86_64::__cpuid_count as cpuid;
     if cpuid(0x8000_0000, 0).eax < 0x8000_001f {
@@ -373,6 +401,7 @@ extern "efiapi" fn efi_main(image: Handle, system: *mut SystemTable) -> Status {
             core::slice::from_raw_parts(rsdp as *const u8, size as usize)
         });
     }
+    let trampoline = handoff_code();
     say!("fl4-efi: entering x86_64 kernel, SEV-SNP {}", cpuid != 0);
     let (mut size, mut key, mut stride, mut version) = (0, 0, 0, 0);
     if (bs().get_memory_map)(
@@ -420,8 +449,7 @@ extern "efiapi" fn efi_main(image: Handle, system: *mut SystemTable) -> Status {
             "cli",
             "cld",
             "mov cr4, r11",
-            "mov cr3, rax",
-            "jmp r10",
+            "jmp r9",
             in("rax") root | mask,
             in("r10") entry,
             in("r11") cr4 & !(1 << 7),
@@ -430,6 +458,7 @@ extern "efiapi" fn efi_main(image: Handle, system: *mut SystemTable) -> Status {
             in("rdx") mask,
             in("rcx") if cpuid != 0 { cpuid_copy } else { 0 },
             in("r8") delta,
+            in("r9") trampoline,
             options(noreturn)
         )
     }
