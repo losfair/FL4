@@ -266,46 +266,9 @@ fn long_mode_entry(kernel: &[u8]) -> Option<u64> {
     Some(rd64(entry, 16))
 }
 
-#[no_mangle]
-extern "efiapi" fn efi_main(image: Handle, system: *mut SystemTable) -> Status {
-    unsafe { ST = system };
-    (bs().set_watchdog_timer)(0, 0, 0, core::ptr::null());
-    say!("fl4-efi: FL4 UEFI loader (x86_64)");
-    let cr4: u64;
-    unsafe { asm!("mov {}, cr4", out(reg) cr4) };
-    if cr4 & (1 << 12) != 0 {
-        fail("firmware uses five-level paging");
-    }
-    let (mask, cpuid, secrets) = sev();
-    let kernel = embedded::KERNEL;
-    if kernel.len() < 64 || &kernel[..5] != b"\x7fELF\x02" || rd16(kernel, 18) != 62 {
-        fail("no x86_64 kernel image built in");
-    }
-    let ph = rd64(kernel, 32) as usize;
-    let stride = rd16(kernel, 54) as usize;
-    let segments = kernel[ph..ph + stride * rd16(kernel, 56) as usize]
-        .chunks_exact(stride)
-        .filter(|p| rd32(p, 0) == 1);
-    let end = segments
-        .clone()
-        .map(|p| rd64(p, 24) + rd64(p, 40))
-        .max()
-        .unwrap_or(0);
-    let entry = long_mode_entry(kernel)
-        .filter(|&entry| {
-            entry >= KERNEL_OFFSET
-                && segments.clone().any(|p| {
-                    let base = rd64(p, 16);
-                    rd32(p, 4) & 1 != 0 && entry >= base && entry - base < rd64(p, 32)
-                })
-        })
-        .unwrap_or_else(|| fail("no long-mode kernel entry"));
-    let mut li = core::ptr::null_mut();
-    if (bs().handle_protocol)(image, &LOADED_IMAGE, &mut li) != SUCCESS {
-        fail("no loaded image protocol");
-    }
-    let li = unsafe { &*(li as *const LoadedImage) };
-    let opts = options(li);
+pub(super) type BootFile<'a> = (u64, u64, &'a [u8]);
+
+fn boot_files<'a>(li: &LoadedImage, opts: &'a Words) -> ([BootFile<'a>; 9], usize) {
     let mut files = [(0, 0, &[][..]); 9];
     let mut n = 1;
     for opt in opts.iter() {
@@ -344,8 +307,54 @@ extern "efiapi" fn efi_main(image: Handle, system: *mut SystemTable) -> Status {
         );
         n += 1;
     }
+    (files, n)
+}
+
+pub unsafe fn start_default(image: Handle, system: *mut SystemTable) -> Status {
+    unsafe { ST = system };
+    (bs().set_watchdog_timer)(0, 0, 0, core::ptr::null());
+    say!("fl4-efi: FL4 UEFI loader (x86_64)");
+    let mut li = core::ptr::null_mut();
+    if (bs().handle_protocol)(image, &LOADED_IMAGE, &mut li) != SUCCESS {
+        fail("no loaded image protocol");
+    }
+    let li = unsafe { &*(li as *const LoadedImage) };
+    let opts = options(li);
+    let (files, n) = boot_files(li, &opts);
+    boot(image, embedded::KERNEL, &files[..n])
+}
+
+pub(super) fn boot(image: Handle, kernel: &[u8], files: &[BootFile<'_>]) -> ! {
+    let cr4: u64;
+    unsafe { asm!("mov {}, cr4", out(reg) cr4) };
+    if cr4 & (1 << 12) != 0 {
+        fail("firmware uses five-level paging");
+    }
+    let (mask, cpuid, secrets) = sev();
+    if kernel.len() < 64 || &kernel[..5] != b"\x7fELF\x02" || rd16(kernel, 18) != 62 {
+        fail("no x86_64 kernel image built in");
+    }
+    let ph = rd64(kernel, 32) as usize;
+    let stride = rd16(kernel, 54) as usize;
+    let segments = kernel[ph..ph + stride * rd16(kernel, 56) as usize]
+        .chunks_exact(stride)
+        .filter(|p| rd32(p, 0) == 1);
+    let end = segments
+        .clone()
+        .map(|p| rd64(p, 24) + rd64(p, 40))
+        .max()
+        .unwrap_or(0);
+    let entry = long_mode_entry(kernel)
+        .filter(|&entry| {
+            entry >= KERNEL_OFFSET
+                && segments.clone().any(|p| {
+                    let base = rd64(p, 16);
+                    rd32(p, 4) & 1 != 0 && entry >= base && entry - base < rd64(p, 32)
+                })
+        })
+        .unwrap_or_else(|| fail("no long-mode kernel entry"));
     let end = end.div_ceil(PAGE) * PAGE;
-    let files_len: u64 = files[..n]
+    let files_len: u64 = files
         .iter()
         .map(|&(_, len, _)| len.div_ceil(PAGE) * PAGE)
         .sum();
@@ -379,7 +388,7 @@ extern "efiapi" fn efi_main(image: Handle, system: *mut SystemTable) -> Status {
         });
     }
     let mut dst = cpuid_copy + 2 * PAGE;
-    for &(src, size, path) in &files[..n] {
+    for &(src, size, path) in files {
         write(dst, unsafe {
             core::slice::from_raw_parts(src as *const u8, size as usize)
         });
