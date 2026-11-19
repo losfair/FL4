@@ -27,12 +27,28 @@ core::arch::global_asm!(
 );
 
 extern "C" {
+    fn __x86_return_thunk();
     fn fl4_restore_user(regs: u64, stack_top: u64, cr3: u64) -> !;
     fn fl4_idle(stack_top: u64) -> !;
     static fl4_idle_loop: u8;
     static fl4_idle_end: u8;
     static fl4_vectors: u8;
     static fl4_common_entry: u8;
+}
+
+/// On the boot core, while the APs are parked and native entries still
+/// use IBPB, switch Rust returns to the Safe RET sequence.
+pub fn patch_return_thunk() {
+    let paddr = crate::paging::image_paddr(__x86_return_thunk as *const () as u64);
+    let opcode = fl4_core::layout::pptr(paddr) as *mut u8;
+    unsafe {
+        assert_eq!(opcode.read_volatile(), 0xc3);
+        assert_eq!(opcode.add(1).read_volatile(), 0xcc);
+        // Write through the physical window. The instruction mapping
+        // stays read-only.
+        opcode.write_volatile(0xeb);
+    }
+    crate::smp::sync_patched_text();
 }
 
 /// The CR3 value entry.S switches to on every entry with the skim window

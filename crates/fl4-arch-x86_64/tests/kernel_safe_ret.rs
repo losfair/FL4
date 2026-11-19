@@ -3,11 +3,7 @@
 
 core::arch::global_asm!(
     include_str!("../../fl4-kernel/src/safe_ret.S"),
-    ".pushsection .data
-FL4_SAFE_RET:
-    .byte 0
-    .popsection
-    .text
+    ".text
     .global fl4_test_finish_safe_ret
 fl4_test_finish_safe_ret:
     fl4_finish_interrupted_safe_ret %rdi

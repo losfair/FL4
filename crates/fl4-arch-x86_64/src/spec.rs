@@ -112,10 +112,13 @@ fn caps() -> Caps {
 }
 
 /// Enable the native policy after all admitted cores have contributed.
-pub fn finish_native_entry_policy() -> bool {
-    let safe_ret = ALL_SAFE_RET.load(Ordering::Relaxed);
-    FL4_SAFE_RET.store(safe_ret, Ordering::Release);
-    safe_ret
+pub fn finish_native_entry_policy(patch_return_thunk: impl FnOnce()) -> bool {
+    if !ALL_SAFE_RET.load(Ordering::Relaxed) {
+        return false;
+    }
+    patch_return_thunk();
+    FL4_SAFE_RET.store(true, Ordering::Release);
+    true
 }
 
 /// Whether the kernel needs the skim window (Meltdown, rogue data cache

@@ -1,6 +1,6 @@
 //! Starting the application processors (seL4 arch/x86/kernel/smp_sys.c).
 use crate::{entry, gdt, kprintln, paging};
-use core::sync::atomic::{AtomicBool, AtomicU8, Ordering};
+use core::sync::atomic::{AtomicBool, AtomicU64, AtomicU8, Ordering};
 use fl4_arch_x86_64::arch::TIMER_VECTOR;
 use fl4_arch_x86_64::{apic, cpu, fpu, percpu, pit, sev::snp, smp, timer};
 use fl4_core::layout::{pptr, MAX_NODES};
@@ -17,6 +17,9 @@ extern "C" {
 const AP_BASE: u64 = 0x8000;
 /// The boot core has created the root task; started cores may schedule.
 static BOOT_DONE: AtomicBool = AtomicBool::new(false);
+/// Zero until the boot core patches text. Then the number of cores
+/// whose instruction streams have been serialized since the patch.
+static TEXT_SYNCED: AtomicU64 = AtomicU64::new(0);
 // AP failures must reach the BSP: a panic halts only the failing CPU and
 // would otherwise look like a startup timeout, allowing boot to continue.
 static AP_REJECTED: AtomicU8 = AtomicU8::new(0);
@@ -145,6 +148,21 @@ pub fn start_aps(apic_ids: &[u32], f: Features) -> usize {
     smp::num_online() as usize
 }
 
+/// Synchronize the patched instructions before enabling the new native
+/// entry path. APs acknowledge the patch while still at the boot barrier.
+pub fn sync_patched_text() {
+    cpu::serialize_instructions();
+    TEXT_SYNCED.store(1, Ordering::Release);
+    let online = smp::num_online();
+    let deadline = cpu::rdtsc() + timer::us_to_ticks(100_000);
+    while TEXT_SYNCED.load(Ordering::Acquire) < online {
+        if cpu::rdtsc() >= deadline {
+            crate::fail("AP did not synchronize patched instructions");
+        }
+        core::hint::spin_loop();
+    }
+}
+
 /// The root task exists: let the other cores schedule.
 pub fn release_aps() {
     BOOT_DONE.store(true, Ordering::Release);
@@ -182,7 +200,13 @@ extern "C" fn fl4_ap_main(c: u64) -> ! {
     if !timer::core_supported() { reject_ap(REJECT_TIMER); }
     timer::init_core(TIMER_VECTOR);
     smp::set_online(c as usize);
+    let mut text_synced = false;
     while !BOOT_DONE.load(Ordering::Acquire) {
+        if !text_synced && TEXT_SYNCED.load(Ordering::Acquire) != 0 {
+            cpu::serialize_instructions();
+            TEXT_SYNCED.fetch_add(1, Ordering::AcqRel);
+            text_synced = true;
+        }
         core::hint::spin_loop();
     }
     entry::lock();

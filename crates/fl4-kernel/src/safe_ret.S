@@ -23,18 +23,17 @@ fl4_safe_ret_insn:
     ret
     int3
 
+/* The byte after RET is both an INT3 and the displacement for JMP rel8
+ * (-52). Boot changes only the opcode, from RET to JMP, on Safe RET CPUs.
+ * Either value decodes correctly if an NMI arrives while APs are parked. */
 fl4_safe_ret_thunk:
     call fl4_safe_ret
     ud2
+    .fill 50 - (. - fl4_safe_ret_thunk), 1, 0xcc
 
-.text
 .global __x86_return_thunk
 .type __x86_return_thunk, @function
 __x86_return_thunk:
-    cmpb $0, FL4_SAFE_RET(%rip)
-    jne fl4_safe_ret_thunk
-    /* A mispredicted guard must resolve before the plain RET. */
-    lfence
     ret
     int3
 .size __x86_return_thunk, . - __x86_return_thunk

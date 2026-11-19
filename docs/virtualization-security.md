@@ -56,9 +56,12 @@ and its [interrupt recovery](https://www.amd.com/en/resources/product-security/b
 
 The x86 kernel builds its Rust libraries from source with external return
 thunks, using the Rust toolchain's `rust-src` component.
-The linked-image check rejects unexpected plain returns. Fallback native
-entries still apply the boot-selected barriers and use the fenced plain
-return in the thunk.
+The linked-image check rejects unexpected plain returns. The image starts
+with a plain RET followed by INT3 in the thunk. On eligible boots the
+boot core changes the RET opcode into a short jump, using the INT3 byte
+as its displacement. Each core serializes instruction fetch before the
+Safe RET native entry policy is published and APs are released. Fallback
+boots keep the plain return and the boot-selected native entry barriers.
 
 ## Firmware and data sampling
 

@@ -73,6 +73,18 @@ pub fn cpuid(leaf: u32, sub: u32) -> Cpuid {
     Cpuid { eax: r.eax, ebx: r.ebx, ecx: r.ecx, edx: r.edx }
 }
 
+/// Serialize instruction fetch after a code patch on a non-SNP CPU.
+#[inline]
+pub fn serialize_instructions() {
+    // The assembly also acts as a compiler memory barrier. LLVM reserves
+    // RBX, so save and restore it here.
+    unsafe {
+        asm!("push rbx", "cpuid", "pop rbx",
+            inout("eax") 0u32 => _, inout("ecx") 0u32 => _, lateout("edx") _,
+            options(preserves_flags));
+    }
+}
+
 #[inline]
 pub fn rdmsr(msr: u32) -> u64 {
     let (lo, hi): (u32, u32);

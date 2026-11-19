@@ -153,9 +153,15 @@ require([op for _, op, _ in safe] == ["lea"]
         and safe[0][2] == "0x8(%rsp),%rsp"
         and [op for _, op, _ in functions["fl4_safe_ret_insn"][:2]] == ["ret", "int3"],
         "Safe RET must discard the speculative target and trap after RET")
-require([op for _, op, _ in functions["__x86_return_thunk"][:5]]
-        == ["cmpb", "jne", "lfence", "ret", "int3"],
-        "plain thunk return must be behind a fenced policy guard")
+fallback = functions["__x86_return_thunk"]
+safe_thunk = functions["fl4_safe_ret_thunk"]
+require([op for _, op, _ in fallback[:2]] == ["ret", "int3"]
+        and fallback[1][0] == fallback[0][0] + 1,
+        "return thunk must start with RET and a one-byte INT3")
+require(fallback[0][0] + 2 - 52 == safe_thunk[0][0]
+        and [op for _, op, _ in safe_thunk[:2]] == ["call", "ud2"]
+        and safe_thunk[0][2].endswith("<fl4_safe_ret>"),
+        "the patched short jump must land at the Safe RET thunk")
 untrain_call = next(i for i, (_, op, arg) in enumerate(native)
                     if op == "call" and arg.endswith("<fl4_untrain_ret>"))
 require(native[untrain_call - 1][1] == "lfence",
