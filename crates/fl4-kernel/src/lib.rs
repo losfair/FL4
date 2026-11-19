@@ -385,9 +385,11 @@ pub extern "C" fn fl4_boot(magic: u32, info: u32, private_mask: u64, cpuid_page:
     let st = unsafe { &mut *STATICS.0.get() };
     let mods = keep_modules(&mb, image.p_end, &ram, &mut st.mods);
     if sev::snp::active() {
-        // Keep firmware RAM, including the SNP secrets, out of device caps.
+        // Keep usable RAM and ACPI NVS (including the SNP secrets)
+        // out of device caps. Root reads ACPI tables in reclaim memory
+        // through private device frames, which retain the encryption bit.
         for e in &mb.mmap[..mb.n_mmap] {
-            if matches!(e.ty, 1 | 3 | 4) {
+            if matches!(e.ty, 1 | 4) {
                 dev.remove(e.base & !(PAGE - 1), e.base.saturating_add(e.len).saturating_add(PAGE - 1) & !(PAGE - 1));
             }
         }
