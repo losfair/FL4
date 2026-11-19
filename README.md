@@ -92,6 +92,15 @@ cargo build --release -p fl4-efi --target x86_64-unknown-uefi
 Copy `target/x86_64-unknown-uefi/release/fl4-efi.efi` to
 `/EFI/BOOT/BOOTX64.EFI` on the EFI system partition.
 
+For an L4H installation with separate boot slots, build the x86_64 EFI
+application with `--features l4h-slot` and set `FL4_BOOT_MODULE` to the
+guest kernel. The loader reads `/l4h/l4h.conf` and `/l4h/dom0/initrd`
+from the loaded image's EFI device. It returns `EFI_LOAD_ERROR` for
+missing or unreadable slot files so the chainloader can try another slot.
+The firmware measures the embedded images into PCR 4. When EFI TCG2 is
+available, FL4 extends PCR 9 with the configuration and initramfs in that
+order. This mode rejects EFI load options.
+
 `xtask/scripts/sev-smoke-image.sh sev` builds `build/sev-smoke/fl4-sev.tar.gz`
 with GRUB. Use `xtask/scripts/sev-smoke-image.sh snp` to build
 `build/snp-smoke/fl4-snp.tar.gz` with FL4's UEFI loader. Both modes require
