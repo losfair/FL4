@@ -43,12 +43,14 @@ impl Firmware<'_> {
 
     /// Read a file from the device that supplied this EFI image.
     pub fn read_file(&self, path: &[u8]) -> Result<FileContents<'_>, &'static str> {
-        let (address, size) = try_read_file(self.loaded, path)?;
-        Ok(FileContents {
-            address,
-            size,
+        self.volume().read_file(path)
+    }
+
+    pub fn volume(&self) -> Volume<'_> {
+        Volume {
+            handle: self.loaded.device,
             _firmware: PhantomData,
-        })
+        }
     }
 
     pub fn print(&self, args: core::fmt::Arguments<'_>) {
@@ -86,6 +88,87 @@ impl Firmware<'_> {
         }
         x86::boot(self.image, kernel, &files[..modules.len()])
     }
+}
+
+const DEVICE_PATH: Guid = Guid(
+    0x0957_6e91,
+    0x6d3f,
+    0x11d2,
+    [0x8e, 0x39, 0x00, 0xa0, 0xc9, 0x69, 0x72, 0x3b],
+);
+
+/// A file system on an EFI device handle.
+pub struct Volume<'a> {
+    handle: Handle,
+    _firmware: PhantomData<&'a Firmware<'a>>,
+}
+
+impl<'a> Volume<'a> {
+    pub fn read_file(&self, path: &[u8]) -> Result<FileContents<'a>, &'static str> {
+        let (address, size) = try_read_file(self.handle, path)?;
+        Ok(FileContents {
+            address,
+            size,
+            _firmware: PhantomData,
+        })
+    }
+
+    pub fn partition_number(&self) -> Option<u32> {
+        disk_path(self.handle).map(|(_, partition)| partition)
+    }
+
+    /// Open a file-system partition on the same disk as this volume.
+    pub fn sibling_partition(&self, number: u32) -> Option<Self> {
+        let (disk, _) = disk_path(self.handle)?;
+        let mut count = 0;
+        let mut handles = core::ptr::null_mut();
+        // EFI_LOCATE_SEARCH_TYPE.ByProtocol enumerates file-system handles.
+        if (bs().locate_handle_buffer)(2, &SIMPLE_FS, core::ptr::null(), &mut count, &mut handles)
+            != SUCCESS
+            || handles.is_null()
+        {
+            return None;
+        }
+        let first = unsafe { core::slice::from_raw_parts(handles, count) };
+        let found = first.iter().copied().find(|&handle| {
+            disk_path(handle)
+                .is_some_and(|(parent, partition)| parent == disk && partition == number)
+        });
+        (bs().free_pool)(handles.cast());
+        found.map(|handle| Self {
+            handle,
+            _firmware: PhantomData,
+        })
+    }
+}
+
+// Return the full hardware path before the hard-drive media node. EFI
+// owns the device path and keeps it live while the handle is present.
+fn disk_path(handle: Handle) -> Option<(&'static [u8], u32)> {
+    let mut protocol = core::ptr::null_mut();
+    if (bs().handle_protocol)(handle, &DEVICE_PATH, &mut protocol) != SUCCESS || protocol.is_null()
+    {
+        return None;
+    }
+    let start = protocol.cast::<u8>();
+    let mut offset = 0;
+    while offset <= 4092 {
+        let node = unsafe { start.add(offset) };
+        let header = unsafe { core::slice::from_raw_parts(node, 4) };
+        let len = rd16(header, 2) as usize;
+        match (header[0], header[1], len) {
+            (4, 1, 42) if offset > 0 => {
+                let partition = unsafe { node.add(4).cast::<u32>().read_unaligned() };
+                return Some((
+                    unsafe { core::slice::from_raw_parts(start, offset) },
+                    partition,
+                ));
+            }
+            (0x7f, _, _) | (_, _, 0..=3) => return None,
+            _ => offset += len,
+        }
+    }
+    None
 }
 
 /// Firmware pages holding a file, freed if the loader returns to EFI.

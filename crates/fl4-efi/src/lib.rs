@@ -100,7 +100,7 @@ struct BootServices {
     close_protocol: usize,
     open_protocol_information: usize,
     protocols_per_handle: usize,
-    locate_handle_buffer: usize,
+    locate_handle_buffer: extern "efiapi" fn(u32, *const Guid, *const c_void, *mut usize, *mut *mut Handle) -> Status,
     locate_protocol: extern "efiapi" fn(*const Guid, *const c_void, *mut *mut c_void) -> Status,
 }
 
@@ -302,12 +302,12 @@ fn options(li: &LoadedImage) -> Words {
 /// Read the file `path` (ASCII, `\` or `/` separated) from the volume
 /// this loader came from, into fresh pages; returns (address, size).
 fn read_file(li: &LoadedImage, path: &[u8]) -> (u64, u64) {
-    try_read_file(li, path).unwrap_or_else(|msg| fail(msg))
+    try_read_file(li.device, path).unwrap_or_else(|msg| fail(msg))
 }
 
-fn try_read_file(li: &LoadedImage, path: &[u8]) -> Result<(u64, u64), &'static str> {
+fn try_read_file(device: Handle, path: &[u8]) -> Result<(u64, u64), &'static str> {
     let mut fs: *mut c_void = core::ptr::null_mut();
-    if (bs().handle_protocol)(li.device, &SIMPLE_FS, &mut fs) != SUCCESS {
+    if (bs().handle_protocol)(device, &SIMPLE_FS, &mut fs) != SUCCESS {
         return Err("no file system on the boot device");
     }
     let fs = fs as *mut SimpleFs;
@@ -620,4 +620,4 @@ pub use x86::start_default;
 #[cfg(target_arch = "x86_64")]
 mod firmware;
 #[cfg(target_arch = "x86_64")]
-pub use firmware::{with_firmware, Firmware, FileContents};
+pub use firmware::{with_firmware, Firmware, FileContents, Volume};
