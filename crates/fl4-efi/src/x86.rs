@@ -266,57 +266,6 @@ fn long_mode_entry(kernel: &[u8]) -> Option<u64> {
     Some(rd64(entry, 16))
 }
 
-type BootFile<'a> = (u64, u64, &'a [u8]);
-
-#[cfg(not(feature = "l4h-slot"))]
-fn boot_files<'a>(li: &LoadedImage, opts: &'a Words) -> ([BootFile<'a>; 9], usize) {
-    let mut files = [(0, 0, &[][..]); 9];
-    let mut n = 1;
-    for opt in opts.iter() {
-        if let Some(path) = opt.strip_prefix(b"rootserver=") {
-            let (pa, len) = read_file(li, path);
-            files[0] = (pa, len, path);
-        } else if let Some(path) = opt.strip_prefix(b"module=") {
-            if n == files.len() {
-                fail("too many boot modules");
-            }
-            let (pa, len) = read_file(li, path);
-            files[n] = (pa, len, path);
-            n += 1;
-        }
-    }
-    if files[0].1 == 0 {
-        if embedded::ROOTSERVER.is_empty() {
-            fail("no x86_64 root task");
-        }
-        files[0] = (
-            embedded::ROOTSERVER.as_ptr() as u64,
-            embedded::ROOTSERVER.len() as u64,
-            b"rootserver",
-        );
-    }
-    // The fallback EFI path has no load options. Allow a boot module to
-    // be built in alongside the root task.
-    if !embedded::MODULE.is_empty() {
-        if n == files.len() {
-            fail("too many boot modules");
-        }
-        files[n] = (
-            embedded::MODULE.as_ptr() as u64,
-            embedded::MODULE.len() as u64,
-            b"module",
-        );
-        n += 1;
-    }
-    (files, n)
-}
-
-#[cfg(feature = "l4h-slot")]
-#[path = "l4h_slot.rs"]
-mod l4h_slot;
-#[cfg(feature = "l4h-slot")]
-use l4h_slot::boot_files;
-
 #[no_mangle]
 extern "efiapi" fn efi_main(image: Handle, system: *mut SystemTable) -> Status {
     unsafe { ST = system };
@@ -356,15 +305,45 @@ extern "efiapi" fn efi_main(image: Handle, system: *mut SystemTable) -> Status {
         fail("no loaded image protocol");
     }
     let li = unsafe { &*(li as *const LoadedImage) };
-    #[cfg(not(feature = "l4h-slot"))]
     let opts = options(li);
-    #[cfg(not(feature = "l4h-slot"))]
-    let (files, n) = boot_files(li, &opts);
-    #[cfg(feature = "l4h-slot")]
-    let (files, n) = match boot_files(li) {
-        Ok(files) => files,
-        Err(status) => return status,
-    };
+    let mut files = [(0, 0, &[][..]); 9];
+    let mut n = 1;
+    for opt in opts.iter() {
+        if let Some(path) = opt.strip_prefix(b"rootserver=") {
+            let (pa, len) = read_file(li, path);
+            files[0] = (pa, len, path);
+        } else if let Some(path) = opt.strip_prefix(b"module=") {
+            if n == files.len() {
+                fail("too many boot modules");
+            }
+            let (pa, len) = read_file(li, path);
+            files[n] = (pa, len, path);
+            n += 1;
+        }
+    }
+    if files[0].1 == 0 {
+        if embedded::ROOTSERVER.is_empty() {
+            fail("no x86_64 root task");
+        }
+        files[0] = (
+            embedded::ROOTSERVER.as_ptr() as u64,
+            embedded::ROOTSERVER.len() as u64,
+            b"rootserver",
+        );
+    }
+    // The fallback EFI path has no load options. Allow a boot module to
+    // be built in alongside the root task.
+    if !embedded::MODULE.is_empty() {
+        if n == files.len() {
+            fail("too many boot modules");
+        }
+        files[n] = (
+            embedded::MODULE.as_ptr() as u64,
+            embedded::MODULE.len() as u64,
+            b"module",
+        );
+        n += 1;
+    }
     let end = end.div_ceil(PAGE) * PAGE;
     let files_len: u64 = files[..n]
         .iter()

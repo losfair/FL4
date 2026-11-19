@@ -5,9 +5,6 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
-[features]
-l4h-slot = []
-
 [[bin]]
 name = "fl4-efi"
 test = false

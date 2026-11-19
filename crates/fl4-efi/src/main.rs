@@ -95,14 +95,6 @@ struct BootServices {
     get_next_monotonic_count: usize,
     stall: extern "efiapi" fn(usize) -> Status,
     set_watchdog_timer: extern "efiapi" fn(usize, u64, usize, *const u16) -> Status,
-    connect_controller: usize,
-    disconnect_controller: usize,
-    open_protocol: usize,
-    close_protocol: usize,
-    open_protocol_information: usize,
-    protocols_per_handle: usize,
-    locate_handle_buffer: usize,
-    locate_protocol: extern "efiapi" fn(*const Guid, *const c_void, *mut *mut c_void) -> Status,
 }
 
 #[repr(C)]
@@ -203,19 +195,15 @@ const MB2: u64 = 2 << 20;
 
 /// Allocate loader data within the architecture's boot address range.
 fn alloc_pages(n: u64) -> u64 {
-    try_alloc_pages(n).unwrap_or_else(|msg| fail(msg))
-}
-
-fn try_alloc_pages(n: u64) -> Result<u64, &'static str> {
     #[cfg(target_arch = "aarch64")]
     let mut p = LOAD_TOP - 1;
     #[cfg(target_arch = "x86_64")]
     let mut p = (1u64 << 32) - 1;
     let r = (bs().allocate_pages)(1, 2, n as usize, &mut p);
     if r != SUCCESS {
-        return Err("out of memory");
+        fail("out of memory");
     }
-    Ok(p)
+    p
 }
 
 /// `len` bytes, 2 MiB aligned.
@@ -272,20 +260,17 @@ fn clean(start: u64, len: u64) {
 }
 
 /// The load options as ASCII words (UCS-2 truncated).
-#[cfg(any(target_arch = "aarch64", not(feature = "l4h-slot")))]
 struct Words {
     buf: [u8; 1024],
     n: usize,
 }
 
-#[cfg(any(target_arch = "aarch64", not(feature = "l4h-slot")))]
 impl Words {
     fn iter(&self) -> impl Iterator<Item = &[u8]> {
         self.buf[..self.n].split(|&c| c == b' ' || c == b'\t').filter(|w| !w.is_empty())
     }
 }
 
-#[cfg(any(target_arch = "aarch64", not(feature = "l4h-slot")))]
 fn options(li: &LoadedImage) -> Words {
     let mut w = Words { buf: [0; 1024], n: 0 };
     if li.options.is_null() {
@@ -305,49 +290,41 @@ fn options(li: &LoadedImage) -> Words {
 
 /// Read the file `path` (ASCII, `\` or `/` separated) from the volume
 /// this loader came from, into fresh pages; returns (address, size).
-#[cfg(any(target_arch = "aarch64", not(feature = "l4h-slot")))]
 fn read_file(li: &LoadedImage, path: &[u8]) -> (u64, u64) {
-    try_read_file(li, path).unwrap_or_else(|msg| fail(msg))
-}
-
-fn try_read_file(li: &LoadedImage, path: &[u8]) -> Result<(u64, u64), &'static str> {
     let mut fs: *mut c_void = core::ptr::null_mut();
     if (bs().handle_protocol)(li.device, &SIMPLE_FS, &mut fs) != SUCCESS {
-        return Err("no file system on the boot device");
+        fail("no file system on the boot device");
     }
     let fs = fs as *mut SimpleFs;
     let mut root: *mut File = core::ptr::null_mut();
     if unsafe { ((*fs).open_volume)(fs, &mut root) } != SUCCESS {
-        return Err("cannot open the boot volume");
+        fail("cannot open the boot volume");
     }
     let mut name = [0u16; 256];
     for (i, &c) in path.iter().take(255).enumerate() {
         name[i] = if c == b'/' { b'\\' as u16 } else { c as u16 };
     }
     let mut f: *mut File = core::ptr::null_mut();
-    let status = unsafe { ((*root).open)(root, &mut f, name.as_ptr(), 1, 0) };
-    unsafe { ((*root).close)(root) };
-    if status != SUCCESS {
-        return Err("missing file");
+    if unsafe { ((*root).open)(root, &mut f, name.as_ptr(), 1, 0) } != SUCCESS {
+        say!("fl4-efi: cannot open {}", core::str::from_utf8(path).unwrap_or("?"));
+        fail("missing file");
     }
-    let result = (|| {
-        let mut info = [0u8; 512];
-        let mut isz = info.len();
-        if unsafe { ((*f).get_info)(f, &FILE_INFO, &mut isz, info.as_mut_ptr()) } != SUCCESS {
-            return Err("cannot stat a file");
-        }
-        let size = rd64(&info, 8);
-        let pages = size.div_ceil(PAGE).max(1);
-        let p = try_alloc_pages(pages)?;
-        let mut n = size as usize;
-        if unsafe { ((*f).read)(f, &mut n, p as *mut u8) } != SUCCESS || n as u64 != size {
-            (bs().free_pages)(p, pages as usize);
-            return Err("cannot read a file");
-        }
-        Ok((p, size))
-    })();
-    unsafe { ((*f).close)(f) };
-    result
+    let mut info = [0u8; 512];
+    let mut isz = info.len();
+    if unsafe { ((*f).get_info)(f, &FILE_INFO, &mut isz, info.as_mut_ptr()) } != SUCCESS {
+        fail("cannot stat a file");
+    }
+    let size = rd64(&info, 8);
+    let p = alloc_pages(size.div_ceil(PAGE).max(1));
+    let mut n = size as usize;
+    if unsafe { ((*f).read)(f, &mut n, p as *mut u8) } != SUCCESS || n as u64 != size {
+        fail("cannot read a file");
+    }
+    unsafe {
+        ((*f).close)(f);
+        ((*root).close)(root);
+    }
+    (p, size)
 }
 
 fn config_table(g: Guid) -> u64 {
