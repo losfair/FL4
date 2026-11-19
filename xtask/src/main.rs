@@ -175,7 +175,9 @@ fn build_aarch64_image(o: &Opts, root_elf: &Path) -> PathBuf {
 fn build_kernel(o: &Opts) -> PathBuf {
     let r = root();
     let mut c = Command::new("cargo");
-    c.current_dir(&r).args(["build", "--release", "-p", "fl4-kernel", "--target", "x86_64-unknown-none"]);
+    c.current_dir(&r).env("RUSTC_BOOTSTRAP", "1")
+        .args(["build", "-Zbuild-std=core,alloc", "--config", "env.RUSTC_BOOTSTRAP='1'",
+            "--release", "-p", "fl4-kernel", "--target", "x86_64-unknown-none"]);
     if o.release {
         c.arg("--features=release-profile");
     }
@@ -184,6 +186,7 @@ fn build_kernel(o: &Opts) -> PathBuf {
     fs::create_dir_all(&out).unwrap();
     let elf = out.join("kernel.elf");
     run(Command::new("ld").args(["-n", "-static", "--gc-sections", "--build-id=none", "-u", "fl4_boot", "-T"]).arg(r.join("crates/fl4-kernel/linker.ld")).arg("--whole-archive").arg(r.join("target/x86_64-unknown-none/release/libfl4_kernel.a")).arg("-o").arg(&elf));
+    run(Command::new("python3").arg(r.join("xtask/scripts/check_vm_asm.py")).arg(&elf));
     let elf32 = out.join("kernel32.elf");
     run(Command::new("objcopy").args(["-O", "elf32-i386"]).arg(&elf).arg(&elf32));
     elf32

@@ -4,14 +4,17 @@
 After cargo xtask kernel: python3 xtask/scripts/check_vm_asm.py build/kernel.elf
 This checks code generation and ordering; it cannot prove predictor isolation.
 """
+from collections import Counter
 import re
 import subprocess
 import sys
 
 text = subprocess.check_output(
-    ["objdump", "-d", "--no-show-raw-insn", sys.argv[1]], text=True
+    [sys.argv[2] if len(sys.argv) > 2 else "objdump",
+     "-d", "--no-show-raw-insn", sys.argv[1]], text=True
 )
 functions = {}
+near_returns = Counter()
 current = None
 for line in text.splitlines():
     symbol = re.match(r"^[0-9a-f]+ <([^>]+)>:$", line)
@@ -20,7 +23,11 @@ for line in text.splitlines():
         functions[current] = []
     insn = re.match(r"^\s*([0-9a-f]+):\s+(\S+)\s*(.*)$", line)
     if insn and current:
-        functions[current].append((int(insn[1], 16), insn[2], insn[3]))
+        op, arg = insn[2], insn[3]
+        functions[current].append((int(insn[1], 16), op, arg))
+        if op in ("ret", "retq", "retl", "retn") or (
+                op in ("rep", "repz") and re.match(r"ret[qnl]?\b", arg)):
+            near_returns[current] += 1
 
 
 def require(ok, message):
@@ -127,4 +134,31 @@ require([op for _, op, _ in vector_entry[:3]] == ["push", "popf", "jmp"]
         and vector_entry[2][2].endswith("<fl4_common_entry>"),
         "fl4_vector_entry must load RFLAGS = 2 before fl4_common_entry")
 require(not any(n.startswith("fl4_test_") for n in functions), "test trampoline in kernel")
-print("VM assembly: RFLAGS cleared on IDT entries, entry/exit barriers, fenced guards, RAP/PBRSB, BHB, VERW and GIF ordering verified")
+# All compiler-generated near returns, including core and compiler-builtins,
+# must go through the thunk. The VM-entry code's returns are after its IBPB
+# and the native entry's two raw returns are in the Intel-only BHB routine.
+require(near_returns == {
+    "fl4_safe_ret_insn": 1,
+    "__x86_return_thunk": 1,
+    "fl4_common_entry": 2,
+    "fl4_vmx_exit": 3,
+    "fl4_svm_run": 3,
+}, f"unexpected near returns: {near_returns}")
+untrain = functions["fl4_untrain_ret"]
+safe = functions["fl4_safe_ret"]
+require(untrain[0][0] & 0x1fffff == 0
+        and untrain[0][0] ^ safe[0][0] == 0x104104,
+        "Safe RET BTB addresses differ from the required alias")
+require([op for _, op, _ in safe] == ["lea"]
+        and safe[0][2] == "0x8(%rsp),%rsp"
+        and [op for _, op, _ in functions["fl4_safe_ret_insn"][:2]] == ["ret", "int3"],
+        "Safe RET must discard the speculative target and trap after RET")
+require([op for _, op, _ in functions["__x86_return_thunk"][:5]]
+        == ["cmpb", "jne", "lfence", "ret", "int3"],
+        "plain thunk return must be behind a fenced policy guard")
+untrain_call = next(i for i, (_, op, arg) in enumerate(native)
+                    if op == "call" and arg.endswith("<fl4_untrain_ret>"))
+require(native[untrain_call - 1][1] == "lfence",
+        "untraining call must be behind a fenced policy guard")
+
+print("VM assembly: RFLAGS cleared on IDT entries, entry/exit barriers, fenced guards, RAP/PBRSB, BHB, Safe RET, VERW and GIF ordering verified")

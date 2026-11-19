@@ -41,6 +41,11 @@ SECTIONS
         *(.skim.text .skim.text.*)
         . = ALIGN(4096);
         HIDDEN(__skim_text_end = .);
+        /* Zen 3/4 BTB aliases for the Safe RET entry and return. */
+        . = ALIGN(0x200000);
+        KEEP(*(.text.safe_ret.untrain))
+        . += 0x104104 - (. - fl4_untrain_ret);
+        KEEP(*(.text.safe_ret.return))
         *(.text .text.*)
     } :text
     .efi.entry : AT(ADDR(.efi.entry) - KERNEL_OFFSET) {
@@ -78,3 +83,6 @@ SECTIONS
     __kernel_end = .;
     /DISCARD/ : { *(.eh_frame*) *(.note*) *(.comment) }
 }
+
+ASSERT((fl4_untrain_ret & 0x1fffff) == 0, "misaligned Safe RET untraining code")
+ASSERT(fl4_safe_ret - fl4_untrain_ret == 0x104104, "Safe RET BTB alias mismatch")

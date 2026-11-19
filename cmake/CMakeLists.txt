@@ -84,6 +84,10 @@ else()
   set(fl4_lib "${fl4_cargo_dir}/${fl4_target}/release/libfl4_kernel.a")
   set(fl4_linker_script "${FL4_ROOT}/crates/fl4-kernel/linker.ld")
   set(fl4_emulation "-Wl,-m,elf_x86_64")
+  # Safe RET must cover compiler-built library code as well.
+  set(fl4_cargo_env RUSTC_BOOTSTRAP=1)
+  # Newer Cargo filters inherited variables in rustc's target probe.
+  set(fl4_cargo_flags -Zbuild-std=core,alloc --config "env.RUSTC_BOOTSTRAP='1'")
 endif()
 set(fl4_gen_config "${CMAKE_CURRENT_BINARY_DIR}/gen_config/kernel/gen_config.json")
 set(fl4_feature_list "")
@@ -104,8 +108,8 @@ endif()
 find_program(CARGO cargo HINTS "$ENV{HOME}/.cargo/bin" REQUIRED)
 add_custom_target(
   fl4_cargo_build
-  COMMAND ${CMAKE_COMMAND} -E env FL4_GEN_CONFIG=${fl4_gen_config} CARGO_TARGET_DIR=${fl4_cargo_dir}
-          ${CARGO} build --quiet --release -p ${fl4_package} --target ${fl4_target} ${fl4_features}
+  COMMAND ${CMAKE_COMMAND} -E env FL4_GEN_CONFIG=${fl4_gen_config} CARGO_TARGET_DIR=${fl4_cargo_dir} ${fl4_cargo_env}
+          ${CARGO} build ${fl4_cargo_flags} --quiet --release -p ${fl4_package} --target ${fl4_target} ${fl4_features}
   WORKING_DIRECTORY ${FL4_ROOT}
   BYPRODUCTS ${fl4_lib}
   DEPENDS kernel_config_headers
@@ -119,6 +123,15 @@ set_target_properties(kernel.elf PROPERTIES LINKER_LANGUAGE C LINK_DEPENDS "${fl
 target_link_options(kernel.elf PRIVATE -nostdlib -static -Wl,--build-id=none -Wl,-n
                     -Wl,-T,${fl4_linker_script} ${fl4_emulation} -Wl,--gc-sections -Wl,-u,fl4_boot)
 target_link_libraries(kernel.elf PRIVATE -Wl,--whole-archive ${fl4_lib} -Wl,--no-whole-archive)
+if(NOT FL4_AARCH64)
+  find_package(Python3 REQUIRED COMPONENTS Interpreter)
+  set(fl4_asm_check "${FL4_ROOT}/xtask/scripts/check_vm_asm.py")
+  set_property(TARGET kernel.elf APPEND PROPERTY LINK_DEPENDS "${fl4_asm_check}")
+  add_custom_command(TARGET kernel.elf POST_BUILD
+      COMMAND "${Python3_EXECUTABLE}" "${fl4_asm_check}" "$<TARGET_FILE:kernel.elf>" "${CMAKE_OBJDUMP}"
+      VERBATIM)
+endif()
+
 
 if(FL4_AARCH64)
   # AArch64 boots through FL4's UEFI loader with the kernel built in

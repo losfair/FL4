@@ -506,6 +506,9 @@ pub extern "C" fn fl4_boot(magic: u32, info: u32, private_mask: u64, cpuid_page:
         kprintln!("FL4: creating the root task failed: {}", why);
         fail("root task");
     }
+    if spec::finish_native_entry_policy() {
+        kprintln!("FL4: native entry uses AutoIBRS and Safe RET");
+    }
     kprintln!("FL4: starting the root task at {:#x}", image.entry);
     entry::lock();
     smp::release_aps();

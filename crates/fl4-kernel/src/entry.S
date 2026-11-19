@@ -92,6 +92,19 @@ fl4_common_entry:
     pushq %r14
     pushq %r15
     cld
+    cmpb $0, FL4_SNP_POISONED(%rip)
+    jne .Lpoisoned
+    cmpb $0, FL4_SAFE_RET(%rip)
+    je .Lentry_barrier
+    lfence
+    call fl4_untrain_ret
+    fl4_finish_interrupted_safe_ret
+    jmp .Lentry_protected
+.Lentry_barrier:
+    lfence
+    movl FL4_SPEC_ENTRY(%rip), %r11d
+    fl4_spec_barrier %r11d
+.Lentry_protected:
     /* A wrong injection type can give an error-code vector a frame
      * without an error code. Reject an invalid CS before the common path
      * can mistake that malformed frame for a user entry and relocate it. */
@@ -103,10 +116,6 @@ fl4_common_entry:
     call fl4_bad_entry_frame
     ud2
 .Lframe_cs_ok:
-    cmpb $0, FL4_SNP_POISONED(%rip)
-    jne .Lpoisoned
-    movl FL4_SPEC_ENTRY(%rip), %r11d
-    fl4_spec_barrier %r11d
     fl4_clear_guest_gprs
     movq %rsp, %rbp
     /* The kernel's tables, if not on them already. rbx keeps the CR3 to

@@ -18,6 +18,11 @@ use policy::*;
 #[no_mangle]
 #[cfg_attr(target_os = "none", link_section = ".bss.skim")]
 static FL4_SPEC_ENTRY: AtomicU32 = AtomicU32::new(0);
+/// Published once before running the root task or releasing APs.
+#[no_mangle]
+#[cfg_attr(target_os = "none", link_section = ".bss.skim")]
+static FL4_SAFE_RET: AtomicBool = AtomicBool::new(false);
+static ALL_SAFE_RET: AtomicBool = AtomicBool::new(true);
 #[no_mangle]
 #[cfg_attr(target_os = "none", link_section = ".bss.skim")]
 static FL4_SPEC_BUFFERS: AtomicU32 = AtomicU32::new(0);
@@ -104,6 +109,13 @@ fn caps() -> Caps {
         amd21: a21.eax,
         amd21_ecx: a21.ecx,
     }
+}
+
+/// Enable the native policy after all admitted cores have contributed.
+pub fn finish_native_entry_policy() -> bool {
+    let safe_ret = ALL_SAFE_RET.load(Ordering::Relaxed);
+    FL4_SAFE_RET.store(safe_ret, Ordering::Release);
+    safe_ret
 }
 
 /// Whether the kernel needs the skim window (Meltdown, rogue data cache
@@ -230,6 +242,14 @@ pub fn init_core(bsp: bool) -> bool {
             auto = c.amd21 & AUTO_IBRS != 0;
         }
         FL4_SPEC_BUFFERS.store(1, Ordering::Relaxed);
+    }
+    let safe_ret = native_safe_ret(&c) && !crate::sev::snp::active()
+        && matches!(plan, Ok(_) | Err(Rejected::BufferMicrocode));
+    ALL_SAFE_RET.fetch_and(safe_ret, Ordering::Relaxed);
+    if safe_ret && plan.is_err() {
+        // A native-only boot still needs cross-thread predictor isolation.
+        spec_ctrl |= 2;
+        NO_SMT.store(true, Ordering::Relaxed);
     }
     if spec_ctrl != 0 {
         wrmsr(0x48, rdmsr(0x48) | spec_ctrl);

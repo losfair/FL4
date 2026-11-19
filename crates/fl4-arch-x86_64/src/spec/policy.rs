@@ -158,6 +158,16 @@ fn intel_its_revision(model: u32, stepping: u32) -> Option<u32> {
     })
 }
 
+/// Zen 3/4's BTB aliasing rule is used by the native return thunk.
+/// AutoIBRS protects indirect calls/jumps, and Safe RET protects returns.
+pub fn native_safe_ret(c: &Caps) -> bool {
+    c.vendor == Vendor::Amd
+        && c.family == 0x19
+        && c.smep
+        && c.amd8 & AMD_STIBP != 0
+        && c.amd21 & (LFENCE_SERIAL | AUTO_IBRS) == (LFENCE_SERIAL | AUTO_IBRS)
+}
+
 pub fn select(c: &Caps) -> Result<Plan, Rejected> {
     let mut p = Plan {
         entry: IBPB,
@@ -533,6 +543,25 @@ mod tests {
         assert_eq!(p.vmexit, IBPB);
         c.microcode = 0;
         assert_eq!(select(&c), Err(Rejected::SrsoMicrocode)); // AutoIBRS is insufficient.
+    }
+
+    #[test]
+    fn native_safe_ret_requires_zen3_or_zen4_and_predictor_isolation() {
+        let mut c = amd();
+        c.family = 0x19;
+        c.hypervisor = true;
+        c.amd21 |= AUTO_IBRS | IBPB_BRTYPE | VERW_CLEAR;
+        assert!(native_safe_ret(&c));
+        assert_eq!(select(&c).unwrap().vmexit, IBPB);
+        for family in [0x17, 0x1a] {
+            assert!(!native_safe_ret(&Caps { family, ..c }));
+        }
+        assert!(!native_safe_ret(&Caps { vendor: Vendor::Intel, ..c }));
+        assert!(!native_safe_ret(&Caps { smep: false, ..c }));
+        assert!(!native_safe_ret(&Caps { amd8: c.amd8 & !AMD_STIBP, ..c }));
+        for bit in [AUTO_IBRS, LFENCE_SERIAL] {
+            assert!(!native_safe_ret(&Caps { amd21: c.amd21 & !bit, ..c }));
+        }
     }
 
     #[test]

@@ -14,7 +14,8 @@ use fl4_arch_x86_64::smp;
 use core::sync::atomic::{AtomicU64, Ordering};
 
 core::arch::global_asm!(
-    include_str!("../../fl4-arch-x86_64/src/spec.S"), include_str!("sysret.S"), include_str!("bad_iret.S"), include_str!("entry.S"),
+    include_str!("../../fl4-arch-x86_64/src/spec.S"), include_str!("sysret.S"), include_str!("bad_iret.S"),
+    include_str!("safe_ret.S"), include_str!("entry.S"),
     spec_ibpb = const fl4_arch_x86_64::spec::policy::IBPB,
     spec_rsb = const fl4_arch_x86_64::spec::policy::RSB,
     spec_pbrsb = const fl4_arch_x86_64::spec::policy::PBRSB,

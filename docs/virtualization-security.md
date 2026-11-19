@@ -26,12 +26,17 @@ below. FL4 does not install firmware/microcode updates.
   Affected eIBRS CPUs use the PBRSB CALL/stack-adjust/LFENCE sequence.
   Intel also requires SMEP for native return protection; nested hosts must
   expose it as well.
-* AMD uses IBPB plus 32 nonzero-displacement CALLs where IBPB does not clear
-  return predictions; VM exit omits the CALLs when AutoIBRS provides return
-  protection. AutoIBRS remains enabled when available, but does not
-  replace the IBPB needed for SRSO/VMSCAPE. An AMD bare-metal boot explicitly
-  makes LFENCE dispatch-serializing; nested AMD requires the corresponding
-  CPUID capability.
+* On compatible AMD family 19h CPUs, native entries use AutoIBRS for
+  indirect calls and jumps, and the Zen 3/4 Safe RET thunk for returns.
+  This path requires AutoIBRS, SMEP, STIBP and dispatch-serializing LFENCE
+  on every online CPU. It is disabled under SNP. Native-only boots rejected
+  solely for buffer-clearing capability can still use Safe RET with STIBP
+  and one thread per physical core. Other native AMD entries retain IBPB
+  plus 32 nonzero-displacement CALLs where IBPB leaves return predictions
+  live. Every AMD VM exit retains IBPB and omits the CALLs when AutoIBRS
+  provides return protection. An AMD bare-metal boot explicitly makes
+  LFENCE dispatch-serializing. Nested AMD requires the corresponding CPUID
+  capability.
 * Intel BHI protection uses BHI_DIS_S when available, otherwise the vendor's
   long BHB-clearing sequence. IBHF follows the sequence for virtualized hosts
   and is also used with BHI_DIS_S. Return protection precedes the BHB routine's
@@ -42,10 +47,18 @@ at LFENCE so a mispredicted guard cannot bypass protection and reach a host
 return. Guest GPRs are saved before scratch-register use and cleared before
 restoring the host. SVM keeps GIF clear through host VMLOAD and the barriers.
 
-The initial implementation deliberately issues IBPB on every native entry and
-VM exit. This has a measurable cost, including on newer CPUs. Avoiding redundant
-barriers or introducing compiler-wide return thunks is a separate optimization;
-the existing VMCS/VMCB field and translation caches remain in use.
+For Safe RET, native entry untrains the single return thunk before calling
+Rust. The linker checks the Zen 3/4 BTB alias addresses. If an interrupt
+lands between the thunk's CALL and RET, entry completes the interrupted
+return in the hardware frame before resuming it. This follows the
+[Linux Safe RET design](https://docs.kernel.org/admin-guide/hw-vuln/srso.html)
+and its [interrupt recovery](https://www.amd.com/en/resources/product-security/bulletin/amd-sb-7061.html).
+
+The x86 kernel builds its Rust libraries from source with external return
+thunks, using the Rust toolchain's `rust-src` component.
+The linked-image check rejects unexpected plain returns. Fallback native
+entries still apply the boot-selected barriers and use the fenced plain
+return in the thunk.
 
 ## Firmware and data sampling
 
@@ -101,8 +114,9 @@ at least once before parking it, so a broadcast machine check does not encounter
 a sibling with CR4.MCE=0 and shut down the machine (as documented in
 [Linux's CPU bring-up code](https://github.com/torvalds/linux/blob/master/kernel/cpu.c)).
 
-Native entry barriers use the union of admitted CPUs' actions, frozen before
-userspace starts; VM exits use the local CPU's plan. All admitted CPUs must
+Native entry uses Safe RET only if every admitted CPU supports it. Otherwise
+it uses the union of admitted CPUs' entry barriers. The native policy is frozen
+before userspace starts. VM exits use the local CPU's plan. All admitted CPUs must
 support the common vendor/IBPB operations. An AP requiring stricter SMT
 isolation than the BSP, failing the local mitigation policy, or lacking the
 selected VM backend reports rejection to the BSP and halts. The BSP then halts
@@ -127,9 +141,11 @@ if mistakenly admitted. Enabled CPU IDs and IOAPIC discovery must be preserved.
 The unit matrix covers RDCL_NO independently of eIBRS, Zen 2/3/4/newer paths,
 microcode revision boundaries, nested feature masking, buffer clearing, and
 SMT admission. Host assembly tests execute the actual VMX software exit
-sequences and verify guest GPR/host-stack preservation. The linked-image check
-verifies barriers, fenced conditional skips, CALL traps, return ordering,
-memory-form VERW and SVM GIF ordering:
+sequences and verify guest GPR/host-stack preservation. Safe RET tests check
+that interruption at either instruction produces the correct saved RIP and
+RSP. The linked-image check verifies return thunk coverage, BTB aliasing,
+barriers, fenced conditional skips, CALL traps, return ordering, memory-form
+VERW and SVM GIF ordering:
 
 ```sh
 cargo test -p fl4-arch-x86_64 -p fl4-core -p xtask
