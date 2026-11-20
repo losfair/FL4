@@ -122,6 +122,7 @@ impl SerialGate {
     /// either the probe sees the transaction or it sees the closed gate.
     /// A failed scan releases its ticket before returning; it never runs
     /// an entry, waits for a transaction, or changes the version clock.
+    #[inline(always)]
     pub fn opportunistic_acquire<M: Mem>(&self, m: &M, cpu: u64, mut wait: impl FnMut()) -> bool {
         let p = &self.policy[cpu as usize];
         let generation = m.a_load(&self.contention.0, Ordering::Relaxed);
@@ -249,6 +250,7 @@ pub trait EntryEnv {
     /// Run (`committed`) or drop the queued Arch effects.
     fn finish_effects(&self, committed: bool);
     /// The entry has completed (it will not run again).
+    #[inline(always)]
     fn entry_done(&self);
     /// An interrupt this entry accepted that the run which took effect did
     /// not handle, now forgotten: an aborted attempt polled it at a
@@ -259,6 +261,7 @@ pub trait EntryEnv {
     fn unhandled_irq(&self) -> Option<u64>;
     /// This core now holds the serial gate (released when it leaves the
     /// kernel).
+    #[inline(always)]
     fn holding_gate(&self);
     fn count(&self, _what: Count) {}
 }
@@ -284,6 +287,7 @@ pub const TX_ATTEMPTS: u32 = if cfg!(feature = "serial-gate") { 0 } else { 4 };
 /// that took effect gets an entry of its own afterwards (`unhandled_irq`).
 /// Returns false when a stall cancelled a non-interrupt entry before
 /// it ran.
+#[inline(always)]
 pub fn run_entry<E: EntryEnv>(
     env: &E,
     gate: &SerialGate,
@@ -306,6 +310,7 @@ pub fn run_entry<E: EntryEnv>(
     ran
 }
 
+#[inline(always)]
 fn attempts<E: EntryEnv>(
     env: &E,
     gate: &SerialGate,

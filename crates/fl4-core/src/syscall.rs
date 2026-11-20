@@ -220,6 +220,7 @@ fn cap_fault_recv<S: Store, A: Arch>(s: &mut S, a: &mut A, cptr: u64, lf: Lookup
 }
 
 /// seL4 `handleRecv` (MCS).
+#[inline(always)]
 fn handle_recv<S: Store, A: Arch>(s: &mut S, a: &mut A, blocking: bool, can_reply: bool) {
     let t = sched::cur_thread(s);
     let ep_cptr = t.reg(s, reg::CAP);
@@ -279,6 +280,7 @@ fn handle_yield<S: Store, A: Arch>(s: &mut S, a: &mut A) {
     csc.set_consumed(s, total);
 }
 
+#[inline(always)]
 fn after_invocation<S: Store, A: Arch>(s: &mut S, a: &mut A, r: KResult<()>) -> bool {
     match r {
         Ok(()) => true,
@@ -305,6 +307,7 @@ arch_items!("syscall.rs");
 /// seL4 `handleSyscall` and `slowpath`: `number` is the syscall number
 /// from RDX (as a signed value).
 // (On AArch64 the number is from x7.)
+#[inline(always)]
 pub fn handle_syscall<S: Store, A: Arch>(s: &mut S, a: &mut A, number: i64) {
     let t = sched::cur_thread(s);
     // The syscall instruction is two bytes long.
@@ -326,6 +329,7 @@ pub fn handle_syscall<S: Store, A: Arch>(s: &mut S, a: &mut A, number: i64) {
 }
 
 /// The API syscalls, once the caller's budget is checked.
+#[inline(always)]
 fn dispatch_syscall<S: Store, A: Arch>(s: &mut S, a: &mut A, number: i64) {
     let t = sched::cur_thread(s);
     let cptr = t.reg(s, reg::CAP);
@@ -372,6 +376,7 @@ fn dispatch_syscall<S: Store, A: Arch>(s: &mut S, a: &mut A, number: i64) {
 /// instruction of a thread with trapSyscalls comes here, whatever RDX
 /// holds: none of them is interpreted, SetTLSBase included (GitHub
 /// issue #7).
+#[inline(always)]
 fn unknown_syscall_fault<S: Store, A: Arch>(s: &mut S, a: &mut A, number: u64) {
     if budget_ok(s, a) {
         let t = sched::cur_thread(s);

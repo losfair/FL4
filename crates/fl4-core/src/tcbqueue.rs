@@ -130,6 +130,7 @@ pub fn insert_after<S: Store>(s: &mut S, l: Link, t: Tcb, before: Tcb) {
 }
 
 /// seL4 MCS `tcbAppend`: insert in priority order (FIFO among equals).
+#[inline(always)]
 pub fn append_by_prio<S: Store>(s: &mut S, l: Link, q: Queue, t: Tcb) -> Queue {
     let p = t.prio(s);
     if q.is_empty() || p > q.head.prio(s) {

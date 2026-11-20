@@ -113,6 +113,7 @@ fn tag(t: u64) -> u64 {
 }
 
 impl Cap {
+    #[inline(always)]
     pub fn decode(w0: u64, w1: u64) -> Cap {
         let t = w0 >> 59;
         let p = unpack_ptr(w0);

@@ -24,6 +24,7 @@ fn mask(bits: u64) -> u64 {
 }
 
 /// seL4 `resolveAddressBits`. Errors are lookup faults.
+#[inline(always)]
 pub fn resolve_address_bits<S: Store>(s: &S, node_cap: Cap, cptr: u64, n_bits: u64) -> Result<Resolved, LookupFault> {
     let mut cap = node_cap;
     let mut n = n_bits;
@@ -63,12 +64,14 @@ pub fn resolve_address_bits<S: Store>(s: &S, node_cap: Cap, cptr: u64, n_bits: u
 }
 
 /// seL4 `lookupSlot`: resolve a CPtr in the thread's CSpace.
+#[inline(always)]
 pub fn lookup_slot<S: Store>(s: &S, thread: Tcb, cptr: u64) -> Result<Resolved, LookupFault> {
     let root = thread.slot(t::SLOT_CTABLE).cap(s);
     resolve_address_bits(s, root, cptr, WORD_BITS)
 }
 
 /// seL4 `lookupCap`, with lookup faults as kernel exceptions.
+#[inline(always)]
 pub fn lookup_cap<S: Store>(s: &S, thread: Tcb, cptr: u64) -> KResult<Cap> {
     match lookup_slot(s, thread, cptr) {
         Ok(r) => Ok(r.slot.cap(s)),

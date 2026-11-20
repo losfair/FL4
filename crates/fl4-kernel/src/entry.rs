@@ -114,6 +114,7 @@ pub fn store() -> PhysStore {
     PhysStore { frame_masks: (fl4_arch_x86_64::sev::mask(), 0), ks_base: unsafe { KS_BASE }, cpu: percpu::cpu_index() as u64, tx: false }
 }
 
+#[inline(always)]
 fn save_user(s: &mut PhysStore, f: &Frame) {
     let t = sched::cur_thread(s);
     let r = t.0 + tl::REGS;
@@ -242,6 +243,7 @@ pub fn lock() -> bool {
     !stalled.get()
 }
 
+#[inline(always)]
 fn unlock() {
     let pc = percpu::get();
     if pc.gate_held.get() {
@@ -294,6 +296,7 @@ impl fl4_sync::EntryEnv for KernelEnv {
             arch::discard_effects();
         }
     }
+    #[inline(always)]
     fn entry_done(&self) {
         // An interrupt only an aborted attempt took stays for unhandled_irq.
         let pc = percpu::get();
@@ -308,6 +311,7 @@ impl fl4_sync::EntryEnv for KernelEnv {
         pc.held_used.set(false);
         (v != percpu::NO_IRQ).then_some(v)
     }
+    #[inline(always)]
     fn holding_gate(&self) {
         let pc = percpu::get();
         pc.gate_held.set(true);
@@ -336,6 +340,7 @@ impl fl4_sync::EntryEnv for KernelEnv {
 }
 
 /// Run the kernel's part of an entry (DESIGN.md §7, `fl4_sync::run_entry`).
+#[inline(always)]
 fn run_entry(irq: bool, serial: bool, body: impl FnMut(&mut PhysStore, &mut PhysArch)) -> bool {
     fl4_sync::run_entry(&KernelEnv { serial }, &GATE, irq, body)
 }

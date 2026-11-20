@@ -48,6 +48,7 @@ fn serial_needed() {
 }
 
 /// Queue `e` if a transaction runs; returns whether it did.
+#[inline(always)]
 fn defer(e: Effect) -> bool {
     let pc = percpu::get();
     if !pc.tx.get() {
@@ -92,6 +93,7 @@ pub fn forget_irq(irq: u64) {
     }
 }
 
+#[inline(always)]
 fn switch_vspace(root: u64, asid: u64) {
     tlb::switch(root.wrapping_sub(PPTR_BASE), asid);
 }
@@ -173,6 +175,7 @@ impl Arch for PhysArch {
         }
     }
 
+    #[inline(always)]
     fn set_vspace(&mut self, root: u64, asid: u64) {
         if !defer(Effect::VSpace(root, asid)) {
             switch_vspace(root, asid)

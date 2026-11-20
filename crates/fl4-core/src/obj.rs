@@ -233,6 +233,7 @@ fn sext48(p: u64) -> u64 {
 }
 
 impl Slot {
+    #[inline(always)]
     pub fn cap<S: Store>(self, s: &S) -> Cap {
         let (w0, w1) = s.read_pair(self.0);
         Cap::decode(w0, w1)

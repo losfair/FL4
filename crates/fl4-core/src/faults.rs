@@ -62,6 +62,7 @@ pub fn valid_timeout_handler<S: Store>(s: &S, t: Tcb) -> bool {
 }
 
 /// seL4 `sendFaultIPC`.
+#[inline(always)]
 fn send_fault_ipc<S: Store, A: Arch>(s: &mut S, a: &mut A, t: Tcb, handler: Cap, can_donate: bool, f: Fault) -> bool {
     match handler {
         Cap::Endpoint { ptr, badge, grant, grant_reply, .. } => {
@@ -129,6 +130,7 @@ fn copy_mrs_fault<S: Store>(s: &mut S, sender: Tcb, receiver: Tcb, regs_list: &[
 
 /// seL4 `setMRs_fault`: encode the sender's fault into the receiver's
 /// message registers. Returns the message length.
+#[inline(always)]
 pub fn set_mrs_fault<S: Store, A: Arch>(s: &mut S, a: &A, sender: Tcb, receiver: Tcb, buf: u64) -> u64 {
     let ty = sender.fault_type(s);
     let w0 = sender.fault_w0(s);
@@ -175,6 +177,7 @@ pub fn set_mrs_fault<S: Store, A: Arch>(s: &mut S, a: &A, sender: Tcb, receiver:
     }
 }
 
+#[inline(always)]
 fn copy_mrs_fault_reply<S: Store>(s: &mut S, sender: Tcb, receiver: Tcb, regs_list: &[u64], length: u64) {
     let n = if length < regs_list.len() as u64 { length as usize } else { regs_list.len() };
     let mut i: usize = 0;
@@ -199,6 +202,7 @@ fn copy_mrs_fault_reply<S: Store>(s: &mut S, sender: Tcb, receiver: Tcb, regs_li
 
 /// seL4 `handleFaultReply`: apply the handler's reply. Returns whether the
 /// faulting thread restarts.
+#[inline(always)]
 pub fn handle_fault_reply<S: Store, A: Arch>(s: &mut S, a: &mut A, receiver: Tcb, sender: Tcb) -> bool {
     let tag = msg::msg_info(s, sender);
     let lbl = tag.label;

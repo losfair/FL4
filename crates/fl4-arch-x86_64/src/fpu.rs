@@ -444,11 +444,18 @@ fn restore(t: u64) {
     }
 }
 
+#[inline(always)]
 fn set_ts(on: bool) {
     let pc = percpu::get();
     if pc.ts_set.get() != on {
-        let c = read_cr0();
-        write_cr0(if on { c | CR0_TS } else { c & !CR0_TS });
+        if on {
+            write_cr0(read_cr0() | CR0_TS);
+        } else {
+            // Cheaper than a read and write of CR0. Every switch between
+            // a thread with the FPU disabled and one with it does one or
+            // the other.
+            unsafe { asm!("clts", options(nomem, nostack, preserves_flags)) }
+        }
         pc.ts_set.set(on);
     }
 }
@@ -484,6 +491,7 @@ fn scrub_local() {
 }
 
 /// Exit path: make the FPU right for thread `t`.
+#[inline(always)]
 pub fn switch_to(t: u64, fpu_disabled: bool) {
     if fpu_disabled {
         if !lazy() {

@@ -24,6 +24,7 @@ fn set_queue<S: Store>(s: &mut S, ep: Ep, q: Queue, state: u64) {
 }
 
 /// seL4 `tcbEPAppend`.
+#[inline(always)]
 fn ep_append<S: Store>(s: &mut S, ep: Ep, t: Tcb, state: u64) {
     let q = get_queue(s, ep);
     let q = tcbqueue::append_by_prio(s, Link::Ep, q, t);
@@ -49,6 +50,7 @@ pub fn reorder_ep<S: Store>(s: &mut S, ep_ptr: u64, t: Tcb) {
     set_queue(s, ep, q, st);
 }
 
+#[inline(always)]
 fn unblock_sporadic<S: Store>(s: &mut S, t: Tcb) {
     let sc = Sc(t.sc(s));
     if sporadic::sc_sporadic(s, sc) && sc != sched::cur_sc(s) {
@@ -58,6 +60,7 @@ fn unblock_sporadic<S: Store>(s: &mut S, t: Tcb) {
 
 /// seL4 `sendIPC` (MCS).
 #[allow(clippy::too_many_arguments)]
+#[inline(always)]
 pub fn send_ipc<S: Store, A: Arch>(
     s: &mut S,
     a: &mut A,
@@ -110,6 +113,7 @@ pub fn send_ipc<S: Store, A: Arch>(
 }
 
 /// seL4 `receiveIPC` (MCS).
+#[inline(always)]
 pub fn receive_ipc<S: Store, A: Arch>(s: &mut S, a: &mut A, thread: Tcb, cap: Cap, blocking: bool, reply_cap: Cap) {
     let ep_ptr = cap.ptr();
     let reply = take_reply(s, a, thread, reply_cap);
@@ -143,6 +147,7 @@ fn take_reply<S: Store, A: Arch>(s: &mut S, a: &mut A, thread: Tcb, reply_cap: C
 }
 
 /// No sender waits: block on the endpoint, or return for a polling receive.
+#[inline(always)]
 fn wait_for_sender<S: Store>(s: &mut S, thread: Tcb, ep_ptr: u64, blocking: bool, reply: Reply) {
     if !blocking {
         thread.set_reg(s, crate::layout::reg::BADGE, 0);

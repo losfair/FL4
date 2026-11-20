@@ -24,6 +24,7 @@ pub type ExtraCaps = [Slot; 3];
 pub const NO_EXTRA_CAPS: ExtraCaps = [Slot(0), Slot(0), Slot(0)];
 
 /// seL4 `lookupExtraCaps`. Errors are lookup faults for the given cptr.
+#[inline(always)]
 pub fn lookup_extra_caps<S: Store>(s: &S, thread: Tcb, buf: u64, info: MessageInfo) -> Result<ExtraCaps, Fault> {
     let mut caps = NO_EXTRA_CAPS;
     if buf == 0 {
@@ -133,6 +134,7 @@ fn do_normal_transfer<S: Store>(s: &mut S, sender: Tcb, send_buf: u64, ep: u64, 
 }
 
 /// seL4 `doFaultTransfer`.
+#[inline(always)]
 fn do_fault_transfer<S: Store, A: Arch>(s: &mut S, a: &A, badge: u64, sender: Tcb, receiver: Tcb, recv_buf: u64) {
     let sent = faults::set_mrs_fault(s, a, sender, receiver, recv_buf);
     let ftype = sender.fault_type(s);
@@ -141,6 +143,7 @@ fn do_fault_transfer<S: Store, A: Arch>(s: &mut S, a: &A, badge: u64, sender: Tc
 }
 
 /// seL4 `doIPCTransfer`.
+#[inline(always)]
 pub fn do_ipc_transfer<S: Store, A: Arch>(s: &mut S, a: &A, sender: Tcb, ep: u64, badge: u64, grant: bool, receiver: Tcb) {
     let recv_buf = msg::lookup_ipc_buffer(s, true, receiver);
     if sender.fault_type(s) == fl4_abi::consts::fault::NullFault {
@@ -154,12 +157,14 @@ pub fn do_ipc_transfer<S: Store, A: Arch>(s: &mut S, a: &A, sender: Tcb, ep: u64
 // ---- replies (MCS call stack) ---------------------------------------------
 
 /// seL4 `reply_unlink`.
+#[inline(always)]
 pub fn reply_unlink<S: Store>(s: &mut S, r: Reply, t: Tcb) {
     r.set_tcb(s, 0);
     sched::set_thread_state(s, t, sched::TS_INACTIVE);
 }
 
 /// seL4 `reply_push`.
+#[inline(always)]
 pub fn reply_push<S: Store, A: Arch>(s: &mut S, a: &mut A, caller: Tcb, callee: Tcb, r: Reply, can_donate: bool) {
     let sc_donated = Sc(caller.sc(s));
     r.set_tcb(s, caller.0);
@@ -194,6 +199,7 @@ pub fn reply_pop<S: Store, A: Arch>(s: &mut S, a: &mut A, r: Reply, t: Tcb) {
 }
 
 /// seL4 `reply_remove`.
+#[inline(always)]
 pub fn reply_remove<S: Store, A: Arch>(s: &mut S, a: &mut A, r: Reply, t: Tcb) {
     let next = r.next(s);
     let prev = r.prev(s);
@@ -255,6 +261,7 @@ pub fn cancel_ipc<S: Store, A: Arch>(s: &mut S, a: &mut A, t: Tcb) {
 }
 
 /// seL4 `doReplyTransfer` (MCS).
+#[inline(always)]
 pub fn do_reply_transfer<S: Store, A: Arch>(s: &mut S, a: &mut A, sender: Tcb, r: Reply, grant: bool) {
     let receiver = Tcb(r.tcb(s));
     if receiver.is_null() || receiver.state(s) != sched::TS_BLOCKED_ON_REPLY {

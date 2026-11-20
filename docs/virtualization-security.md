@@ -66,6 +66,15 @@ as its displacement. Each core serializes instruction fetch before the
 Safe RET native entry policy is published and APs are released. Fallback
 boots keep the plain return and the boot-selected native entry barriers.
 
+Under Safe RET every Rust return mispredicts: the thunk's CALL leaves the
+return-stack prediction pointing at its own UD2. A syscall fault and its
+reply used to execute about 65 returns, a quarter of the round trip. The
+functions on that path (entry and exit, the serial gate, syscall dispatch,
+IPC, fault delivery and reply, scheduling and the address-space switch) are
+therefore `#[inline(always)]`. The larger ones with many callers
+(`schedule`, `handle_fault`, `decode_invocation`) stay out of line: inlining
+them grows the image more than it saves.
+
 ## Firmware and data sampling
 
 * Bare-metal Intel parts affected by ITS need a verified model/stepping-specific

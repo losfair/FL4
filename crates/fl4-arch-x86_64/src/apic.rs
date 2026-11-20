@@ -177,6 +177,7 @@ pub const SPURIOUS_VECTOR: u64 = 0xff;
 /// user code raising `int n`), acknowledge it, so that it does not mask
 /// every lower-priority vector (timer, IPIs and all IRQs) on this core
 /// for good. Returns whether it was one, to be otherwise ignored.
+#[inline(always)]
 pub fn ack_stray(v: u64) -> bool {
     if v < STRAY_MIN || v >= SPURIOUS_VECTOR || !in_service(v as u32) {
         return false;

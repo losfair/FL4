@@ -189,6 +189,7 @@ pub fn kernel_root<S: Store>(s: &S) -> u64 {
 }
 
 /// seL4 `setVMRoot`.
+#[inline(always)]
 pub fn set_vm_root<S: Store, A: Arch>(s: &mut S, a: &mut A, t: Tcb) {
     match t.slot(tl::SLOT_VTABLE).cap(s) {
         Cap::Pml4 { ptr, mapped: true, asid } => match find_vspace_for_asid(s, asid) {

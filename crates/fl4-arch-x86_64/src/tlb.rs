@@ -125,6 +125,7 @@ fn holds(asid: u64) -> bool {
 
 /// Run address space `cr3` (a page-table root's physical address) with
 /// ASID `asid` on this core.
+#[inline(always)]
 pub fn switch(cr3: u64, asid: u64) {
     let pc = percpu::get();
     let t = tag(asid);

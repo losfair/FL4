@@ -128,6 +128,7 @@ fn set_flag<S: Store>(s: &mut S, t: Tcb, f: u64, v: bool) {
     t.set_in_queues(s, if v { q | f } else { q & !f });
 }
 
+#[inline(always)]
 pub fn is_schedulable<S: Store>(s: &S, t: Tcb) -> bool {
     if !is_runnable(s, t) {
         return false;
@@ -137,6 +138,7 @@ pub fn is_schedulable<S: Store>(s: &S, t: Tcb) -> bool {
 }
 
 /// seL4 `scheduleTCB`.
+#[inline(always)]
 pub fn schedule_tcb<S: Store>(s: &mut S, t: Tcb) {
     if t == cur_thread(s) && action(s) == ACTION_RESUME_CURRENT && !is_schedulable(s, t) {
         set_action(s, ACTION_CHOOSE_NEW);
@@ -149,6 +151,7 @@ pub fn set_thread_state<S: Store>(s: &mut S, t: Tcb, st: u64) {
     schedule_tcb(s, t);
 }
 
+#[inline(always)]
 pub fn set_blocked_on_reply<S: Store>(s: &mut S, t: Tcb, reply: u64) {
     t.set_state(s, TS_BLOCKED_ON_REPLY);
     t.set_reply_obj(s, reply);
@@ -185,6 +188,7 @@ fn bitmap_dom(dom: u64) -> u64 {
     }
 }
 
+#[inline(always)]
 fn add_to_bitmap<S: Store>(s: &mut S, cpu: u64, dom: u64, prio: u64) {
     let d = bitmap_dom(dom);
     let l1 = prio >> 6;
@@ -237,6 +241,7 @@ fn q_set<S: Store>(s: &mut S, cpu: u64, off: u64, q: Queue) {
 }
 
 /// seL4 `tcbSchedEnqueue`.
+#[inline(always)]
 pub fn enqueue<S: Store>(s: &mut S, t: Tcb) {
     if queued(s, t) {
         return;
@@ -275,6 +280,7 @@ pub fn append<S: Store>(s: &mut S, t: Tcb) {
 }
 
 /// seL4 `tcbSchedDequeue`.
+#[inline(always)]
 pub fn dequeue<S: Store>(s: &mut S, t: Tcb) {
     if !queued(s, t) {
         return;
@@ -345,6 +351,7 @@ pub fn release_enqueue<S: Store>(s: &mut S, t: Tcb) {
 // ---- scheduling decisions --------------------------------------------------
 
 /// seL4 `rescheduleRequired`.
+#[inline(always)]
 pub fn reschedule_required<S: Store>(s: &mut S) {
     let act = action(s);
     if act != ACTION_RESUME_CURRENT && act != ACTION_CHOOSE_NEW && is_schedulable(s, Tcb(act)) {
@@ -354,6 +361,7 @@ pub fn reschedule_required<S: Store>(s: &mut S) {
 }
 
 /// seL4 `possibleSwitchTo`.
+#[inline(always)]
 pub fn possible_switch_to<S: Store>(s: &mut S, t: Tcb) {
     if t.sc(s) == 0 || in_release_queue(s, t) {
         return;
@@ -521,6 +529,7 @@ pub fn check_budget<S: Store, A: Arch>(s: &mut S, a: &mut A) -> bool {
 }
 
 /// seL4 `checkBudgetRestart`.
+#[inline(always)]
 pub fn check_budget_restart<S: Store, A: Arch>(s: &mut S, a: &mut A) -> bool {
     let r = check_budget(s, a);
     let ct = cur_thread(s);
@@ -531,6 +540,7 @@ pub fn check_budget_restart<S: Store, A: Arch>(s: &mut S, a: &mut A) -> bool {
 }
 
 /// seL4 `awaken`: move released threads from the release queue.
+#[inline(always)]
 pub fn awaken<S: Store, A: Arch>(s: &mut S, a: &mut A) {
     crate::timer::fire(s, a);
     let mut fuel: u64 = WALK_FUEL;
@@ -572,6 +582,7 @@ pub fn set_dom_sched<S: Store>(s: &mut S, i: u64, dom: u64, duration: u64) {
     ks_set(s, ks::DOM_SCHEDULE.wrapping_add(i.wrapping_mul(16)).wrapping_add(8), duration);
 }
 
+#[inline(always)]
 fn switch_to_thread<S: Store, A: Arch>(s: &mut S, a: &mut A, t: Tcb) {
     crate::vspace::set_vm_root(s, a, t);
     dequeue(s, t);
@@ -584,6 +595,7 @@ pub fn switch_to_idle_thread<S: Store, A: Arch>(s: &mut S, a: &mut A) {
     set_cur_thread(s, idle);
 }
 
+#[inline(always)]
 fn choose_thread<S: Store, A: Arch>(s: &mut S, a: &mut A) {
     let dom = if NUM_DOMAINS > 1 { cur_domain(s) } else { 0 };
     let cpu = s.cur_cpu();
@@ -596,6 +608,7 @@ fn choose_thread<S: Store, A: Arch>(s: &mut S, a: &mut A) {
     }
 }
 
+#[inline(always)]
 fn schedule_choose_new_thread<S: Store, A: Arch>(s: &mut S, a: &mut A) {
     if domain_time(s) == 0 {
         next_domain(s);
@@ -603,6 +616,7 @@ fn schedule_choose_new_thread<S: Store, A: Arch>(s: &mut S, a: &mut A) {
     choose_thread(s, a);
 }
 
+#[inline(always)]
 fn switch_sched_context<S: Store, A: Arch>(s: &mut S, a: &mut A) {
     let ct = cur_thread(s);
     let tsc = Sc(ct.sc(s));
@@ -661,6 +675,7 @@ pub fn schedule<S: Store, A: Arch>(s: &mut S, a: &mut A) {
 }
 
 /// seL4 `activateThread`.
+#[inline(always)]
 pub fn activate_thread<S: Store, A: Arch>(s: &mut S, a: &mut A) {
     let ct = cur_thread(s);
     if ct.yield_to(s) != 0 {

@@ -129,6 +129,7 @@ pub(crate) fn current_asid(cpu: usize) -> u64 {
     shared(cpu).asid.load(Ordering::SeqCst)
 }
 
+#[inline(always)]
 pub(crate) fn publish_asid(asid: u64) {
     shared(cpu_index()).asid.store(asid, Ordering::SeqCst);
 }
@@ -154,6 +155,7 @@ pub fn register_entry_areas(base: u64, stride: u64) {
 /// KSTACKS[c], and takes NMI, #DB, #MC and #DF (and, briefly, every entry
 /// from user mode) on the stacks of its entry area `c`. Anything else is
 /// the boot core's early boot stack: core 0.
+#[inline(always)]
 fn index_of(rsp: u64, kstacks: u64, skim_base: u64, skim_stride: u64) -> usize {
     let off = rsp.wrapping_sub(kstacks);
     if off < (MAX_CPUS * KSTACK_SIZE) as u64 {
@@ -167,7 +169,7 @@ fn index_of(rsp: u64, kstacks: u64, skim_base: u64, skim_stride: u64) -> usize {
 }
 
 /// The calling core's index, from the stack pointer (`index_of`).
-#[inline]
+#[inline(always)]
 pub fn cpu_index() -> usize {
     let rsp: u64;
     unsafe { core::arch::asm!("mov {}, rsp", out(reg) rsp, options(nomem, nostack, preserves_flags)) };
@@ -176,6 +178,7 @@ pub fn cpu_index() -> usize {
 
 /// The current CPU's private state. Field accesses borrow only shared
 /// references, including when a nested entry uses the same CPU.
+#[inline(always)]
 pub fn get() -> &'static PerCpu {
     &PERCPU.0[cpu_index()]
 }

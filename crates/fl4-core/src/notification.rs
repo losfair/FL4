@@ -56,6 +56,7 @@ fn maybe_donate_sched_context<S: Store, A: Arch>(s: &mut S, a: &mut A, t: Tcb, n
 }
 
 /// seL4 `maybeReturnSchedContext`.
+#[inline(always)]
 pub fn maybe_return_sched_context<S: Store>(s: &mut S, n: Ntfn, t: Tcb) {
     let sc = Sc(n.sc(s));
     if !sc.is_null() && sc.0 == t.sc(s) {
@@ -67,6 +68,7 @@ pub fn maybe_return_sched_context<S: Store>(s: &mut S, n: Ntfn, t: Tcb) {
     }
 }
 
+#[inline(always)]
 fn unblock_sporadic<S: Store>(s: &mut S, t: Tcb) {
     let sc = Sc(t.sc(s));
     if sporadic::sc_sporadic(s, sc) && sc != sched::cur_sc(s) {

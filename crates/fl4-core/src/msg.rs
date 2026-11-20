@@ -24,6 +24,7 @@ pub const BUF_RECV_INDEX: u64 = BUF_RECV_CNODE + 1;
 pub const BUF_RECV_DEPTH: u64 = BUF_RECV_INDEX + 1;
 
 /// A thread's IPC buffer as a kernel address, or 0 (seL4 `lookupIPCBuffer`).
+#[inline(always)]
 pub fn lookup_ipc_buffer<S: Store>(s: &S, is_receiver: bool, t: Tcb) -> u64 {
     let w = t.ipc_buffer(s);
     match t.slot(tl::SLOT_BUFFER).cap(s) {

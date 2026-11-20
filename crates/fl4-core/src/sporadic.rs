@@ -264,6 +264,7 @@ pub fn budget_check<S: Store, A: Arch>(s: &mut S, a: &A, usage_in: u64) {
 }
 
 /// seL4 `refill_unblock_check`.
+#[inline(always)]
 pub fn unblock_check<S: Store>(s: &mut S, sc: Sc) {
     if is_round_robin(s, sc) {
         return;
