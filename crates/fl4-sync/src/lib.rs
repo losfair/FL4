@@ -1,9 +1,10 @@
 //! FL4 transaction runtime: the serial gate (trusted, sim-tested).
 //!
 //! A quiet multi-core machine can take the existing serial gate and execute
-//! an entry directly. Two contenders may queue behind an existing serial
-//! ticket; more contention backs off these probes and entries run concurrently
-//! as transactions (fl4-store's `tx`). An irrevocable entry, or one that
+//! an entry directly. Contenders may queue behind an existing serial ticket,
+//! up to a bound the environment sets (`EntryEnv::probe_successors`); more
+//! contention backs off these probes and entries run concurrently as
+//! transactions (fl4-store's `tx`). An irrevocable entry, or one that
 //! exhausts its retries, waits for the gate
 //! in ticket order. Both forms close the gate and exclude all transactions
 //! before touching memory directly (DESIGN.md §7). Every blocking wait
@@ -19,9 +20,15 @@ pub const MAX_CPUS: usize = fl4_store::tx::MAX_CPUS;
 /// Extra entries to defer after observing a new contention generation.
 /// The observation itself already sends one entry through STM.
 const PROBE_BACKOFF: u64 = 0;
-/// Bounded direct execution remains useful with a short ticket queue;
-/// deeper queues defer to concurrent transactions.
-const PROBE_SUCCESSORS: u64 = 2;
+/// Queued successors a probe may join (`EntryEnv::probe_successors`);
+/// deeper queues defer to concurrent transactions. The simulator keeps
+/// this short bound, so transactions keep overlapping serial entries.
+pub const PROBE_SUCCESSORS: u64 = 2;
+/// A bound no queue of other cores reaches: direct execution unless the
+/// gate is closed for an irrevocable entry. On x86_64 a transaction costs
+/// several times the same entry run directly (DESIGN.md §7), so waiting
+/// for the gate behind other cores' short entries is the faster choice.
+pub const DEEP_PROBE_SUCCESSORS: u64 = MAX_CPUS as u64 - 1;
 
 // Written only by its CPU. Padding keeps backoff updates off other CPUs'
 // cache lines. These relaxed atomics are policy, not synchronization, and
@@ -109,13 +116,15 @@ impl SerialGate {
         m.a_store(&self.active[cpu as usize], 0, Ordering::Release);
     }
 
-    /// Opportunistically reserve a serial ticket, allowing at most two
-    /// queued successors. A new contention generation sends the next entry
-    /// through STM, with no extra cooldown. Successors service IPIs while waiting.
-    /// The caller must not have an active transaction, as for `acquire`.
+    /// Opportunistically reserve a serial ticket, allowing at most
+    /// `successors` queued successors. A new contention generation sends the
+    /// next entry through STM, with no extra cooldown. Successors service
+    /// IPIs while waiting. The caller must not have an active transaction,
+    /// as for `acquire`.
     ///
     /// The CAS reserves the next ticket only if the queue is empty or has
-    /// at most two tickets. After that ticket is served, closing the gate and
+    /// at most `successors` tickets; losing it to another prober retries
+    /// while that still holds. After that ticket is served, closing the gate and
     /// checking every active flag use the same SeqCst handshake as
     /// `acquire`/`enter_tx`, unless the predecessor passes an already closed
     /// and drained gate through the release/acquire of `serving`:
@@ -123,7 +132,7 @@ impl SerialGate {
     /// A failed scan releases its ticket before returning; it never runs
     /// an entry, waits for a transaction, or changes the version clock.
     #[inline(always)]
-    pub fn opportunistic_acquire<M: Mem>(&self, m: &M, cpu: u64, mut wait: impl FnMut()) -> bool {
+    pub fn opportunistic_acquire<M: Mem>(&self, m: &M, cpu: u64, successors: u64, mut wait: impl FnMut()) -> bool {
         let p = &self.policy[cpu as usize];
         let generation = m.a_load(&self.contention.0, Ordering::Relaxed);
         if m.a_load(&p.seen, Ordering::Relaxed) != generation {
@@ -136,22 +145,20 @@ impl SerialGate {
             m.a_store(&p.retry, remaining - 1, Ordering::Relaxed);
             return false;
         }
-        let ticket = m.a_load(&self.serving, Ordering::Acquire);
-        let next = m.a_load(&self.next, Ordering::Relaxed);
-        let queued = next != ticket;
-        if (next.wrapping_sub(ticket) > PROBE_SUCCESSORS)
-            || m.a_cas(
-                &self.next,
-                next,
-                next.wrapping_add(1),
-                Ordering::Relaxed,
-                Ordering::Relaxed,
-            )
-            .is_err()
-        {
-            m.a_add(&self.contention.0, 1, Ordering::Relaxed);
-            return false;
-        }
+        let mut next = m.a_load(&self.next, Ordering::Relaxed);
+        let queued = loop {
+            let ticket = m.a_load(&self.serving, Ordering::Acquire);
+            if next.wrapping_sub(ticket) > successors {
+                m.a_add(&self.contention.0, 1, Ordering::Relaxed);
+                return false;
+            }
+            // Another prober took this ticket: the queue moved, which
+            // is progress; try for the next one.
+            match m.a_cas(&self.next, next, next.wrapping_add(1), Ordering::Relaxed, Ordering::Relaxed) {
+                Ok(_) => break next != ticket,
+                Err(n) => next = n,
+            }
+        };
         if queued {
             while m.a_load(&self.serving, Ordering::Acquire) != next {
                 wait();
@@ -238,6 +245,11 @@ pub trait EntryEnv {
     /// request, and waits still service stalls and accepted interrupts.
     fn prefer_serial(&self) -> bool {
         false
+    }
+    /// How many queued successors a probe for the gate may join before the
+    /// entry runs as a transaction instead.
+    fn probe_successors(&self) -> u64 {
+        PROBE_SUCCESSORS
     }
     /// The store, inside this core's transaction or direct.
     fn store(&self, tx: bool) -> Self::S;
@@ -332,7 +344,7 @@ fn attempts<E: EntryEnv>(
             stalled.set(true);
         }
     };
-    if max_attempts != 0 && gate.opportunistic_acquire(env.mem(), cpu, wait) {
+    if max_attempts != 0 && gate.opportunistic_acquire(env.mem(), cpu, env.probe_successors(), wait) {
         env.count(Count::Serial);
         env.holding_gate();
         if stalled.get() && !irq {
@@ -400,16 +412,16 @@ mod tests {
     fn active_transaction_rejects_probe_and_contention_yields_to_stm() {
         let gate = SerialGate::new();
         gate.enter_tx(&Atomics, 1, || panic!("open gate"));
-        assert!(!gate.opportunistic_acquire(&Atomics, 0, || panic!("unexpected wait")));
+        assert!(!gate.opportunistic_acquire(&Atomics, 0, PROBE_SUCCESSORS, || panic!("unexpected wait")));
         assert_eq!(gate.owner(), u64::MAX);
         // A failed probe must give its ticket back and reopen the gate.
         gate.enter_tx(&Atomics, 2, || panic!("probe stranded the gate"));
         gate.leave_tx(&Atomics, 1);
         gate.leave_tx(&Atomics, 2);
         // Even now that it is empty, contenders get a window for STM.
-        assert!(!gate.opportunistic_acquire(&Atomics, 0, || panic!("unexpected wait")));
-        assert!(!gate.opportunistic_acquire(&Atomics, 1, || panic!("unexpected wait")));
-        let recovered = (0..1024).any(|_| gate.opportunistic_acquire(&Atomics, 0, || panic!("unexpected wait")));
+        assert!(!gate.opportunistic_acquire(&Atomics, 0, PROBE_SUCCESSORS, || panic!("unexpected wait")));
+        assert!(!gate.opportunistic_acquire(&Atomics, 1, PROBE_SUCCESSORS, || panic!("unexpected wait")));
+        let recovered = (0..1024).any(|_| gate.opportunistic_acquire(&Atomics, 0, PROBE_SUCCESSORS, || panic!("unexpected wait")));
         assert!(
             recovered,
             "uncontended entries must recover the direct path"
@@ -448,10 +460,10 @@ mod tests {
         let successor_gate = Arc::clone(&gate);
         let successor = thread::spawn(move || {
             rx.recv().unwrap();
-            successor_gate.opportunistic_acquire(&Atomics, 2, thread::yield_now)
+            successor_gate.opportunistic_acquire(&Atomics, 2, PROBE_SUCCESSORS, thread::yield_now)
         });
         let m = QueueDuringScan { gate: Arc::clone(&gate), start: tx, fired: AtomicBool::new(false) };
-        assert!(!gate.opportunistic_acquire(&m, 0, || panic!("first ticket")));
+        assert!(!gate.opportunistic_acquire(&m, 0, PROBE_SUCCESSORS, || panic!("first ticket")));
         assert!(!successor.join().unwrap(), "a failed scan does not establish exclusion");
         assert_eq!(gate.owner(), u64::MAX);
         gate.leave_tx(&Atomics, 1);
@@ -461,6 +473,17 @@ mod tests {
 
     #[test]
     fn queued_probe_preserves_ticket_order_and_services_calls_across_wraparound() {
+        queued_probes(PROBE_SUCCESSORS);
+    }
+
+    #[test]
+    fn deeper_bound_queues_more_probes() {
+        queued_probes(6);
+    }
+
+    /// `successors` probes queue behind a mandatory entry, are served in
+    /// ticket order across the counter's wraparound, and one more is refused.
+    fn queued_probes(successors: u64) {
         use std::sync::{mpsc, Arc, Mutex};
         use std::thread;
         let gate = Arc::new(SerialGate::new());
@@ -471,13 +494,13 @@ mod tests {
         let order = Arc::new(Mutex::new(std::vec::Vec::new()));
         let (tx, rx) = mpsc::channel();
         let mut workers = std::vec::Vec::new();
-        for cpu in 1..=PROBE_SUCCESSORS {
+        for cpu in 1..=successors {
             let gate = Arc::clone(&gate);
             let order = Arc::clone(&order);
             let tx = tx.clone();
             workers.push(thread::spawn(move || {
                 let mut notified = false;
-                assert!(gate.opportunistic_acquire(&Atomics, cpu, || {
+                assert!(gate.opportunistic_acquire(&Atomics, cpu, successors, || {
                     if !notified {
                         tx.send(cpu).unwrap();
                         notified = true;
@@ -491,14 +514,14 @@ mod tests {
             }));
             assert_eq!(rx.recv().unwrap(), cpu);
         }
-        assert!(!gate.opportunistic_acquire(&Atomics, 3, || panic!("full queue")));
-        assert_eq!(gate.next.load(Ordering::Relaxed), 1);
+        assert!(!gate.opportunistic_acquire(&Atomics, successors + 1, successors, || panic!("full queue")));
+        assert_eq!(gate.next.load(Ordering::Relaxed), successors - 1);
         gate.release(&Atomics);
         for worker in workers { worker.join().unwrap(); }
-        assert_eq!(*order.lock().unwrap(), [1, 2]);
-        assert_eq!(gate.serving.load(Ordering::Acquire), 1);
-        gate.enter_tx(&Atomics, 3, || panic!("successor stranded the gate"));
-        gate.leave_tx(&Atomics, 3);
+        assert_eq!(*order.lock().unwrap(), (1..=successors).collect::<std::vec::Vec<_>>());
+        assert_eq!(gate.serving.load(Ordering::Acquire), successors - 1);
+        gate.enter_tx(&Atomics, successors + 1, || panic!("successor stranded the gate"));
+        gate.leave_tx(&Atomics, successors + 1);
     }
 
     #[derive(Default)]
@@ -596,7 +619,7 @@ mod tests {
                 self.gate.leave_tx(&Atomics, 1);
                 let generation = self.gate.contention.0.load(Ordering::Relaxed);
                 self.gate.policy[2].seen.store(generation, Ordering::Relaxed);
-                assert!(!self.gate.opportunistic_acquire(&Atomics, 2, || panic!("empty ticket queue")),
+                assert!(!self.gate.opportunistic_acquire(&Atomics, 2, PROBE_SUCCESSORS, || panic!("empty ticket queue")),
                     "serial code could delete an object still used by queued effects");
                 self.finishes.set(self.finishes.get() + 1);
             }
@@ -619,7 +642,7 @@ mod tests {
             // Exclusion must end after effects finish.
             let generation = gate.contention.0.load(Ordering::Relaxed);
             gate.policy[2].seen.store(generation, Ordering::Relaxed);
-            assert!(gate.opportunistic_acquire(&Atomics, 2, || panic!("gate stranded")));
+            assert!(gate.opportunistic_acquire(&Atomics, 2, PROBE_SUCCESSORS, || panic!("gate stranded")));
             gate.release(&Atomics);
         }
     }

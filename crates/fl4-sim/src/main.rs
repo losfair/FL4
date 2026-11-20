@@ -238,6 +238,9 @@ const ZOMBIE_LIMIT: u64 = 1_000_000;
 /// 1/K, as a conflict with another core's commit does, so the rest of the
 /// entry runs on zeros.
 static DOOM_READS: AtomicU64 = AtomicU64::new(0);
+/// `--probe-successors`: the queue bound for gate probes (0: the default,
+/// `fl4_sync::PROBE_SUCCESSORS`; the x86_64 kernel uses a deeper one).
+static PROBE: AtomicU64 = AtomicU64::new(0);
 
 impl Conc {
     /// `pct`: run PCT of that depth over about `points` scheduling points.
@@ -956,6 +959,12 @@ impl fl4_sync::EntryEnv for SimEnv {
     }
     fn multi(&self) -> bool {
         true
+    }
+    fn probe_successors(&self) -> u64 {
+        match PROBE.load(Ordering::Relaxed) {
+            0 => fl4_sync::PROBE_SUCCESSORS,
+            n => n,
+        }
     }
     fn prefer_serial(&self) -> bool {
         // Mix entries known to require exclusion with transactions and
@@ -2108,6 +2117,8 @@ struct Run {
     switches: Option<Vec<u64>>,
     /// `--doom-reads`: 1/K of transaction reads doom the transaction.
     doom: u64,
+    /// `--probe-successors`, 0 for the default.
+    probe: u64,
 }
 
 /// How a run ended.
@@ -2146,6 +2157,10 @@ impl Run {
             v.push("--doom-reads".into());
             v.push(self.doom.to_string());
         }
+        if self.probe != 0 {
+            v.push("--probe-successors".into());
+            v.push(self.probe.to_string());
+        }
         v
     }
 
@@ -2173,6 +2188,7 @@ impl Run {
             }
             let sim = bases.iter().find(|b| b.ncores == self.cores).cloned().unwrap_or_else(|| booted(self.cores));
             DOOM_READS.store(self.doom, Ordering::Relaxed);
+            PROBE.store(self.probe, Ordering::Relaxed);
             run_one(sim, self.seed, self.cores, self.steps, VERBOSE.load(Ordering::Relaxed), self.conc || self.tso || self.switches.is_some(), self.pct, self.tso, self.switches.clone(), self.scenario.as_deref());
             let _ = std::io::stdout().flush();
             unsafe { libc::_exit(0) };
@@ -2202,25 +2218,27 @@ impl Run {
 
     fn line(&self) -> String {
         format!(
-            "{} {} {} {} {}{}{}",
+            "{} {} {} {} {}{}{}{}",
             self.seed,
             self.cores,
             self.steps,
             if self.tso { "tso" } else if self.conc { "conc" } else { "serial" },
             self.pct.map_or("random".to_string(), |d| format!("pct{d}")),
             self.scenario.as_ref().map_or(String::new(), |s| format!(" {s}")),
-            if self.doom != 0 { format!(" doom{}", self.doom) } else { String::new() }
+            if self.doom != 0 { format!(" doom{}", self.doom) } else { String::new() },
+            if self.probe != 0 { format!(" probe{}", self.probe) } else { String::new() }
         )
     }
 
     fn parse(l: &str) -> Option<Run> {
         let f: Vec<&str> = l.split_whitespace().collect();
-        if f.len() < 5 || f.len() > 7 || l.starts_with('#') {
+        if f.len() < 5 || f.len() > 8 || l.starts_with('#') {
             return None;
         }
-        // After the five fields: a scenario name, `doomK`, or both.
+        // After the five fields: a scenario name, `doomK`, `probeN`.
         let doom = f[5..].iter().find_map(|t| t.strip_prefix("doom")?.parse().ok()).unwrap_or(0);
-        let scenario = f[5..].iter().find(|t| !t.starts_with("doom")).map(|s| s.to_string());
+        let probe = f[5..].iter().find_map(|t| t.strip_prefix("probe")?.parse().ok()).unwrap_or(0);
+        let scenario = f[5..].iter().find(|t| !t.starts_with("doom") && !t.starts_with("probe")).map(|s| s.to_string());
         Some(Run {
             seed: f[0].parse().ok()?,
             cores: f[1].parse().ok()?,
@@ -2231,6 +2249,7 @@ impl Run {
             scenario,
             switches: None,
             doom,
+            probe,
         })
     }
 }
@@ -2316,7 +2335,7 @@ struct Search {
 
 impl Search {
     fn run(&self, switches: Vec<u64>) -> Run {
-        Run { seed: self.seed, cores: self.cores, steps: self.steps, conc: true, pct: None, tso: false, scenario: None, switches: Some(switches), doom: 0 }
+        Run { seed: self.seed, cores: self.cores, steps: self.steps, conc: true, pct: None, tso: false, scenario: None, switches: Some(switches), doom: 0, probe: 0 }
     }
 
     /// The scheduling points of the unpreempted schedule, from its run.
@@ -2395,12 +2414,13 @@ struct Campaign {
     tso: bool,
     scenario: Option<String>,
     doom: u64,
+    probe: u64,
 }
 
 impl Campaign {
     fn runs(&self) -> Vec<Run> {
         (self.first..self.first + self.seeds)
-            .map(|seed| Run { seed, cores: self.cores, steps: self.steps, conc: self.conc || self.tso, pct: self.pct, tso: self.tso, scenario: self.scenario.clone(), switches: None, doom: self.doom })
+            .map(|seed| Run { seed, cores: self.cores, steps: self.steps, conc: self.conc || self.tso, pct: self.pct, tso: self.tso, scenario: self.scenario.clone(), switches: None, doom: self.doom, probe: self.probe })
             .collect()
     }
 
@@ -2427,6 +2447,7 @@ impl Campaign {
         let extra = self.pct.map_or(String::new(), |d| format!(", PCT depth {d}"))
             + &self.scenario.as_ref().map_or(String::new(), |s| format!(", scenario {s}"))
             + &if self.doom != 0 { format!(", 1/{} of reads doom the transaction", self.doom) } else { String::new() }
+            + &if self.probe != 0 { format!(", probes queue behind up to {} cores", self.probe) } else { String::new() }
             + if cfg!(feature = "serial-gate") { ", every entry under the serial gate" } else { "" };
         println!("fl4-sim: {} seeds, {} cores, {} steps each, {mode}{extra}: {failed} failed", self.seeds, self.cores, self.steps);
         failed
@@ -2466,6 +2487,7 @@ fn main() {
     let pct = args.iter().position(|a| a == "--pct").map(|_| opt("--pct", 3));
     let tso = args.iter().any(|a| a == "--tso");
     DOOM_READS.store(opt("--doom-reads", 0), Ordering::Relaxed);
+    PROBE.store(opt("--probe-successors", 0), Ordering::Relaxed);
     if let Some(i) = args.iter().position(|a| a == "--one") {
         let seed = args[i + 1].parse().unwrap();
         TRACE.store(args.iter().any(|a| a == "--trace"), Ordering::Relaxed);
@@ -2501,7 +2523,7 @@ fn main() {
     // run. Otherwise the one campaign the options describe.
     let suite = args.iter().any(|a| a == "--suite");
     let doom = opt("--doom-reads", 0);
-    let c = |steps, conc, pct, tso, scenario: Option<&str>, seeds| Campaign { seeds, first, cores, steps, conc, pct, tso, scenario: scenario.map(String::from), doom: 0 };
+    let c = |steps, conc, pct, tso, scenario: Option<&str>, seeds| Campaign { seeds, first, cores, steps, conc, pct, tso, scenario: scenario.map(String::from), doom: 0, probe: 0 };
     let quarter = (seeds / 4).max(1);
     let campaigns = if suite {
         vec![
@@ -2519,9 +2541,13 @@ fn main() {
             // reads until they reach commit (GitHub issue #5).
             Campaign { doom: 32, ..c(8000, true, None, false, None, quarter) },
             Campaign { doom: 32, ..c(8000, false, None, true, Some("ep"), quarter) },
+            // The x86_64 kernel's admission: probes queue behind any
+            // number of other cores (fl4_sync::DEEP_PROBE_SUCCESSORS).
+            Campaign { probe: fl4_sync::DEEP_PROBE_SUCCESSORS, ..c(8000, true, None, false, None, quarter) },
+            Campaign { probe: fl4_sync::DEEP_PROBE_SUCCESSORS, ..c(8000, false, None, true, None, quarter) },
         ]
     } else {
-        vec![Campaign { doom, ..c(steps, conc, pct, tso, scenario.as_deref(), seeds) }]
+        vec![Campaign { doom, probe: opt("--probe-successors", 0), ..c(steps, conc, pct, tso, scenario.as_deref(), seeds) }]
     };
     // Every schedule with one preemption at a runtime atomic, for small
     // two-core scenarios.
@@ -2734,7 +2760,7 @@ mod tests {
         // remove the contender before the mandatory serial retry.
         let plain = SimStore { conc: None, ..sim.s.clone() };
         GATE.enter_tx(&plain, 1, || panic!("open gate"));
-        assert!(!GATE.opportunistic_acquire(&plain, 0, || panic!("no serial owner")));
+        assert!(!GATE.opportunistic_acquire(&plain, 0, fl4_sync::PROBE_SUCCESSORS, || panic!("no serial owner")));
         GATE.leave_tx(&plain, 1);
         sim.a.raise(0, irq::RESCHEDULE_IPI);
         let runs = Cell::new(0);

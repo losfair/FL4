@@ -294,7 +294,7 @@ Each kernel entry, and each chunk of a preemptible operation, runs as follows:
 flowchart LR
   E[Kernel entry] --> H{known serial entry?}
   H -->|yes| S[serial gate]
-  H -->|no| P{at most two tickets and probe allowed?}
+  H -->|no| P{queue within the bound and probe allowed?}
   P -->|yes: reserve, await turn, close, no active transactions| Q[run directly, release gate, exit]
   P -->|no: back off probes on contention| B[begin: mark core active, read clock]
   B --> R[run the core entry on the transactional store]
@@ -318,7 +318,7 @@ flowchart LR
   Aligned power-of-two regions of 16 bytes through 8 KiB map to a contiguous stripe interval under the stripe hash, so the runtime enumerates that interval directly in lock order. Other regions retain sorting and deduplication. Saved versions occupy one slot per held stripe, with binary search for read-set validation, instead of an array as large as the global table. The physical backend uses a bulk zero while holding every covering stripe; the simulator retains individual word stores through `Mem::clear`, including their TSO buffering and version history.
 - **The serial gate.** Transactions mark their core active while they run. A core that needs the gate takes it, waits for active transactions to drain, runs the entry directly on memory, and releases it; new transactions wait while it is held. Rare hardware-global operations (IRQ routing, TLB and ASID invalidation) also use it. With one core there are no transactions and no gate: the store is plain memory.
 - **Known serial entries.** `VMEnter` requests serial admission directly when virtualization is available and the current thread has a bound VCPU without syscall trapping: its VCPU barrier would reject a transaction. Other calls retain ordinary probe/transaction admission. The hint skips speculation, not syscall validation, remote-stall handling or accepted interrupts. The simulator mixes hinted entries with transactions through the same runner. VCPU lifecycle barriers and the gate protocol are unchanged.
-- **Opportunistic gate probes.** Before starting a transaction, a core may reserve the next serial ticket with a CAS when at most two tickets are outstanding. The bounded queue lets short overlapping entries use direct execution. A successor services remote calls while waiting; a remote stall cancels a non-interrupt entry before it runs. Once served, the probe inherits a drained gate or closes it with a SeqCst store and scans the transaction-active flags. If another core is active, it releases its ticket and uses STM; otherwise it runs the same core entry directly under the gate. A transaction arriving during a fresh probe either publishes its active flag early enough to make the probe fail or observes the closed gate and waits. A failed probe has no memory effects beyond the gate protocol and remote-call servicing.
+- **Opportunistic gate probes.** Before starting a transaction, a core may reserve the next serial ticket with a CAS while at most a bound of tickets are outstanding; a CAS lost to another prober retries while the queue is still within it. The environment sets the bound (`EntryEnv::probe_successors`). The x86_64 kernel lets a probe queue behind every other core (15): there, a transaction costs several times the same entry run directly (about 4,000–5,000 TSC cycles against 650–750 for the body of an l4h guest syscall's fault or reply, mostly per-access bookkeeping and Safe RET returns), so up to 16 cores, waiting for other cores' short direct entries is faster than running alongside them. The simulator and the AArch64 kernel keep a bound of two, so transactions keep overlapping serial entries there, and two more simulator campaigns run the x86_64 bound. The bounded queue lets short overlapping entries use direct execution. A successor services remote calls while waiting; a remote stall cancels a non-interrupt entry before it runs. Once served, the probe inherits a drained gate or closes it with a SeqCst store and scans the transaction-active flags. If another core is active, it releases its ticket and uses STM; otherwise it runs the same core entry directly under the gate. A transaction arriving during a fresh probe either publishes its active flag early enough to make the probe fail or observes the closed gate and waits. A failed probe has no memory effects beyond the gate protocol and remote-call servicing.
 - **Serial handoff.** The closed word distinguishes open (0), closing/draining (1), and closed with transaction bodies excluded (2). After a successful drain, it stays at 2 while serial tickets are queued. A successor acquires the predecessor's release of the serving ticket, then can reuse that exclusion without another locked close or full flag scan. If release opens the gate, the successor must perform the complete handshake again. A failed probe leaves state 1, so it cannot pass an exclusion certificate while a transaction still runs. A transaction that announces itself late must still observe the continuously closed gate before running its body. The flag array matches the transaction runtime's 16 supported participants, instead of scanning 64 flags.
 - **Contention restores concurrency.** A failed probe or a transaction waiting for a closed gate advances a contention generation. Each core observing a new generation sends its next entry through STM, without the previous extra 256-entry cooldown. The bounded ticket queue and active-transaction check still reject probes under contention; mandatory serial entries retain FIFO tickets and IPI servicing. The generation is only an admission hint. Exclusion depends on the ticket handoff and SeqCst handshake even with stale policy reads. The shorter deferral avoids spending hundreds of short entries in STM after a transient collision; performance across workloads remains an empirical property.
 - **Store specialization.** Once the runtime has selected direct or transactional execution, x86 entry dispatch uses the corresponding `EntryStore<TX>` implementation of the same `Store` interface. The exit path also uses the direct specialization, including VM entry/exit bookkeeping under its existing synchronization. Both forward through the existing `PhysStore` implementation with a constant mode, removing a mode branch from each word access. Kernel logic, capability checks, scheduler semantics, and extracted proof definitions are unchanged. Runtime statistics remain enabled in debug builds; release builds avoid updating their otherwise unused shared counters.
@@ -738,6 +738,32 @@ of a default trait method. An existing simulator IRQ test failed on the
 unmodified base because it expected a transaction on a quiet core, where
 opportunistic admission now runs serially. Its setup now enters policy
 backoff first, ensuring that the test actually exercises an aborted attempt.
+
+**Deep gate probes (x86_64, 2026-11-20).** With the probe bound at two, a
+third concurrent core's entries ran as transactions, and an l4h guest's
+syscall throughput fell as vCPUs were added. Raw `getppid` loops pinned one
+per vCPU in a 6-vCPU guest (Ryzen 7 7700, QEMU/KVM, 6 host cores): 1.13 M
+calls/s with one thread, 2.2 M with two, then 0.75 M with four and 1.12 M
+with six (per-call latency 5.3 µs). Letting probes queue behind every other
+core (§7) gives 1.65 M and 1.53 M, with one and two threads unchanged.
+`run-smpbench.py`, divisor 4, medians of three interleaved boots (higher is
+better):
+
+| Linux vCPUs | Metric | seL4 | FL4 base | Deep probes |
+| ---: | --- | ---: | ---: | ---: |
+| 4 | getpid (calls/s) | 1.20 M | 0.95 M | 1.41 M |
+| 4 | fault_4k (faults/s) | 502 k | 425 k | 473 k |
+| 4 | fork_wait (cycles/s) | 11.6 k | 7.0 k | 8.6 k |
+| 6 | getpid | 1.22 M | 1.06 M | 1.32 M |
+| 6 | fault_4k | 605 k | 491 k | 561 k |
+| 6 | fork_wait | 11.1 k | 8.8 k | 8.5 k |
+
+The other metrics (pipes, futexes, 1 vCPU) are within ±7%. At divisor 4 the
+6-vCPU compute phase reads 8–10% lower with deep probes; at full length
+(divisor 1) both give 5.18 G ops/s, and a two-second pinned compute loop shows
+the same per-vCPU rate, so that is a few milliseconds of fixed start or end
+skew in a short phase, not lost throughput. A full-length 6-vCPU boot gives
+getpid 1.09 M → 1.51 M, fault_4k 562 k → 672 k, fork_wait 9.39 k → 8.84 k.
 
 **Fork serial-gate follow-up (same base).** The gate changes in §7 recover
 direct execution promptly after transient contention, reuse exclusion

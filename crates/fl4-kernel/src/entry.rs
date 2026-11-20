@@ -270,6 +270,9 @@ impl fl4_sync::EntryEnv for KernelEnv {
     fn prefer_serial(&self) -> bool {
         self.serial
     }
+    fn probe_successors(&self) -> u64 {
+        fl4_sync::DEEP_PROBE_SUCCESSORS
+    }
     fn store(&self, tx: bool) -> PhysStore {
         PhysStore { frame_masks: (fl4_arch_x86_64::sev::mask(), 0), ks_base: unsafe { KS_BASE }, cpu: self.cpu(), tx }
     }
