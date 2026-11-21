@@ -27,7 +27,12 @@ below. FL4 does not install firmware/microcode updates.
   fresh WRMSR at each boundary, even if already set, and VM exit fills the RSB.
   Affected eIBRS CPUs use the PBRSB CALL/stack-adjust/LFENCE sequence.
   Intel also requires SMEP for native return protection; nested hosts must
-  expose it as well.
+  expose it as well. With eIBRS and SMEP, native entries skip IBPB, as Linux
+  does: eIBRS keeps user-mode training out of supervisor indirect and
+  alternate return predictions, and SMEP keeps supervisor returns off the
+  user-mode targets of user RSB entries. ITS-affected parts without ITS_NO
+  keep it. VM exits keep IBPB. On GCE N4 the entry IBPB was half of a guest
+  syscall round trip (1.97 to 1.00 us).
 * On compatible AMD family 19h CPUs, native entries use AutoIBRS for
   indirect calls and jumps, and the Zen 3/4 Safe RET thunk for returns.
   This path requires AutoIBRS, SMEP, STIBP and dispatch-serializing LFENCE
@@ -86,6 +91,10 @@ them grows the image more than it saves.
   guest/host isolation is unaffected. Nested Intel relies on L0 implementing
   the advertised IBPB contract: a guest BIOS-signature MSR is not a physical
   host firmware revision.
+* Outside SEV/SEV-SNP the hypervisor is trusted: on Intel, MMIO stale data
+  and RFDS are judged by the reported model, as on bare metal, when the
+  immunity bits are missing (GCE N4 reports no RFDS_NO although RFDS affects
+  Atom cores only).
 * Zen 2's IBPB intrinsically has the branch-type behavior needed for SRSO.
   The bare-metal Zen 2 path also applies the Zenbleed software workaround
   unless the model/stepping has a known fixed microcode revision.
