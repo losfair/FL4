@@ -8,4 +8,3 @@ license.workspace = true
 [dependencies]
 fl4-abi = { path = "../fl4-abi" }
 fl4-core = { path = "../fl4-core" }
-fl4-store = { path = "../fl4-store" }

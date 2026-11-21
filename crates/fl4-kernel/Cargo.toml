@@ -19,4 +19,3 @@ fl4-arch-x86_64 = { path = "../fl4-arch-x86_64" }
 
 [features]
 release-profile = ["fl4-abi/release-profile"]
-serial-gate = ["fl4-sync/serial-gate"]

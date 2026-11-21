@@ -169,7 +169,7 @@ pub fn cache_op(op: u64, root: u64, asid: u64, vaddr: u64, len: u64, paddr: u64)
     let (va, switched) = if in_window(paddr, len) {
         (layout::pptr(paddr), None)
     } else {
-        // Under the serial gate in an SMP kernel (`cache_rule`). Page-table
+        // Under the serial gate in an SMP kernel. Page-table
         // writes of this entry reach the walker before it walks them.
         // PSTATE.PAN does not apply ("no effect on ... data cache
         // instructions, except DC ZVA", DDI 0487J.a).

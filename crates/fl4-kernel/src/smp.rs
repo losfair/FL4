@@ -62,7 +62,7 @@ fn wait_us(us: u64) {
 // bounds check (the transaction runtime's states, the serial gate's slots)
 // and every core bit mask (u64) covers each core `start_aps` may start.
 const _: () = assert!(
-    percpu::MAX_CPUS <= fl4_store::tx::MAX_CPUS && percpu::MAX_CPUS <= fl4_sync::MAX_CPUS && percpu::MAX_CPUS <= 64
+    percpu::MAX_CPUS <= fl4_sync::MAX_CPUS && percpu::MAX_CPUS <= 64
 );
 
 /// Start every other core listed in the MADT, up to the kernel's node

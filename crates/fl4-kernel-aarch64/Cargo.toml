@@ -20,4 +20,3 @@ fl4-bootinfo = { path = "../fl4-bootinfo" }
 
 [features]
 release-profile = ["fl4-abi/release-profile"]
-serial-gate = ["fl4-sync/serial-gate"]

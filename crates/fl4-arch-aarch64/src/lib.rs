@@ -6,7 +6,6 @@
 
 pub mod ap_caps;
 pub mod arch;
-pub mod cache_rule;
 pub mod cpu;
 pub mod el0_access;
 pub mod fpu;

@@ -7,10 +7,3 @@ license.workspace = true
 
 [dependencies]
 fl4-core = { path = "../fl4-core" }
-
-[features]
-# Mutation testing only (DESIGN.md §10): known-broken runtimes the
-# simulator must catch. Never enabled in a kernel build.
-mutant-skip-validation = []
-mutant-no-publish = []
-mutant-clear-no-validate = []

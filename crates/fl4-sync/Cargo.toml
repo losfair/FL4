@@ -1,6 +1,6 @@
 [package]
 name = "fl4-sync"
-description = "FL4 transaction runtime: lock table, serial gate (sim-tested)"
+description = "FL4 kernel entry runtime: serial gate and local paths (sim-tested)"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -11,10 +11,9 @@ fl4-core = { path = "../fl4-core" }
 fl4-store = { path = "../fl4-store" }
 
 [features]
-# Test only (DESIGN.md §13, M4): every entry takes the serial gate, as with
-# a big lock, for differential runs against the transactional runtime.
-serial-gate = []
-# Mutation testing only (DESIGN.md §10).
+# Mutation testing only (DESIGN.md §10): the gate holder does not wait for
+# active local paths, or a local path marks its core active without the
+# store-load order of the handshake.
 mutant-gate-no-wait = []
 mutant-gate-release = []
 # The syscall fast paths beside the gate (run_syscall) without marking the

@@ -31,7 +31,7 @@ use fl4_core::layout::{self, irq, ks, node, reg, tcb as tl, PPTR_BASE};
 use fl4_core::machine::{Arch, Store};
 use fl4_core::obj::{node_get, Slot, Tcb};
 use fl4_core::{sched, syscall};
-use fl4_store::tx;
+use fl4_store::lock;
 use fl4_sync::SerialGate;
 
 /// Simulated physical memory: 0..MEM_BYTES, seen through the kernel window.
@@ -139,13 +139,9 @@ struct Conc {
     gate_held: Vec<AtomicBool>,
     /// Cores that have run all their steps.
     out_of_steps: AtomicU64,
-    /// Per core: reads its transaction made since it was doomed.
-    zombie: Vec<AtomicU64>,
-    check: Mutex<Checker>,
-    /// Per core: the current transaction's reads from memory, and its own
-    /// writes.
-    rlog: Vec<Mutex<Vec<(u64, u64)>>>,
-    wlog: Vec<Mutex<HashMap<u64, u64>>>,
+    /// Per core, while it runs a local path beside the gate: the words it
+    /// writes, for the footprint oracle (`Sim::check_footprint`).
+    footprint: Vec<Mutex<Option<Vec<u64>>>>,
     /// x86-TSO (DESIGN.md §10): per core, the stores not yet visible to
     /// other cores, oldest first. Off unless `--tso`.
     tso: bool,
@@ -153,42 +149,12 @@ struct Conc {
 }
 
 /// What a buffered store writes: a word of simulated memory, or one of the
-/// runtime's atomics (version table, clock, serial gate).
+/// runtime's atomics (serial gate, object locks).
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 enum Target {
     Word(u64),
     Atomic(usize),
 }
-
-/// The snapshot checker (DESIGN.md §10): every value a committed
-/// transaction read from memory must be the word's value where the
-/// transaction serializes (P2): a writer just before its commit version, a
-/// read-only transaction at its start version.
-#[derive(Default)]
-struct Checker {
-    /// Each word written during the run: (version, value), oldest first,
-    /// from its value before the first write. Versions never decrease: two
-    /// commits writing a word hold its stripe's lock in turn.
-    hist: HashMap<u64, Vec<(u64, u64)>>,
-    /// Words written directly while transactions may run (a core's own
-    /// thread context, DESIGN.md §7): not versioned, so not checked.
-    unversioned: HashSet<u64>,
-    checked: u64,
-    skipped: u64,
-}
-
-impl Checker {
-    fn record(&mut self, addr: u64, old: u64, new: u64, version: u64) {
-        self.hist.entry(addr).or_insert_with(|| vec![(0, old)]).push((version, new));
-    }
-
-    /// The value of `addr` at version `rv`, if it was written in the run.
-    fn at(&self, addr: u64, rv: u64) -> Option<u64> {
-        let h = self.hist.get(&addr)?;
-        h.iter().rev().find(|(v, _)| *v <= rv).map(|(_, x)| *x)
-    }
-}
-
 
 struct Baton {
     turn: u64,
@@ -204,9 +170,10 @@ struct Baton {
 
 /// Bounded exhaustive search (DESIGN.md §10, `--explore`): the schedule is
 /// fixed by the list of scheduling points at which the running core is
-/// preempted. Points are the runtime's atomic operations only (version
-/// table, clock, gate): data accesses are bracketed by version checks, so
-/// their order against another core's matters only at those. Otherwise a
+/// preempted. Points are the runtime's atomic operations only (the gate,
+/// object locks): data accesses happen with the gate held or inside a
+/// local path's footprint, so their order against another core's matters
+/// only at those. Otherwise a
 /// core runs until it spins or runs out of steps, then the next one runs.
 struct Explore {
     points: u64,
@@ -245,26 +212,12 @@ thread_local! {
 /// livelocked or deadlocked (DESIGN.md §10, liveness oracle).
 const SPIN_LIMIT: u64 = 2_000_000;
 
-/// Reads a doomed transaction may make before it reaches commit, which
-/// gives it up (liveness oracle). A doomed transaction reads 0 from every
-/// word and drops its writes, so the kernel code runs on zeros: every loop
-/// must still end on that input, or the core never leaves the entry and
-/// the serial gate waits for it forever (GitHub issue #5).
-const ZOMBIE_LIMIT: u64 = 1_000_000;
-
-/// `--doom-reads K`: each read of a transaction dooms it with probability
-/// 1/K, as a conflict with another core's commit does, so the rest of the
-/// entry runs on zeros.
-static DOOM_READS: AtomicU64 = AtomicU64::new(0);
 /// `--fastpath-diff`: run each serial syscall both through the general
 /// path and through `handle_syscall` from the same state, and require the
 /// same memory and machine state (fl4_core::fastpath). Counts: syscalls
 /// checked, and those a fast path ran.
 static FASTPATH_DIFF: AtomicBool = AtomicBool::new(false);
 static FASTPATH_COUNTS: Mutex<(u64, u64)> = Mutex::new((0, 0));
-/// `--probe-successors`: the queue bound for gate probes (0: the default,
-/// `fl4_sync::PROBE_SUCCESSORS`; the x86_64 kernel uses a deeper one).
-static PROBE: AtomicU64 = AtomicU64::new(0);
 
 impl Conc {
     /// `pct`: run PCT of that depth over about `points` scheduling points.
@@ -294,10 +247,7 @@ impl Conc {
             in_kernel: (0..n).map(|_| AtomicBool::new(false)).collect(),
             gate_held: (0..n).map(|_| AtomicBool::new(false)).collect(),
             out_of_steps: AtomicU64::new(0),
-            zombie: (0..n).map(|_| AtomicU64::new(0)).collect(),
-            check: Mutex::new(Checker::default()),
-            rlog: (0..n).map(|_| Mutex::new(Vec::new())).collect(),
-            wlog: (0..n).map(|_| Mutex::new(HashMap::new())).collect(),
+            footprint: (0..n).map(|_| Mutex::new(None)).collect(),
             tso,
             sb: (0..n).map(|_| Mutex::new(StoreBuffer::default())).collect(),
         }
@@ -355,8 +305,7 @@ impl Conc {
         self.wait_turn(cpu, b);
     }
 
-    /// A core waiting for another (the gate, a stripe, a stall it asked
-    /// for): a scheduling point, counted for the liveness oracle.
+    /// A core waiting for another (the gate, a stall it asked for): a scheduling point, counted for the liveness oracle.
     fn spin(&self, cpu: u64) {
         let mut b = self.baton.lock().unwrap();
         b.spins[cpu as usize] += 1;
@@ -418,8 +367,6 @@ struct SimStore {
     mem: Arc<Memory>,
     ks_base: u64,
     cpu: u64,
-    /// Accesses go through this core's transaction.
-    tx: bool,
     conc: Option<Arc<Conc>>,
 }
 
@@ -430,42 +377,16 @@ impl SimStore {
         }
     }
 
-    /// A write outside any transaction: versioned at the current clock
-    /// under the serial gate (no transaction runs), unversioned otherwise.
     fn direct_set(&self, addr: u64, v: u64) {
         if let Some(c) = &self.conc {
-            let old = self.mem_get(addr);
-            let mut k = c.check.lock().unwrap();
-            if !c.gate_held[self.cpu as usize].load(Ordering::SeqCst) {
-                k.unversioned.insert(addr);
+            if let Some(w) = c.footprint[self.cpu as usize].lock().unwrap().as_mut() {
+                w.push(addr);
             }
-            k.record(addr, old, v, tx::clock());
         }
         if self.tso().is_some() {
-            // In order with this core's buffered commit stores.
             self.buffer(Target::Word(addr), v);
         } else {
             self.mem.set(addr, v)
-        }
-    }
-
-    fn log_read(&self, addr: u64, v: u64) {
-        let Some(c) = &self.conc else { return };
-        if tx::doomed(self.cpu) {
-            return;
-        }
-        let own = c.wlog[self.cpu as usize].lock().unwrap().get(&addr).copied();
-        match own {
-            Some(w) => assert_eq!(v, w, "snapshot checker: core {} read {addr:#x} = {v:#x} after writing {w:#x}", self.cpu),
-            None => c.rlog[self.cpu as usize].lock().unwrap().push((addr, v)),
-        }
-    }
-
-    fn log_write(&self, addr: u64, v: u64) {
-        if let Some(c) = &self.conc {
-            if !tx::doomed(self.cpu) {
-                c.wlog[self.cpu as usize].lock().unwrap().insert(addr, v);
-            }
         }
     }
 }
@@ -553,32 +474,7 @@ impl SimStore {
     }
 }
 
-impl tx::Mem for SimStore {
-    fn load(&self, addr: u64) -> u64 {
-        self.pause();
-        self.maybe_drain_one();
-        self.mem_get(addr)
-    }
-    // Only commits write memory through `Mem`.
-    fn store(&self, addr: u64, v: u64) {
-        self.pause();
-        if let Some(c) = &self.conc {
-            let old = self.mem_get(addr);
-            c.check.lock().unwrap().record(addr, old, v, tx::commit_version(self.cpu));
-        }
-        if self.tso().is_some() {
-            self.buffer(Target::Word(addr), v);
-        } else {
-            self.mem.set(addr, v)
-        }
-    }
-    fn relax(&self) {
-        // A spinning core's stores reach memory eventually; let them.
-        self.drain();
-        if let Some(c) = &self.conc {
-            c.spin(self.cpu);
-        }
-    }
+impl lock::Mem for SimStore {
     fn a_load(&self, a: &AtomicU64, o: Ordering) -> u64 {
         self.pause();
         if let Some(c) = &self.conc {
@@ -618,77 +514,22 @@ impl tx::Mem for SimStore {
         self.drain();
         a.fetch_add(v, Ordering::SeqCst)
     }
-    fn fence(&self, o: Ordering) {
-        // Acquire and release fences are free on x86; only SeqCst drains.
-        if o == Ordering::SeqCst {
-            self.drain();
-        }
-    }
-}
-
-impl SimStore {
-    fn before_tx_read(&self) {
-        if let Some(c) = &self.conc {
-            let z = &c.zombie[self.cpu as usize];
-            if tx::doomed(self.cpu) {
-                let n = z.fetch_add(1, Ordering::Relaxed) + 1;
-                assert!(n < ZOMBIE_LIMIT, "liveness: core {} read {ZOMBIE_LIMIT} words after its transaction was doomed, without reaching commit", self.cpu);
-            } else {
-                z.store(0, Ordering::Relaxed);
-                let k = DOOM_READS.load(Ordering::Relaxed);
-                if k != 0 && c.baton.lock().unwrap().rng.below(k) == 0 {
-                    tx::doom_serial(self.cpu);
-                }
-            }
-        }
-    }
 }
 
 impl Store for SimStore {
     fn read(&self, addr: u64) -> u64 {
-        if self.tx {
-            self.before_tx_read();
-            let v = tx::read(self.cpu, self, addr);
-            self.log_read(addr, v);
-            v
-        } else {
-            self.pause();
-            self.mem_get(addr)
-        }
+        self.pause();
+        self.mem_get(addr)
     }
     fn read_pair(&self, addr: u64) -> (u64, u64) {
-        if self.tx {
-            self.before_tx_read();
-            self.before_tx_read();
-            let (a, b) = tx::read_pair(self.cpu, self, addr);
-            self.log_read(addr, a);
-            self.log_read(addr.wrapping_add(8), b);
-            (a, b)
-        } else {
-            (self.read(addr), self.read(addr.wrapping_add(8)))
-        }
+        (self.read(addr), self.read(addr.wrapping_add(8)))
     }
     fn write(&mut self, addr: u64, v: u64) {
-        if self.tx {
-            self.pause();
-            tx::write(self.cpu, addr, v);
-            self.log_write(addr, v);
-        } else {
-            self.pause();
-            self.direct_set(addr, v)
-        }
+        self.pause();
+        self.direct_set(addr, v)
     }
     fn zero(&mut self, addr: u64, len: u64) {
         assert!(len % 8 == 0);
-        if self.tx {
-            tx::zero(self.cpu, addr, len);
-            let mut a = addr;
-            while a < addr + len {
-                self.log_write(a, 0);
-                a += 8;
-            }
-            return;
-        }
         self.pause();
         let mut a = addr;
         while a < addr + len {
@@ -697,13 +538,6 @@ impl Store for SimStore {
         }
     }
     fn clear_free(&mut self, addr: u64, len: u64) {
-        assert!(len % 8 == 0);
-        if self.tx {
-            // In place, through `Mem::store`: the checker sees the zeros
-            // at the clear's version.
-            tx::clear_free(self.cpu, &*self, addr, len);
-            return;
-        }
         self.zero(addr, len)
     }
     fn ks_base(&self) -> u64 {
@@ -733,9 +567,6 @@ struct Core {
     deadline: u64,
     /// Pending IRQs (bit = irq number, up to 191).
     pending: [u64; 3],
-    /// Inside a transaction: Arch effects are queued.
-    tx: bool,
-    effects: Vec<Effect>,
     /// An interrupt taken during the current entry, and whether the
     /// current run of the entry was given it.
     held_irq: Option<u64>,
@@ -772,22 +603,6 @@ impl SimArch {
         m.cores[cpu as usize].pending[(irq / 64) as usize] |= 1 << (irq % 64);
     }
 
-    fn in_tx(&self) -> bool {
-        self.m.lock().unwrap().cores[self.cpu as usize].tx
-    }
-
-    /// Queue `e` inside a transaction; returns whether it did.
-    fn defer(&self, e: Effect) -> bool {
-        let mut m = self.m.lock().unwrap();
-        let c = &mut m.cores[self.cpu as usize];
-        if c.tx {
-            c.effects.push(e);
-            true
-        } else {
-            false
-        }
-    }
-
     fn apply(&self, e: Effect) {
         match e {
             Effect::Deadline(t) => self.m.lock().unwrap().cores[self.cpu as usize].deadline = t,
@@ -820,9 +635,7 @@ impl Arch for SimArch {
         m.now
     }
     fn set_deadline(&mut self, ticks: u64) {
-        if !self.defer(Effect::Deadline(ticks)) {
-            self.apply(Effect::Deadline(ticks));
-        }
+        self.apply(Effect::Deadline(ticks));
     }
     fn us_to_ticks(&self, us: u64) -> u64 {
         us.saturating_mul(TICKS_PER_US)
@@ -862,9 +675,7 @@ impl Arch for SimArch {
     }
     fn mask_irq(&mut self, _irq: u64, _mask: bool) {}
     fn ack_irq(&mut self, _irq: u64) {
-        if !self.defer(Effect::Ack) {
-            self.apply(Effect::Ack);
-        }
+        self.apply(Effect::Ack);
     }
     fn set_vspace(&mut self, root: u64, asid: u64) {
         self.m.lock().unwrap().cores[self.cpu as usize].vspace = (root, asid);
@@ -888,10 +699,7 @@ impl Arch for SimArch {
         (port * 0x9e37 ^ 0x5a5a) & ((1 << (8 * size)) - 1)
     }
     fn port_out(&mut self, port: u64, size: u64, v: u64) {
-        let e = Effect::PortOut(port, size, v);
-        if !self.defer(e) {
-            self.apply(e);
-        }
+        self.apply(Effect::PortOut(port, size, v));
     }
     fn fpu_flush(&mut self, _tcb: u64) {}
     fn fpu_sanitise(&mut self, _tcb: u64) {}
@@ -902,15 +710,11 @@ impl Arch for SimArch {
             // Entries run one at a time: the target services the stall at
             // once, on the gate holder's behalf.
             None => {
-                let mut s = SimStore { mem: self.mem.clone(), ks_base: self.ks_base, cpu, tx: false, conc: None };
+                let mut s = SimStore { mem: self.mem.clone(), ks_base: self.ks_base, cpu, conc: None };
                 let mut a = SimArch { cpu, ..self.clone() };
                 fl4_core::smp::stall(&mut s, &mut a);
             }
             Some(c) => {
-                if self.in_tx() {
-                    tx::doom_serial(self.cpu);
-                    return;
-                }
                 // Ask the target and wait until it has serviced the stall.
                 c.call_pending.fetch_or(1 << cpu, Ordering::SeqCst);
                 while c.call_pending.load(Ordering::SeqCst) & (1 << cpu) != 0 {
@@ -920,23 +724,15 @@ impl Arch for SimArch {
         }
     }
     fn send_reschedule(&mut self, mask: u64) {
-        if !self.defer(Effect::Reschedule(mask)) {
-            self.apply(Effect::Reschedule(mask));
-        }
+        self.apply(Effect::Reschedule(mask));
     }
     fn putc(&mut self, c: u64) {
-        if !self.defer(Effect::Putc(c as u8)) {
-            self.apply(Effect::Putc(c as u8));
-        }
+        self.apply(Effect::Putc(c as u8));
     }
     fn get_char(&mut self) -> u64 {
         u64::MAX
     }
     fn halt(&mut self) {
-        if self.conc.is_some() && self.in_tx() {
-            tx::doom_serial(self.cpu);
-            return;
-        }
         // seL4_DebugHalt (or a debug call that halts on bad arguments)
         // stops the machine: the run ends there.
         self.m.lock().unwrap().halted = true;
@@ -954,32 +750,13 @@ struct SimEnv {
 }
 
 impl SimEnv {
-    /// The committed transaction read one snapshot, where it serializes.
-    fn check_snapshot(&self) {
-        let cpu = self.s.cpu;
-        let wrote = !self.conc.wlog[cpu as usize].lock().unwrap().is_empty();
-        let rv = if wrote { tx::commit_version(cpu) - 1 } else { tx::read_version(cpu) };
-        let reads = std::mem::take(&mut *self.conc.rlog[cpu as usize].lock().unwrap());
-        let mut k = self.conc.check.lock().unwrap();
-        for (addr, v) in reads {
-            if k.unversioned.contains(&addr) {
-                k.skipped += 1;
-                continue;
-            }
-            k.checked += 1;
-            if let Some(want) = k.at(addr, rv) {
-                assert_eq!(v, want, "snapshot checker: core {cpu} committed after reading {addr:#x} = {v:#x}, but at version {rv}, where it serializes, the word held {want:#x}");
-            }
-        }
-    }
-
     /// Service a remote stall addressed to this core, if any.
     fn service(&self) -> bool {
         let me = 1u64 << self.s.cpu;
         if self.conc.call_pending.load(Ordering::SeqCst) & me == 0 {
             return false;
         }
-        let mut s = SimStore { tx: false, ..self.s.clone() };
+        let mut s = self.s.clone();
         let mut a = self.a.clone();
         fl4_core::smp::stall(&mut s, &mut a);
         // The acknowledgement is a locked instruction: it drains.
@@ -999,19 +776,8 @@ impl fl4_sync::EntryEnv for SimEnv {
     fn multi(&self) -> bool {
         true
     }
-    fn probe_successors(&self) -> u64 {
-        match PROBE.load(Ordering::Relaxed) {
-            0 => fl4_sync::PROBE_SUCCESSORS,
-            n => n,
-        }
-    }
-    fn prefer_serial(&self) -> bool {
-        // Mix entries known to require exclusion with transactions and
-        // abort-driven fallback, exercising the same admission protocol.
-        self.conc.baton.lock().unwrap().rng.below(8) == 0
-    }
-    fn store(&self, tx: bool) -> SimStore {
-        SimStore { tx, ..self.s.clone() }
+    fn store(&self) -> SimStore {
+        self.s.clone()
     }
     fn arch(&self) -> SimArch {
         self.a.clone()
@@ -1024,36 +790,6 @@ impl fl4_sync::EntryEnv for SimEnv {
         let r = self.service();
         self.conc.spin(self.s.cpu);
         r
-    }
-    fn set_tx(&self, on: bool) {
-        {
-            let mut m = self.a.m.lock().unwrap();
-            let c = &mut m.cores[self.s.cpu as usize];
-            c.tx = on;
-            if on {
-                c.held_used = false;
-            }
-        }
-        if on {
-            self.conc.rlog[self.s.cpu as usize].lock().unwrap().clear();
-            self.conc.wlog[self.s.cpu as usize].lock().unwrap().clear();
-        }
-        // Send some entries down the serial path, so serial entries overlap
-        // transactions often enough to test the gate.
-        if on && self.conc.baton.lock().unwrap().rng.below(8) == 0 {
-            tx::doom_serial(self.s.cpu);
-        }
-    }
-    fn finish_effects(&self, committed: bool) {
-        if committed {
-            self.check_snapshot();
-        }
-        let effects = std::mem::take(&mut self.a.m.lock().unwrap().cores[self.s.cpu as usize].effects);
-        if committed {
-            for e in effects {
-                self.a.apply(e);
-            }
-        }
     }
     fn entry_done(&self) {
         let mut m = self.a.m.lock().unwrap();
@@ -1076,17 +812,25 @@ impl fl4_sync::EntryEnv for SimEnv {
     fn count(&self, what: fl4_sync::Count) {
         let mut st = STATS.lock().unwrap();
         match what {
-            fl4_sync::Count::Commit => st.0 += 1,
-            fl4_sync::Count::Abort => st.1 += 1,
-            fl4_sync::Count::Serial => st.2 += 1,
-            fl4_sync::Count::Local => st.3 += 1,
+            fl4_sync::Count::Serial => st.0 += 1,
+            fl4_sync::Count::Local => st.1 += 1,
         }
     }
 }
 
-/// Transactions committed, aborted, entries run serially, and syscalls
-/// whose fast path ran without the gate.
-static STATS: Mutex<(u64, u64, u64, u64)> = Mutex::new((0, 0, 0, 0));
+/// Entries run under the gate, and syscalls whose local path ran beside it.
+static STATS: Mutex<(u64, u64)> = Mutex::new((0, 0));
+
+/// The footprint oracle: every word the local path for syscall `number`
+/// on core `cpu` wrote lies in `allowed` (`Sim::footprint`).
+fn check_footprint(cpu: u64, number: i64, allowed: &[(u64, u64)], writes: impl Iterator<Item = u64>) {
+    for w in writes {
+        assert!(
+            allowed.iter().any(|&(a, n)| w >= a && w < a + n),
+            "footprint: core {cpu}'s local path for syscall {number} wrote {w:#x}, outside its footprint"
+        );
+    }
+}
 
 /// xorshift64*, seeded.
 #[derive(Clone, PartialEq, Debug)]
@@ -1177,7 +921,7 @@ impl Sim {
             halted: false,
             rng: Rng(seed_rng(seed)),
         }));
-        let s = SimStore { mem: mem.clone(), ks_base, cpu: 0, tx: false, conc: None };
+        let s = SimStore { mem: mem.clone(), ks_base, cpu: 0, conc: None };
         let a = SimArch { m, mem, ks_base, cpu: 0, conc: None };
         Sim { s, a, ncores, objs: Vec::new(), next_slot: 0, fault_ep: 0, reply: 0, focus: None, reset_ut: 0, reset_child: 0, port: 0, guest: Vec::new(), big_ut: Cell::new((0, 0)) }
     }
@@ -1372,7 +1116,18 @@ impl Sim {
         conc.in_kernel[cpu].store(true, Ordering::SeqCst);
         let env = SimEnv { s: self.s.clone(), a: self.a.clone(), conc: conc.clone() };
         let m = self.s.clone();
-        fl4_sync::run_syscall(&env, &GATE, number, |s, a| fl4_sync::local_syscall(s, a, &m, number), |s, a| syscall::handle_syscall_fast(s, a, number));
+        let me: &Sim = self;
+        // The local path, under the footprint oracle: its core is active,
+        // so nothing the oracle reads changes meanwhile.
+        let local = |s: &mut SimStore, a: &mut SimArch| {
+            let allowed = me.footprint(cpu as u64, fl4_sync::local_objects(s, number));
+            *conc.footprint[cpu].lock().unwrap() = Some(Vec::new());
+            let ran = fl4_sync::local_syscall(s, a, &m, number);
+            let writes = conc.footprint[cpu].lock().unwrap().take().unwrap();
+            check_footprint(cpu as u64, number, &allowed, writes.into_iter());
+            ran
+        };
+        fl4_sync::run_syscall(&env, &GATE, number, local, |s, a| syscall::handle_syscall_fast(s, a, number));
         if conc.gate_held[cpu].swap(false, Ordering::SeqCst) {
             GATE.release(&self.s);
         }
@@ -1401,6 +1156,7 @@ impl Sim {
             && (number == sc::SysCall || number == sc::SysSend)
             && fl4_core::ioport::is_port_label(fl4_core::msg::msg_info(&self.s, t).label);
         let try_local = local && (trap || (number == sc::SysReplyRecv && found.is_some()) || port);
+        let allowed = if try_local { self.footprint(self.s.cpu, fl4_sync::local_objects(&self.s, number)) } else { Vec::new() };
         mem.start_log();
         let ran_local = try_local
             && if port {
@@ -1410,6 +1166,9 @@ impl Sim {
             };
         let fast = ran_local || syscall::handle_syscall_fast(&mut self.s, &mut self.a, number);
         let fast_log = mem.take_log();
+        if ran_local {
+            check_footprint(self.s.cpu, number, &allowed, fast_log.iter().map(|&(i, _)| PPTR_BASE + i as u64 * 8));
+        }
         let m_fast = self.a.m.lock().unwrap().clone();
         let mut orig: HashMap<usize, u64> = HashMap::new();
         let mut want: HashMap<usize, u64> = HashMap::new();
@@ -1456,6 +1215,54 @@ impl Sim {
             }
             panic!("fastpath: syscall {number} (fast path ran: {fast}, locally: {ran_local}) left {} words and the machine state {} from the general path's", bad.len(), if m_fast == m_general { "equal" } else { "different" });
         }
+    }
+
+    /// The footprint oracle (DESIGN.md §10): the memory a local path beside
+    /// the gate on core `cpu` may write, as (address, bytes): the core's
+    /// node state, threads on the core and their IPC buffers, scheduling
+    /// contexts on the core, and the objects it locked (`locked`, endpoints
+    /// 16 bytes long), with the queue links of the threads queued on a
+    /// locked endpoint, which belong to the queue. Read without scheduling
+    /// points.
+    fn footprint(&self, cpu: u64, locked: [(u64, u64); 2]) -> Vec<(u64, u64)> {
+        let s = SimStore { conc: None, ..self.s.clone() };
+        let mut v = vec![(fl4_core::obj::node_base(&s, cpu), node::SIZE)];
+        for &(o, n) in locked.iter().filter(|o| o.0 != 0) {
+            v.push((o, n));
+            if n == 16 {
+                let mut t = s.read(o);
+                let mut fuel = 10_000;
+                while t != 0 && fuel > 0 {
+                    // EP_NEXT and EP_PREV, adjacent.
+                    v.push((t + tl::EP_NEXT, 16));
+                    t = Tcb(t).ep_next(&s);
+                    fuel -= 1;
+                }
+            }
+        }
+        let mut scs = vec![node_get(&s, cpu, node::CUR_SC), node_get(&s, cpu, node::IDLE_SC)];
+        for c in 0..self.ncores {
+            let mut t = node_get(&s, c, node::DEBUG_TCBS);
+            while t != 0 {
+                let tt = Tcb(t);
+                scs.push(tt.sc(&s));
+                if tt.affinity(&s) == cpu {
+                    v.push((t, 1 << fl4_abi::consts::bits::TCB));
+                    let buf = fl4_core::msg::lookup_ipc_buffer(&s, true, tt);
+                    if buf != 0 {
+                        v.push((buf, 1 << fl4_abi::consts::bits::PAGE));
+                    }
+                }
+                t = tt.debug_next(&s);
+            }
+        }
+        for sc in scs {
+            let c = fl4_core::obj::Sc(sc);
+            if sc != 0 && c.cpu(&s) == cpu {
+                v.push((sc, fl4_core::layout::sc::REFILLS + c.refill_max(&s) * fl4_core::layout::sc::REFILL_SIZE));
+            }
+        }
+        v
     }
 
     /// Message words beyond the registers go in the IPC buffer.
@@ -2328,9 +2135,7 @@ fn run_one(mut sim: Sim, seed: u64, ncores: u64, steps: u64, verbose: bool, conc
         }
         if verbose {
             let st = STATS.lock().unwrap();
-            println!("seed {seed}: {} transactions committed, {} aborted, {} serial entries, {} local fast paths", st.0, st.1, st.2, st.3);
-            let k = conc.check.lock().unwrap();
-            println!("seed {seed}: snapshot checker: {} reads checked, {} of unversioned words skipped", k.checked, k.skipped);
+            println!("seed {seed}: {} serial entries, {} local paths", st.0, st.1);
             if let Some(p) = &conc.baton.lock().unwrap().pct {
                 println!("seed {seed}: PCT: {} scheduling points, change points {:?}", p.points, p.change_points);
             }
@@ -2365,10 +2170,6 @@ struct Run {
     scenario: Option<String>,
     /// `--explore`: the scheduling points at which to preempt.
     switches: Option<Vec<u64>>,
-    /// `--doom-reads`: 1/K of transaction reads doom the transaction.
-    doom: u64,
-    /// `--probe-successors`, 0 for the default.
-    probe: u64,
     /// `--fastpath-diff`.
     diff: bool,
 }
@@ -2405,14 +2206,6 @@ impl Run {
             v.push("--pct".into());
             v.push(d.to_string());
         }
-        if self.doom != 0 {
-            v.push("--doom-reads".into());
-            v.push(self.doom.to_string());
-        }
-        if self.probe != 0 {
-            v.push("--probe-successors".into());
-            v.push(self.probe.to_string());
-        }
         if self.diff {
             v.push("--fastpath-diff".into());
         }
@@ -2442,8 +2235,6 @@ impl Run {
                 libc::dup2(err.as_raw_fd(), 2);
             }
             let sim = bases.iter().find(|b| b.ncores == self.cores).cloned().unwrap_or_else(|| booted(self.cores));
-            DOOM_READS.store(self.doom, Ordering::Relaxed);
-            PROBE.store(self.probe, Ordering::Relaxed);
             FASTPATH_DIFF.store(self.diff, Ordering::Relaxed);
             run_one(sim, self.seed, self.cores, self.steps, VERBOSE.load(Ordering::Relaxed), self.conc || self.tso || self.switches.is_some(), self.pct, self.tso, self.switches.clone(), self.scenario.as_deref());
             let _ = std::io::stdout().flush();
@@ -2474,15 +2265,13 @@ impl Run {
 
     fn line(&self) -> String {
         format!(
-            "{} {} {} {} {}{}{}{}{}",
+            "{} {} {} {} {}{}{}",
             self.seed,
             self.cores,
             self.steps,
             if self.tso { "tso" } else if self.conc { "conc" } else { "serial" },
             self.pct.map_or("random".to_string(), |d| format!("pct{d}")),
             self.scenario.as_ref().map_or(String::new(), |s| format!(" {s}")),
-            if self.doom != 0 { format!(" doom{}", self.doom) } else { String::new() },
-            if self.probe != 0 { format!(" probe{}", self.probe) } else { String::new() },
             if self.diff { " diff" } else { "" }
         )
     }
@@ -2492,11 +2281,9 @@ impl Run {
         if f.len() < 5 || f.len() > 9 || l.starts_with('#') {
             return None;
         }
-        // After the five fields: a scenario name, `doomK`, `probeN`.
-        let doom = f[5..].iter().find_map(|t| t.strip_prefix("doom")?.parse().ok()).unwrap_or(0);
-        let probe = f[5..].iter().find_map(|t| t.strip_prefix("probe")?.parse().ok()).unwrap_or(0);
+        // After the five fields: a scenario name, `diff`.
         let diff = f[5..].iter().any(|t| *t == "diff");
-        let scenario = f[5..].iter().find(|t| !t.starts_with("doom") && !t.starts_with("probe") && **t != "diff").map(|s| s.to_string());
+        let scenario = f[5..].iter().find(|t| **t != "diff").map(|s| s.to_string());
         Some(Run {
             seed: f[0].parse().ok()?,
             cores: f[1].parse().ok()?,
@@ -2506,8 +2293,6 @@ impl Run {
             tso: f[3] == "tso",
             scenario,
             switches: None,
-            doom,
-            probe,
             diff,
         })
     }
@@ -2594,7 +2379,7 @@ struct Search {
 
 impl Search {
     fn run(&self, switches: Vec<u64>) -> Run {
-        Run { seed: self.seed, cores: self.cores, steps: self.steps, conc: true, pct: None, tso: false, scenario: None, switches: Some(switches), doom: 0, probe: 0, diff: false }
+        Run { seed: self.seed, cores: self.cores, steps: self.steps, conc: true, pct: None, tso: false, scenario: None, switches: Some(switches), diff: false }
     }
 
     /// The scheduling points of the unpreempted schedule, from its run.
@@ -2672,15 +2457,13 @@ struct Campaign {
     pct: Option<u64>,
     tso: bool,
     scenario: Option<String>,
-    doom: u64,
-    probe: u64,
     diff: bool,
 }
 
 impl Campaign {
     fn runs(&self) -> Vec<Run> {
         (self.first..self.first + self.seeds)
-            .map(|seed| Run { seed, cores: self.cores, steps: self.steps, conc: self.conc || self.tso, pct: self.pct, tso: self.tso, scenario: self.scenario.clone(), switches: None, doom: self.doom, probe: self.probe, diff: self.diff })
+            .map(|seed| Run { seed, cores: self.cores, steps: self.steps, conc: self.conc || self.tso, pct: self.pct, tso: self.tso, scenario: self.scenario.clone(), switches: None, diff: self.diff })
             .collect()
     }
 
@@ -2706,10 +2489,7 @@ impl Campaign {
         let mode = if self.tso { "tso" } else if self.conc { "conc" } else { "serial" };
         let extra = self.pct.map_or(String::new(), |d| format!(", PCT depth {d}"))
             + &self.scenario.as_ref().map_or(String::new(), |s| format!(", scenario {s}"))
-            + &if self.doom != 0 { format!(", 1/{} of reads doom the transaction", self.doom) } else { String::new() }
-            + &if self.probe != 0 { format!(", probes queue behind up to {} cores", self.probe) } else { String::new() }
-            + if self.diff { ", fast paths checked against the general path" } else { "" }
-            + if cfg!(feature = "serial-gate") { ", every entry under the serial gate" } else { "" };
+            + if self.diff { ", fast paths checked against the general path" } else { "" };
         println!("fl4-sim: {} seeds, {} cores, {} steps each, {mode}{extra}: {failed} failed", self.seeds, self.cores, self.steps);
         failed
     }
@@ -2747,8 +2527,6 @@ fn main() {
     let conc = args.iter().any(|a| a == "--conc");
     let pct = args.iter().position(|a| a == "--pct").map(|_| opt("--pct", 3));
     let tso = args.iter().any(|a| a == "--tso");
-    DOOM_READS.store(opt("--doom-reads", 0), Ordering::Relaxed);
-    PROBE.store(opt("--probe-successors", 0), Ordering::Relaxed);
     FASTPATH_DIFF.store(args.iter().any(|a| a == "--fastpath-diff"), Ordering::Relaxed);
     if let Some(i) = args.iter().position(|a| a == "--one") {
         let seed = args[i + 1].parse().unwrap();
@@ -2784,8 +2562,7 @@ fn main() {
     // pool of child processes, so no campaign waits for another's slowest
     // run. Otherwise the one campaign the options describe.
     let suite = args.iter().any(|a| a == "--suite");
-    let doom = opt("--doom-reads", 0);
-    let c = |steps, conc, pct, tso, scenario: Option<&str>, seeds| Campaign { seeds, first, cores, steps, conc, pct, tso, scenario: scenario.map(String::from), doom: 0, probe: 0, diff: false };
+    let c = |steps, conc, pct, tso, scenario: Option<&str>, seeds| Campaign { seeds, first, cores, steps, conc, pct, tso, scenario: scenario.map(String::from), diff: false };
     let quarter = (seeds / 4).max(1);
     let campaigns = if suite {
         vec![
@@ -2799,25 +2576,18 @@ fn main() {
             c(8000, false, None, true, Some("ep"), quarter),
             c(8000, true, None, false, Some("ntfn"), quarter),
             c(8000, false, None, true, Some("ntfn"), quarter),
-            // Transactions doomed partway, so entries run on with zero
-            // reads until they reach commit (GitHub issue #5).
-            Campaign { doom: 32, ..c(8000, true, None, false, None, quarter) },
-            Campaign { doom: 32, ..c(8000, false, None, true, Some("ep"), quarter) },
-            // The x86_64 kernel's admission: probes queue behind any
-            // number of other cores (fl4_sync::DEEP_PROBE_SUCCESSORS).
-            Campaign { probe: fl4_sync::DEEP_PROBE_SUCCESSORS, ..c(8000, true, None, false, None, quarter) },
-            Campaign { probe: fl4_sync::DEEP_PROBE_SUCCESSORS, ..c(8000, false, None, true, None, quarter) },
             // The syscall fast paths (fl4_core::fastpath): each serial
             // syscall also run through the general path from the same
             // state, with an l4h vCPU's trap and reply pattern and without;
-            // and the pattern among transactions.
+            // and the pattern on every core at once, beside the gate.
             Campaign { diff: true, ..c(20000, false, None, false, Some("guest"), quarter) },
             Campaign { diff: true, ..c(20000, false, None, false, None, quarter) },
-            c(8000, true, None, false, Some("guest"), quarter),
-            c(8000, false, None, true, Some("guest"), quarter),
+            c(20000, true, None, false, Some("guest"), quarter),
+            c(20000, true, Some(3), false, Some("guest"), quarter),
+            c(20000, false, None, true, Some("guest"), quarter),
         ]
     } else {
-        vec![Campaign { doom, probe: opt("--probe-successors", 0), diff: args.iter().any(|a| a == "--fastpath-diff"), ..c(steps, conc, pct, tso, scenario.as_deref(), seeds) }]
+        vec![Campaign { diff: args.iter().any(|a| a == "--fastpath-diff"), ..c(steps, conc, pct, tso, scenario.as_deref(), seeds) }]
     };
     // Every schedule with one preemption at a runtime atomic, for small
     // two-core scenarios.
@@ -3011,36 +2781,5 @@ mod tests {
         let (sim, r) = boot_with(230, &fake, 20);
         assert!(r.is_ok());
         assert_eq!(bi_word(&sim, 0), 20);
-    }
-
-    /// GitHub issue #6: an attempt polls an interrupt at a preemption point
-    /// and aborts; the rerun reaches no preemption point. The interrupt is
-    /// still in service, and must get an entry of its own that acknowledges
-    /// it (`enter` checks that none is left in service).
-    #[test]
-    fn interrupt_polled_by_an_aborted_attempt_is_acknowledged() {
-        let mut sim = booted(2);
-        // Explore mode with no switches: core 0 runs alone.
-        let conc = Arc::new(Conc::new(2, 1, None, false, Some(Vec::new())));
-        sim.s.conc = Some(conc.clone());
-        sim.a.conc = Some(conc);
-        sim.on(0);
-        // The quiet-core policy can execute directly. Back off its probe
-        // so this test actually exercises an aborted transaction, then
-        // remove the contender before the mandatory serial retry.
-        let plain = SimStore { conc: None, ..sim.s.clone() };
-        GATE.enter_tx(&plain, 1, || panic!("open gate"));
-        assert!(!GATE.opportunistic_acquire(&plain, 0, fl4_sync::PROBE_SUCCESSORS, || panic!("no serial owner")));
-        GATE.leave_tx(&plain, 1);
-        sim.a.raise(0, irq::RESCHEDULE_IPI);
-        let runs = Cell::new(0);
-        sim.enter(false, |s, a| {
-            runs.set(runs.get() + 1);
-            if runs.get() == 1 {
-                assert_eq!(a.take_pending_irq(), irq::RESCHEDULE_IPI);
-                tx::doom_serial(s.cpu);
-            }
-        });
-        assert!(runs.get() >= 2, "the entry did not rerun");
     }
 }

@@ -2,7 +2,7 @@
 
 *Design, draft 9 (2026-11-13). Draft 8 is published at https://claude.ai/artifact/3zN2Xrz25AFk4ysqA4qfin; draft 9 changes how fine-grained locking is built (§6, §7, §9, §13).*
 
-FL4 re-implements the seL4 17.0 kernel in Rust. Every seL4 program builds and runs on it unchanged from source, and FL4 adds its own APIs on top. Binary compatibility is not a goal. It makes MCS and SMP first-class, detects hardware at boot instead of asking for configuration, and replaces the big kernel lock with short transactions over a striped lock table. The serial kernel is proven correct in Lean through Aeneas. The concurrent kernel is checked by deterministic simulation against that proven serial kernel.
+FL4 re-implements the seL4 17.0 kernel in Rust. Every seL4 program builds and runs on it unchanged from source, and FL4 adds its own APIs on top. Binary compatibility is not a goal. It makes MCS and SMP first-class, detects hardware at boot instead of asking for configuration, and keeps seL4's big kernel lock only for what is rare: its common syscall paths run beside the lock, on every core at once, within footprints the simulator checks. The serial kernel is proven correct in Lean through Aeneas. The concurrent kernel is checked by deterministic simulation against that proven serial kernel.
 
 | | |
 |---|---|
@@ -109,7 +109,7 @@ There are three profiles, **debug**, **release** and **bench**. Debug turns on `
 Two settings stay, because user programs are compiled against them. FL4 reads them from the same generated configuration as libsel4:
 
 - `KernelRootCNodeSizeBits`, the size of the root task's CNode (seL4's default is 12; sel4test uses 13, l4h 19).
-- `KernelMaxNumNodes` as an upper bound. FL4 starts min(cores found, this value, 16) cores, so a program sized for N cores never sees more than N. The core's logical state supports up to 64 nodes; the current x86 per-core storage and transaction runtime support 16.
+- `KernelMaxNumNodes` as an upper bound. FL4 starts min(cores found, this value, 16) cores, so a program sized for N cores never sees more than N. The core's logical state supports up to 64 nodes; the current x86 per-core storage and the serial gate support 16.
 
 ### Boot command line
 
@@ -151,8 +151,8 @@ l4h's new methods, constants, flags and BootInfo records keep their l4h names an
 
 | Patch      | Behavior in FL4                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 |------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| 0000       | Remote stalls can fail. A stall IPI is handled only on the interrupt path. When the remote core is busy, the operation gives up and the syscall restarts. In FL4 a stall is an irrevocable effect, so the transaction that needs it aborts and reruns under the serial gate (§7). The operations that need a stall: TCB invocations, finalising a TCB or SC cap, removing a reply whose donated SC belongs to a thread on another core, `SchedContext_YieldTo`, and `SchedControl_ConfigureFlags`. l4h's GenMC harnesses for the lock and IPI code are ported to FL4's lock table and serial gate, next to the simulator's weak-memory mode |
-| 0012       | A timer interrupt that finds the timer still armed belongs to a deadline that has since been replaced. FL4 acknowledges it and returns to user space without starting a transaction. The armed deadline is compared with the time first, so a due interrupt does not pay for the MSR read, which traps under a hypervisor. This prevents the livelock l4h saw with vCPUs that the host deschedules                                                                                                                                                                                                             |
+| 0000       | Remote stalls can fail. A stall IPI is handled only on the interrupt path. When the remote core is busy, the operation gives up and the syscall restarts. In FL4 an operation that needs a stall runs under the serial gate (§7). The operations that need a stall: TCB invocations, finalising a TCB or SC cap, removing a reply whose donated SC belongs to a thread on another core, `SchedContext_YieldTo`, and `SchedControl_ConfigureFlags`. l4h's GenMC harnesses for the lock and IPI code are ported to FL4's lock table and serial gate, next to the simulator's weak-memory mode |
+| 0012       | A timer interrupt that finds the timer still armed belongs to a deadline that has since been replaced. FL4 acknowledges it and returns to user space without taking the serial gate. The armed deadline is compared with the time first, so a due interrupt does not pay for the MSR read, which traps under a hypervisor. This prevents the livelock l4h saw with vCPUs that the host deschedules                                                                                                                                                                                                             |
 | 0013       | `SchedControl_ConfigureFlags` enqueues a thread on another core only when it is schedulable. A postponed thread still gets a remote queue update, so that core reprograms its timer                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | 0014       | APIC countdown mode converts deadlines with both rates instead of their truncated ratio, rounds up so the count never runs out early, and re-arms delays longer than the 32-bit count                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | 0019       | At boot, only free pages that contain a nonzero word are cleared, which keeps the hypervisor's shared zero pages. Clean boot untypeds start with a free index of 0. Untyped resets at run time still clear everything                                                                                                                                                                                                                                                                                                                                                                                          |
@@ -207,9 +207,9 @@ The kernel is a stack of layers. Each one has a single assurance level, so the t
 |---|---|---|---|
 | User space | sel4test, rootserver | | Unmodified sources, built against FL4's libsel4 |
 | Entry and exit | `fl4-arch-x86_64` | Trusted | SYSCALL/SYSRET, interrupt and exception stubs, register save into the TCB, per-core GS state, FPU switching |
-| Transaction runtime | `fl4-sync` | Trusted, sim-tested | Chooses uncontended serial execution or concurrent transactions; commit, retry, serial-gate escalation, IPI servicing while spinning |
+| Entry runtime | `fl4-sync` | Trusted, sim-tested | The serial gate (a ticket lock that drains local paths), the local paths beside it, IPI servicing while spinning |
 | Kernel logic | `fl4-core` | Verified | Syscall dispatch, decode, CSpace, CDT, IPC, notifications, untyped, scheduling, MCS refills, VSpace logic, IRQ objects. Safe Rust only, generic over the store and arch traits |
-| Object store | `fl4-store` | Trusted, sim-tested | Implements `Store` over physical memory: directly on one core or under the serial gate, and transactionally otherwise (versioned reads against the lock table, buffered writes, commit) |
+| Object store | `fl4-store` | Trusted, sim-tested | Implements `Store` over physical memory, directly: on one core, under the serial gate, or within a local path's footprint; the object locks of local paths |
 | Hardware backends | | Trusted | Page-table writes, TLB and cache maintenance, x2APIC, TSC-deadline timer, IOAPIC/MSI, ACPI parsing, serial |
 
 ### Workspace layout
@@ -219,8 +219,8 @@ The kernel is a stack of layers. Each one has a single assurance level, so the t
         fl4-abi/          # generated from interfaces/ and .bf; no_std, no unsafe
         fl4-bitfield-gen/ # Rust backend for seL4's bitfield_gen.py
         fl4-core/         # #![forbid(unsafe_code)]; the Aeneas input
-        fl4-sync/         # serial gate, transaction driver, IPI-aware spinning
-        fl4-store/        # PhysStore, the transactional TxStore and its lock table
+        fl4-sync/         # serial gate, local paths, IPI-aware spinning
+        fl4-store/        # PhysStore, the object locks of local paths
         fl4-arch/         # Arch + Platform traits, shared by all backends
         fl4-arch-x86_64/  # entry asm, paging, APIC, timer, FPU, VT-d (later)
         fl4-arch-aarch64/ # placeholder that compiles; filled after M5
@@ -267,7 +267,7 @@ The core is written as a serial kernel: one entry point per kind of kernel entry
 
     pub fn handle_syscall<S: Store, A: Arch>(s: &mut S, a: &mut A, number: i64);
 
-Objects are typed handles over this memory (`Tcb`, `Ep`, `Slot`, …) with field accessors, so every kernel decision is a function of what the store returns. That is what makes one core serve every execution mode: on one core the store is plain memory, on several it is a transaction (§7), and the proofs, which are about the serial core, apply to each committed entry.
+Objects are typed handles over this memory (`Tcb`, `Ep`, `Slot`, …) with field accessors, so every kernel decision is a function of what the store returns. That is what lets one core serve every execution mode: the store is plain memory on one core, under the serial gate, and within a local path's footprint (§7), and the proofs, which are about the serial core, apply to each entry.
 
 ### Fast paths
 
@@ -296,144 +296,79 @@ general path, is undone from a store log, and runs again through
 (time, RNG, deadlines, effects, loaded address space) must end the same.
 `--scenario guest` sets up an l4h vCPU's handler and trapping thread on
 one core, among the random workload; `cargo xtask sim` runs it with the
-check, and among transactions under the random and TSO schedulers.
-
-Without transactions (x86_64, §7), the fast paths also run beside the
-serial gate, on several cores at once (`fl4_sync::run_syscall`,
-`handle_syscall_local`). What they write is this core's scheduler state,
-threads and scheduling contexts on this core (checked before any write),
-the endpoint and reply object involved, and a receiver's IPC buffer; every
-other kernel word they read changes only under the gate. So the core marks
-itself active like a transaction, which a serial entry drains, and the
-endpoint and reply object, which threads on several cores may share, are
-locked through lock bits of the version table, which nothing else uses
-without transactions (`tx::try_lock_object`, hashed so that neighbouring
-objects use different lines). A fast path that cannot take them or
-declines leaves the entry to the gate, having written only `FAULT_IP` and
-the timestamp, which the general path repeats (with one domain, two
-timestamp updates equal the later one). IPC buffers are user memory: a
-frame two threads on different cores share is the user's race, as it is
-on one core.
-
-I/O port invocations (`SysCall` or `SysSend` on an IoPort cap) run beside
-the gate too (`handle_ioport_local`), as the general path's own code: once
-reads show a valid access, budget left, and no reschedule pending or due on
-this core (`schedulable_here`), that code writes only the caller, this
-core's scheduler state and the port, and takes no lock. The host's logger
-writes the serial port one byte per invocation, each with a trap to the
-hypervisor; under the gate, a guest's boot log slowed the syscalls of every
-other core by about 25% for half a second.
-
-Admission: only trapped syscalls, ReplyRecv and I/O port invocations (by
-their label) try this. While the gate is
-closed, a core waits for it to open (servicing remote calls) rather than
-take a ticket, since queued syscalls would keep it closed for each other;
-but only if its last such syscall ran a fast path, beside the gate or
-under it (or was an I/O port access), and only for `LOCAL_WAIT_SPINS`: serial
-entries queued back to back keep the gate closed, and the core would wait
-out of FIFO order. One whose fast path then declined would have waited for
-the gate twice, which cost fork-heavy loads up to 11%. A reply object
-taken beside the gate must have no neighbours on a call stack
-(`reply_remove` would write them unlocked).
-
-The differential check runs this composition on every other syscall, and
-the simulator's root task reads and writes an IoPort cap (in and out of its
-range); the workload arms no TCB timers, so the timer condition of the I/O
-port path goes unexercised. The
-simulator's serial-gate build runs the guest scenario (half the runs share
-one endpoint among all vCPUs) concurrently and on the TSO model; a queue
-oracle requires that every thread blocked on an endpoint or notification
-is on its queue. `cargo xtask mutants` runs two more mutants there: no
-active mark (`mutant-local-no-active`) and no object locks
-(`mutant-local-no-lock`).
+check, and on every core at once under the random, PCT and TSO
+schedulers. The fast paths also run beside the serial gate, as local
+paths (§7).
 
 ### Footprints
 
-A kernel entry's footprint is the set of objects it reads and writes. FL4 does not state footprints in the core: the transactional store records them as the entry runs, exactly, and locks what was written. What needs proving is then a property of the runtime, not of each entry point: that a committed transaction saw a consistent snapshot and that commits are serializable (P2 in §9).
+A kernel entry's footprint is the memory it reads and writes. Under the serial gate it does not matter: nothing else runs. A local path beside the gate (§7) runs alongside other local paths, so its write footprint is stated, small and checked: the simulator asserts it on every local path it runs, and P2 (§9) is to prove it.
 
-## 7. Fine-grained locking
+## 7. Concurrency: the serial gate and local paths
 
-seL4 SMP protects the whole kernel with one CLH lock (`NODE_LOCK_SYS` in `include/smp/lock.h`). FL4 uses the serial gate for quiet kernel entries and runs concurrent entries as short transactions over only the memory they touch, in the style of TL2 software transactional memory. The core does not know: the transaction lives in the `Store` and `Arch` it is given.
+seL4 SMP protects the whole kernel with one CLH lock (`NODE_LOCK_SYS` in `include/smp/lock.h`). FL4 does too, for most kernel entries: the serial gate. What scales instead are local paths: syscalls common enough to matter whose footprint is known, which run beside the gate on every core at once. Concurrency comes from adding local paths, each one checked, not from a general mechanism.
 
-### The striped seqlock table
+Until 2026-11-21 FL4 ran concurrent entries as TL2-style transactions over a striped seqlock table (`fl4-store`'s `tx`, with P2 in §9 proving it serializable). That was removed. An entry runs 600–700 cycles and touches 100–200 words, and a transaction pays for every access (version checks, read and write logs) and a commit: 4,000–5,000 cycles on x86_64 even uncontended, against 650–750 run directly. Under the gate with local paths beside it, x86_64 ran getpid 5–7× faster than with transactions at 4–6 vCPUs and fault_4k up to 1.5× (§12). Two mechanisms side by side also doubled the reasoning about how they interact, and the gap between P2's abstract model and the 1,200-line runtime was only tested.
 
-Endpoints are 16 bytes and cap slots 32, and a CNode holds thousands of slots. Instead of growing every small object and every slot by a lock word, FL4 keeps locks in a global table indexed by a hash of the 16-byte region a word lives in. Adjacent endpoints sharing a physical cache line have distinct stripes.
+### The serial gate
 
-- Each entry is a 64-bit word padded to 16 bytes: a lock bit and a 63-bit version. Committing writers set the bit and release it with a new version. Readers check an entry without writing to its line. There are 16384 entries (256 KiB), covering each aligned 256 KiB memory span without collisions within that span. The hash multiplies the span number by an odd constant before XORing it with the within-span index, spreading equally aligned pages from nearby spans across the table. Four version words share a cache line; this trades some metadata false sharing for less cache traffic during clears.
-- Two regions that hash to the same entry share it. This costs some false conflicts but never correctness: the protocol only needs every word to be covered by exactly one entry.
-- All kernel memory is covered the same way, per-core scheduler state included. Each core's state lies on separate cache lines; table hash collisions can still cause false conflicts.
-- A global version clock orders commits.
+`fl4_sync::SerialGate`: a ticket lock whose holder also excludes local paths.
 
-### Transaction protocol
+- **Tickets.** A core takes a ticket (`next`, fetch-add) and waits until `serving` reaches it, servicing remote calls meanwhile. `next`, `serving` with `closed`, the active flags and `owner` each sit on their own cache lines.
+- **Draining local paths.** A core running a local path marks itself active. The gate holder stores `closed = 1` and then scans the active flags until none is set, then sets `closed = 2`. The active store and the `closed` store are SeqCst, each followed by a load of the other's word: a Dekker handshake, which needs the store-load order x86 gives only to locked stores. Either the local path sees the closed gate and backs off, or the holder sees its flag and waits.
+- **Handoff.** `closed` distinguishes open (0), closing and draining (1), and closed with local paths excluded (2). A release with another ticket queued keeps the gate at 2, and the successor, acquiring the release of `serving`, inherits the exclusion without another scan. Otherwise release opens the gate.
+- **One core.** With one core there is no gate: the store is plain memory.
+- **IPI-aware spinning.** seL4 services remote-stall IPIs while spinning on its lock. FL4 does the same in every spin loop: waiting for the gate, for local paths to drain, or for a remote call to be acknowledged. IPI handlers touch only core-local state, so a core waiting for an acknowledgement cannot deadlock with a core spinning on the gate.
+- **Effects.** Every Arch operation runs at once, whether under the gate or in a local path: an entry never reruns, so nothing needs to be queued or undone. An interrupt accepted during an entry that a remote stall then cancels gets an entry of its own (`unhandled_irq`).
 
-Each kernel entry, and each chunk of a preemptible operation, runs as follows:
+### Local paths
 
-``` mermaid
-flowchart LR
-  E[Kernel entry] --> H{known serial entry?}
-  H -->|yes| S[serial gate]
-  H -->|no| P{queue within the bound and probe allowed?}
-  P -->|yes: reserve, await turn, close, no active transactions| Q[run directly, release gate, exit]
-  P -->|no: back off probes on contention| B[begin: mark core active, read clock]
-  B --> R[run the core entry on the transactional store]
-  R -->|read sees a locked or newer entry| A[abort: drop buffers]
-  R -->|irrevocable effect| S[serial gate]
-  R -->|done| C[lock written entries in table order]
-  C --> V[validate the read set]
-  V -->|changed| A
-  V -->|ok| W[apply writes, bump clock and versions, release]
-  W --> F[run queued effects, exit]
-  A -->|retries below N| B
-  A -->|retries exceed N| S
-  S --> D[drain other transactions, run directly, exit]
-```
+`fl4_sync::run_syscall`: on several cores, a syscall that may have one first tries its local path; if that declines, the entry takes the gate. The local paths now:
 
-- **Consistent reads.** A read is valid only if its table entry is unlocked and no newer than the clock value the transaction began with. Otherwise the transaction is doomed: from then on reads return zero and nothing it does is kept. Every loop in the core is bounded (P0), so a doomed entry finishes quickly, and until it is doomed the core sees one consistent snapshot of memory. Reads are plain loads through the kernel window, which maps all of kernel memory, so they never fault.
-- **Buffered writes, two-phase commit.** Writes go to a per-core buffer, and later reads of the same word see them. At commit the entries covering the write set are locked in table order, which is deadlock free, then the read set is checked against the start clock, the buffer is written out, and the entries are released with the new version.
-- **Deferred effects.** Arch operations other cores or the hardware could observe (reschedule IPIs, timer programming, interrupt masking and acknowledgement, address-space switches, console output) are queued and run after commit, never while holding entries. An interrupt accepted during the entry is kept and offered again if the transaction reruns.
-- **Irrevocable operations go serial.** Port I/O, remote stalls, FPU state moving between cores, TLB invalidation, and clears of more than 8 KiB rerun under the serial gate. An invalidation must follow the page-table change, which a transaction makes only at commit, and its shootdown IPIs need the gate; mapping into an empty entry invalidates nothing, so most maps stay transactions. A core switching address space publishes its ASID before it loads CR3 (or reads the ASID's invalidation generation, with PCIDs), and an invalidation changes the tables before it looks for cores to shoot down, so a switch racing with an unmap cannot keep a stale entry. The transaction aborts and the entry reruns under the serial gate, as does any entry after N failed attempts (default 4).
-- **Clearing free memory runs in place.** An untyped reset clears memory that no live object occupies, and so does making an ASID pool from a fresh frame. Such a clear does not need to be buffered: no other core depends on that memory. `Store::clear_free` means `zero` to the proofs. In a transaction it locks the region's stripes together with the read set's, in table order, validates the read set, zeroes memory in place along with any buffered writes into it, releases the region's stripes at a new version and the read set's at their old ones, and extends the transaction's read version to it. A reader of the region aborts at the new version. Holding the read set matters because a commit can make the region live without writing into it: a retype from an untyped whose free index is 0 writes only caps, and user code can write the new frame at once. Such a commit writes the untyped's cap or CDT link, which the clearing transaction read, so it lands either before the clear (which then gives up) or after the zeros. Clears larger than 8 KiB, including the 64 KiB reset chunk, rerun serially to avoid acquiring thousands of finer stripes.
-  Aligned power-of-two regions of 16 bytes through 8 KiB map to a contiguous stripe interval under the stripe hash, so the runtime enumerates that interval directly in lock order. Other regions retain sorting and deduplication. Saved versions occupy one slot per held stripe, with binary search for read-set validation, instead of an array as large as the global table. The physical backend uses a bulk zero while holding every covering stripe; the simulator retains individual word stores through `Mem::clear`, including their TSO buffering and version history.
-- **The serial gate.** Transactions mark their core active while they run. A core that needs the gate takes it, waits for active transactions to drain, runs the entry directly on memory, and releases it; new transactions wait while it is held. Rare hardware-global operations (IRQ routing, TLB and ASID invalidation) also use it. With one core there are no transactions and no gate: the store is plain memory.
-- **Known serial entries.** `VMEnter` requests serial admission directly when virtualization is available and the current thread has a bound VCPU without syscall trapping: its VCPU barrier would reject a transaction. Other calls retain ordinary probe/transaction admission. The hint skips speculation, not syscall validation, remote-stall handling or accepted interrupts. The simulator mixes hinted entries with transactions through the same runner. VCPU lifecycle barriers and the gate protocol are unchanged.
-- **No transactions on x86_64.** The x86_64 kernel runs every entry under the serial gate (`EntryEnv::tx_attempts` is 0), except guest syscall fast paths, which run beside it (§6). A transaction there costs several times the same entry run directly (below), and the gate's ticket words sit on their own cache lines (`next`; `serving` with `closed`; the active flags; `owner`). Simulator campaigns keep transactions (with the probe bound below) and run the serial-gate build with the fast paths.
-- **Opportunistic gate probes.** Before starting a transaction, a core may reserve the next serial ticket with a CAS while at most a bound of tickets are outstanding; a CAS lost to another prober retries while the queue is still within it. The environment sets the bound (`EntryEnv::probe_successors`). The simulator and the AArch64 kernel use two, so transactions keep overlapping serial entries, and two more simulator campaigns let a probe queue behind every other core (15, `DEEP_PROBE_SUCCESSORS`). The x86_64 kernel runs no transactions (above), so it does not probe: there, a transaction costs about 4,000–5,000 TSC cycles against 650–750 for the body of an l4h guest syscall's fault or reply run directly, mostly per-access bookkeeping and Safe RET returns. The bounded queue lets short overlapping entries use direct execution. A successor services remote calls while waiting; a remote stall cancels a non-interrupt entry before it runs. Once served, the probe inherits a drained gate or closes it with a SeqCst store and scans the transaction-active flags. If another core is active, it releases its ticket and uses STM; otherwise it runs the same core entry directly under the gate. A transaction arriving during a fresh probe either publishes its active flag early enough to make the probe fail or observes the closed gate and waits. A failed probe has no memory effects beyond the gate protocol and remote-call servicing.
-- **Serial handoff.** The closed word distinguishes open (0), closing/draining (1), and closed with transaction bodies excluded (2). After a successful drain, it stays at 2 while serial tickets are queued. A successor acquires the predecessor's release of the serving ticket, then can reuse that exclusion without another locked close or full flag scan. If release opens the gate, the successor must perform the complete handshake again. A failed probe leaves state 1, so it cannot pass an exclusion certificate while a transaction still runs. A transaction that announces itself late must still observe the continuously closed gate before running its body. The flag array matches the transaction runtime's 16 supported participants, instead of scanning 64 flags.
-- **Contention restores concurrency.** A failed probe or a transaction waiting for a closed gate advances a contention generation. Each core observing a new generation sends its next entry through STM, without the previous extra 256-entry cooldown. The bounded ticket queue and active-transaction check still reject probes under contention; mandatory serial entries retain FIFO tickets and IPI servicing. The generation is only an admission hint. Exclusion depends on the ticket handoff and SeqCst handshake even with stale policy reads. The shorter deferral avoids spending hundreds of short entries in STM after a transient collision; performance across workloads remains an empirical property.
-- **Store specialization.** Once the runtime has selected direct or transactional execution, x86 entry dispatch uses the corresponding `EntryStore<TX>` implementation of the same `Store` interface. The exit path also uses the direct specialization, including VM entry/exit bookkeeping under its existing synchronization. Both forward through the existing `PhysStore` implementation with a constant mode, removing a mode branch from each word access. Kernel logic, capability checks, scheduler semantics, and extracted proof definitions are unchanged. Runtime statistics remain enabled in debug builds; release builds avoid updating their otherwise unused shared counters.
-- **Capability reads and metadata updates.** `Slot::cap` reads its two words through `Store::read_pair`. When they occupy one 16-byte stripe, the transactional store checks the version once before both loads and once after them, with the same acquire ordering and read-set validation as a scalar read. Each word can independently come from the write buffer; if both do, no memory read is needed. A pair crossing a stripe boundary uses two scalar reads. Direct stores also use two ordinary loads. `LawfulStore` states that the pair equals the two words of its memory view, with a concrete model instance; the physical implementation remains in the tested trusted base. The simulator uses the paired path and exposes each load to its interleaving and TSO schedulers.
-  Capability insertion, movement and swapping write the packed next pointer and its two flags together, preserving all other bits, instead of performing three read/modify/write operations on the same word. Copy and deletion reuse caps already loaded by the same entry, without crossing a preemption point or changing the source cap. The serial core proofs cover the new helper functions and combined metadata update; serial admission, stripe ownership and commit rules are unchanged.
-- **IPI-aware spinning.** seL4 services remote-stall IPIs while spinning on its lock. FL4 does the same in every spin loop: waiting for the gate, for a transaction to drain, or for a remote call to be acknowledged. IPI handlers touch only core-local state, so a core waiting for an acknowledgement cannot deadlock with a core spinning on a lock.
+- an l4h guest syscall's fault and the handler's ReplyRecv, the fast paths of §6 (`handle_syscall_local`);
+- I/O port invocations, `SysCall` or `SysSend` on an IoPort cap (`handle_ioport_local`): the general path's own code, once reads show a valid access, budget left, and no reschedule pending or due on this core (`schedulable_here`). l4h's logger writes the serial port one byte per invocation, each with a trap to the hypervisor; under the gate, a guest's boot log slowed the syscalls of every other core by about 25% for half a second.
 
-### Footprints of common operations
+What a local path may write, its footprint, is:
 
-What a transaction typically touches, and so where cores can conflict:
+- this core's node state, and threads and scheduling contexts on this core (checked before any write), with the IPC buffers of those threads;
+- the objects it locks: the endpoint and reply object involved, which threads on several cores may share, and the queue links (`EP_NEXT`, `EP_PREV`) of the threads queued on a locked endpoint, which belong to its queue;
+- the I/O port, for an I/O port access.
 
-| Operation                             | Written                                                                | Only read                                    |
-|---------------------------------------|------------------------------------------------------------------------|----------------------------------------------|
-| Call to a waiting passive server      | caller TCB, endpoint, server TCB, reply object, caller SC, core's scheduler state | endpoint cap slot, reply cap slot   |
-| ReplyRecv                             | server TCB, reply, client TCB, endpoint, SC, core's scheduler state    | endpoint and reply cap slots                 |
-| Signal, nobody waiting                | notification                                                           | notification cap slot                        |
-| Signal wakes a thread on another core | notification, waiter TCB, target core's scheduler state                | notification cap slot; IPI sent after commit |
-| CNode_Copy / Mint                     | source slot, destination slot, source's CDT next-neighbor              | CSpace path slots                            |
-| Delete (one preemption chunk)         | slot, CDT prev and next, object if final cap                           | CSpace path slots                            |
-| Untyped_Retype (one chunk)            | untyped slot, destination slots, CDT neighbors                         | CSpace path slots                            |
-| Timer interrupt (MCS)                 | current TCB, current SC, core's scheduler state                        | none                                         |
+Every other kernel word it reads changes only under the gate, which the core's active mark keeps out. The locks are `fl4_store::lock`: a 4,096-entry table of lock words, one per cache line, indexed by a hash of the object's address so that neighbouring objects (a guest's per-vCPU endpoints) use different ones; taken with a CAS, never waited for. A local path that cannot take them, or declines, leaves the entry to the gate, having written only `FAULT_IP` and the timestamp, which the general path repeats (with one domain, two timestamp updates equal the later one). A reply object taken beside the gate must have no neighbours on a call stack: `reply_remove` would write them unlocked. IPC buffers are user memory: a frame two threads on different cores share is the user's race, as on one core.
+
+Admission: only trapped syscalls, ReplyRecv and I/O port invocations (by their label, a register) try a local path. While the gate is closed, a core waits for it to open (servicing remote calls) rather than take a ticket, since queued syscalls would keep it closed for each other; but only if its last such syscall ran a fast path, beside the gate or under it (or was an I/O port access), and for at most `LOCAL_WAIT_SPINS`, since serial entries queued back to back keep the gate closed and the core would wait out of FIFO order. One whose fast path then declined would have waited for the gate twice, which cost fork-heavy loads up to 11%. Both kernels use the local paths; AArch64 has no I/O ports.
+
+### Checking a local path
+
+A local path needs three things, the obligations of P2 (§9):
+
+1. **Refinement.** When it runs, it ends in the state the general path would: `local s = (true, s') → handle_syscall_general s = s'`. `fl4-sim --fastpath-diff` runs every other serial syscall through the local path, undoes it from a store log, runs the general path, and compares every word and the simulated machine.
+2. **Footprint.** It writes only its footprint. The simulator's footprint oracle (§10) checks every word each local path writes, serially and concurrently.
+3. **Commutation.** Local paths with disjoint footprints commute, and no serial entry overlaps one. Shown once for the runtime: the locks make footprints of different cores disjoint, and the gate handshake excludes serial entries. The simulator runs local paths on every core at once under the random, PCT and x86-TSO schedulers, with mutants of the handshake and the locks.
+
+### What runs where
+
+| Operation                              | Where | Written                                                         |
+|----------------------------------------|-------|-----------------------------------------------------------------|
+| l4h guest syscall (fault to the vCPU's handler) | local | faulting thread, handler, endpoint and its queue links, reply object, core's scheduler state, handler's IPC buffer |
+| l4h handler ReplyRecv                  | local | handler, faulting thread, reply object, endpoint, SCs on the core, core's scheduler state |
+| I/O port access                        | local | caller, core's scheduler state, the port                        |
+| Everything else                        | gate  | anything                                                        |
 
 The CDT stays seL4's doubly linked list in derivation order, so the "is this the final cap" check and inserts only need the slot and its two neighbors. With MCS, IPC uses reply objects instead of reply caps, so the IPC path never touches the CDT. This is one of the main reasons FL4 builds on MCS. Shared CSpaces stay fast because CSpace walks only read slots: sel4test threads share one CSpace, and every invocation reads slots in it.
 
 ### Ownership of running threads
 
-A TCB whose thread is running on core C has its register context owned by C. C saves and restores that context outside any transaction. A remote operation that changes it, such as `TCB_WriteRegisters` or suspend, runs under the serial gate and stalls C with an IPI first, like seL4's `remoteTCBStall`, so C is not running the thread when it changes. When the kernel finds only one core, transactions, the serial gate and IPIs are skipped behind a flag set at boot, which keeps uniprocessor IPC free of atomic operations.
+A TCB whose thread is running on core C has its register context owned by C. C saves and restores that context outside the gate. A remote operation that changes it, such as `TCB_WriteRegisters` or suspend, runs under the serial gate and stalls C with an IPI first, like seL4's `remoteTCBStall`, so C is not running the thread when it changes. When the kernel finds only one core, the serial gate, local paths and IPIs are skipped behind a flag set at boot, which keeps uniprocessor IPC free of atomic operations.
 
 ## 8. SMP and MCS semantics
 
 FL4 follows seL4 17.0 MCS+SMP behavior exactly. The design points that matter for locking:
 
 - Each core has its own `SchedControl` cap, ready queues with priority bitmap, release queue and timer. A thread runs on the core of its bound scheduling context.
-- When a client donates its SC to a passive server on Call, the server runs on the client's core. Migration changes both cores' scheduler state in one transaction.
+- When a client donates its SC to a passive server on Call, the server runs on the client's core. Migration changes both cores' scheduler state under the serial gate.
 - Budget accounting reads the per-core TSC and updates only the current SC, which is in the timer path's footprint. The refill algorithm (`src/kernel/sporadic.c`) is ported directly and verified on its own: refill invariants are some of the first Lean proofs.
-- Cross-core wakeups update the target core's queues in the transaction and send the reschedule IPI after it commits, never while holding table entries.
+- Cross-core wakeups update the target core's queues under the serial gate and send the reschedule IPI. A local path wakes only threads on its own core.
 - The domain scheduler keeps seL4's global schedule. Changes go through the serial gate.
 
 ## 9. Proof plan
@@ -444,7 +379,7 @@ The proof is staged so each level is useful by itself and later levels build on 
 |-------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------|
 | P0    | Every extracted function terminates without failure (no panic, overflow or out-of-bounds) when the invariants hold. Complete: all 1,041 functions, 14 proved by hand; CI fails if any is left (`FL4_P0_STRICT`)                                                                                                                              | All of `fl4-core`                                                                               |
 | P1    | Each kernel entry preserves the invariants: well-typed heap, object alignment and non-overlap, CDT well-formed (including subframe aliases), queues consistent with thread states, refill invariants, deadline-timer trees, untyped bookkeeping | All of `fl4-core`                                                                               |
-| P2    | Transaction soundness: over an abstract model of `fl4-store` and `fl4-sync`, a committed transaction observed one consistent snapshot, its writes are applied atomically, and any history of committed transactions is equivalent to running them one after another: writers and serial entries in commit order, each read-only transaction on the memory at its start. Proved in `proofs/Fl4Proofs/P2/Runtime.lean` (`sound`, `snapshot`) | Once, for the runtime; required before fine-grained locking ships |
+| P2    | Local-path soundness (§7): each local path refines the general path (`local s = (true, s') → handle_syscall_general s = s'`) and writes only its footprint (a frame lemma: states that agree on the footprint give results that agree on it, and nothing outside it changes); and, once for the runtime, local paths with disjoint footprints commute and no serial entry overlaps one, so every execution equals some serial order | Per local path (refinement, frame); once for the gate and the locks (commutation) |
 | P3    | Functional refinement: every kernel entry refines the abstract spec                                                                                                                                                                             | One subsystem at a time: CSpace, then IPC and notifications, scheduler and MCS, untyped, VSpace |
 | P3x   | Conservative extension: on any state reachable by seL4 calls alone, every seL4 call behaves exactly as in the ported seL4 spec                                                                                                                  | Proven once for the spec, then again for each extension that touches shared state               |
 | P4    | Integrity, then confidentiality                                                                                                                                                                                                                 | After P3                                                                                        |
@@ -458,7 +393,7 @@ The proof is staged so each level is useful by itself and later levels build on 
   - Write footprints and frames for the native operations used by P3: cap-slot writes, installs, delete and finalisation, and VSpace operations. The native thread-finalisation leaf requires an unbound VCPU link. None of them breaks the invariant, and finalisation writes no cap slot.
   - The two conditions seL4's C code relies on without checking are P1 invariants, kept by every kernel entry: the current thread has an SC when `switch_sched_context` runs (`BoundInv.resume`, l4v `active_sc_tcb_at`), and a thread blocked on reply has a reply object (`ReplyInv0.reply`).
   - Typed-heap layout, object alignment and non-overlap appear as hypotheses (the sets P1 is parameterised by). CDT and untyped invariants are proved in P3 (`MdbOK`), not yet as P1 invariants.
-- **P2**: complete.
+- **P2**: not started. The transaction-soundness theorem it replaces (`proofs/Fl4Proofs/P2/Runtime.lean`, `sound` and `snapshot`) is complete, but about the transactional runtime removed on 2026-11-21 (§7); the Lean tree still builds it.
 - **P3**, in `proofs/Fl4Proofs/P3`, against `Fl4Spec` (the l4v rt abstract spec ported to Lean, up to `call_kernel`; KernelInit_A is dead in l4v and left out). The top-level theorem `handle_invocation_refinesM` relates the decode and invocation of each capability to the spec, from per-capability results and named hypotheses, and carries the CDT invariant `MdbOK` (frame invariant, untyped bookkeeping, no overlap) through a per-step relation `MdbStep`:
   - CSpace: lookups, every CNode invocation, delete and revoke (zombies, preemption), untyped retype and reset, the IRQ and IO port caps.
   - TCBs: native TCB invocations, including cap installs. The dispatcher excludes the new SetEPTRoot label.
@@ -480,7 +415,7 @@ Decided: we port seL4's Isabelle abstract specification (the MCS version, from `
 
 The argument
 
-\(1\) A committed transaction ran the serial core on one consistent snapshot of memory and its writes take effect at once, so it behaves like one serial kernel entry, which P0 to P3 are about. (2) Commits are serializable: two-phase locking of the write set with reads validated against the start clock makes any execution equivalent to running the transactions one after another in commit order. A transaction that wrote nothing commits without revalidating, so it serializes at its start rather than at its commit. Together these are P2, a textbook argument proved once in Lean over an abstract model of the runtime, not once per entry point. The uncontended probe selects the model's existing serial-entry transition, which already permits a direct entry whenever no transaction is active. The model takes each read as one step (the seqlock read in `tx.rs` rechecks the stripe around the load) and the part of a commit that runs with its write stripes locked as one step; lock acquisition, aborts and serial-gate entries interleave freely. (3) Aborted transactions have no effect: their writes stay in the buffer and their Arch effects in the queue. (4) What is left unproven is that `fl4-store`, `fl4-sync` and the IPI paths implement that model correctly on real memory. The simulator tests exactly that.
+\(1\) Under the serial gate an entry runs alone on memory, so it is one serial kernel entry, which P0 to P3 are about. (2) A local path that runs ends in the state the general path, a serial entry, would (refinement), and writes only its footprint (frame). (3) The gate holder waits for active local paths and a local path starts only on an open gate (the Dekker handshake of §7), so serial entries and local paths never overlap; two local paths hold disjoint footprints, by their locks and their cores, so they commute. Together, any execution equals running its entries one after another, in the order serial entries take the gate and local paths finish. (1) is P0–P3; (2) and (3) are P2. (4) What is left unproven is that `fl4-store`, `fl4-sync` and the IPI paths implement the gate and the locks correctly on real memory. The simulator tests exactly that, and checks (2) on every local path it runs.
 
 ### Trusted base
 
@@ -488,17 +423,17 @@ The proof assumes: Rust, LLVM and the linker; Charon, Aeneas and the Lean kernel
 
 ## 10. Deterministic simulation
 
-`fl4-sim` is a host program that links the real `fl4-core`, `fl4-sync` and the transactional store over simulated memory, with a simulated arch backend. Nothing is mocked above the hardware line.
+`fl4-sim` is a host program that links the real `fl4-core` and `fl4-sync`, over simulated memory, with a simulated arch backend. Nothing is mocked above the hardware line.
 
 ### Execution model
 
 - Each simulated CPU is a coroutine, and all of them run on one host thread, so switching CPUs is a stack switch, not a host context switch. A seeded scheduler decides which CPU runs at every scheduling point: each atomic operation, lock attempt, IPI send and store access. The same seed always replays the same run.
 - Time is virtual. Each CPU has its own TSC and TSC-deadline timer, so MCS budget overruns, timeouts and refill edge cases can be hit on purpose.
-- Atomics run on a store-buffer model of x86-TSO (`fl4-sim --tso`). `fl4-store` and `fl4-sync` do every atomic operation of the runtime (version table, clock, serial gate) and every commit store through the `Mem` trait. On hardware these are the operations themselves, inlined. In the simulator each core has a FIFO store buffer:
-  - Commit stores, the kernel's direct stores, and the runtime's release and relaxed atomic stores go into the buffer.
+- Atomics run on a store-buffer model of x86-TSO (`fl4-sim --tso`). `fl4-store` and `fl4-sync` do every atomic operation of the runtime (serial gate, object locks) through the `Mem` trait. On hardware these are the operations themselves, inlined. In the simulator each core has a FIFO store buffer:
+  - The kernel's stores and the runtime's release and relaxed atomic stores go into the buffer.
   - Loads read the core's own newest buffered store first.
   - Locked operations (CAS, fetch-add, SeqCst stores) and SeqCst fences drain the buffer, as does leaving the kernel. Otherwise buffered stores become visible at random points.
-  - A mutant that weakens the gate's SeqCst store of a core's "transaction active" flag to Release breaks the Dekker handshake between that store and the gate holder's. It passes 100 seeds under sequentially consistent scheduling and fails 5 under TSO.
+  - A mutant that weakens the SeqCst store of a core's "local path active" flag to Release breaks the Dekker handshake between that store and the gate holder's. It passes 100 seeds under sequentially consistent scheduling and fails 4 under TSO.
   - A weak-memory model for AArch64 is future work.
 - User programs are Rust closures that issue seL4 syscalls through the simulated register ABI. Workloads include generated random syscall programs, ports of the SMP-sensitive sel4test cases, and targeted races: revoke during IPC, deleting an endpoint with queued threads on several cores, SC exhaustion during migration, signal racing with a thread being bound to another core.
 
@@ -506,24 +441,22 @@ The proof assumes: Rust, LLVM and the linker; Charon, Aeneas and the Lean kernel
 
 | Oracle                                                                                                                                                                        | Catches                                                                                           |
 |-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------|
-| **Snapshot checker.** Simulated memory keeps every version of every word. Each value a transaction read must be the value at its start clock, and each write must land only at commit.  | Validation and buffering bugs, found on the first run that executes the path, with no unlucky interleaving needed |
-| **Serializability.** Record the commit order, replay the same transactions on a single-core FL4 (the proven configuration), compare every syscall result and the final state. | Lost updates, stale reads, validation bugs                                                        |
+| **Footprint.** Every word a local path beside the gate writes lies in its footprint (§7): the core's node state, threads on the core with their IPC buffers, SCs on the core, the objects it locked and the queue links of threads queued on a locked endpoint (`Sim::footprint`, computed before the path runs). Checked in the serial differential runs and in every concurrent one, while the core is still marked active, so nothing under the gate changes what it reads. It is how the queue links were found to belong to a locked endpoint's footprint. A mutant that skips the check that the receiver is on this core fails 21 of 40 serial and 29 of 60 concurrent guest-scenario seeds, every one on this oracle | A local path writing outside its footprint, on the first run that executes it, with no unlucky interleaving needed |
+| **Fast paths.** `--fastpath-diff`: every other serial syscall also runs through its local or fast path from the same state as the general path, and both must leave the same memory and machine state (§6) | Fast and local paths that diverge from the general path |
 | **Invariants.** Executable Rust versions of the P1 invariants, checked after every commit: CDT links, endpoint, notification and release queues (links, tails, owning core), and refills (ring bounds; for periodic SCs, time order without overlap and a total within the period). The workload gives SCs partial and sporadic budgets so the refill paths run. The release-queue checks found a layout bug: the release queue's tail word was the deadline-timer tree root | Corruption, close to where it starts                                                              |
-| **Liveness.** Wait-for graph with cycle detection, bounded retry counts, IPI acknowledgement deadlines. As implemented: every wait (for the serial gate, a stripe lock, or a remote stall to be acknowledged) is a counted spin, and a core that spins 2,000,000 times without finishing a kernel entry fails the run. The only blocking waits are on the gate, the stripes and stall acknowledgements, so a deadlock shows up as such a spin. A run that hangs anyway fails on the per-seed timeout | Deadlock, livelock, missed IPIs                                                                   |
+| **Liveness.** Wait-for graph with cycle detection, bounded retry counts, IPI acknowledgement deadlines. As implemented: every wait (for the serial gate, for local paths to drain, or for a remote stall to be acknowledged) is a counted spin, and a core that spins 2,000,000 times without finishing a kernel entry fails the run. The only blocking waits are those, so a deadlock shows up as such a spin. A run that hangs anyway fails on the per-seed timeout | Deadlock, livelock, missed IPIs                                                                   |
 
 ### Exploration
 
-- Random walks and PCT (probabilistic concurrency testing) at scale, millions of seeds per night. In PCT (`fl4-sim --pct D`), the live core with the highest priority runs. Priorities start in random order, and at D−1 random scheduling points the running core drops below the others. A spinning core also drops below the others, because it is waiting for another core. Each step of a run has about 50 scheduling points. PCT preempts rarely, so a transaction it preempts usually reads what the other core wrote meanwhile and aborts. As a result PCT catches the runtime mutants below in only 1–2 seeds in 100, and the random scheduler remains the main campaign.
+- Random walks and PCT (probabilistic concurrency testing) at scale, millions of seeds per night. In PCT (`fl4-sim --pct D`), the live core with the highest priority runs. Priorities start in random order, and at D−1 random scheduling points the running core drops below the others. A spinning core also drops below the others, because it is waiting for another core. Each step of a run has about 50 scheduling points. PCT preempts rarely, and catches none of the runtime mutants below in 100 seeds, so the random and TSO schedulers remain the main campaigns.
 - Bounded exhaustive search with partial-order reduction for small scenarios of 2 to 3 CPUs and a few syscalls each. These cover the hand-picked races completely.
   - As built (`fl4-sim --explore B`), the search runs every schedule of a seed's scenario with up to B preemptions. The schedule is a list of scheduling points at which the running core is preempted; otherwise a core runs until it spins or runs out of steps.
-  - The reduction: scheduling points are only the runtime's atomic operations (version table, clock, serial gate). Data accesses are bracketed by version checks, so their order against another core's matters only at those operations.
-  - A two-core, six-entry scenario has 550 to 980 such points, and a schedule takes about 2 ms of CPU, so a bound of 1 runs in under a second over all CPUs. `cargo xtask sim` runs four seeds this way.
-  - Results so far: it finds the skip-validation mutant with one preemption (43 of 582 schedules fail). It does not find the gate mutants: these scenarios have a single serial entry, which never overlaps a transaction that reads what it writes. Hand-picked scenarios that force that overlap are still to do.
-- An eighth of transactions are doomed to the serial path at random, so serial entries overlap running transactions often enough to test the gate.
-- Mutation testing checks that the simulator can fail: each known-broken runtime must fail seeds in a 100-seed concurrent campaign. The mutants are test-only Cargo features of `fl4-store` and `fl4-sync` (`mutant-skip-validation`, `mutant-no-publish`, `mutant-gate-no-wait`, `mutant-gate-release`). `cargo xtask mutants` runs each one under the random, PCT and TSO schedulers in CI, and each must be caught by at least one of them. Current catch rates out of 100 seeds (random/PCT/TSO): 36/1/43, 51/1/48, 10/0/15, and 0/0/3 for the last, which only the store-buffer model can see. Measured so far: commit skips read validation (57/100 seeds fail before the snapshot checker; with it 50/100, every one at the faulty commit), the gate does not wait for running transactions (14/100), commit does not publish new stripe versions (53/100; with the checker 52/100, every one at the commit).
-- The snapshot checker is implemented as: each word's history tagged with the commit version that wrote it (serial entries take the current clock); a committed writer's reads must match memory just before its commit version, a read-only transaction's its start version. Words a core writes directly outside the gate (its own thread's context, §7) carry no version and are left unchecked; about a tenth of reads fall there.
+  - The reduction: scheduling points are only the runtime's atomic operations (serial gate, object locks). Data accesses happen with the gate held or within a local path's footprint, so their order against another core's matters only at those operations.
+  - A two-core, six-entry scenario has 156 to 162 such points, and a schedule takes about 2 ms of CPU, so a bound of 1 runs in well under a second over all CPUs. `cargo xtask sim` runs four seeds this way.
+  - Results so far: it finds none of the mutants below. These scenarios run the plain workload, whose local paths are rare (I/O port accesses), so a serial entry seldom meets one; hand-picked scenarios with the guest pattern are still to do.
+- Mutation testing checks that the simulator can fail: each known-broken runtime must fail seeds in a 100-seed concurrent campaign with an l4h vCPU's syscall pattern on every core. The mutants are test-only Cargo features of `fl4-sync`: the gate holder does not wait for active local paths (`mutant-gate-no-wait`), a local path marks its core active without the handshake's store-load order (`mutant-gate-release`), without marking it at all (`mutant-local-no-active`), or without locking its objects (`mutant-local-no-lock`). `cargo xtask mutants` runs each one under the random, PCT and TSO schedulers in CI, and each must be caught by at least one of them. Current catch rates out of 100 seeds (random/PCT/TSO): 15/0/40, 0/0/4, 46/0/52 and 27/0/25. The footprint oracle has no mutant here: one that skips the check that the receiver is on this core, a change to `fl4-core`, is caught as described under Oracles. A local path that writes the reply objects next to its own on a call stack (the bug `Reply.next == 0` guards against) is not caught: the workload builds no such call stack.
 - Failing seeds shrink automatically and become regression tests. A failing run is cut to the shortest prefix of the same seed that still fails, found by bisecting the step count; one mutant's 4000-step failure shrank to 12 steps. `--record` appends shrunk runs to `crates/fl4-sim/regressions`, which every campaign replays first.
-- `cargo xtask sim` runs every campaign above (100 seeds each of random, PCT and TSO, 25 each of the endpoint and notification races under random and TSO, the four bounded searches, and 100 seeds with every entry under the serial gate) in about 5 seconds on 16 host CPUs. Where the time went before, when it took over 25 minutes:
+- `cargo xtask sim` runs every campaign above (100 seeds each of random, PCT and TSO; 25 each of the endpoint and notification races under random and TSO; 25 each of the guest scenario with the fast-path check, of the plain workload with it, and of the guest scenario under random, PCT and TSO; and the four bounded searches) in about 3.5 seconds on 16 host CPUs. Where the time went before, when it took over 25 minutes:
   - Simulated CPUs were host threads handing a baton through a condition variable, about 10 million host context switches for one endpoint-race run.
   - Each run booted again: boot reads all of free memory (l4h 0019), 36 ms. Boot now uses a fixed seed. A campaign boots once and forks a child per run from the booted state, with one child per host CPU at a time, and the seed's RNG starts after boot.
   - The capability and refill oracles scanned the whole 8,192-slot root CNode after every entry. They now check only slots written since the last check, slots that were not empty and unlinked then, and every slot of a CNode or TCB that is new to them. Any other slot is unchanged since a check found it empty and unlinked.
@@ -651,6 +584,8 @@ Two experiments with 16-byte stripes failed:
 - An adjacency-preserving table raised serial entries tenfold.
 
 `FL4_PIN=c0,c1,...` pins each vCPU thread to a host CPU; xtask gets the thread IDs from QEMU over QMP. Until the kbench work it also pinned a bogus "thread 0" (the SMT thread number in each CPU's QMP `props`), which shifted the list so that two vCPUs shared one host CPU. That, not the host, explains an earlier pinned run in which both kernels slowed down more than 20× from 5 pairs on.
+
+The SMP measurements below up to 2026-11-21 ran the transactional runtime, removed then (§7): the probes, stripes, conflict logs and transaction counts they mention no longer exist. They stay as the record of why.
 
 **Kernel-intensive SMP throughput** (`cargo xtask kbench`, fl4test FL4PERF0003). k workers on k cores, k = 1, 2, 4, 6, each repeat one kernel operation on objects of their own for a fixed window of 10⁸ TSC ticks:
 - `yield`: `seL4_Yield`.
@@ -915,8 +850,8 @@ Ordered by dependency. Each milestone ends with a check that can be run.
 - **M0 Scaffolding** — ABI and bitfield generators, workspace, CMake drop-in, Aeneas pipeline on a stub core, boot to a serial banner on QEMU. *Exit: sel4test builds against FL4; extraction runs in CI.*
 - **M1 Uniprocessor MCS kernel** — CSpace, CDT, untyped, TCB, endpoints, notifications, reply and SC objects, VSpace, IRQs, faults, debug syscalls, both MCS timer modes. The l4h fixes, and the l4h extensions that do not depend on SMP. *Exit: sel4test passes with 1 core, debug and release, in both KVM setups.*
 - **M2 P0 and first P1 proofs** — No-failure proofs for all of `fl4-core`, CDT and refill invariants. *Exit: P0 complete; extraction gate enforced.*
-- **M3 SMP in serial-gate mode** — APs, per-core scheduling, IPIs, migration, and the remaining l4h extensions. Every transaction takes the serial gate, which behaves like a big lock. Simulator with oracles running. *Exit: sel4test passes with 2 and 4 cores.*
-- **M4 Fine-grained locking** — The transactional store over the lock table, deferred Arch effects, escalation of irrevocable entries to the serial gate, and the simulator interleaving transactions inside kernel entries. P2 for the runtime. Serial-gate mode stays as a test-only Cargo feature for differential runs. It is not a user-facing option. *Exit: P2 complete; nightly simulation clean for two weeks; sel4test passes; scaling target met.*
+- **M3 SMP under the serial gate** — APs, per-core scheduling, IPIs, migration, and the remaining l4h extensions. Every entry takes the serial gate, which behaves like a big lock. Simulator with oracles running. *Exit: sel4test passes with 2 and 4 cores.*
+- **M4 Local paths** — The common paths run beside the gate (§7): an l4h guest's syscalls and I/O port accesses so far; page mapping under a per-address-space lock next, as measurement directs. Each with its refinement and footprint checked by the simulator, and P2 for each and for the runtime. (A transactional runtime filled this milestone until 2026-11-21, §7.) *Exit: P2 for every local path; nightly simulation clean for two weeks; sel4test passes; scaling target met.*
 - **M5 P1 completion and performance** — Full invariant set. Speed up the general IPC path in `fl4-core` without adding a second copy of it. *Exit: P1 complete; uniprocessor IPC within target.*
 - **M6 Refinement** — P3 per subsystem against the ported spec. *Exit: each subsystem's refinement proof lands separately.*
 
@@ -929,8 +864,8 @@ AArch64 is future work, outside M1–M6. The boundary rules in §11 still apply,
 | Aeneas cannot express some kernel patterns, or proof terms grow too large at kernel scale | Extractability gate from M0. Keep functions small. Prove against the `Store` trait instead of a concrete heap. Budget time to contribute upstream fixes to Charon and Aeneas.          |
 | Porting the abstract spec to Lean is a large job                                          | Port incrementally per subsystem, in the same order as P3. P0 to P2 do not need the abstract spec.                                                                                     |
 | Behavior differs from seL4 in cases sel4test does not cover                               | Differential fuzzing against seL4 on QEMU. Decoders follow the C source check by check.                                                                                                |
-| Retries make worst-case execution time hard to bound                                      | Serial-gate escalation after N retries gives a bound comparable to the big lock. Measure retry rates in simulation and on hardware.                                                    |
-| False sharing in the lock table under load                                                | Table size is configurable. The hash includes high address bits. Monitor collision counters in benchmark builds.                                                                       |
+| The serial gate limits scaling for workloads without local paths                          | Measure (smpbench, §12) and add local paths for what dominates; each comes with its own refinement and footprint check. The gate itself bounds worst-case waits as seL4's lock does.    |
+| A local path writes outside its footprint                                                 | The footprint oracle checks every local path the simulator runs; P2 is to prove it. Keep local paths few and simple.                                                                   |
 | The simulator misses a bug that only real hardware shows                                  | Keep the trusted runtime tiny, test both KVM CPU models and TCG, and use QEMU record and replay to reproduce.                                                                          |
 | KVM hides timing and ordering behavior of real hardware, and one AMD host runs every test | The reduced-feature KVM setup covers the fallback hardware paths. The simulator's memory model does not depend on the host. Add an Intel KVM host once FL4 is ready for wider testing. |
 
@@ -949,9 +884,9 @@ Settled on 2026-11-12.
 | Binary compatibility        | Not a goal. FL4 is compatible with the seL4 API at the source level and numbers its own ABI.                                              | §2                                |
 | Debug syscall MCP threshold | Not supported.                                                                                                                            | §4                                   |
 | Multikernel                 | Not supported. FL4 is the only kernel on its machine.                                                                                     | §4                                   |
-| Fastpaths                   | None for now. Only the general, verified IPC path.                                                                                        | §1, §3                  |
+| Fastpaths                   | Only for an l4h guest syscall's fault and reply, checked against the general path in simulation; their refinement proof is to do.        | §6, §9                  |
 | Test hardware               | Only inside QEMU/KVM guests on the development machine. FL4 never boots on that machine's hardware.                                       | §12                              |
-| Fine-grained locking        | A transactional store (TL2 style) under the unchanged serial core, not a prepare/perform split of every operation. Decided 2026-11-13. | §6, §7, §9, §13 |
+| Fine-grained locking        | The serial gate, with local paths beside it whose footprints are checked, under the unchanged serial core. Replaces a transactional store (TL2 style, decided 2026-11-13). Decided 2026-11-21. | §6, §7, §9, §13 |
 | IBPB on context switch      | No separate context-switch barrier. Native kernel entry uses IBPB or Safe RET to protect the kernel, or neither on AMD CPUs with AutoIBRS that report SRSO_NO or SRSO_USER_KERNEL_NO. Every VM exit issues IBPB to protect the kernel and userspace VMM. General user-to-user side-channel isolation remains outside the model. Revised 2026-11-17; see [the security policy](docs/virtualization-security.md). | §3 |
 
 VT-x and AMD-V support precede the AArch64 port. P0 covers the virtualization policy; P1/P3 use the expanded capability and TCB layouts, with native semantic scope as described in §9.

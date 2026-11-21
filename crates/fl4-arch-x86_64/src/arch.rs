@@ -1,12 +1,6 @@
-//! `fl4_core::machine::Arch` on x86_64 hardware.
-//!
-//! Inside a transaction (DESIGN.md §7) the operations fall in three groups:
-//! reads of the machine that have no lasting effect run at once (time, the
-//! IRR); operations other cores or the hardware would observe are queued
-//! (`Effect`) and run after commit; and operations that can be neither
-//! repeated nor deferred (port I/O, remote stalls, IOAPIC programming, FPU
-//! state on another core, TLB shootdowns) end the transaction's chances:
-//! the entry reruns under the serial gate, where they run directly.
+//! `fl4_core::machine::Arch` on x86_64 hardware. Every operation runs at
+//! once: kernel entries run under the serial gate, or are local paths
+//! beside it whose operations concern their own core (DESIGN.md §7).
 use crate::{apic, cpu, fpu, ioapic, percpu, serial, smp, timer, tlb};
 use fl4_core::layout::{irq, PPTR_BASE};
 use fl4_core::machine::Arch;
@@ -26,71 +20,10 @@ fn irq_requested() -> bool {
     false
 }
 
-#[derive(Clone, Copy)]
-pub enum Effect {
-    Deadline(u64),
-    Mask(u64, bool),
-    Forget(u64),
-    Ack,
-    VSpace(u64, u64),
-    Reschedule(u64),
-    Putc(u8),
-}
-
-pub const MAX_EFFECTS: usize = 64;
-
-fn in_tx() -> bool {
-    percpu::get().tx.get()
-}
-
-fn serial_needed() {
-    fl4_store::tx::doom_serial(percpu::cpu_index() as u64);
-}
-
-/// Queue `e` if a transaction runs; returns whether it did.
-#[inline(always)]
-fn defer(e: Effect) -> bool {
-    let pc = percpu::get();
-    if !pc.tx.get() {
-        return false;
-    }
-    if pc.neffects.get() == MAX_EFFECTS {
-        serial_needed();
-    } else {
-        pc.effects[pc.neffects.get()].set(e);
-        pc.neffects.set(pc.neffects.get() + 1);
-    }
-    true
-}
-
-/// Run the effects the committed transaction queued.
-pub fn apply_effects() {
-    let n = percpu::get().neffects.get();
-    for i in 0..n {
-        match percpu::get().effects[i].get() {
-            Effect::Deadline(t) => timer::set_deadline(t),
-            Effect::Mask(irq, m) => ioapic::mask(irq, m),
-            Effect::Forget(irq) => ioapic::forget(irq),
-            Effect::Ack => apic::eoi(),
-            Effect::VSpace(root, asid) => switch_vspace(root, asid),
-            Effect::Reschedule(m) => smp::reschedule(m),
-            Effect::Putc(c) => serial::putc(c),
-        }
-    }
-    percpu::get().neffects.set(0);
-}
-
-/// Drop the effects of a transaction that did not commit.
-pub fn discard_effects() {
-    percpu::get().neffects.set(0);
-}
-
 /// IRQ `irq` is free again (its handler was deleted): mask its pin and drop
-/// its route (`ioapic::forget`), after commit inside a transaction.
+/// its route (`ioapic::forget`).
 pub fn forget_irq(irq: u64) {
-    if !defer(Effect::Forget(irq)) {
-        ioapic::forget(irq)
-    }
+    ioapic::forget(irq)
 }
 
 #[inline(always)]
@@ -104,18 +37,13 @@ impl Arch for PhysArch {
     fn dma_ram(&self, base: u64, bytes: u64) -> bool { crate::sev::is_dma_ram(base, bytes) }
 
     fn dma_frame(&mut self, base: u64, bytes: u64, shared: bool) {
-        if in_tx() {
-            serial_needed();
-        } else {
-            crate::sev::transition(base, bytes, shared);
-        }
+        crate::sev::transition(base, bytes, shared);
     }
 
     fn virtualization(&self) -> u64 { crate::vm::backend() }
     fn vcpu_capability(&self, field: u64) -> u64 { crate::vm::capability(field) }
-    fn vcpu_barrier(&mut self) { if in_tx() { serial_needed(); } }
+    fn vcpu_barrier(&mut self) {}
     fn invalidate_ept(&mut self, root: u64, mask: u64) {
-        if in_tx() { return serial_needed(); }
         crate::vm::invalidate_local(root);
         smp::remote_call(smp::CALL_EPT, root, 0, mask);
     }
@@ -124,9 +52,7 @@ impl Arch for PhysArch {
         timer::now()
     }
     fn set_deadline(&mut self, ticks: u64) {
-        if !defer(Effect::Deadline(ticks)) {
-            timer::set_deadline(ticks)
-        }
+        timer::set_deadline(ticks)
     }
     fn us_to_ticks(&self, us: u64) -> u64 {
         timer::us_to_ticks(us)
@@ -144,8 +70,8 @@ impl Arch for PhysArch {
     fn irq_pending(&mut self) -> bool {
         irq_requested()
     }
-    /// An interrupt accepted here is kept until the entry completes, so a
-    /// transaction that reruns sees it again.
+    /// An interrupt accepted here is kept until the entry completes, so an
+    /// entry a stall cancels still gets it handled (`unhandled_irq`).
     fn take_pending_irq(&mut self) -> u64 {
         let pc = percpu::get();
         if pc.held_irq.get() != percpu::NO_IRQ {
@@ -162,42 +88,26 @@ impl Arch for PhysArch {
         pc.polled_irq.get()
     }
     fn mask_irq(&mut self, irq: u64, mask: bool) {
-        if !defer(Effect::Mask(irq, mask)) {
-            ioapic::mask(irq, mask)
-        }
+        ioapic::mask(irq, mask)
     }
     fn irq_free(&mut self, irq: u64) {
         forget_irq(irq);
     }
     fn ack_irq(&mut self, _irq: u64) {
-        if !defer(Effect::Ack) {
-            apic::eoi()
-        }
+        apic::eoi()
     }
 
     #[inline(always)]
     fn set_vspace(&mut self, root: u64, asid: u64) {
-        if !defer(Effect::VSpace(root, asid)) {
-            switch_vspace(root, asid)
-        }
+        switch_vspace(root, asid)
     }
     // An invalidation runs after the page tables changed, and other cores
-    // running the address space are shot down (tlb.rs). The changes reach
-    // memory only at commit, after which no IPI can be sent, so inside a
-    // transaction an invalidation sends the entry to the serial gate.
-    // (Mapping into an empty entry invalidates nothing and stays in the
-    // transaction.)
+    // running the address space are shot down (tlb.rs).
     fn invalidate_page(&mut self, asid: u64, vaddr: u64) {
-        if in_tx() {
-            return serial_needed();
-        }
         let remote = tlb::invalidate_page(asid, vaddr);
         smp::remote_call(smp::CALL_INVLPG, asid, vaddr, remote);
     }
     fn invalidate_asid(&mut self, asid: u64) {
-        if in_tx() {
-            return serial_needed();
-        }
         let remote = tlb::invalidate_asid(asid);
         smp::remote_call(smp::CALL_FLUSH_TLB, asid, 0, remote);
     }
@@ -209,10 +119,6 @@ impl Arch for PhysArch {
         if ioapic >= ioapic::count() || pin >= ioapic::pins(ioapic) {
             return false;
         }
-        if in_tx() {
-            serial_needed();
-            return true;
-        }
         // False only for a boot CPU whose x2APIC ID a compatibility entry
         // cannot name; the pin then stays as it was (masked, unless an
         // earlier request routed it).
@@ -221,10 +127,6 @@ impl Arch for PhysArch {
     fn ioapic_map_remapped(&mut self, ioapic: u64, pin: u64, level: u64, polarity: u64, vector: u64, handle: u64) -> bool {
         if ioapic >= ioapic::count() || pin >= ioapic::pins(ioapic) {
             return false;
-        }
-        if in_tx() {
-            serial_needed();
-            return true;
         }
         let high = (((handle & 0x7fff) as u32) << 17) | (1 << 16);
         let lo_extra = (((handle >> 15) & 1) as u32) << 11;
@@ -238,10 +140,6 @@ impl Arch for PhysArch {
     }
 
     fn port_in(&mut self, port: u64, size: u64) -> u64 {
-        if in_tx() {
-            serial_needed();
-            return 0;
-        }
         let p = port as u16;
         match size {
             1 => cpu::inb(p) as u64,
@@ -250,9 +148,6 @@ impl Arch for PhysArch {
         }
     }
     fn port_out(&mut self, port: u64, size: u64, v: u64) {
-        if in_tx() {
-            return serial_needed();
-        }
         let p = port as u16;
         match size {
             1 => cpu::outb(p, v as u8),
@@ -261,76 +156,36 @@ impl Arch for PhysArch {
         }
     }
 
-    // FPU images are written by XSAVE, not through the store: anything that
-    // would touch live state, or write an image, runs serially.
     fn fpu_flush(&mut self, tcb: u64) {
-        // Bringing a compacted image back to the standard format, or
-        // clearing components the save skipped, writes the TCB outside the
-        // store.
-        if in_tx() {
-            if fpu::is_live(tcb) || fpu::flush_writes() {
-                serial_needed();
-            }
-            return;
-        }
         fpu::flush(tcb)
     }
     fn fpu_sanitise(&mut self, tcb: u64) {
-        if in_tx() {
-            return serial_needed();
-        }
         fpu::sanitise(tcb)
     }
     fn fpu_reload(&mut self, tcb: u64) {
-        if in_tx() {
-            if fpu::is_live(tcb) {
-                serial_needed();
-            }
-            return;
-        }
         fpu::forget(tcb)
     }
     fn fpu_release(&mut self, tcb: u64) {
-        if in_tx() {
-            if fpu::is_live(tcb) {
-                serial_needed();
-            }
-            return;
-        }
         fpu::release(tcb)
     }
 
     fn remote_stall(&mut self, cpu: u64) {
-        if in_tx() {
-            return serial_needed();
-        }
         smp::remote_call(smp::CALL_STALL, 0, 0, 1u64 << (cpu & 63));
     }
     fn send_reschedule(&mut self, mask: u64) {
-        if !defer(Effect::Reschedule(mask)) {
-            smp::reschedule(mask)
-        }
+        smp::reschedule(mask)
     }
 
     fn putc(&mut self, c: u64) {
-        if !defer(Effect::Putc(c as u8)) {
-            serial::putc(c as u8)
-        }
+        serial::putc(c as u8)
     }
     fn get_char(&mut self) -> u64 {
-        if in_tx() {
-            serial_needed();
-            return u64::MAX;
-        }
         match serial::getc() {
             Some(c) => c as u64,
             None => u64::MAX,
         }
     }
     fn halt(&mut self) {
-        if in_tx() {
-            return serial_needed();
-        }
         for b in b"FL4: halted by seL4_DebugHalt\n" {
             serial::putc(*b);
         }
@@ -351,23 +206,9 @@ pub fn print_stats() {
     for &b in &line[..n] {
         serial::putc(b);
     }
-    // This core's recent conflicts (fl4_store::tx::conflicts), in hex.
-    let hex = |v: u64| {
-        for i in (0..16).rev() {
-            serial::putc(b"0123456789abcdef"[((v >> (4 * i)) & 15) as usize]);
-        }
-    };
-    for b in b"FL4: recent conflicts:" {
-        serial::putc(*b);
-    }
-    for c in fl4_store::tx::conflicts(percpu::cpu_index() as u64) {
-        serial::putc(b' ');
-        hex(c);
-    }
-    serial::putc(b'\n');
 }
 
-/// "FL4: N transactions committed, N aborted, N serial entries\n".
+/// "FL4: N serial entries\n".
 fn fmt_stats(out: &mut [u8; 96]) -> usize {
     use core::sync::atomic::Ordering::Relaxed;
     let mut n = 0;
@@ -393,12 +234,6 @@ fn fmt_stats(out: &mut [u8; 96]) -> usize {
     };
     let mut b = [0u8; 20];
     put(b"FL4: ", &mut n);
-    let i = num(smp::TX_COMMITS.load(Relaxed), &mut b);
-    put(&b[i..], &mut n);
-    put(b" transactions committed, ", &mut n);
-    let i = num(smp::TX_ABORTS.load(Relaxed), &mut b);
-    put(&b[i..], &mut n);
-    put(b" aborted, ", &mut n);
     let i = num(smp::SERIAL_ENTRIES.load(Relaxed), &mut b);
     put(&b[i..], &mut n);
     put(b" serial entries\n", &mut n);

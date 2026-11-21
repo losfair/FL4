@@ -35,12 +35,8 @@ pub struct PerCpu {
     pub gate_held: Cell<bool>,
     /// The deadline the timer is armed for (counter ticks; 0 = none).
     pub armed: Cell<u64>,
-    /// A transaction runs on this core (Arch effects are queued).
-    pub tx: Cell<bool>,
-    pub effects: [Cell<crate::arch::Effect>; crate::arch::MAX_EFFECTS],
-    pub neffects: Cell<usize>,
-    /// An interrupt accepted during the current entry, offered again if
-    /// the entry's transaction reruns (a GIC interrupt ID).
+    /// An interrupt accepted during the current entry (a GIC interrupt ID),
+    /// handled by an entry of its own if a stall cancels this one.
     pub held_irq: Cell<u64>,
     /// The current run of the entry was given `held_irq`.
     pub held_used: Cell<bool>,
@@ -62,9 +58,6 @@ impl PerCpu {
             vspace_stale: Cell::new(false),
             gate_held: Cell::new(false),
             armed: Cell::new(0),
-            tx: Cell::new(false),
-            effects: [const { Cell::new(crate::arch::Effect::Ack(0)) }; crate::arch::MAX_EFFECTS],
-            neffects: Cell::new(0),
             held_irq: Cell::new(NO_IRQ),
             held_used: Cell::new(false),
             iar: Cell::new(0),

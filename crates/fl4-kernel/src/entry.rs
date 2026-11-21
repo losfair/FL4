@@ -7,7 +7,6 @@ use fl4_core::layout::{irq, node, reg, tcb as tl};
 use fl4_core::machine::Store;
 use fl4_core::obj::{node_get, Tcb};
 use fl4_core::{debug, sched, syscall};
-use fl4_arch_x86_64::arch;
 use fl4_store::{Phys, PhysStore};
 use fl4_sync::SerialGate;
 use fl4_arch_x86_64::smp;
@@ -100,8 +99,8 @@ const RFLAGS_TF: u64 = 1 << 8;
 
 static mut KS_BASE: u64 = 0;
 
-/// The serial gate (DESIGN.md §7): kernel entries that cannot run as
-/// transactions run holding it, with no transaction running.
+/// The serial gate (DESIGN.md §7): kernel entries run holding it, except
+/// syscalls' local paths, which run beside it.
 pub static GATE: SerialGate = SerialGate::new();
 
 pub fn set_ks_base(b: u64) {
@@ -111,7 +110,7 @@ pub fn set_ks_base(b: u64) {
 /// Direct access to kernel memory (one core, the serial gate, or this
 /// core's own thread context).
 pub fn store() -> PhysStore {
-    PhysStore { frame_masks: (fl4_arch_x86_64::sev::mask(), 0), ks_base: unsafe { KS_BASE }, cpu: percpu::cpu_index() as u64, tx: false }
+    PhysStore { frame_masks: (fl4_arch_x86_64::sev::mask(), 0), ks_base: unsafe { KS_BASE }, cpu: percpu::cpu_index() as u64 }
 }
 
 #[inline(always)]
@@ -253,9 +252,7 @@ fn unlock() {
 }
 
 /// The kernel's side of `fl4_sync::run_entry`.
-struct KernelEnv {
-    serial: bool,
-}
+struct KernelEnv;
 
 impl fl4_sync::EntryEnv for KernelEnv {
     type S = PhysStore;
@@ -267,16 +264,8 @@ impl fl4_sync::EntryEnv for KernelEnv {
     fn multi(&self) -> bool {
         smp::multi()
     }
-    fn prefer_serial(&self) -> bool {
-        self.serial
-    }
-    /// No transactions on x86_64: entries queue for the gate, and guest
-    /// syscall fast paths run beside it (`fl4_sync::run_syscall`).
-    fn tx_attempts(&self) -> u32 {
-        0
-    }
-    fn store(&self, tx: bool) -> PhysStore {
-        PhysStore { frame_masks: (fl4_arch_x86_64::sev::mask(), 0), ks_base: unsafe { KS_BASE }, cpu: self.cpu(), tx }
+    fn store(&self) -> PhysStore {
+        PhysStore { frame_masks: (fl4_arch_x86_64::sev::mask(), 0), ks_base: unsafe { KS_BASE }, cpu: self.cpu() }
     }
     fn arch(&self) -> PhysArch {
         PhysArch
@@ -287,23 +276,8 @@ impl fl4_sync::EntryEnv for KernelEnv {
     fn service_remote(&self) -> bool {
         service_remote()
     }
-    fn set_tx(&self, on: bool) {
-        let pc = percpu::get();
-        pc.tx.set(on);
-        if on {
-            pc.held_used.set(false);
-        }
-    }
-    fn finish_effects(&self, committed: bool) {
-        if committed {
-            arch::apply_effects();
-        } else {
-            arch::discard_effects();
-        }
-    }
     #[inline(always)]
     fn entry_done(&self) {
-        // An interrupt only an aborted attempt took stays for unhandled_irq.
         let pc = percpu::get();
         if pc.held_used.get() {
             pc.held_irq.set(percpu::NO_IRQ);
@@ -328,15 +302,6 @@ impl fl4_sync::EntryEnv for KernelEnv {
         if !fl4_abi::config::DEBUG_BUILD { return; }
         use core::sync::atomic::Ordering::Relaxed;
         match what {
-            fl4_sync::Count::Commit => {
-                let c = smp::TX_COMMITS.fetch_add(1, Relaxed);
-                if fl4_abi::config::DEBUG_BUILD && c & 0x3ffff == 0x3ffff {
-                    arch::print_stats();
-                }
-            }
-            fl4_sync::Count::Abort => {
-                smp::TX_ABORTS.fetch_add(1, Relaxed);
-            }
             fl4_sync::Count::Serial => {
                 smp::SERIAL_ENTRIES.fetch_add(1, Relaxed);
             }
@@ -347,8 +312,8 @@ impl fl4_sync::EntryEnv for KernelEnv {
 
 /// Run the kernel's part of an entry (DESIGN.md §7, `fl4_sync::run_entry`).
 #[inline(always)]
-fn run_entry(irq: bool, serial: bool, body: impl FnMut(&mut PhysStore, &mut PhysArch)) -> bool {
-    fl4_sync::run_entry(&KernelEnv { serial }, &GATE, irq, body)
+fn run_entry(irq: bool, body: impl FnMut(&mut PhysStore, &mut PhysArch)) -> bool {
+    fl4_sync::run_entry(&KernelEnv, &GATE, irq, body)
 }
 
 /// Back to the interrupted user code without a kernel entry: the CR3 value
@@ -439,7 +404,7 @@ extern "C" fn fl4_entry(f: &mut Frame) -> u64 {
                 }
                 apic::ack_stray(v);
                 if irq {
-                    run_entry(true, false, |s, a| syscall::handle_interrupt_entry(s, a, v - VEC_IRQ_MIN));
+                    run_entry(true, |s, a| syscall::handle_interrupt_entry(s, a, v - VEC_IRQ_MIN));
                 }
                 exit();
             }
@@ -512,7 +477,7 @@ extern "C" fn fl4_entry(f: &mut Frame) -> u64 {
     if v == smp::REMOTE_CALL_VECTOR as u64 {
         service_remote();
     }
-    // Machine state the entry reads once, outside the repeatable part.
+    // Machine state the entry reads once.
     let cr2 = if v == 14 { cpu::read_cr2() } else { 0 };
     let dr6 = if v == 1 && fl4_abi::config::HARDWARE_DEBUG_API {
         let d = cpu::read_dr6();
@@ -521,41 +486,18 @@ extern "C" fn fl4_entry(f: &mut Frame) -> u64 {
     } else {
         0
     };
-    // Only a VMEnter that can reach vcpu::enter needs the serial gate.
-    // Invalid or trapped calls retain ordinary probe/transaction admission.
-    // These caller-owned reads are only a hint: dispatch rechecks them,
-    // and a remote stall still cancels the entry before its body runs.
-    let serial = v == VEC_SYSCALL
-        && f.rdx as i64 == fl4_abi::syscall::SysVMEnter
-        && fl4_arch_x86_64::vm::backend() != 0
-        && {
-            let s = store();
-            let t = sched::cur_thread(&s);
-            t.flags(&s) & fl4_abi::consts::tcb_flag::TRAP_SYSCALLS == 0
-                && fl4_core::vcpu::bound(&s, t) != 0
-        };
     // An interrupt is handled even if a stall cancelled the entry: it has
     // been accepted and needs its EOI.
     let body = |s: &mut PhysStore, a: &mut PhysArch| {
-        if s.tx {
-            dispatch_entry(&mut s.specialize::<true>(), a, v, irq, f.rdx as i64, f.error, cr2, dr6);
-        } else {
-            dispatch_entry(&mut s.specialize::<false>(), a, v, irq, f.rdx as i64, f.error, cr2, dr6);
-        }
+        dispatch_entry(s, a, v, irq, f.rdx as i64, f.error, cr2, dr6);
     };
     if v == VEC_SYSCALL {
         let number = f.rdx as i64;
-        let local = |s: &mut PhysStore, a: &mut PhysArch| fl4_sync::local_syscall(&mut s.specialize::<false>(), a, &Phys, number);
-        let syscall_body = |s: &mut PhysStore, a: &mut PhysArch| {
-            if s.tx {
-                dispatch_syscall_entry(&mut s.specialize::<true>(), a, number)
-            } else {
-                dispatch_syscall_entry(&mut s.specialize::<false>(), a, number)
-            }
-        };
-        fl4_sync::run_syscall(&KernelEnv { serial }, &GATE, number, local, syscall_body);
+        let local = |s: &mut PhysStore, a: &mut PhysArch| fl4_sync::local_syscall(s, a, &Phys, number);
+        let syscall_body = |s: &mut PhysStore, a: &mut PhysArch| dispatch_syscall_entry(s, a, number);
+        fl4_sync::run_syscall(&KernelEnv, &GATE, number, local, syscall_body);
     } else {
-        run_entry(irq, serial, body);
+        run_entry(irq, body);
     }
     exit()
 }
@@ -633,9 +575,7 @@ fn dispatch_handler<S: fl4_core::machine::Store>(
 pub fn exit() -> ! {
     loop {
         fl4_arch_x86_64::sev::snp::halt_if_poisoned();
-        // Exit never runs in a transaction. Use the direct specialization
-        // for guest entry/exit and scheduling, as syscall dispatch does.
-        let s = &mut store().specialize::<false>();
+        let s = &mut store();
         let mut ct = sched::cur_thread(s);
         if ct.state(s) == sched::TS_RUNNING_VM {
             // Register the nested root before releasing the gate. An

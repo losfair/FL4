@@ -17,8 +17,6 @@ pub const CALL_ASID: u64 = 7;
 pub const CALL_GIC_MASK: u64 = 8;
 pub const CALL_GIC_CONFIG: u64 = 9;
 
-pub static TX_COMMITS: AtomicU64 = AtomicU64::new(0);
-pub static TX_ABORTS: AtomicU64 = AtomicU64::new(0);
 pub static SERIAL_ENTRIES: AtomicU64 = AtomicU64::new(0);
 
 static ONLINE: AtomicU64 = AtomicU64::new(1);

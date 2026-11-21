@@ -1,7 +1,7 @@
 //! Kernel entry and exit: entry.S has saved the user registers into the
 //! current TCB; dispatch to fl4-core, then run whichever thread is current.
 use crate::kprintln;
-use fl4_arch_aarch64::arch::{self, PhysArch};
+use fl4_arch_aarch64::arch::PhysArch;
 use fl4_arch_aarch64::{fpu, gic, mmu, percpu, smp, timer};
 use fl4_core::layout::{irq, node, reg, tcb as tl};
 use fl4_core::machine::Store;
@@ -37,7 +37,7 @@ pub fn set_ks_base(b: u64) {
 }
 
 pub fn store() -> PhysStore {
-    PhysStore { frame_masks: (0, 0), ks_base: unsafe { KS_BASE }, cpu: percpu::cpu_index() as u64, tx: false }
+    PhysStore { frame_masks: (0, 0), ks_base: unsafe { KS_BASE }, cpu: percpu::cpu_index() as u64 }
 }
 
 fn service_remote() -> bool {
@@ -83,8 +83,8 @@ impl fl4_sync::EntryEnv for KernelEnv {
     fn multi(&self) -> bool {
         smp::multi()
     }
-    fn store(&self, tx: bool) -> PhysStore {
-        PhysStore { frame_masks: (0, 0), ks_base: unsafe { KS_BASE }, cpu: self.cpu(), tx }
+    fn store(&self) -> PhysStore {
+        PhysStore { frame_masks: (0, 0), ks_base: unsafe { KS_BASE }, cpu: self.cpu() }
     }
     fn arch(&self) -> PhysArch {
         PhysArch
@@ -94,20 +94,6 @@ impl fl4_sync::EntryEnv for KernelEnv {
     }
     fn service_remote(&self) -> bool {
         service_remote()
-    }
-    fn set_tx(&self, on: bool) {
-        let pc = percpu::get();
-        pc.tx.set(on);
-        if on {
-            pc.held_used.set(false);
-        }
-    }
-    fn finish_effects(&self, committed: bool) {
-        if committed {
-            arch::apply_effects();
-        } else {
-            arch::discard_effects();
-        }
     }
     fn entry_done(&self) {
         let pc = percpu::get();
@@ -133,15 +119,6 @@ impl fl4_sync::EntryEnv for KernelEnv {
         }
         use core::sync::atomic::Ordering::Relaxed;
         match what {
-            fl4_sync::Count::Commit => {
-                let c = smp::TX_COMMITS.fetch_add(1, Relaxed);
-                if c & 0x3ffff == 0x3ffff {
-                    arch::print_stats();
-                }
-            }
-            fl4_sync::Count::Abort => {
-                smp::TX_ABORTS.fetch_add(1, Relaxed);
-            }
             fl4_sync::Count::Serial => {
                 smp::SERIAL_ENTRIES.fetch_add(1, Relaxed);
             }
@@ -206,13 +183,7 @@ extern "C" fn fl4_entry(kind: u64, esr: u64, far: u64) -> ! {
             Some(i) => i,
             None => resume(),
         };
-        run_entry(true, |s, a| {
-            if s.tx {
-                syscall::handle_interrupt_entry(&mut s.specialize::<true>(), a, irq)
-            } else {
-                syscall::handle_interrupt_entry(&mut s.specialize::<false>(), a, irq)
-            }
-        });
+        run_entry(true, |s, a| syscall::handle_interrupt_entry(s, a, irq));
         exit()
     }
     if kind != KIND_SYNC {
@@ -235,14 +206,29 @@ extern "C" fn fl4_entry(kind: u64, esr: u64, far: u64) -> ! {
     t.set_reg(s, reg::FAULT_IP, if ec == EC_SVC64 { elr.wrapping_sub(4) } else { elr });
     trace(kind, esr, elr, t.0, s);
     let number = t.reg(s, reg::SYSCALL) as i64;
-    run_entry(false, |s, a| {
-        if s.tx {
-            dispatch(&mut s.specialize::<true>(), a, ec, esr, far, elr, number)
-        } else {
-            dispatch(&mut s.specialize::<false>(), a, ec, esr, far, elr, number)
-        }
-    });
+    if ec == EC_SVC64 {
+        // The local paths beside the serial gate (fl4_sync::run_syscall),
+        // as on x86_64.
+        let local = |s: &mut PhysStore, a: &mut PhysArch| fl4_sync::local_syscall(s, a, &Phys, number);
+        let body = |s: &mut PhysStore, a: &mut PhysArch| dispatch_syscall(s, a, number);
+        fl4_sync::run_syscall(&KernelEnv, &GATE, number, local, body);
+    } else {
+        run_entry(false, |s, a| dispatch(s, a, ec, esr, far, elr, number));
+    }
     exit()
+}
+
+/// `dispatch` for a syscall, through `handle_syscall_fast`: whether a fast
+/// path ran (`fl4_sync::run_syscall`).
+#[inline(always)]
+fn dispatch_syscall<S: Store>(s: &mut S, a: &mut PhysArch, number: i64) -> bool {
+    let ct = sched::cur_thread(s);
+    let vroot = ct.slot(tl::SLOT_VTABLE).cap(s);
+    let fast = syscall::handle_syscall_fast(s, a, number);
+    if sched::cur_thread(s) == ct && ct.slot(tl::SLOT_VTABLE).cap(s) != vroot {
+        fl4_core::vspace::set_vm_root(s, a, ct);
+    }
+    fast
 }
 
 #[inline(always)]
@@ -294,7 +280,7 @@ extern "C" fn fl4_kernel_fault(esr: u64, far: u64, elr: u64, sp: u64) -> ! {
 /// the serial gate.
 pub fn exit() -> ! {
     loop {
-        let s = &mut store().specialize::<false>();
+        let s = &mut store();
         let pc = percpu::get();
         // The ASID this core ran was invalidated by another core: if it was
         // deleted, run the current thread on what its VSpace cap now names

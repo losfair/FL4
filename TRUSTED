@@ -21,7 +21,8 @@ hardware: crates/fl4-arch-aarch64/src
 # core) and not covered by the proofs.
 unverified-core: crates/fl4-core/src/arch/aarch64
 
-# The transaction runtime (tested by fl4-sim, modelled in P2).
+# The kernel entry runtime: the serial gate, the local paths beside it and
+# their object locks (tested by fl4-sim, DESIGN.md §7, §10).
 runtime: crates/fl4-store/src
 runtime: crates/fl4-sync/src
 
@@ -31,5 +32,6 @@ interface: crates/fl4-core/src/machine.rs
 interface: proofs/Fl4Proofs/P0/Totality.lean
 interface: proofs/Fl4Core/FunsExternal.lean
 
-# The abstract runtime model P2 is proved about.
+# The abstract model of the transactional runtime P2 was proved about,
+# superseded with it (DESIGN.md §9).
 model: proofs/Fl4Proofs/P2/Runtime.lean

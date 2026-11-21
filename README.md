@@ -14,7 +14,7 @@ first-class SMP and fine-grained locking. See [DESIGN.md](DESIGN.md).
 | `crates/fl4-kernel-aarch64` | The AArch64 kernel image (boot, glue) |
 | `crates/fl4-arch-aarch64` | AArch64 hardware backend |
 | `crates/fl4-efi`, `fl4-bootinfo` | The AArch64 UEFI loader and its boot protocol |
-| `crates/fl4-sync`, `fl4-store` | Transaction runtime and object store |
+| `crates/fl4-sync`, `fl4-store` | Entry runtime (serial gate, local paths) and object store |
 | `crates/fl4-sim` | Deterministic simulator |
 | `interfaces/` | The one interface definition (seL4's XML, pruned to FL4's configuration, plus FL4 methods) |
 | `libsel4/` | FL4's libsel4 |

@@ -14,13 +14,8 @@ corosensei = "0.3"
 libc = "0.2"
 
 [features]
-# Test only: every kernel entry takes the serial gate.
-serial-gate = ["fl4-sync/serial-gate"]
 # Mutation testing (DESIGN.md §10): `cargo xtask mutants` checks that the
 # simulator fails each of these known-broken runtimes.
-mutant-skip-validation = ["fl4-store/mutant-skip-validation"]
-mutant-no-publish = ["fl4-store/mutant-no-publish"]
-mutant-clear-no-validate = ["fl4-store/mutant-clear-no-validate"]
 mutant-gate-no-wait = ["fl4-sync/mutant-gate-no-wait"]
 mutant-gate-release = ["fl4-sync/mutant-gate-release"]
 mutant-local-no-active = ["fl4-sync/mutant-local-no-active"]

@@ -18,8 +18,6 @@ pub const CALL_FPU_RELEASE: u64 = 7;
 pub const CALL_SNP_INVLPG: u64 = 8;
 
 /// Kernel entries by how they ran, on all cores (DESIGN.md §7).
-pub static TX_COMMITS: AtomicU64 = AtomicU64::new(0);
-pub static TX_ABORTS: AtomicU64 = AtomicU64::new(0);
 pub static SERIAL_ENTRIES: AtomicU64 = AtomicU64::new(0);
 
 /// Cores that have finished starting.
