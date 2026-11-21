@@ -7,7 +7,10 @@ pub const MAX_CPUS: usize = 16;
 pub const KSTACK_SIZE: usize = 64 * 1024;
 pub const NO_IRQ: u64 = u64::MAX;
 
-#[repr(C)]
+// Each core's state is alone on its 128-byte pair of cache lines (Intel's
+// spatial prefetcher fetches lines in pairs): written on every address-space
+// switch and FPU change, it would otherwise bounce between neighbouring cores.
+#[repr(C, align(128))]
 pub struct PerCpu {
     /// The core is in the idle loop.
     pub idle: Cell<bool>,
@@ -80,6 +83,9 @@ static PERCPU: Locals = Locals([const { PerCpu::new() }; MAX_CPUS]);
 
 /// Fields accessed from another CPU. The AP publishes its APIC ID before
 /// joining the online mask; the FPU and TLB protocols synchronize separately.
+/// Each core's on its own cache-line pair, as `PerCpu`: every address-space
+/// switch stores `asid`.
+#[repr(align(128))]
 struct Shared {
     pub apic_id: AtomicU32,
     pub fpu_owner: AtomicU64,
