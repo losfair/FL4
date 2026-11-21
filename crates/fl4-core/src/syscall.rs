@@ -309,23 +309,42 @@ arch_items!("syscall.rs");
 // (On AArch64 the number is from x7.)
 #[inline(always)]
 pub fn handle_syscall<S: Store, A: Arch>(s: &mut S, a: &mut A, number: i64) {
+    let _ = syscall(s, a, number, true);
+}
+
+/// `handle_syscall`; true if one of its fast paths (`fastpath`) ran.
+pub fn handle_syscall_fast<S: Store, A: Arch>(s: &mut S, a: &mut A, number: i64) -> bool {
+    syscall(s, a, number, true)
+}
+
+/// `handle_syscall` without the fast paths, which must leave the state
+/// exactly as this does.
+pub fn handle_syscall_general<S: Store, A: Arch>(s: &mut S, a: &mut A, number: i64) {
+    let _ = syscall(s, a, number, false);
+}
+
+/// Returns whether a fast path ran.
+#[inline(always)]
+fn syscall<S: Store, A: Arch>(s: &mut S, a: &mut A, number: i64, fast: bool) -> bool {
     let t = sched::cur_thread(s);
     // The syscall instruction is two bytes long.
     let next = t.reg(s, reg::NEXT_IP);
     t.set_reg(s, reg::FAULT_IP, next.wrapping_sub(syscall_insn_len!()));
     // l4h 0001: a thread with trapSyscalls set never makes seL4 calls.
     if t.flags(s) & tcb_flag::TRAP_SYSCALLS != 0 {
-        unknown_syscall_fault(s, a, trapped_syscall_number!(s, t, number));
-        return;
+        return unknown_syscall_fault(s, a, trapped_syscall_number!(s, t, number), fast);
     }
     if number < sc::SYSCALL_MIN || number > sc::SYSCALL_MAX {
-        handle_unknown_syscall(s, a, number);
-        return;
+        return handle_unknown_syscall(s, a, number, fast);
     }
     if budget_ok(s, a) {
+        if fast && number == sc::SysReplyRecv && crate::fastpath::reply_recv(s, a) {
+            return true;
+        }
         dispatch_syscall(s, a, number);
     }
     finish(s, a);
+    false
 }
 
 /// The API syscalls, once the caller's budget is checked.
@@ -377,12 +396,16 @@ fn dispatch_syscall<S: Store, A: Arch>(s: &mut S, a: &mut A, number: i64) {
 /// holds: none of them is interpreted, SetTLSBase included (GitHub
 /// issue #7).
 #[inline(always)]
-fn unknown_syscall_fault<S: Store, A: Arch>(s: &mut S, a: &mut A, number: u64) {
+fn unknown_syscall_fault<S: Store, A: Arch>(s: &mut S, a: &mut A, number: u64, fast: bool) -> bool {
     if budget_ok(s, a) {
         let t = sched::cur_thread(s);
+        if fast && crate::fastpath::fault(s, a, t, number) {
+            return true;
+        }
         faults::handle_fault(s, a, t, Fault::UnknownSyscall { number });
     }
     finish(s, a);
+    false
 }
 
 /// seL4 `SysSetTLSBase` (`KernelSetTLSBaseSelf`): the caller sets its own
@@ -398,29 +421,29 @@ fn set_tls_base_self<S: Store, A: Arch>(s: &mut S, a: &mut A) {
 
 /// Debug syscalls and everything else outside the API range
 /// (seL4 `handleUnknownSyscall`).
-fn handle_unknown_syscall<S: Store, A: Arch>(s: &mut S, a: &mut A, number: i64) {
+fn handle_unknown_syscall<S: Store, A: Arch>(s: &mut S, a: &mut A, number: i64, fast: bool) -> bool {
     let t = sched::cur_thread(s);
     if fl4_abi::config::PRINTING && number == sc::SysDebugPutChar {
         let c = t.reg(s, reg::CAP);
         a.putc(c & 0xff);
-        return;
+        return false;
     }
     if fl4_abi::config::PRINTING && number == sc::SysDebugDumpScheduler {
-        return;
+        return false;
     }
     if fl4_abi::config::DEBUG_BUILD && debug_syscall(s, a, t, number) {
-        return;
+        return false;
     }
     if fl4_abi::config::SET_TLS_BASE_SELF && number == sc::SysSetTLSBase {
         set_tls_base_self(s, a);
-        return;
+        return false;
     }
     if number == sc::SysVMEnter && a.virtualization() != 0 && crate::vcpu::bound(s, t) != 0 {
         if budget_ok(s, a) { crate::vcpu::enter(s, a, t); }
         finish(s, a);
-        return;
+        return false;
     }
-    unknown_syscall_fault(s, a, number as u64);
+    unknown_syscall_fault(s, a, number as u64, fast)
 }
 
 /// The debug syscalls of a debug build; false if `number` is none of them.

@@ -269,6 +269,35 @@ The core is written as a serial kernel: one entry point per kind of kernel entry
 
 Objects are typed handles over this memory (`Tcb`, `Ep`, `Slot`, …) with field accessors, so every kernel decision is a function of what the store returns. That is what makes one core serve every execution mode: on one core the store is plain memory, on several it is a transaction (§7), and the proofs, which are about the serial core, apply to each committed entry.
 
+### Fast paths
+
+An l4h guest syscall is two kernel entries: the user context's trapped
+syscall, delivered as an UnknownSyscall fault to the vCPU's kernel thread
+waiting on its endpoint, and that thread's ReplyRecv, which answers it and
+waits again (l4h DESIGN §5.4). `fastpath.rs` handles each in one flat
+function: after the same prefix as the general path (`FAULT_IP`, the
+budget check) it checks, with reads only, that the general path would
+take its common course (a receiver waiting with a reply object and its own
+scheduling context; a reply through an undonated reply object to a thread
+that can run at once; an idle endpoint with nothing signalled; the other
+thread chosen next, nothing to wake, the domain not over), then makes the
+same writes and Arch calls and switches directly. A declined fast path has
+changed nothing, and the general path runs as before. It skips the
+decoding, the second reply-cap lookup, the possible-switch, enqueue and
+dequeue pair that leaves the ready queues as they were, and the
+scheduler's search, and keeps out-of-line calls (each a mispredicted return
+under Safe RET) to `commit_time` and `set_next_interrupt`.
+
+The intended theorem is `fast s = (true, s') → handle_syscall_general s =
+s'`, in the style of seL4's fastpath proofs; it is not proved yet.
+`fl4-sim --fastpath-diff` checks it: each serial syscall runs through the
+general path, is undone from a store log, and runs again through
+`handle_syscall`, and every word either wrote and the simulated machine
+(time, RNG, deadlines, effects, loaded address space) must end the same.
+`--scenario guest` sets up an l4h vCPU's handler and trapping thread on
+one core, among the random workload; `cargo xtask sim` runs it with the
+check, and among transactions under the random and TSO schedulers.
+
 ### Footprints
 
 A kernel entry's footprint is the set of objects it reads and writes. FL4 does not state footprints in the core: the transactional store records them as the entry runs, exactly, and locks what was written. What needs proving is then a property of the runtime, not of each entry point: that a committed transaction saw a consistent snapshot and that commits are serializable (P2 in §9).
@@ -738,6 +767,18 @@ of a default trait method. An existing simulator IRQ test failed on the
 unmodified base because it expected a transaction on a quiet core, where
 opportunistic admission now runs serially. Its setup now enters policy
 backoff first, ensuring that the test actually exercises an aborted attempt.
+
+**Guest syscall fast paths (§6, 2026-11-21).** Same host and guest as
+below, with deep probes in both kernels, `getppid` loops with one thread
+pinned per vCPU (2.5–3 s each, after boot settles): 1 thread 716 → 654 ns
+per call, total throughput with 2, 4 and 6 threads 2.30 → 2.74, 1.77 → 2.21
+and 1.52 → 1.64 M calls/s. The kernel part of an entry (the body run under
+the gate) averages 623 TSC cycles without the fast paths and 503 with them;
+the CR3 load (no PCIDs here) is about 140 of either. A measurement build
+counted both fast paths running the same number of times (1,940 and 1,932
+in a 50 ms loop). Most of the rest of a 2,500-cycle round
+trip is entry and exit: CR0.TS set on the switch to the kernel thread
+(the FPU is switched lazily), the CR3 loads, and the gate.
 
 **Deep gate probes (x86_64, 2026-11-20).** With the probe bound at two, a
 third concurrent core's entries ran as transactions, and an l4h guest's

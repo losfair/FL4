@@ -18,6 +18,7 @@ fn cur_time<S: Store>(s: &S) -> u64 {
 }
 
 /// `MIN_BUDGET`: twice the kernel's WCET (KernelWcetScale is fixed at 1).
+#[inline(always)]
 pub fn min_budget<A: Arch>(a: &A) -> u64 {
     a.kernel_wcet_ticks().wrapping_mul(2)
 }
@@ -49,14 +50,20 @@ pub fn refill_absolute_max(size_bits: u64) -> u64 {
     }
 }
 
+#[inline(always)]
+
 pub fn get<S: Store>(s: &S, sc: Sc, i: u64) -> Refill {
     Refill { time: sc.r_time(s, i), amount: sc.r_amount(s, i) }
 }
+
+#[inline(always)]
 
 pub fn put<S: Store>(s: &mut S, sc: Sc, i: u64, r: Refill) {
     sc.set_r_time(s, i, r.time);
     sc.set_r_amount(s, i, r.amount);
 }
+
+#[inline(always)]
 
 pub fn head<S: Store>(s: &S, sc: Sc) -> Refill {
     get(s, sc, sc.refill_head(s))
@@ -65,6 +72,8 @@ pub fn head<S: Store>(s: &S, sc: Sc) -> Refill {
 pub fn tail<S: Store>(s: &S, sc: Sc) -> Refill {
     get(s, sc, sc.refill_tail(s))
 }
+
+#[inline(always)]
 
 fn set_head<S: Store>(s: &mut S, sc: Sc, r: Refill) {
     let h = sc.refill_head(s);
@@ -102,6 +111,8 @@ pub fn single<S: Store>(s: &S, sc: Sc) -> bool {
     sc.refill_head(s) == sc.refill_tail(s)
 }
 
+#[inline(always)]
+
 pub fn capacity<S: Store>(s: &S, sc: Sc, usage: u64) -> u64 {
     let amount = head(s, sc).amount;
     if usage > amount {
@@ -111,13 +122,19 @@ pub fn capacity<S: Store>(s: &S, sc: Sc, usage: u64) -> u64 {
     }
 }
 
+#[inline(always)]
+
 pub fn sufficient<S: Store, A: Arch>(s: &S, a: &A, sc: Sc, usage: u64) -> bool {
     capacity(s, sc, usage) >= min_budget(a)
 }
 
+#[inline(always)]
+
 pub fn ready<S: Store>(s: &S, sc: Sc) -> bool {
     head(s, sc).time <= cur_time(s)
 }
+
+#[inline(always)]
 
 pub fn sc_active<S: Store>(s: &S, sc: Sc) -> bool {
     sc.refill_max(s) > 0
@@ -127,6 +144,8 @@ pub fn sc_released<S: Store>(s: &S, sc: Sc) -> bool {
     sc_active(s, sc) && ready(s, sc)
 }
 
+#[inline(always)]
+
 pub fn sc_sporadic<S: Store>(s: &S, sc: Sc) -> bool {
     !sc.is_null() && sc.sporadic(s) != 0
 }
@@ -134,6 +153,8 @@ pub fn sc_sporadic<S: Store>(s: &S, sc: Sc) -> bool {
 pub fn sc_constant_bandwidth<S: Store>(s: &S, sc: Sc) -> bool {
     sc.sporadic(s) == 0
 }
+
+#[inline(always)]
 
 pub fn is_round_robin<S: Store>(s: &S, sc: Sc) -> bool {
     sc.period(s) == 0

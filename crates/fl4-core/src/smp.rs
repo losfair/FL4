@@ -91,6 +91,7 @@ pub fn remote_queue_update<S: Store>(s: &mut S, t: Tcb) {
 }
 
 /// Send the reschedule IPIs this entry asked for.
+#[inline(always)]
 pub fn send_pending<S: Store, A: Arch>(s: &mut S, a: &mut A) {
     let c = s.cur_cpu();
     let m = node_get(s, c, node::IPI_PENDING);

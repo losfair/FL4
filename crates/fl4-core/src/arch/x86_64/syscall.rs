@@ -41,5 +41,5 @@ pub fn handle_trap_syscall<S: Store, A: Arch>(s: &mut S, a: &mut A, vector: u64)
     }
     let eax = t.reg(s, reg::RAX);
     let num = (vector << 24) | (eax & 0x00ff_ffff);
-    handle_unknown_syscall(s, a, num as i64);
+    let _ = handle_unknown_syscall(s, a, num as i64, false);
 }
