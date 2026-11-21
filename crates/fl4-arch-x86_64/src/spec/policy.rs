@@ -169,13 +169,41 @@ pub fn native_safe_ret(c: &Caps) -> bool {
         && c.amd21 & (LFENCE_SERIAL | AUTO_IBRS) == (LFENCE_SERIAL | AUTO_IBRS)
 }
 
-/// AutoIBRS protects indirect calls/jumps; a CPU reporting SRSO_NO or
+/// Intel parts affected by Indirect Target Selection (INTEL-SA-01153).
+fn intel_its(c: &Caps) -> bool {
+    c.vendor == Vendor::Intel
+        && c.family == 6
+        && (matches!(c.model, 0x6a | 0x6c | 0x7e | 0x8c | 0x8d | 0xa5 | 0xa6 | 0xa7)
+            || c.model == 0x55 && c.stepping >= 6
+            || c.model == 0x8e && c.stepping >= 0xc
+            || c.model == 0x9e && c.stepping >= 0xd)
+}
+
+/// Whether a native kernel entry needs no IBPB.
+/// AMD: AutoIBRS protects indirect calls/jumps; a CPU reporting SRSO_NO or
 /// SRSO_USER_KERNEL_NO needs no return barrier at a native kernel entry.
+/// Intel: eIBRS (IBRS_ALL, always on) keeps user-mode training out of
+/// supervisor indirect-branch and alternate (RRSBA) return predictions,
+/// and SMEP keeps supervisor returns off the user RSB entries' user-mode
+/// targets. ITS-affected parts are excluded: their eIBRS can still let
+/// user training steer some kernel branches. BHI and PBRSB keep their own
+/// entry barriers. As on AMD, this is the user/kernel boundary only:
+/// VM exits keep IBPB.
 pub fn native_entry_without_ibpb(c: &Caps) -> bool {
-    c.vendor == Vendor::Amd
-        && c.smep
-        && c.amd21 & AUTO_IBRS != 0
-        && c.amd21 & (SRSO_NO | SRSO_USER_KERNEL_NO) != 0
+    match c.vendor {
+        Vendor::Amd => {
+            c.smep
+                && c.amd21 & AUTO_IBRS != 0
+                && c.amd21 & (SRSO_NO | SRSO_USER_KERNEL_NO) != 0
+        }
+        Vendor::Intel => {
+            c.smep
+                && c.leaf7_edx & (1 << 26) != 0
+                && c.arch & IBRS_ALL != 0
+                && (c.arch & ITS_NO != 0 || !intel_its(c))
+        }
+        Vendor::Other => false,
+    }
 }
 
 /// What a core without a plan (`select` rejected it) still enables at
@@ -207,9 +235,6 @@ pub fn native_only(c: &Caps, no_entry_ibpb: bool) -> NativeOnly {
                     n.entry |= RSB;
                 }
             }
-            if no_entry_ibpb {
-                n.entry &= !IBPB;
-            }
             n.auto_ibrs = c.amd21 & AUTO_IBRS != 0;
             if c.amd8 & AMD_STIBP != 0 {
                 n.spec_ctrl |= 2;
@@ -239,6 +264,9 @@ pub fn native_only(c: &Caps, no_entry_ibpb: bool) -> NativeOnly {
             }
             n.disable_tsx = c.rtm && c.arch & TAA_NO == 0 && c.arch & TSX_CTRL != 0;
         }
+    }
+    if no_entry_ibpb {
+        n.entry &= !IBPB;
     }
     n
 }
@@ -291,13 +319,7 @@ pub fn select(c: &Caps) -> Result<Plan, Rejected> {
                 p.entry |= IBHF;
                 p.vmexit |= IBHF;
             }
-            let its = c.family == 6
-                && (matches!(
-                    c.model,
-                    0x6a | 0x6c | 0x7e | 0x8c | 0x8d | 0xa5 | 0xa6 | 0xa7
-                ) || c.model == 0x55 && c.stepping >= 6
-                    || c.model == 0x8e && c.stepping >= 0xc
-                    || c.model == 0x9e && c.stepping >= 0xd);
+            let its = intel_its(c);
             // A nested VMM must trust L0 to implement the advertised IBPB
             // contract; guest IA32_BIOS_SIGN_ID is not a host patch level.
             if its
@@ -357,6 +379,10 @@ pub fn select(c: &Caps) -> Result<Plan, Rejected> {
                 return Err(Rejected::BufferMicrocode);
             }
             p.buffers = mds || mmio || rfds;
+            // VM exits keep IBPB: it also protects the userspace VMM.
+            if native_entry_without_ibpb(c) {
+                p.entry &= !IBPB;
+            }
             // Buffer clearing cannot isolate concurrently executing SMT
             // siblings on MDS/MMIO-affected CPUs.
             p.no_smt |= mds || mmio;
@@ -480,8 +506,34 @@ mod tests {
         assert_eq!(select(&c).unwrap().spec_ctrl & (1 << 10), 0);
         c.leaf7_2_edx = 0;
         c.arch &= !BHI_NO;
-        assert_ne!(select(&c).unwrap().entry & IBPB, 0);
+        assert_eq!(select(&c).unwrap().entry & IBPB, 0);
         assert_ne!(select(&c).unwrap().entry & BHB, 0);
+    }
+
+    #[test]
+    fn intel_eibrs_drops_only_the_entry_ibpb() {
+        let mut c = intel();
+        assert!(native_entry_without_ibpb(&c));
+        let p = select(&c).unwrap();
+        assert_eq!(p.entry, PBRSB | IBHF);
+        assert_eq!(p.vmexit, IBPB | PBRSB | IBHF);
+        // Legacy IBRS, no SMEP or no SPEC_CTRL: entry IBPB stays.
+        assert!(!native_entry_without_ibpb(&Caps { arch: c.arch & !IBRS_ALL, ..c }));
+        assert!(!native_entry_without_ibpb(&Caps { smep: false, ..c }));
+        assert!(!native_entry_without_ibpb(&Caps { leaf7_edx: 1 << 27, ..c }));
+        assert_ne!(select(&Caps { arch: c.arch & !IBRS_ALL, ..c }).unwrap().entry & IBPB, 0);
+        // ITS-affected parts keep it unless they report ITS_NO.
+        c.model = 0x6a;
+        c.stepping = 6;
+        c.microcode = 0x0d000404;
+        assert!(!native_entry_without_ibpb(&c));
+        assert_ne!(select(&c).unwrap().entry & IBPB, 0);
+        c.arch |= ITS_NO;
+        assert!(native_entry_without_ibpb(&c));
+        assert_eq!(select(&c).unwrap().entry & IBPB, 0);
+        // Emerald Rapids (GCE N4) as an L1 guest.
+        let n4 = Caps { model: 0xcf, stepping: 2, hypervisor: true, ..intel() };
+        assert_eq!(select(&n4).unwrap().entry & IBPB, 0);
     }
 
     #[test]
@@ -835,6 +887,7 @@ mod tests {
         let n = native_only(&c, false);
         assert_eq!(n.spec_ctrl, 1 | 2 | (1 << 10));
         assert_eq!(n.entry, IBPB | PBRSB | IBHF);
+        assert_eq!(native_only(&c, true).entry, PBRSB | IBHF);
         c.arch |= PBRSB_NO;
         assert_eq!(native_only(&c, false).entry, IBPB | IBHF);
         c.leaf7_2_edx = 0;
@@ -870,7 +923,7 @@ mod tests {
             for l72 in [0, 1 << 4] {
                 let c = Caps { arch: RDCL_NO | MDS_NO | TAA_NO | MMIO_NO | RFDS_NO | arch, leaf7_2_edx: l72, ..intel() };
                 let p = select(&c).unwrap();
-                let n = native_only(&c, false);
+                let n = native_only(&c, native_entry_without_ibpb(&c));
                 let rsb = if arch & IBRS_ALL == 0 { RSB } else { 0 };
                 assert_eq!((n.entry, n.spec_ctrl), (p.entry | rsb, p.spec_ctrl), "arch {arch:#x} l72 {l72:#x}");
             }
