@@ -140,6 +140,7 @@ require(not any(n.startswith("fl4_test_") for n in functions), "test trampoline 
 require(near_returns == {
     "fl4_safe_ret_insn": 1,
     "__x86_return_thunk": 1,
+    "fl4_retpoline_r11": 1,
     "fl4_common_entry": 2,
     "fl4_vmx_exit": 3,
     "fl4_svm_run": 3,
@@ -162,9 +163,29 @@ require(fallback[0][0] + 2 - 52 == safe_thunk[0][0]
         and [op for _, op, _ in safe_thunk[:2]] == ["call", "ud2"]
         and safe_thunk[0][2].endswith("<fl4_safe_ret>"),
         "the patched short jump must land at the Safe RET thunk")
+# Rust's indirect calls and jumps all go through the R11 thunk
+# (-Zretpoline-external-thunk); boot may patch it into the retpoline. Only
+# the identity-mapped boot code, which runs before any user code, has
+# another indirect branch.
+indirect = [(name, a) for name, insns in functions.items() for a, op, arg in insns
+            if op in ("call", "jmp") and arg.startswith("*")]
+require(all(name == "__x86_indirect_thunk_r11" or a < 0xffffffff80000000
+            for name, a in indirect),
+        f"indirect branch outside the retpoline thunk: {indirect}")
+thunk = functions["__x86_indirect_thunk_r11"]
+retpoline = functions["fl4_retpoline_r11"]
+require([(op, arg) for _, op, arg in thunk[:2]] == [("jmp", "*%r11"), ("int3", "")]
+        and thunk[1][0] == thunk[0][0] + 3
+        and 0 < retpoline[0][0] - (thunk[0][0] + 2) < 128,
+        "indirect thunk must be a 3-byte JMP *%r11 within a short jump of the retpoline")
+require([op for _, op, _ in retpoline[:7]] == ["call", "pause", "lfence", "jmp", "mov", "ret", "int3"]
+        and retpoline[0][2].startswith(hex(retpoline[4][0])[2:])
+        and retpoline[3][2].startswith(hex(retpoline[1][0])[2:])
+        and retpoline[4][2] == "%r11,(%rsp)",
+        "retpoline must call over a PAUSE/LFENCE capture loop and return to R11")
 untrain_call = next(i for i, (_, op, arg) in enumerate(native)
                     if op == "call" and arg.endswith("<fl4_untrain_ret>"))
 require(native[untrain_call - 1][1] == "lfence",
         "untraining call must be behind a fenced policy guard")
 
-print("VM assembly: RFLAGS cleared on IDT entries, entry/exit barriers, fenced guards, RAP/PBRSB, BHB, Safe RET, VERW and GIF ordering verified")
+print("VM assembly: RFLAGS cleared on IDT entries, entry/exit barriers, fenced guards, RAP/PBRSB, BHB, Safe RET, retpoline, VERW and GIF ordering verified")

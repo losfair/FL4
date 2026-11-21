@@ -160,13 +160,26 @@ fn intel_its_revision(model: u32, stepping: u32) -> Option<u32> {
 }
 
 /// Zen 3/4's BTB aliasing rule is used by the native return thunk.
-/// AutoIBRS protects indirect calls/jumps, and Safe RET protects returns.
+/// Safe RET protects returns; AutoIBRS (Zen 4) or, without it (Zen 3),
+/// retpolines (`native_retpoline`) protect indirect calls and jumps. This
+/// is what Linux uses on Zen 3 (Spectre v2: Retpolines; SRSO: Safe RET),
+/// in place of an IBPB at every native entry, which there costs about
+/// 2.4 us per guest syscall round trip in cold predictors (GCE N2D).
+///
+/// Dispatch-serializing LFENCE: bare metal sets it (`init_core`); a guest
+/// relies on its hypervisor for it, as its native-only entry guards
+/// already do. Only VM support (`select`) requires the CPUID promise.
 pub fn native_safe_ret(c: &Caps) -> bool {
     c.vendor == Vendor::Amd
         && c.family == 0x19
         && c.smep
         && c.amd8 & AMD_STIBP != 0
-        && c.amd21 & (LFENCE_SERIAL | AUTO_IBRS) == (LFENCE_SERIAL | AUTO_IBRS)
+}
+
+/// Whether native Safe RET needs the retpoline thunk for indirect calls
+/// and jumps: on a Safe RET CPU without AutoIBRS.
+pub fn native_retpoline(c: &Caps) -> bool {
+    native_safe_ret(c) && c.amd21 & AUTO_IBRS == 0
 }
 
 /// Intel parts affected by Indirect Target Selection (INTEL-SA-01153).
@@ -743,9 +756,33 @@ mod tests {
         assert!(!native_safe_ret(&Caps { vendor: Vendor::Intel, ..c }));
         assert!(!native_safe_ret(&Caps { smep: false, ..c }));
         assert!(!native_safe_ret(&Caps { amd8: c.amd8 & !AMD_STIBP, ..c }));
+        assert!(!native_retpoline(&c));
+        // Without AutoIBRS (Zen 3) retpolines cover indirect branches; a
+        // guest's LFENCE is its hypervisor's.
         for bit in [AUTO_IBRS, LFENCE_SERIAL] {
-            assert!(!native_safe_ret(&Caps { amd21: c.amd21 & !bit, ..c }));
+            assert!(native_safe_ret(&Caps { amd21: c.amd21 & !bit, ..c }));
         }
+        assert!(native_retpoline(&Caps { amd21: c.amd21 & !AUTO_IBRS, ..c }));
+        assert!(!native_retpoline(&Caps { amd21: c.amd21 & !LFENCE_SERIAL, ..c }));
+    }
+
+    /// GCE N2D under SEV-SNP (EPYC 7B13, Milan), as measured from the SNP
+    /// CPUID table: no AutoIBRS, LFENCE_ALWAYS_SERIALIZING, IBPB_RET,
+    /// IBPB_BRTYPE or SRSO_NO; VERW_CLEAR.
+    #[test]
+    fn snp_milan_runs_retpolines_and_safe_ret_without_vms() {
+        let c = Caps {
+            family: 0x19,
+            model: 0x01,
+            stepping: 0,
+            hypervisor: true,
+            amd8: 0x110c_d005,
+            amd21: 0x20,
+            ..amd()
+        };
+        assert_eq!(select(&c), Err(Rejected::Lfence));
+        assert!(native_safe_ret(&c) && native_retpoline(&c));
+        assert!(!native_entry_without_ibpb(&c));
     }
 
     #[test]
@@ -894,7 +931,7 @@ mod tests {
     fn native_only_enables_advertised_stibp_without_safe_ret() {
         let c = measured_nested_zen5();
         assert_ne!(c.amd8 & AMD_STIBP, 0);
-        assert!(!native_safe_ret(&c));
+        assert!(!native_safe_ret(&c)); // family 1Ah
         let n = native_only(&c, true);
         assert_eq!(n.entry & IBPB, 0);
         assert!(n.auto_ibrs);

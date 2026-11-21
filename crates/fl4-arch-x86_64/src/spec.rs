@@ -23,6 +23,8 @@ static FL4_SPEC_ENTRY: AtomicU32 = AtomicU32::new(0);
 #[cfg_attr(target_os = "none", link_section = ".bss.skim")]
 static FL4_SAFE_RET: AtomicBool = AtomicBool::new(false);
 static ALL_SAFE_RET: AtomicBool = AtomicBool::new(true);
+/// Some core's Safe RET has no AutoIBRS: indirect branches need retpolines.
+static RETPOLINE: AtomicBool = AtomicBool::new(false);
 #[no_mangle]
 #[cfg_attr(target_os = "none", link_section = ".bss.skim")]
 static FL4_SPEC_BUFFERS: AtomicU32 = AtomicU32::new(0);
@@ -112,13 +114,17 @@ fn caps() -> Caps {
 }
 
 /// Enable the native policy after all admitted cores have contributed.
-pub fn finish_native_entry_policy(patch_return_thunk: impl FnOnce()) -> bool {
+/// `patch` switches Rust returns to Safe RET and, if its argument is true,
+/// indirect calls and jumps to the retpoline. Returns whether Safe RET is
+/// on, and whether with retpolines.
+pub fn finish_native_entry_policy(patch: impl FnOnce(bool)) -> Option<bool> {
     if !ALL_SAFE_RET.load(Ordering::Relaxed) {
-        return false;
+        return None;
     }
-    patch_return_thunk();
+    let retpoline = RETPOLINE.load(Ordering::Relaxed);
+    patch(retpoline);
     FL4_SAFE_RET.store(true, Ordering::Release);
-    true
+    Some(retpoline)
 }
 
 /// Whether the kernel needs the skim window (Meltdown, rogue data cache
@@ -174,6 +180,16 @@ fn smt_admission(bsp: bool, needs_no_smt: bool, no_smt: bool) -> Option<bool> {
 /// siblings change nothing for it.
 fn native_only_needs_no_smt(safe_ret: bool, all_safe_ret: bool) -> bool {
     safe_ret && all_safe_ret
+}
+
+/// Whether a rejected `select` still lets this core's native entries use
+/// Safe RET: rejections for VM support (buffer-clearing microcode, nested
+/// LFENCE, SRSO's IBPB microcode) say nothing about native returns.
+fn native_safe_ret_allowed(plan: &Result<Plan, Rejected>) -> bool {
+    matches!(
+        plan,
+        Ok(_) | Err(Rejected::BufferMicrocode | Rejected::Lfence | Rejected::SrsoMicrocode)
+    )
 }
 
 /// Whether this core's native entries skip IBPB (`allowed`: its
@@ -236,8 +252,8 @@ pub fn init_core(bsp: bool) -> bool {
     let pc = percpu::get();
     pc.spec_plan.set(plan.ok());
     pc.spec_rejected.set(plan.err());
-    let safe_ret = native_safe_ret(&c)
-        && matches!(plan, Ok(_) | Err(Rejected::BufferMicrocode));
+    let safe_ret = native_safe_ret(&c) && native_safe_ret_allowed(&plan);
+    RETPOLINE.fetch_or(safe_ret && native_retpoline(&c), Ordering::Relaxed);
     let needs_no_smt = match plan {
         Ok(p) => p.no_smt,
         Err(_) => native_only_needs_no_smt(safe_ret, ALL_SAFE_RET.load(Ordering::Relaxed)),

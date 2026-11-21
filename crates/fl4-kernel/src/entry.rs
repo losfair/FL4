@@ -27,6 +27,8 @@ core::arch::global_asm!(
 
 extern "C" {
     fn __x86_return_thunk();
+    fn __x86_indirect_thunk_r11();
+    fn fl4_retpoline_r11();
     fn fl4_restore_user(regs: u64, stack_top: u64, cr3: u64) -> !;
     fn fl4_idle(stack_top: u64) -> !;
     static fl4_idle_loop: u8;
@@ -36,8 +38,9 @@ extern "C" {
 }
 
 /// On the boot core, while the APs are parked and native entries still
-/// use IBPB, switch Rust returns to the Safe RET sequence.
-pub fn patch_return_thunk() {
+/// use IBPB, switch Rust returns to the Safe RET sequence and, with
+/// `retpoline`, indirect calls and jumps to the retpoline (safe_ret.S).
+pub fn patch_return_thunk(retpoline: bool) {
     let paddr = crate::paging::image_paddr(__x86_return_thunk as *const () as u64);
     let opcode = fl4_core::layout::pptr(paddr) as *mut u8;
     unsafe {
@@ -46,6 +49,18 @@ pub fn patch_return_thunk() {
         // Write through the physical window. The instruction mapping
         // stays read-only.
         opcode.write_volatile(0xeb);
+    }
+    if retpoline {
+        let thunk = __x86_indirect_thunk_r11 as *const () as u64;
+        let disp = fl4_retpoline_r11 as *const () as u64 - (thunk + 2);
+        assert!(thunk % 16 == 0 && disp < 128);
+        let at = fl4_core::layout::pptr(crate::paging::image_paddr(thunk)) as *mut u16;
+        unsafe {
+            // JMP *%r11 (41 ff e3) becomes JMP rel8 (eb disp) in one
+            // aligned store; the E3 byte after it is never reached.
+            assert_eq!(at.read_volatile(), 0xff41);
+            at.write_volatile(0xeb | (disp as u16) << 8);
+        }
     }
     crate::smp::sync_patched_text();
 }
