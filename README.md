@@ -30,15 +30,19 @@ Development runs use QEMU. The AMD SEV guest test runs on a confidential VM.
 cargo xtask run [--setup kvm|kvm-reduced|tcg]   # boot the standalone kernel
 cargo xtask sel4test [--release] [--smp N] [--setup ...]
 cargo xtask extract                              # Charon + Aeneas -> proofs/Fl4Core
+cargo xtask extract --arch aarch64               # the AArch64 build -> proofs/Fl4CoreA64
 (cd proofs && lake build)                        # check the proofs
 ```
 
 `--arch aarch64` selects the AArch64 kernel for `run`, `sel4test`,
 `fl4test` and `uefi` (setups `tcg`, `tcg-gicv3`, `tcg-el2`, `tcg-a57`,
-`tcg-acpi`, and `kvm` or `hvf` on an Arm host).
+`tcg-acpi`, and `kvm` or `hvf` on an Arm host), and the AArch64 build of
+fl4-core for `extract`.
 
 Host dependencies live in `$FL4_DEPS` (default `~/Projects/fl4-deps`):
 `venv/` with `sel4-deps`, and an `aeneas/` checkout with Charon built.
+The AArch64 extraction also needs `aarch64-unknown-none-softfloat` for
+Charon's Rust toolchain (`rustup target add ... --toolchain <Charon's>`).
 
 ## AMD SEV and SEV-SNP guests
 
@@ -146,7 +150,8 @@ implementations are grouped by subsystem under `src/arch/x86_64` and
 `src/arch/aarch64`. The crate root selects one directory for the build
 (default x86_64, or the `aarch64` feature). Each implementation contributes
 items to the same public modules, preserving the paths used by the backends
-and by the x86_64 proof extraction. Proofs currently cover x86_64.
+and by the proof extractions (`proofs/Fl4Core` for x86_64,
+`proofs/Fl4CoreA64` for AArch64). Proofs currently cover x86_64.
 
 ## x86 virtualization
 

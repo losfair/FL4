@@ -104,7 +104,7 @@ pub fn make_s2_leaf(paddr: u64, rights: u64, cap_read: bool, attr: u64, shift: u
     } else {
         return 0;
     };
-    let xn = attr & arm_vm_attr::EXECUTE_NEVER != 0 || !cap_read;
+    let xn = vspace::exec_never(attr, cap_read);
     let cacheable = attr & arm_vm_attr::PAGE_CACHEABLE != 0;
     let (memattr, sh) = if cacheable {
         (S2_MEMATTR_NORMAL_WB, S2_SH_INNER)
@@ -207,21 +207,27 @@ pub fn unmap_table<S: Store, A: Arch>(s: &mut S, a: &mut A, asid: u64, ipa: u64,
     let mut shift = g.top_shift;
     let mut mask = g.top_mask;
     let mut rem = g.levels.wrapping_sub(1);
+    // As in `vspace::unmap_page_table`: the walk records the slot that
+    // points to `pt` and ends with `break` (no early return in the loop).
+    let mut found = None;
     while rem > 0 {
         let slot = entry_addr(table, ipa, shift, mask);
         let e = s.read(slot);
         if !is_table(e, shift) {
-            return;
+            break;
         }
         if table_of(e) == pt {
-            s.write(slot, 0);
-            a.invalidate_stage2_vmid(asid);
-            return;
+            found = Some(slot);
+            break;
         }
         table = table_of(e);
         shift = shift.wrapping_sub(9);
         mask = 511;
         rem -= 1;
+    }
+    if let Some(slot) = found {
+        s.write(slot, 0);
+        a.invalidate_stage2_vmid(asid);
     }
 }
 
@@ -268,7 +274,7 @@ pub fn map_frame<S: Store, A: Arch>(
             lf: LookupFault::MissingCapability { bits_left: lu.shift },
         }));
     }
-    let cap_read = rights == VM_READ_ONLY || rights == VM_READ_WRITE;
+    let cap_read = vspace::rights_readable(rights);
     let e = make_s2_leaf(layout::paddr(ptr), vm, cap_read, attr, shift);
     let ct = sched::cur_thread(s);
     sched::set_thread_state(s, ct, sched::TS_RESTART);
@@ -432,6 +438,7 @@ mod tests {
         Write(u64, u64),
         InvS2Page(u64, u64),
         CacheClean(u64, u64),
+        InvVmid(u64),
     }
 
     struct Mem {
@@ -491,6 +498,9 @@ mod tests {
         fn s2_ipa_bits(&self) -> u64 { self.ipa }
         fn invalidate_stage2_page(&mut self, asid: u64, ipa: u64) {
             self.log.borrow_mut().push(Ev::InvS2Page(asid, ipa));
+        }
+        fn invalidate_stage2_vmid(&mut self, asid: u64) {
+            self.log.borrow_mut().push(Ev::InvVmid(asid));
         }
         fn putc(&mut self, _: u64) {}
         fn get_char(&mut self) -> u64 { 0 }
@@ -602,5 +612,98 @@ mod tests {
             decode(&mut s, &mut a, label::ARMVSpaceClean_Data, 2, cap, Slot(0), 0, &ex),
             Err(Exc::Sys(SysError::IllegalOperation))
         ));
+    }
+
+    struct S2World {
+        s: Mem,
+        a: Mach,
+        log: Rc<RefCell<Vec<Ev>>>,
+        ipa: u64,
+        /// The page tables on the walk to `ipa`, top first, and the slots
+        /// that point to them.
+        tables: Vec<u64>,
+        slots: Vec<u64>,
+    }
+
+    /// A Stage-2 VSpace for ASID 1 with page tables mapped down to the last
+    /// table level at an IPA near the top of the `ipa_bits` space.
+    fn s2_world(ipa_bits: u64) -> S2World {
+        let log = Rc::new(RefCell::new(Vec::new()));
+        let mut s = Mem { words: BTreeMap::new(), watch: 0, log: log.clone() };
+        let mut a = Mach { ipa: ipa_bits, log: log.clone() };
+        sched::set_cur_thread(&mut s, Tcb(layout::pptr(0x60_0000)));
+        let root = layout::pptr(0x10_0000);
+        let pool = layout::pptr(0x15_0000);
+        crate::obj::ks_set(&mut s, layout::ks::ASID_TABLE, pool);
+        s.write(pool + 8, root | 1);
+        let ipa = if ipa_bits == 40 { 0x80_0000_1000 } else if ipa_bits == 44 { 0x400_0000_1000 } else { 0x8000_0000_1000 };
+        let n = geom(ipa_bits).levels - 1;
+        let mut tables = Vec::new();
+        let mut slots = Vec::new();
+        for i in 0..n {
+            let pt = layout::pptr(0x11_0000 + i * 0x1_0000);
+            slots.push(lookup_slot(&s, root, ipa, ipa_bits).slot);
+            assert!(map_table(&mut s, &mut a, root, 1, ipa, pt, Slot(layout::pptr(0x70_0000 + i * 0x20))).is_ok());
+            tables.push(pt);
+        }
+        assert_eq!(lookup_slot(&s, root, ipa, ipa_bits).shift, PAGE_BITS);
+        S2World { s, a, log, ipa, tables, slots }
+    }
+
+    /// Run `f` (an unmap of `w.ipa`): the words it changed and the events.
+    fn changes(w: &mut S2World, f: impl FnOnce(&mut Mem, &mut Mach, u64)) -> (Vec<(u64, u64)>, Vec<Ev>) {
+        let before = w.s.words.clone();
+        w.log.borrow_mut().clear();
+        f(&mut w.s, &mut w.a, w.ipa);
+        let changed = w.s.words.iter().filter(|&(k, v)| before.get(k).unwrap_or(&0) != v).map(|(&k, &v)| (k, v)).collect();
+        let ev = w.log.borrow().clone();
+        (changed, ev)
+    }
+
+    /// The walk reaches the table at each level (3- and 4-level
+    /// geometries): that slot alone is cleared, then the VMID is flushed.
+    /// `vspace::unmap_page_table` dispatches a Stage-2 ASID here.
+    #[test]
+    fn unmap_table_clears_the_slot_pointing_to_the_table() {
+        for ipa_bits in [40u64, 44, 48] {
+            let n = s2_world(ipa_bits).tables.len();
+            for i in 0..n {
+                let mut w = s2_world(ipa_bits);
+                let (pt, slot) = (w.tables[i], w.slots[i]);
+                let got = changes(&mut w, |s, a, ipa| unmap_table(s, a, 1, ipa, pt));
+                assert_eq!(got, (vec![(slot, 0)], vec![Ev::InvVmid(1)]), "ipa_bits {ipa_bits} level {i}");
+                let mut w = s2_world(ipa_bits);
+                let got = changes(&mut w, |s, a, ipa| vspace::unmap_page_table(s, a, 1, ipa, pt));
+                assert_eq!(got, (vec![(slot, 0)], vec![Ev::InvVmid(1)]), "dispatch ipa_bits {ipa_bits} level {i}");
+            }
+        }
+    }
+
+    /// Every other exit changes nothing and flushes nothing: an ASID with
+    /// no Stage-2 VSpace (none, or a Stage-1 one), a walk that meets an
+    /// entry that is not a table descriptor before the table, and a walk
+    /// that runs through every table level without meeting it.
+    #[test]
+    fn unmap_table_without_the_table_on_the_walk_changes_nothing() {
+        for ipa_bits in [40u64, 44, 48] {
+            let mut w = s2_world(ipa_bits);
+            let pt = w.tables[0];
+            assert_eq!(changes(&mut w, |s, a, ipa| unmap_table(s, a, 2, ipa, pt)), (vec![], vec![]));
+            let mut w = s2_world(ipa_bits);
+            let pool = layout::pptr(0x15_0000);
+            w.s.write(pool + 8, layout::pptr(0x10_0000));
+            assert_eq!(changes(&mut w, |s, a, ipa| unmap_table(s, a, 1, ipa, pt)), (vec![], vec![]));
+            let block = make_s2_leaf(0x40_0000, VM_READ_WRITE, true, arm_vm_attr::PAGE_CACHEABLE, 30);
+            for e in [0, block] {
+                let mut w = s2_world(ipa_bits);
+                let last = *w.tables.last().unwrap();
+                let first = w.slots[0];
+                w.s.write(first, e);
+                assert_eq!(changes(&mut w, |s, a, ipa| unmap_table(s, a, 1, ipa, last)), (vec![], vec![]), "ipa_bits {ipa_bits} entry {e:#x}");
+            }
+            let mut w = s2_world(ipa_bits);
+            let other = layout::pptr(0x14_0000);
+            assert_eq!(changes(&mut w, |s, a, ipa| unmap_table(s, a, 1, ipa, other)), (vec![], vec![]), "ipa_bits {ipa_bits}");
+        }
     }
 }

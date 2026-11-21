@@ -89,24 +89,24 @@ pub fn sanitize_vgic_lr(val: u64, gic_v3: bool) -> Option<u64> {
     }
 }
 
-pub fn reg_addr(vcpu: u64, idx: u64) -> u64 {
-    vcpu.wrapping_add(REGS).wrapping_add(idx.wrapping_mul(8))
+pub fn reg_addr(vc: u64, idx: u64) -> u64 {
+    vc.wrapping_add(REGS).wrapping_add(idx.wrapping_mul(8))
 }
 
-pub fn reg_get<S: Store>(s: &S, vcpu: u64, idx: u64) -> u64 {
-    s.read(reg_addr(vcpu, idx))
+pub fn reg_get<S: Store>(s: &S, vc: u64, idx: u64) -> u64 {
+    s.read(reg_addr(vc, idx))
 }
 
-pub fn reg_set<S: Store>(s: &mut S, vcpu: u64, idx: u64, val: u64) {
-    s.write(reg_addr(vcpu, idx), val);
+pub fn reg_set<S: Store>(s: &mut S, vc: u64, idx: u64, val: u64) {
+    s.write(reg_addr(vc, idx), val);
 }
 
 pub fn bound<S: Store>(s: &S, t: Tcb) -> u64 {
     s.read(t.0.wrapping_add(tl::VCPU))
 }
 
-fn set_bound<S: Store>(s: &mut S, t: Tcb, vcpu: u64) {
-    s.write(t.0.wrapping_add(tl::VCPU), vcpu);
+fn set_bound<S: Store>(s: &mut S, t: Tcb, vc: u64) {
+    s.write(t.0.wrapping_add(tl::VCPU), vc);
 }
 
 /// Unused on AArch64 (guests run via `ARMVCPURun` or bound VCPU TCBs, not SysVMEnter).
@@ -144,23 +144,23 @@ pub fn cancel_run<S: Store, A: Arch>(s: &mut S, _a: &mut A, t: Tcb) {
 pub fn revoke_ports<S: Store, A: Arch>(_s: &mut S, _a: &mut A, _owner: u64, _first: u64, _last: u64) {}
 
 /// Initialise a newly retyped 4 KiB VCPU object.
-pub fn init<S: Store, A: Arch>(s: &mut S, a: &A, vcpu: u64) {
-    s.write(vcpu.wrapping_add(TCB), 0);
-    s.write(vcpu.wrapping_add(OWNER_CPU), 0);
-    s.write(vcpu.wrapping_add(VPPI_MASKED), 0);
-    s.write(vcpu.wrapping_add(RUN_CALLER), 0);
-    s.write(vcpu.wrapping_add(RUN_OFFSET), 0);
-    s.write(vcpu.wrapping_add(RUN_OUT_MASK), 0);
-    reg_set(s, vcpu, vr::SCTLR, SCTLR_EL1_DEFAULT);
-    reg_set(s, vcpu, vr::VMPIDR_EL2, VMPIDR_DEFAULT);
-    reg_set(s, vcpu, vr::VPIDR_EL2, a.vcpu_midr());
-    reg_set(s, vcpu, vr::HCR_EL2, HCR_FORCED_1);
+pub fn init<S: Store, A: Arch>(s: &mut S, a: &A, vc: u64) {
+    s.write(vc.wrapping_add(TCB), 0);
+    s.write(vc.wrapping_add(OWNER_CPU), 0);
+    s.write(vc.wrapping_add(VPPI_MASKED), 0);
+    s.write(vc.wrapping_add(RUN_CALLER), 0);
+    s.write(vc.wrapping_add(RUN_OFFSET), 0);
+    s.write(vc.wrapping_add(RUN_OUT_MASK), 0);
+    reg_set(s, vc, vr::SCTLR, SCTLR_EL1_DEFAULT);
+    reg_set(s, vc, vr::VMPIDR_EL2, VMPIDR_DEFAULT);
+    reg_set(s, vc, vr::VPIDR_EL2, a.vcpu_midr());
+    reg_set(s, vc, vr::HCR_EL2, HCR_FORCED_1);
     let gic_v3 = a.vcpu_gic_version() == 3;
     // ICH_HCR_EL2 / GICH_HCR: En (bit 0) | (GICv3: TALL0 bit 11).
     let vgic_hcr = 1 | if gic_v3 { 1 << 11 } else { 0 };
-    reg_set(s, vcpu, vr::VGIC_HCR, vgic_hcr);
-    reg_set(s, vcpu, vr::VGIC_VTR, abi_vgic_vtr(a.vcpu_vgic_vtr(), gic_v3));
-    sync_vgic_status(s, vcpu, num_lrs(a), gic_v3);
+    reg_set(s, vc, vr::VGIC_HCR, vgic_hcr);
+    reg_set(s, vc, vr::VGIC_VTR, abi_vgic_vtr(a.vcpu_vgic_vtr(), gic_v3));
+    sync_vgic_status(s, vc, num_lrs(a), gic_v3);
 }
 
 /// Cap hardware `VGIC_VTR` `ListRegs` to <= 15 (16 LRs) so the VCPU ABI
@@ -193,14 +193,14 @@ fn lr_is_empty(lr: u64, gic_v3: bool) -> bool {
 /// in-memory `VGIC_HCR`, `VGIC_VMCR`, and `VGIC_LR0..lrs` per ARM GICv3 §12.4.9
 /// and GICv2 §5.3.4 so all software write paths (`WriteState(VGIC)`,
 /// `WriteState(VGIC_LR)`, `WriteRegs`, `InjectIRQ`) stay identical to hardware.
-fn sync_vgic_status<S: Store>(s: &mut S, vcpu: u64, lrs: u64, gic_v3: bool) {
+fn sync_vgic_status<S: Store>(s: &mut S, vc: u64, lrs: u64, gic_v3: bool) {
     let mut elrsr = 0u64;
     let mut eisr = 0u64;
     let mut valid_lrs = 0u64;
     let mut has_pend = false;
     let mut i = 0u64;
     while i < lrs {
-        let lr = reg_get(s, vcpu, vr::VGIC_LR0.wrapping_add(i));
+        let lr = reg_get(s, vc, vr::VGIC_LR0.wrapping_add(i));
         let (state, hw, eoi) = if gic_v3 {
             ((lr >> 62) & 0x3, (lr >> 61) & 1, (lr >> 41) & 1)
         } else {
@@ -218,8 +218,8 @@ fn sync_vgic_status<S: Store>(s: &mut S, vcpu: u64, lrs: u64, gic_v3: bool) {
         }
         i += 1;
     }
-    let hcr = reg_get(s, vcpu, vr::VGIC_HCR);
-    let vmcr = reg_get(s, vcpu, vr::VGIC_VMCR);
+    let hcr = reg_get(s, vc, vr::VGIC_HCR);
+    let vmcr = reg_get(s, vc, vr::VGIC_VMCR);
     let mut misr = 0u64;
     if eisr != 0 {
         misr |= 1 << 0; // EOI
@@ -245,9 +245,9 @@ fn sync_vgic_status<S: Store>(s: &mut S, vcpu: u64, lrs: u64, gic_v3: bool) {
     if (hcr & (1 << 7)) != 0 && (vmcr & (1 << 1)) == 0 {
         misr |= 1 << 7; // VGrp1D
     }
-    reg_set(s, vcpu, vr::VGIC_ELRSR, elrsr);
-    reg_set(s, vcpu, vr::VGIC_EISR, eisr);
-    reg_set(s, vcpu, vr::VGIC_MISR, misr);
+    reg_set(s, vc, vr::VGIC_ELRSR, elrsr);
+    reg_set(s, vc, vr::VGIC_EISR, eisr);
+    reg_set(s, vc, vr::VGIC_MISR, misr);
 }
 
 fn num_lrs<A: Arch>(a: &A) -> u64 {
@@ -268,39 +268,39 @@ fn is_readonly_reg(r: u64) -> bool {
     )
 }
 
-fn stall_vcpu<S: Store, A: Arch>(s: &mut S, a: &mut A, vcpu: u64) {
-    let t = s.read(vcpu.wrapping_add(TCB));
+fn stall_vcpu<S: Store, A: Arch>(s: &mut S, a: &mut A, vc: u64) {
+    let t = s.read(vc.wrapping_add(TCB));
     if t != 0 {
         smp::remote_tcb_stall(s, a, Tcb(t));
     }
-    let caller = s.read(vcpu.wrapping_add(RUN_CALLER));
+    let caller = s.read(vc.wrapping_add(RUN_CALLER));
     if caller != 0 {
         smp::remote_tcb_stall(s, a, Tcb(caller));
     }
-    a.vcpu_flush(vcpu);
+    a.vcpu_flush(vc);
 }
 
-fn unbind<S: Store, A: Arch>(s: &mut S, a: &mut A, vcpu: u64) {
-    let caller_ptr = s.read(vcpu.wrapping_add(RUN_CALLER));
+fn unbind<S: Store, A: Arch>(s: &mut S, a: &mut A, vc: u64) {
+    let caller_ptr = s.read(vc.wrapping_add(RUN_CALLER));
     if caller_ptr != 0 {
         let caller = Tcb(caller_ptr);
         smp::remote_tcb_stall(s, a, caller);
         if caller.state(s) == sched::TS_RUNNING_VM {
             complete_run(s, a, caller, vcpu_run_stop::INTERRUPT, 0, 0, 0);
         } else {
-            s.write(vcpu.wrapping_add(RUN_CALLER), 0);
+            s.write(vc.wrapping_add(RUN_CALLER), 0);
             s.write(caller_ptr.wrapping_add(tl::RUN_VCPU), 0);
         }
     }
-    let t_ptr = s.read(vcpu.wrapping_add(TCB));
+    let t_ptr = s.read(vc.wrapping_add(TCB));
     if t_ptr == 0 {
         return;
     }
     let t = Tcb(t_ptr);
     smp::remote_tcb_stall(s, a, t);
-    a.vcpu_flush(vcpu);
-    s.write(vcpu.wrapping_add(TCB), 0);
-    s.write(vcpu.wrapping_add(OWNER_CPU), 0);
+    a.vcpu_flush(vc);
+    s.write(vc.wrapping_add(TCB), 0);
+    s.write(vc.wrapping_add(OWNER_CPU), 0);
     set_bound(s, t, 0);
     // Downgrade detached TCB's SPSR_EL1 back to native EL0t.
     let old_spsr = t.reg(s, reg::SPSR_EL1);
@@ -320,9 +320,9 @@ pub fn detach<S: Store, A: Arch>(s: &mut S, a: &mut A, t: Tcb) {
 }
 
 /// Finalise a VCPU object on cap deletion.
-pub fn finalise<S: Store, A: Arch>(s: &mut S, a: &mut A, vcpu: u64) {
-    unbind(s, a, vcpu);
-    a.vcpu_flush(vcpu);
+pub fn finalise<S: Store, A: Arch>(s: &mut S, a: &mut A, vc: u64) {
+    unbind(s, a, vc);
+    a.vcpu_flush(vc);
 }
 
 /// Deliver a VGIC maintenance fault to the current VCPU thread (MCS guarded).
@@ -364,7 +364,7 @@ fn reply1<S: Store>(s: &mut S, t: Tcb, call: bool, val: u64) {
     sched::set_thread_state(s, t, sched::TS_RUNNING);
 }
 
-fn decode_set_tcb<S: Store, A: Arch>(s: &mut S, a: &mut A, vcpu: u64, ex: &[Slot; 3]) -> KResult<()> {
+fn decode_set_tcb<S: Store, A: Arch>(s: &mut S, a: &mut A, vc: u64, ex: &[Slot; 3]) -> KResult<()> {
     if ex[0].is_null() {
         return truncated();
     }
@@ -374,21 +374,21 @@ fn decode_set_tcb<S: Store, A: Arch>(s: &mut S, a: &mut A, vcpu: u64, ex: &[Slot
     };
     let ct = sched::cur_thread(s);
     sched::set_thread_state(s, ct, sched::TS_RESTART);
-    unbind(s, a, vcpu);
+    unbind(s, a, vc);
     let old_v = bound(s, target);
     if old_v != 0 {
         unbind(s, a, old_v);
     }
     smp::remote_tcb_stall(s, a, target);
-    s.write(vcpu.wrapping_add(TCB), target.0);
-    set_bound(s, target, vcpu);
+    s.write(vc.wrapping_add(TCB), target.0);
+    set_bound(s, target, vc);
     if target == sched::cur_thread(s) {
         vspace::set_vm_root(s, a, target);
     }
     Ok(())
 }
 
-fn decode_inject_irq<S: Store, A: Arch>(s: &mut S, a: &mut A, vcpu: u64, length: u64, buf: u64) -> KResult<()> {
+fn decode_inject_irq<S: Store, A: Arch>(s: &mut S, a: &mut A, vc: u64, length: u64, buf: u64) -> KResult<()> {
     if length < 1 {
         return truncated();
     }
@@ -409,9 +409,9 @@ fn decode_inject_irq<S: Store, A: Arch>(s: &mut S, a: &mut A, vcpu: u64, length:
     if virq > 1019 && !(gic_v3 && virq >= 8192) {
         return range(0, 1019);
     }
-    stall_vcpu(s, a, vcpu);
+    stall_vcpu(s, a, vc);
     let lr_reg = vr::VGIC_LR0.wrapping_add(index);
-    let cur = reg_get(s, vcpu, lr_reg);
+    let cur = reg_get(s, vc, lr_reg);
     if !lr_is_empty(cur, gic_v3) {
         return Err(Exc::Sys(SysError::DeleteFirst));
     }
@@ -422,12 +422,12 @@ fn decode_inject_irq<S: Store, A: Arch>(s: &mut S, a: &mut A, vcpu: u64, length:
         ((group & 1) << 30) | (1u64 << 28) | ((priority & 0x1f) << 23) | (1u64 << 19) | (virq & 0x3ff)
     };
     sched::set_thread_state(s, ct, sched::TS_RESTART);
-    reg_set(s, vcpu, lr_reg, lr);
-    sync_vgic_status(s, vcpu, lrs, gic_v3);
+    reg_set(s, vc, lr_reg, lr);
+    sync_vgic_status(s, vc, lrs, gic_v3);
     Ok(())
 }
 
-fn decode_read_reg<S: Store, A: Arch>(s: &mut S, a: &mut A, vcpu: u64, length: u64, call: bool, buf: u64) -> KResult<()> {
+fn decode_read_reg<S: Store, A: Arch>(s: &mut S, a: &mut A, vc: u64, length: u64, call: bool, buf: u64) -> KResult<()> {
     if length < 1 {
         return truncated();
     }
@@ -440,21 +440,29 @@ fn decode_read_reg<S: Store, A: Arch>(s: &mut S, a: &mut A, vcpu: u64, length: u
     if field >= vr::VGIC_LR0 && field - vr::VGIC_LR0 >= lrs {
         return invalid_arg(0);
     }
-    stall_vcpu(s, a, vcpu);
+    stall_vcpu(s, a, vc);
     let gic_v3 = a.vcpu_gic_version() == 3;
     let val = if field == vr::VGIC_VTR {
         abi_vgic_vtr(a.vcpu_vgic_vtr(), gic_v3)
-    } else if !gic_v3 && (vr::VGIC_AP1R0..=vr::VGIC_AP1R3).contains(&field) {
+    } else if !gic_v3 && is_vgic_ap1r(field) {
         0
     } else {
-        reg_get(s, vcpu, field)
+        reg_get(s, vc, field)
     };
     sched::set_thread_state(s, ct, sched::TS_RESTART);
     reply1(s, ct, call, val);
     Ok(())
 }
 
-fn decode_write_reg<S: Store, A: Arch>(s: &mut S, a: &mut A, vcpu: u64, length: u64, buf: u64) -> KResult<()> {
+/// One of GICv3's ICH_AP1R<n>_EL2 fields, which a GICv2 VCPU does not
+/// have. (Compared by hand: `RangeInclusive::contains` has no model in
+/// Aeneas's Lean library.)
+#[allow(clippy::manual_range_contains)]
+fn is_vgic_ap1r(field: u64) -> bool {
+    field >= vr::VGIC_AP1R0 && field <= vr::VGIC_AP1R3
+}
+
+fn decode_write_reg<S: Store, A: Arch>(s: &mut S, a: &mut A, vc: u64, length: u64, buf: u64) -> KResult<()> {
     if length < 2 {
         return truncated();
     }
@@ -473,15 +481,15 @@ fn decode_write_reg<S: Store, A: Arch>(s: &mut S, a: &mut A, vcpu: u64, length: 
         let Some(san) = sanitize_vgic_lr(val, gic_v3) else {
             return invalid_arg(1);
         };
-        stall_vcpu(s, a, vcpu);
+        stall_vcpu(s, a, vc);
         sched::set_thread_state(s, ct, sched::TS_RESTART);
-        reg_set(s, vcpu, field, san);
-        sync_vgic_status(s, vcpu, lrs, gic_v3);
+        reg_set(s, vc, field, san);
+        sync_vgic_status(s, vc, lrs, gic_v3);
         return Ok(());
     }
-    stall_vcpu(s, a, vcpu);
+    stall_vcpu(s, a, vc);
     sched::set_thread_state(s, ct, sched::TS_RESTART);
-    if !gic_v3 && (vr::VGIC_AP1R0..=vr::VGIC_AP1R3).contains(&field) {
+    if !gic_v3 && is_vgic_ap1r(field) {
         return Ok(());
     }
     let v = if field == vr::HCR_EL2 {
@@ -491,14 +499,14 @@ fn decode_write_reg<S: Store, A: Arch>(s: &mut S, a: &mut A, vcpu: u64, length: 
     } else {
         val
     };
-    reg_set(s, vcpu, field, v);
+    reg_set(s, vc, field, v);
     if field == vr::VGIC_HCR || field == vr::VGIC_VMCR {
-        sync_vgic_status(s, vcpu, lrs, gic_v3);
+        sync_vgic_status(s, vc, lrs, gic_v3);
     }
     Ok(())
 }
 
-fn decode_ack_vppi<S: Store, A: Arch>(s: &mut S, a: &mut A, vcpu: u64, length: u64, buf: u64) -> KResult<()> {
+fn decode_ack_vppi<S: Store, A: Arch>(s: &mut S, a: &mut A, vc: u64, length: u64, buf: u64) -> KResult<()> {
     if length < 1 {
         return truncated();
     }
@@ -507,10 +515,10 @@ fn decode_ack_vppi<S: Store, A: Arch>(s: &mut S, a: &mut A, vcpu: u64, length: u
     if irq_id != irq::TIMER_ID {
         return invalid_arg(0);
     }
-    stall_vcpu(s, a, vcpu);
+    stall_vcpu(s, a, vc);
     sched::set_thread_state(s, ct, sched::TS_RESTART);
-    let masked = s.read(vcpu.wrapping_add(VPPI_MASKED));
-    s.write(vcpu.wrapping_add(VPPI_MASKED), masked & !1);
+    let masked = s.read(vc.wrapping_add(VPPI_MASKED));
+    s.write(vc.wrapping_add(VPPI_MASKED), masked & !1);
     Ok(())
 }
 
@@ -527,76 +535,76 @@ fn validate_vgic_lrs<S: Store>(s: &S, frame: u64, lrs: u64, gic_v3: bool) -> boo
     true
 }
 
-fn copy_reg_range_to_frame<S: Store>(s: &mut S, vcpu: u64, frame: u64, start: u64, end_incl: u64) {
+fn copy_reg_range_to_frame<S: Store>(s: &mut S, vc: u64, frame: u64, start: u64, end_incl: u64) {
     let mut r = start;
     while r <= end_incl {
-        s.write(frame.wrapping_add(r * 8), reg_get(s, vcpu, r));
+        s.write(frame.wrapping_add(r * 8), reg_get(s, vc, r));
         r += 1;
     }
 }
 
-fn copy_reg_range_from_frame<S: Store>(s: &mut S, vcpu: u64, frame: u64, start: u64, end_incl: u64) {
+fn copy_reg_range_from_frame<S: Store>(s: &mut S, vc: u64, frame: u64, start: u64, end_incl: u64) {
     let mut r = start;
     while r <= end_incl {
         let val = s.read(frame.wrapping_add(r * 8));
-        reg_set(s, vcpu, r, val);
+        reg_set(s, vc, r, val);
         r += 1;
     }
 }
 
-/// Copy selected state groups from `vcpu` (and its bound TCB) into `frame`.
-fn read_state_to_frame<S: Store, A: Arch>(s: &mut S, a: &A, vcpu: u64, frame: u64, mask: u64) {
+/// Copy selected state groups from `vc` (and its bound TCB) into `frame`.
+fn read_state_to_frame<S: Store, A: Arch>(s: &mut S, a: &A, vc: u64, frame: u64, mask: u64) {
     if mask == 0 {
         return;
     }
     if mask & sm::EL1_SYSREGS != 0 {
-        copy_reg_range_to_frame(s, vcpu, frame, 0, vr::CSSELR_EL1);
-        copy_reg_range_to_frame(s, vcpu, frame, vr::ACTLR_EL1, vr::MDCCINT_EL1);
+        copy_reg_range_to_frame(s, vc, frame, 0, vr::CSSELR_EL1);
+        copy_reg_range_to_frame(s, vc, frame, vr::ACTLR_EL1, vr::MDCCINT_EL1);
     }
     if mask & sm::HYP != 0 {
-        s.write(frame.wrapping_add(vr::VMPIDR_EL2 * 8), reg_get(s, vcpu, vr::VMPIDR_EL2));
-        s.write(frame.wrapping_add(vr::VDISR_EL2 * 8), reg_get(s, vcpu, vr::VDISR_EL2));
-        copy_reg_range_to_frame(s, vcpu, frame, vr::VPIDR_EL2, vr::VSESR_EL2);
-        copy_reg_range_to_frame(s, vcpu, frame, vr::FAR_EL2, vr::ESR_EL2);
+        s.write(frame.wrapping_add(vr::VMPIDR_EL2 * 8), reg_get(s, vc, vr::VMPIDR_EL2));
+        s.write(frame.wrapping_add(vr::VDISR_EL2 * 8), reg_get(s, vc, vr::VDISR_EL2));
+        copy_reg_range_to_frame(s, vc, frame, vr::VPIDR_EL2, vr::VSESR_EL2);
+        copy_reg_range_to_frame(s, vc, frame, vr::FAR_EL2, vr::ESR_EL2);
     }
     if mask & sm::TIMER != 0 {
-        copy_reg_range_to_frame(s, vcpu, frame, vr::CNTV_CTL, vr::CNTKCTL_EL1);
+        copy_reg_range_to_frame(s, vc, frame, vr::CNTV_CTL, vr::CNTKCTL_EL1);
         let vppi_addr = frame.wrapping_add((64 + 37) * 8);
-        s.write(vppi_addr, s.read(vcpu.wrapping_add(VPPI_MASKED)));
+        s.write(vppi_addr, s.read(vc.wrapping_add(VPPI_MASKED)));
     }
     if mask & sm::VGIC != 0 {
         let lrs = num_lrs(a);
         let gic_v3 = a.vcpu_gic_version() == 3;
         s.write(frame.wrapping_add(vr::VGIC_VTR * 8), abi_vgic_vtr(a.vcpu_vgic_vtr(), gic_v3));
-        copy_reg_range_to_frame(s, vcpu, frame, vr::VGIC_HCR, vr::VGIC_AP0R3);
+        copy_reg_range_to_frame(s, vc, frame, vr::VGIC_HCR, vr::VGIC_AP0R3);
         let mut r = vr::VGIC_AP1R0;
         while r <= vr::VGIC_AP1R3 {
-            let val = if gic_v3 { reg_get(s, vcpu, r) } else { 0 };
+            let val = if gic_v3 { reg_get(s, vc, r) } else { 0 };
             s.write(frame.wrapping_add(r * 8), val);
             r += 1;
         }
         let mut i = 0u64;
         while i < 16 {
             let r = vr::VGIC_LR0.wrapping_add(i);
-            let val = if i < lrs { reg_get(s, vcpu, r) } else { 0 };
+            let val = if i < lrs { reg_get(s, vc, r) } else { 0 };
             s.write(frame.wrapping_add(r * 8), val);
             i += 1;
         }
     } else if mask & sm::VGIC_LR != 0 {
         let lrs = num_lrs(a);
-        s.write(frame.wrapping_add(vr::VGIC_HCR * 8), reg_get(s, vcpu, vr::VGIC_HCR));
-        s.write(frame.wrapping_add(vr::VGIC_ELRSR * 8), reg_get(s, vcpu, vr::VGIC_ELRSR));
+        s.write(frame.wrapping_add(vr::VGIC_HCR * 8), reg_get(s, vc, vr::VGIC_HCR));
+        s.write(frame.wrapping_add(vr::VGIC_ELRSR * 8), reg_get(s, vc, vr::VGIC_ELRSR));
         let mut i = 0u64;
         while i < 16 {
             let r = vr::VGIC_LR0.wrapping_add(i);
-            let val = if i < lrs { reg_get(s, vcpu, r) } else { 0 };
+            let val = if i < lrs { reg_get(s, vc, r) } else { 0 };
             s.write(frame.wrapping_add(r * 8), val);
             i += 1;
         }
     }
     if mask & sm::GPRS != 0 {
         let gprs_base = frame.wrapping_add(64 * 8);
-        let t_ptr = s.read(vcpu.wrapping_add(TCB));
+        let t_ptr = s.read(vc.wrapping_add(TCB));
         let mut i = 0u64;
         while i < reg::COUNT {
             let v = if t_ptr != 0 { Tcb(t_ptr).reg(s, i) } else { 0 };
@@ -606,66 +614,66 @@ fn read_state_to_frame<S: Store, A: Arch>(s: &mut S, a: &A, vcpu: u64, frame: u6
     }
 }
 
-/// Copy selected state groups from `frame` into `vcpu` (and its bound TCB).
+/// Copy selected state groups from `frame` into `vc` (and its bound TCB).
 /// Callers must have validated LRs via `validate_vgic_lrs` when `mask & sm::VGIC != 0`.
-fn write_state_from_frame<S: Store, A: Arch>(s: &mut S, a: &A, vcpu: u64, frame: u64, mask: u64) {
+fn write_state_from_frame<S: Store, A: Arch>(s: &mut S, a: &A, vc: u64, frame: u64, mask: u64) {
     if mask == 0 {
         return;
     }
     if mask & sm::EL1_SYSREGS != 0 {
-        copy_reg_range_from_frame(s, vcpu, frame, 0, vr::CSSELR_EL1);
-        copy_reg_range_from_frame(s, vcpu, frame, vr::ACTLR_EL1, vr::MDCCINT_EL1);
+        copy_reg_range_from_frame(s, vc, frame, 0, vr::CSSELR_EL1);
+        copy_reg_range_from_frame(s, vc, frame, vr::ACTLR_EL1, vr::MDCCINT_EL1);
     }
     if mask & sm::HYP != 0 {
-        reg_set(s, vcpu, vr::VMPIDR_EL2, s.read(frame.wrapping_add(vr::VMPIDR_EL2 * 8)));
-        reg_set(s, vcpu, vr::VDISR_EL2, s.read(frame.wrapping_add(vr::VDISR_EL2 * 8)));
-        reg_set(s, vcpu, vr::VPIDR_EL2, s.read(frame.wrapping_add(vr::VPIDR_EL2 * 8)));
-        reg_set(s, vcpu, vr::HCR_EL2, sanitize_hcr(s.read(frame.wrapping_add(vr::HCR_EL2 * 8))));
-        reg_set(s, vcpu, vr::VSESR_EL2, s.read(frame.wrapping_add(vr::VSESR_EL2 * 8)));
+        reg_set(s, vc, vr::VMPIDR_EL2, s.read(frame.wrapping_add(vr::VMPIDR_EL2 * 8)));
+        reg_set(s, vc, vr::VDISR_EL2, s.read(frame.wrapping_add(vr::VDISR_EL2 * 8)));
+        reg_set(s, vc, vr::VPIDR_EL2, s.read(frame.wrapping_add(vr::VPIDR_EL2 * 8)));
+        reg_set(s, vc, vr::HCR_EL2, sanitize_hcr(s.read(frame.wrapping_add(vr::HCR_EL2 * 8))));
+        reg_set(s, vc, vr::VSESR_EL2, s.read(frame.wrapping_add(vr::VSESR_EL2 * 8)));
     }
     if mask & sm::TIMER != 0 {
-        copy_reg_range_from_frame(s, vcpu, frame, vr::CNTV_CTL, vr::CNTKCTL_EL1);
+        copy_reg_range_from_frame(s, vc, frame, vr::CNTV_CTL, vr::CNTKCTL_EL1);
         let vppi_addr = frame.wrapping_add((64 + 37) * 8);
         let m = s.read(vppi_addr) & 1;
-        s.write(vcpu.wrapping_add(VPPI_MASKED), m);
+        s.write(vc.wrapping_add(VPPI_MASKED), m);
     }
     if mask & sm::VGIC != 0 {
         let lrs = num_lrs(a);
         let gic_v3 = a.vcpu_gic_version() == 3;
-        reg_set(s, vcpu, vr::VGIC_HCR, sanitize_vgic_hcr(s.read(frame.wrapping_add(vr::VGIC_HCR * 8)), gic_v3));
-        reg_set(s, vcpu, vr::VGIC_VMCR, s.read(frame.wrapping_add(vr::VGIC_VMCR * 8)));
-        copy_reg_range_from_frame(s, vcpu, frame, vr::VGIC_AP0R0, vr::VGIC_AP0R3);
+        reg_set(s, vc, vr::VGIC_HCR, sanitize_vgic_hcr(s.read(frame.wrapping_add(vr::VGIC_HCR * 8)), gic_v3));
+        reg_set(s, vc, vr::VGIC_VMCR, s.read(frame.wrapping_add(vr::VGIC_VMCR * 8)));
+        copy_reg_range_from_frame(s, vc, frame, vr::VGIC_AP0R0, vr::VGIC_AP0R3);
         if gic_v3 {
-            copy_reg_range_from_frame(s, vcpu, frame, vr::VGIC_AP1R0, vr::VGIC_AP1R3);
+            copy_reg_range_from_frame(s, vc, frame, vr::VGIC_AP1R0, vr::VGIC_AP1R3);
         }
         let mut i = 0u64;
         while i < lrs {
             let r = vr::VGIC_LR0.wrapping_add(i);
             let val = s.read(frame.wrapping_add(r * 8));
             if let Some(san) = sanitize_vgic_lr(val, gic_v3) {
-                reg_set(s, vcpu, r, san);
+                reg_set(s, vc, r, san);
             }
             i += 1;
         }
-        sync_vgic_status(s, vcpu, lrs, gic_v3);
+        sync_vgic_status(s, vc, lrs, gic_v3);
     } else if mask & sm::VGIC_LR != 0 {
         let lrs = num_lrs(a);
         let gic_v3 = a.vcpu_gic_version() == 3;
-        reg_set(s, vcpu, vr::VGIC_HCR, sanitize_vgic_hcr(s.read(frame.wrapping_add(vr::VGIC_HCR * 8)), gic_v3));
+        reg_set(s, vc, vr::VGIC_HCR, sanitize_vgic_hcr(s.read(frame.wrapping_add(vr::VGIC_HCR * 8)), gic_v3));
         let mut i = 0u64;
         while i < lrs {
             let r = vr::VGIC_LR0.wrapping_add(i);
             let val = s.read(frame.wrapping_add(r * 8));
             if let Some(san) = sanitize_vgic_lr(val, gic_v3) {
-                reg_set(s, vcpu, r, san);
+                reg_set(s, vc, r, san);
             }
             i += 1;
         }
-        sync_vgic_status(s, vcpu, lrs, gic_v3);
+        sync_vgic_status(s, vc, lrs, gic_v3);
     }
     if mask & sm::GPRS != 0 {
         let gprs_base = frame.wrapping_add(64 * 8);
-        let t_ptr = s.read(vcpu.wrapping_add(TCB));
+        let t_ptr = s.read(vc.wrapping_add(TCB));
         if t_ptr != 0 {
             let t = Tcb(t_ptr);
             let mut i = 0u64;
@@ -684,7 +692,7 @@ fn write_state_from_frame<S: Store, A: Arch>(s: &mut S, a: &A, vcpu: u64, frame:
 fn decode_state_transfer<S: Store, A: Arch>(
     s: &mut S,
     a: &mut A,
-    vcpu: u64,
+    vc: u64,
     length: u64,
     buf: u64,
     ex: &[Slot; 3],
@@ -718,12 +726,12 @@ fn decode_state_transfer<S: Store, A: Arch>(
     if !to_frame && mask & (sm::VGIC | sm::VGIC_LR) != 0 && !validate_vgic_lrs(s, frame, lrs, gic_v3) {
         return invalid_arg(1);
     }
-    stall_vcpu(s, a, vcpu);
+    stall_vcpu(s, a, vc);
     sched::set_thread_state(s, ct, sched::TS_RESTART);
     if to_frame {
-        read_state_to_frame(s, a, vcpu, frame, mask);
+        read_state_to_frame(s, a, vc, frame, mask);
     } else {
-        write_state_from_frame(s, a, vcpu, frame, mask);
+        write_state_from_frame(s, a, vc, frame, mask);
     }
     Ok(())
 }
@@ -739,22 +747,22 @@ pub fn complete_run<S: Store, A: Arch>(
     w2: u64,
     w3: u64,
 ) {
-    let vcpu = s.read(ct.0.wrapping_add(tl::RUN_VCPU));
-    if vcpu == 0 {
+    let vc = s.read(ct.0.wrapping_add(tl::RUN_VCPU));
+    if vc == 0 {
         return;
     }
-    let offset = s.read(vcpu.wrapping_add(RUN_OFFSET));
-    let out_mask = s.read(vcpu.wrapping_add(RUN_OUT_MASK));
-    a.vcpu_flush_state(vcpu, out_mask);
+    let offset = s.read(vc.wrapping_add(RUN_OFFSET));
+    let out_mask = s.read(vc.wrapping_add(RUN_OUT_MASK));
+    a.vcpu_flush_state(vc, out_mask);
     if out_mask != 0 {
         if let Cap::Frame { ptr, size, rights, is_device, .. } = ct.slot(tl::SLOT_BUFFER).cap(s) {
             let sz = 1u64 << (size.bits() & 63);
             if !is_device && rights == VM_READ_WRITE && offset & 63 == 0 && offset < sz && sz - offset >= sm::SIZE {
-                read_state_to_frame(s, a, vcpu, ptr.wrapping_add(offset), out_mask);
+                read_state_to_frame(s, a, vc, ptr.wrapping_add(offset), out_mask);
             }
         }
     }
-    s.write(vcpu.wrapping_add(RUN_CALLER), 0);
+    s.write(vc.wrapping_add(RUN_CALLER), 0);
     s.write(ct.0.wrapping_add(tl::RUN_VCPU), 0);
     ct.set_reg(s, reg::BADGE, 0);
     ct.set_reg(s, msg::msg_register(0), stop);
@@ -765,7 +773,7 @@ pub fn complete_run<S: Store, A: Arch>(
     sched::set_thread_state(s, ct, sched::TS_RUNNING);
 }
 
-fn decode_run<S: Store, A: Arch>(s: &mut S, a: &mut A, vcpu: u64, length: u64, call: bool, buf: u64) -> KResult<()> {
+fn decode_run<S: Store, A: Arch>(s: &mut S, a: &mut A, vc: u64, length: u64, call: bool, buf: u64) -> KResult<()> {
     if !call {
         return illegal();
     }
@@ -794,11 +802,11 @@ fn decode_run<S: Store, A: Arch>(s: &mut S, a: &mut A, vcpu: u64, length: u64, c
     if offset & 63 != 0 || offset >= size || size - offset < sm::SIZE {
         return invalid_arg(0);
     }
-    let v_tcb = s.read(vcpu.wrapping_add(TCB));
+    let v_tcb = s.read(vc.wrapping_add(TCB));
     if v_tcb == 0 || v_tcb == ct.0 {
         return illegal();
     }
-    if s.read(vcpu.wrapping_add(RUN_CALLER)) != 0 {
+    if s.read(vc.wrapping_add(RUN_CALLER)) != 0 {
         return Err(Exc::Sys(SysError::DeleteFirst));
     }
     let frame = base.wrapping_add(offset);
@@ -809,9 +817,9 @@ fn decode_run<S: Store, A: Arch>(s: &mut S, a: &mut A, vcpu: u64, length: u64, c
     }
     smp::remote_tcb_stall(s, a, Tcb(v_tcb));
     let me = s.cur_cpu().wrapping_add(1);
-    let prev = s.read(vcpu.wrapping_add(OWNER_CPU));
+    let prev = s.read(vc.wrapping_add(OWNER_CPU));
     if prev != 0 && prev != me {
-        a.vcpu_flush(vcpu);
+        a.vcpu_flush(vc);
         a.fpu_flush(v_tcb);
         a.fpu_release(v_tcb);
     } else {
@@ -822,14 +830,14 @@ fn decode_run<S: Store, A: Arch>(s: &mut S, a: &mut A, vcpu: u64, length: u64, c
                 flush_in |= sm::VGIC;
             }
         }
-        a.vcpu_flush_state(vcpu, flush_in);
+        a.vcpu_flush_state(vc, flush_in);
     }
-    s.write(vcpu.wrapping_add(OWNER_CPU), me);
-    write_state_from_frame(s, a, vcpu, frame, in_mask);
-    s.write(vcpu.wrapping_add(RUN_CALLER), ct.0);
-    s.write(vcpu.wrapping_add(RUN_OFFSET), offset);
-    s.write(vcpu.wrapping_add(RUN_OUT_MASK), out_mask);
-    s.write(ct.0.wrapping_add(tl::RUN_VCPU), vcpu);
+    s.write(vc.wrapping_add(OWNER_CPU), me);
+    write_state_from_frame(s, a, vc, frame, in_mask);
+    s.write(vc.wrapping_add(RUN_CALLER), ct.0);
+    s.write(vc.wrapping_add(RUN_OFFSET), offset);
+    s.write(vc.wrapping_add(RUN_OUT_MASK), out_mask);
+    s.write(ct.0.wrapping_add(tl::RUN_VCPU), vc);
     vspace::set_stage2_root(s, a, Tcb(v_tcb));
     sched::set_thread_state(s, ct, sched::TS_RUNNING_VM);
     check(s, a, ct);
@@ -843,27 +851,27 @@ pub fn decode<S: Store, A: Arch>(
     a: &mut A,
     lbl: u64,
     length: u64,
-    vcpu: u64,
+    vc: u64,
     call: bool,
     buf: u64,
     ex: &[Slot; 3],
 ) -> KResult<()> {
     if lbl == label::ARMVCPUSetTCB {
-        decode_set_tcb(s, a, vcpu, ex)
+        decode_set_tcb(s, a, vc, ex)
     } else if lbl == label::ARMVCPUInjectIRQ {
-        decode_inject_irq(s, a, vcpu, length, buf)
+        decode_inject_irq(s, a, vc, length, buf)
     } else if lbl == label::ARMVCPUReadReg {
-        decode_read_reg(s, a, vcpu, length, call, buf)
+        decode_read_reg(s, a, vc, length, call, buf)
     } else if lbl == label::ARMVCPUWriteReg {
-        decode_write_reg(s, a, vcpu, length, buf)
+        decode_write_reg(s, a, vc, length, buf)
     } else if lbl == label::ARMVCPUAckVPPI {
-        decode_ack_vppi(s, a, vcpu, length, buf)
+        decode_ack_vppi(s, a, vc, length, buf)
     } else if lbl == label::ARMVCPUReadState {
-        decode_state_transfer(s, a, vcpu, length, buf, ex, true)
+        decode_state_transfer(s, a, vc, length, buf, ex, true)
     } else if lbl == label::ARMVCPUWriteState {
-        decode_state_transfer(s, a, vcpu, length, buf, ex, false)
+        decode_state_transfer(s, a, vc, length, buf, ex, false)
     } else if lbl == label::ARMVCPURun {
-        decode_run(s, a, vcpu, length, call, buf)
+        decode_run(s, a, vc, length, call, buf)
     } else {
         illegal()
     }
@@ -920,6 +928,14 @@ mod tests {
         fn putc(&mut self, _: u64) {}
         fn get_char(&mut self) -> u64 { 0 }
         fn halt(&mut self) {}
+    }
+
+    /// The GICv3-only AP1R fields are exactly AP1R0..=AP1R3.
+    #[test]
+    fn vgic_ap1r_fields_are_ap1r0_to_ap1r3() {
+        for f in 0..vr::NUM + 2 {
+            assert_eq!(is_vgic_ap1r(f), (vr::VGIC_AP1R0..=vr::VGIC_AP1R3).contains(&f), "field {f}");
+        }
     }
 
     #[test]

@@ -11,6 +11,11 @@ package fl4proofs
 -- edited by hand (DESIGN.md §5).
 lean_lib Fl4Core
 
+-- The same for the AArch64 build (`cargo xtask extract --arch aarch64`),
+-- in namespace `fl4_core_a64`. Its FunsExternal.lean is generated from
+-- Fl4Core's.
+lean_lib Fl4CoreA64
+
 -- The seL4 abstract specification (l4v spec/abstract, MCS) ported to
 -- Lean, with FL4's differences and extensions in separate modules
 -- (DESIGN.md §9). Independent of Fl4Core.

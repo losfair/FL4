@@ -153,10 +153,10 @@ pub mod irq {
     pub const MAX: u64 = BANKED_BASE + BANKED_CORES * NUM_BANKED - 1;
     pub const COUNT: u64 = MAX + 1;
 
-    /// The IRQ of interrupt `id` as `core` takes it.
-    pub fn of(id: u64, core: u64) -> u64 {
+    /// The IRQ of interrupt `id` as `cpu` takes it.
+    pub fn of(id: u64, cpu: u64) -> u64 {
         if id < NUM_BANKED {
-            BANKED_BASE.wrapping_add((core % BANKED_CORES).wrapping_mul(NUM_BANKED)).wrapping_add(id)
+            BANKED_BASE.wrapping_add((cpu % BANKED_CORES).wrapping_mul(NUM_BANKED)).wrapping_add(id)
         } else {
             id
         }

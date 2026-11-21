@@ -20,18 +20,18 @@ pub fn decode_irq_control<S: Store, A: Arch>(s: &mut S, a: &mut A, lbl: u64, len
         let d = msg::syscall_arg(s, ct, buf, 3);
         (msg::syscall_arg(s, ct, buf, 1) != 0, msg::syscall_arg(s, ct, buf, 2), if with_core { d & 0xff } else { d })
     };
-    let core = if with_core { msg::syscall_arg(s, ct, buf, 4) } else { 0 };
+    let cpu = if with_core { msg::syscall_arg(s, ct, buf, 4) } else { 0 };
     let max = a.max_spi();
     if irq_w > max {
         return range(0, max);
     }
-    if with_core && core >= ks_get(s, ks::NUM_NODES) {
+    if with_core && cpu >= ks_get(s, ks::NUM_NODES) {
         return Err(Exc::Sys(SysError::InvalidArgument { arg: 4 }));
     }
     if !plain && !with_core && irq_w < irqn::SPI_MIN && fl4_abi::config::ENABLE_SMP_SUPPORT {
         return illegal();
     }
-    let irq = irqn::of(irq_w, core);
+    let irq = irqn::of(irq_w, cpu);
     if is_irq_active(s, irq) {
         return Err(Exc::Sys(SysError::RevokeFirst));
     }
@@ -39,7 +39,7 @@ pub fn decode_irq_control<S: Store, A: Arch>(s: &mut S, a: &mut A, lbl: u64, len
     cdt::ensure_empty_slot(s, dest)?;
     sched::set_thread_state(s, ct, sched::TS_RESTART);
     if !plain {
-        a.configure_irq(irq, edge, core);
+        a.configure_irq(irq, edge, cpu);
     }
     invoke_irq_control(s, a, irq, dest, src);
     Ok(())
