@@ -142,8 +142,9 @@ flags](https://uefi.org/specs/ACPI/6.6/05_ACPI_Software_Programming_Model.html#p
 FL4 does not support CPU hotplug; these disabled slots are ignored and do not
 consume the boot CPU limit or trigger startup timeouts.
 
-SRSO-affected AMD and MDS/MMIO-affected Intel use one logical processor per
-physical core. STIBP is enabled when available; an otherwise eligible CPU
+With a VM-capable plan, SRSO-affected AMD and MDS/MMIO-affected Intel use
+one logical processor per physical core; native-only boots, Safe RET
+included, keep SMT siblings with STIBP (Predictor boundaries above). STIBP is enabled when available; an otherwise eligible CPU
 without adequate cross-thread branch protection also uses one thread per core.
 Unknown topology under this restriction uses only the boot processor. The BSP
 is retained even if firmware started it on a secondary thread.

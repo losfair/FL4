@@ -73,11 +73,12 @@ __x86_return_thunk:
  * indirect jump: AutoIBRS (or Intel eIBRS) protects it. On CPUs whose
  * native entries run Safe RET without AutoIBRS (Zen 3), boot changes its
  * first two bytes into a short jump to the retpoline below, as Linux's
- * retpolines do there (Spectre v2: Retpolines). The retpoline's own RET
- * is predicted from the RSB entry its CALL just made, which points at the
- * PAUSE/LFENCE capture loop.
- *
- * Adapted from Linux arch/x86/lib/retpoline.S (RETPOLINE_JMP). */
+ * retpolines do there (Spectre v2: Retpolines). The retpoline returns to
+ * the target through the Safe RET thunk, whose CALL leaves a trapping
+ * speculative target and whose RET is the aliased, untrained one that
+ * fl4_finish_interrupted_safe_ret also recovers: Linux's RETPOLINE ends
+ * in RET (the return thunk) the same way. PUSH keeps RFLAGS and leaves no
+ * extra RSB entry. */
 .section .text.retpoline, "ax", @progbits
 .balign 16
 .global __x86_indirect_thunk_r11
@@ -89,12 +90,6 @@ __x86_indirect_thunk_r11:
 .balign 16
 .global fl4_retpoline_r11
 fl4_retpoline_r11:
-    call .Lretpoline_set_target
-.Lretpoline_capture:
-    pause
-    lfence
-    jmp .Lretpoline_capture
-.Lretpoline_set_target:
-    movq %r11, (%rsp)
-    ret
+    pushq %r11
+    jmp fl4_safe_ret_thunk
     int3

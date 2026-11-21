@@ -185,8 +185,10 @@ fn native_safe_ret_allowed(plan: &Result<Plan, Rejected>) -> bool {
 }
 
 /// Whether this core's native entries skip IBPB (`allowed`: its
-/// capabilities permit it, `native_entry_without_ibpb`): as for Safe RET,
-/// only with a plan or a native-only rejection for buffer clearing alone.
+/// capabilities permit it, `native_entry_without_ibpb`): only with a plan
+/// or a native-only rejection for buffer clearing alone (Safe RET also
+/// allows the nested-LFENCE and SRSO-microcode rejections,
+/// `native_safe_ret_allowed`).
 fn entry_without_ibpb(allowed: bool, plan: &Result<Plan, Rejected>) -> bool {
     allowed && matches!(plan, Ok(_) | Err(Rejected::BufferMicrocode))
 }
@@ -245,7 +247,6 @@ pub fn init_core(bsp: bool) -> bool {
     pc.spec_plan.set(plan.ok());
     pc.spec_rejected.set(plan.err());
     let safe_ret = native_safe_ret(&c) && native_safe_ret_allowed(&plan);
-    RETPOLINE.fetch_or(safe_ret && native_retpoline(&c), Ordering::Relaxed);
     // A native-only boot keeps SMT siblings, with Safe RET too: STIBP
     // (which `native_safe_ret` requires, and `native_only` sets) isolates
     // them, as in Linux on Zen 3/4. Only VM-capable plans park them on
@@ -273,6 +274,7 @@ pub fn init_core(bsp: bool) -> bool {
     // `native_only` enables STIBP on every core that can use Safe RET
     // (native_safe_ret requires it).
     ALL_SAFE_RET.fetch_and(safe_ret, Ordering::Relaxed);
+    RETPOLINE.fetch_or(safe_ret && native_retpoline(&c), Ordering::Relaxed);
     NO_SMT.fetch_or(needs_no_smt, Ordering::Relaxed);
     if spec_ctrl != 0 {
         wrmsr(0x48, rdmsr(0x48) | spec_ctrl);
