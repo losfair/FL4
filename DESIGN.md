@@ -753,6 +753,19 @@ unmodified base because it expected a transaction on a quiet core, where
 opportunistic admission now runs serially. Its setup now enters policy
 backoff first, ensuring that the test actually exercises an aborted attempt.
 
+**Without the transactional runtime (§7, 2026-11-21).** Same host,
+l4h 6-vCPU guest, against the kernel with STM still built in (unused on
+x86_64): getppid loops with 2, 4 and 6 threads 2.69 → 2.84, 5.20 → 5.33
+and 7.24 → 7.36 M calls/s, 1 thread unchanged; fork loops on every vCPU
+5,259 → 5,452/s on one vCPU and 7,791 → 8,353/s on six; pipe round trips
+between processes 1–3% faster. `run-smpbench.py` (divisor 4, three boots
+each, alternating): getpid, fork_wait, fault_4k, and same- and cross-vCPU
+pipe and same-vCPU futex round trips 1–7% better at 1, 4 and 6 vCPUs,
+futex_cross too noisy to tell (2.8–8.8 µs within each kernel). The image's
+`.text` is 420 KB smaller and `.bss` 10.3 → 4.2 MB without the per-core
+transaction state. These recover most of the fork losses the guest fast
+paths seemed to cost (below).
+
 **Guest syscall fast paths (§6, 2026-11-21).** Same host and guest as
 below, with deep probes in both kernels, `getppid` loops with one thread
 pinned per vCPU (2.5–3 s each, after boot settles): 1 thread 716 → 654 ns
