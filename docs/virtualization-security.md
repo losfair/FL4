@@ -44,8 +44,9 @@ below. FL4 does not install firmware/microcode updates.
   dispatch-serializing itself; a guest relies on its hypervisor for it, as
   its native-only entry guards already do. Native-only boots rejected for
   VM support alone (buffer-clearing capability, nested LFENCE, SRSO
-  microcode) still use Safe RET, with STIBP and one thread per physical
-  core. Otherwise, AMD CPUs with AutoIBRS and
+  microcode) still use Safe RET, and keep SMT siblings with STIBP, as
+  Linux does there (under SEV-SNP the STIBP write goes through the GHCB, so
+  it is the hypervisor's to honour). Otherwise, AMD CPUs with AutoIBRS and
   SMEP that report SRSO_NO or SRSO_USER_KERNEL_NO (no SRSO across the
   user/kernel boundary) skip the native entry IBPB.
   Other native AMD entries retain IBPB

@@ -174,14 +174,6 @@ fn smt_admission(bsp: bool, needs_no_smt: bool, no_smt: bool) -> Option<bool> {
     Some(needs_no_smt)
 }
 
-/// Whether a native-only core (no `select` plan) needs SMT off for Safe
-/// RET: only if it can use Safe RET (`safe_ret`) and every core so far
-/// can too (`all_safe_ret`). Otherwise Safe RET stays off and SMT
-/// siblings change nothing for it.
-fn native_only_needs_no_smt(safe_ret: bool, all_safe_ret: bool) -> bool {
-    safe_ret && all_safe_ret
-}
-
 /// Whether a rejected `select` still lets this core's native entries use
 /// Safe RET: rejections for VM support (buffer-clearing microcode, nested
 /// LFENCE, SRSO's IBPB microcode) say nothing about native returns.
@@ -254,9 +246,13 @@ pub fn init_core(bsp: bool) -> bool {
     pc.spec_rejected.set(plan.err());
     let safe_ret = native_safe_ret(&c) && native_safe_ret_allowed(&plan);
     RETPOLINE.fetch_or(safe_ret && native_retpoline(&c), Ordering::Relaxed);
+    // A native-only boot keeps SMT siblings, with Safe RET too: STIBP
+    // (which `native_safe_ret` requires, and `native_only` sets) isolates
+    // them, as in Linux on Zen 3/4. Only VM-capable plans park them on
+    // SRSO-affected parts.
     let needs_no_smt = match plan {
         Ok(p) => p.no_smt,
-        Err(_) => native_only_needs_no_smt(safe_ret, ALL_SAFE_RET.load(Ordering::Relaxed)),
+        Err(_) => false,
     };
     let Some(needs_no_smt) = smt_admission(bsp, needs_no_smt, NO_SMT.load(Ordering::Relaxed)) else {
         return false;
@@ -429,20 +425,17 @@ mod tests {
         assert!(ap_admissible(false, false, false, true));
     }
 
-    /// Audit r11 F4: a native-only AP that could use Safe RET joins a
-    /// boot whose earlier cores already ruled Safe RET out (and may have
-    /// started SMT siblings). It must neither be refused for a no-SMT
-    /// need that no longer exists nor turn `NO_SMT` on halfway through AP
-    /// startup, which would skip the remaining cores' siblings.
+    /// Native-only boots (Safe RET or not) keep SMT siblings, so an AP
+    /// never turns `NO_SMT` on halfway through AP startup (audit r11 F4).
     #[test]
-    fn native_only_safe_ret_needs_no_smt_only_while_safe_ret_is_possible() {
-        assert!(native_only_needs_no_smt(true, true));
-        assert!(!native_only_needs_no_smt(true, false));
-        assert!(!native_only_needs_no_smt(false, true));
-        // The F4 case: BSP rejected for SRSO microcode (no Safe RET, SMT
-        // kept), AP rejected only for buffer clearing.
-        let need = native_only_needs_no_smt(true, false);
-        assert_eq!(smt_admission(false, need, false), Some(false));
+    fn native_only_safe_ret_rejections_cover_vm_support_only() {
+        for e in [Rejected::BufferMicrocode, Rejected::Lfence, Rejected::SrsoMicrocode] {
+            assert!(native_safe_ret_allowed(&Err(e)));
+        }
+        for e in [Rejected::Vendor, Rejected::Meltdown, Rejected::Smep, Rejected::BeforeZen2,
+                  Rejected::Ibpb, Rejected::ItsMicrocode] {
+            assert!(!native_safe_ret_allowed(&Err(e)));
+        }
     }
 
     /// Both policy paths share the stricter-AP rule: no core turns SMT
