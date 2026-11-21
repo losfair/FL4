@@ -722,6 +722,8 @@ enum Effect {
     Deadline(u64),
     Reschedule(u64),
     Putc(u8),
+    /// An I/O port write: port, size, value.
+    PortOut(u64, u64, u64),
     /// End of interrupt: the in-service interrupt is done.
     Ack,
 }
@@ -752,6 +754,8 @@ struct Machine {
     now: u64,
     cores: Vec<Core>,
     console: Vec<u8>,
+    /// I/O port writes, in order.
+    ports: Vec<(u64, u64, u64)>,
     rng: Rng,
     halted: bool,
 }
@@ -799,6 +803,7 @@ impl SimArch {
                 }
             }
             Effect::Putc(b) => self.m.lock().unwrap().console.push(b),
+            Effect::PortOut(p, n, v) => self.m.lock().unwrap().ports.push((p, n, v)),
             Effect::Ack => self.m.lock().unwrap().cores[self.cpu as usize].in_service = None,
         }
     }
@@ -882,10 +887,15 @@ impl Arch for SimArch {
     fn ioapic_pins(&self, _i: u64) -> u64 {
         24
     }
-    fn port_in(&mut self, _port: u64, _size: u64) -> u64 {
-        0
+    fn port_in(&mut self, port: u64, size: u64) -> u64 {
+        (port * 0x9e37 ^ 0x5a5a) & ((1 << (8 * size)) - 1)
     }
-    fn port_out(&mut self, _port: u64, _size: u64, _v: u64) {}
+    fn port_out(&mut self, port: u64, size: u64, v: u64) {
+        let e = Effect::PortOut(port, size, v);
+        if !self.defer(e) {
+            self.apply(e);
+        }
+    }
     fn fpu_flush(&mut self, _tcb: u64) {}
     fn fpu_sanitise(&mut self, _tcb: u64) {}
     fn fpu_reload(&mut self, _tcb: u64) {}
@@ -1137,6 +1147,9 @@ struct Sim {
     /// cores' transactions run).
     reset_ut: u64,
     reset_child: u64,
+    /// An IoPort cap for ports 0x60-0x6f, which the root task reads and
+    /// writes (out of range too).
+    port: u64,
     /// `--scenario guest`: l4h vCPUs, each a handler thread waiting in
     /// ReplyRecv on an endpoint and a thread with trapSyscalls faulting to
     /// it, both on one core: (handler, trapping thread, endpoint slot,
@@ -1166,12 +1179,13 @@ impl Sim {
             now: 1_000_000,
             cores: vec![Core::default(); ncores as usize],
             console: Vec::new(),
+            ports: Vec::new(),
             halted: false,
             rng: Rng(seed_rng(seed)),
         }));
         let s = SimStore { mem: mem.clone(), ks_base, cpu: 0, tx: false, conc: None };
         let a = SimArch { m, mem, ks_base, cpu: 0, conc: None };
-        Sim { s, a, ncores, objs: Vec::new(), next_slot: 0, fault_ep: 0, reply: 0, focus: None, reset_ut: 0, reset_child: 0, guest: Vec::new(), big_ut: Cell::new((0, 0)) }
+        Sim { s, a, ncores, objs: Vec::new(), next_slot: 0, fault_ep: 0, reply: 0, focus: None, reset_ut: 0, reset_child: 0, port: 0, guest: Vec::new(), big_ut: Cell::new((0, 0)) }
     }
 
     /// Run the kernel part of an entry: directly, or (concurrent mode)
@@ -1394,9 +1408,17 @@ impl Sim {
         let trap = t.flags(&self.s) & fl4_abi::consts::tcb_flag::TRAP_SYSCALLS != 0;
         let found = fl4_core::fastpath::reply_caps(&self.s, t);
         // As fl4_sync::local_syscall calls it (without the locks).
-        let try_local = local && (trap || (number == sc::SysReplyRecv && found.is_some()));
+        let port = !trap
+            && (number == sc::SysCall || number == sc::SysSend)
+            && fl4_core::ioport::is_port_label(fl4_core::msg::msg_info(&self.s, t).label);
+        let try_local = local && (trap || (number == sc::SysReplyRecv && found.is_some()) || port);
         mem.start_log();
-        let ran_local = try_local && syscall::handle_syscall_local(&mut self.s, &mut self.a, number, found.unwrap_or((0, 0)));
+        let ran_local = try_local
+            && if port {
+                syscall::handle_ioport_local(&mut self.s, &mut self.a, number)
+            } else {
+                syscall::handle_syscall_local(&mut self.s, &mut self.a, number, found.unwrap_or((0, 0)))
+            };
         let fast = ran_local || syscall::handle_syscall_fast(&mut self.s, &mut self.a, number);
         let fast_log = mem.take_log();
         let m_fast = self.a.m.lock().unwrap().clone();
@@ -1503,6 +1525,11 @@ impl Sim {
         self.reset_ut = dest;
         self.reset_child = dest + 1;
         self.next_slot += 2;
+        let dest = self.next_slot;
+        self.invoke(0, rs::IOPortControl, label::X86IOPortControlIssue, &[0x60, 0x6f, dest, 64], &[rs::InitThreadCNode]);
+        self.after("setup port");
+        self.port = dest;
+        self.next_slot += 1;
         // Give each new TCB a CSpace, VSpace, priority, an SC on some core,
         // and start it: these become the threads running random programs.
         let tcbs: Vec<u64> = self.objs_of(|c| matches!(c, Cap::Thread { .. }));
@@ -1647,6 +1674,25 @@ impl Sim {
                 }
                 return;
             }
+        }
+        if self.port != 0 && self.a.m.lock().unwrap().rng.below(8) == 0 {
+            // An I/O port access (fl4_core::syscall::handle_ioport_local),
+            // sometimes out of the cap's range or with too few arguments.
+            let (r, w, p, v, n) = {
+                let rng = &mut self.a.m.lock().unwrap().rng;
+                (rng.below(3), rng.below(2) == 0, 0x5e + rng.below(0x14), rng.below(256), rng.below(4))
+            };
+            let lbls = if w {
+                [label::X86IOPortOut8, label::X86IOPortOut16, label::X86IOPortOut32]
+            } else {
+                [label::X86IOPortIn8, label::X86IOPortIn16, label::X86IOPortIn32]
+            };
+            let args = [p, v];
+            let len = if n == 0 { 0 } else if w { 2 } else { 1 };
+            let info = (lbls[r as usize] << 12) | len;
+            let port = self.port;
+            self.syscall(cpu, if n == 1 { sc::SysSend } else { sc::SysCall }, port, info, [args[0], args[1], 0, 0]);
+            return;
         }
         if mode < 3 {
             // Reply to the last fault (label 0: restart the faulter).

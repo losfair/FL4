@@ -351,6 +351,49 @@ pub fn handle_syscall_local<S: Store, A: Arch>(s: &mut S, a: &mut A, number: i64
     }
 }
 
+/// An I/O port invocation (`SysCall` or `SysSend` on an IoPort cap) run
+/// beside the serial gate (fl4_sync::run_syscall): the general path's own
+/// code, `syscall` through `finish`, once reads show that it writes only
+/// the caller, the port and this core's scheduler state. That takes no
+/// reschedule pending or due on this core (`schedulable_here`), budget
+/// left, and a valid access (`ioport::invocation_ok`); the decode then
+/// neither faults nor blocks, and `schedule()` keeps the caller. Returns
+/// false, having written only `FAULT_IP` and the timestamp, which the
+/// general path repeats, otherwise.
+pub fn handle_ioport_local<S: Store, A: Arch>(s: &mut S, a: &mut A, number: i64) -> bool {
+    let t = sched::cur_thread(s);
+    let info = msg::msg_info(s, t);
+    if t.flags(s) & tcb_flag::TRAP_SYSCALLS != 0
+        || (number != sc::SysCall && number != sc::SysSend)
+        || !ioport::is_port_label(info.label)
+    {
+        return false;
+    }
+    // As `syscall` and `budget_ok` begin; the rest only reads.
+    let next = t.reg(s, reg::NEXT_IP);
+    t.set_reg(s, reg::FAULT_IP, next.wrapping_sub(syscall_insn_len!()));
+    sched::update_timestamp(s, a);
+    let cptr = t.reg(s, reg::CAP);
+    let csc = sched::cur_sc(s);
+    if crate::layout::NUM_DOMAINS != 1
+        || sched::action(s) != sched::ACTION_RESUME_CURRENT
+        || t.yield_to(s) != 0
+        || info.extra_caps != 0
+        || !ioport::invocation_ok(s, t, cptr, info)
+        || !sporadic::sufficient(s, a, csc, sched::consumed(s))
+        || !crate::fastpath::schedulable_here(s, t)
+    {
+        return false;
+    }
+    // `budget_ok` after its update_timestamp: sufficient, the domain not
+    // expired, so it writes nothing.
+    let call = number == sc::SysCall;
+    let r = handle_invocation(s, a, call, true, call, false, cptr);
+    after_invocation(s, a, r);
+    finish(s, a);
+    true
+}
+
 /// Returns whether a fast path ran.
 #[inline(always)]
 fn syscall<S: Store, A: Arch>(s: &mut S, a: &mut A, number: i64, fast: bool) -> bool {

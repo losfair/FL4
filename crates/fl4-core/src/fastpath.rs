@@ -39,7 +39,7 @@ use fl4_abi::consts::fault as ft;
 /// a scheduling context and outside the release queue. Choosing `to` over
 /// queued threads is the caller's to check.
 #[inline(always)]
-fn schedulable_here<S: Store>(s: &S, to: Tcb) -> bool {
+pub(crate) fn schedulable_here<S: Store>(s: &S, to: Tcb) -> bool {
     let cpu = s.cur_cpu();
     let now = sched::cur_time(s);
     let tm = Tcb(node_get(s, cpu, node::TIMER_MIN));

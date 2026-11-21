@@ -125,6 +125,11 @@ fn port_size(lbl: u64) -> u64 {
     }
 }
 
+/// Whether `lbl` names an I/O port access.
+pub fn is_port_label(lbl: u64) -> bool {
+    port_size(lbl) != 0
+}
+
 // Literal results rather than `a || b == c`: Aeneas types a boolean whose
 // last operand is a comparison as a Lean Prop.
 fn is_port_in(lbl: u64) -> bool {
@@ -133,6 +138,33 @@ fn is_port_in(lbl: u64) -> bool {
     } else {
         false
     }
+}
+
+/// Whether thread `t`'s invocation of `cptr` with `info` is an I/O port
+/// access that `decode` would carry out: the cap is an IoPort, there are
+/// arguments enough and the port is in its range. Reads only.
+pub fn invocation_ok<S: Store>(s: &S, t: crate::obj::Tcb, cptr: u64, info: crate::msginfo::MessageInfo) -> bool {
+    let size = port_size(info.label);
+    if size == 0 {
+        return false;
+    }
+    let (first, last) = match cspace::lookup_slot(s, t, cptr) {
+        Ok(r) => match r.slot.cap(s) {
+            Cap::IoPort { first, last, .. } => (first, last),
+            _ => return false,
+        },
+        Err(_) => return false,
+    };
+    let buf = msg::lookup_ipc_buffer(s, false, t);
+    let mut length = info.length;
+    if length > msg::N_MSG_REGISTERS && buf == 0 {
+        length = msg::N_MSG_REGISTERS;
+    }
+    if length < if is_port_in(info.label) { 1 } else { 2 } {
+        return false;
+    }
+    let port = msg::syscall_arg(s, t, buf, 0) & 0xffff;
+    allowed(first, last, port, size).is_ok()
 }
 
 pub fn decode<S: Store, A: Arch>(s: &mut S, a: &mut A, lbl: u64, length: u64, cap: Cap, call: bool, buf: u64) -> KResult<()> {

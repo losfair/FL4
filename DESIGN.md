@@ -315,14 +315,27 @@ timestamp updates equal the later one). IPC buffers are user memory: a
 frame two threads on different cores share is the user's race, as it is
 on one core.
 
-Admission: only trapped syscalls and ReplyRecv try this. While the gate is
+I/O port invocations (`SysCall` or `SysSend` on an IoPort cap) run beside
+the gate too (`handle_ioport_local`), as the general path's own code: once
+reads show a valid access, budget left, and no reschedule pending or due on
+this core (`schedulable_here`), that code writes only the caller, this
+core's scheduler state and the port, and takes no lock. The host's logger
+writes the serial port one byte per invocation, each with a trap to the
+hypervisor; under the gate, a guest's boot log slowed the syscalls of every
+other core by about 25% for half a second.
+
+Admission: only trapped syscalls, ReplyRecv and I/O port invocations (by
+their label) try this. While the gate is
 closed, a core waits for it to open (servicing remote calls) rather than
 take a ticket, since queued syscalls would keep it closed for each other;
 but only if its last such syscall ran a fast path, beside the gate or
 under it. One whose fast path then declined would have waited for the gate
 twice, which cost fork-heavy loads up to 11%.
 
-The differential check runs this composition on every other syscall. The
+The differential check runs this composition on every other syscall, and
+the simulator's root task reads and writes an IoPort cap (in and out of its
+range); the workload arms no TCB timers, so the timer condition of the I/O
+port path goes unexercised. The
 simulator's serial-gate build runs the guest scenario (half the runs share
 one endpoint among all vCPUs) concurrently and on the TSO model; a queue
 oracle requires that every thread blocked on an endpoint or notification

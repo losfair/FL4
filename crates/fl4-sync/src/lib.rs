@@ -442,8 +442,12 @@ fn lock_object<M: Mem>(m: &M, addr: u64, held: &mut fl4_store::tx::Held) -> bool
 /// stalled, and `local_syscall` checks again.)
 #[inline(always)]
 fn local_candidate<S: fl4_core::machine::Store>(s: &S, number: i64) -> bool {
+    let t = fl4_core::sched::cur_thread(s);
     number == fl4_abi::syscall::SysReplyRecv
-        || fl4_core::sched::cur_thread(s).flags(s) & fl4_abi::consts::tcb_flag::TRAP_SYSCALLS != 0
+        || t.flags(s) & fl4_abi::consts::tcb_flag::TRAP_SYSCALLS != 0
+        // An I/O port access by its label alone (a register).
+        || ((number == fl4_abi::syscall::SysCall || number == fl4_abi::syscall::SysSend)
+            && fl4_core::ioport::is_port_label(fl4_core::msg::msg_info(s, t).label))
 }
 
 enum Local {
@@ -530,7 +534,9 @@ pub fn local_syscall<S: fl4_core::machine::Store, A: fl4_core::machine::Arch, M:
             None => false,
         }
     } else {
-        false
+        // An I/O port access writes only the caller and this core's
+        // state: nothing to lock.
+        return fl4_core::syscall::handle_ioport_local(s, a, number);
     };
     let done = ok && fl4_core::syscall::handle_syscall_local(s, a, number, found);
     tx::unlock_held(m, &mut held);
