@@ -53,10 +53,15 @@ pub fn vc(f: &mut Frame) {
     f.rip += 2;
 }
 
+/// MSRs a #VC forwards to the hypervisor through the GHCB. SPEC_CTRL
+/// (0x48): native-only boots set STIBP whenever it is advertised
+/// (`spec::init_core`), and GCE's SEV-SNP hypervisor intercepts the MSR;
+/// a hypervisor that ignores the write leaves STIBP to it, as it already
+/// controls the sibling thread's scheduling.
 fn virtual_msr(msr: u32) -> bool {
     matches!(
         msr,
-        cpu::msr::APIC_BASE | cpu::msr::TSC_DEADLINE | 0x800..=0x83f
+        cpu::msr::APIC_BASE | cpu::msr::TSC_DEADLINE | 0x48 | 0x800..=0x83f
     )
 }
 
