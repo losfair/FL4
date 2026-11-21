@@ -11,9 +11,11 @@ apply to it. They follow (`JAtZ.delUtFact_of`) from:
   (l4v `if_unsafe_then_cap`: a slot in use has a cap to its container; and
   `cap_removeable`: a zombie is removed only once its slots are empty, so the
   removed cap is not the only cover of a slot in use);
-* core 0's debug-list head, when not null, covered by a cap other than
-  `sl`'s (FL4's debug list holds the TCBs not finalised; the analogue of l4v
-  `if_live_then_nonz_cap`);
+* core 0's debug-list head, when not null and not the idle thread, covered
+  by a cap other than `sl`'s (FL4's debug list holds the TCBs not finalised;
+  the analogue of l4v `if_live_then_nonz_cap`, which exempts the idle
+  thread); the idle head lies outside every RAM untyped region
+  (`JCovD.idleOut`);
 (`UtCapP3.rst` no longer asks that no CNode of the typed heap lie in the
 region, which no invariant gives since `th` keeps a CNode after its last cap
 goes: the reset derives its destination CNode off the region from that
@@ -102,6 +104,7 @@ theorem JAtZ.delUtFact_of {AR : A → Fl4Spec.Cr3 → Prop} {Z : XSets} {H : P1.
       (capV (L.mem s) y ≠ .Null ∨ ∃ x, cslotAddr x = y ∧ σ.isOriginalCap x = true) →
       SlotLiveAt (L.mem s) Z.G (L.ksb s) (cslotAddr sl) y)
     (hdbg : L.mem s (L.nodeAt s 0#u64 layout.node.DEBUG_TCBS) ≠ 0#u64 →
+      L.mem s (L.nodeAt s 0#u64 layout.node.DEBUG_TCBS) ≠ L.idleW s →
       OtherCov (L.mem s) Z.G (cslotAddr sl) (L.mem s (L.nodeAt s 0#u64 layout.node.DEBUG_TCBS)).val
         ((L.mem s (L.nodeAt s 0#u64 layout.node.DEBUG_TCBS)).val + 1)) :
     DelUtFact (L := L) Z.th s' σ' up usb ufi udev := by
@@ -165,8 +168,12 @@ theorem JAtZ.delUtFact_of {AR : A → Fl4Spec.Cr3 → Prop} {Z : XSets} {H : P1.
       rw [h0'] at h1
       rw [e64] at hh
       omega
-    · have := out _ (Or.inl (hdbg hz))
-      omega
+    · by_cases hi : L.mem s (L.nodeAt s 0#u64 layout.node.DEBUG_TCBS) = L.idleW s
+      · -- the idle head: outside every RAM untyped region (`JCovD.idleOut`)
+        have := (J.jcov.idleOut _ hum _ _ _ (by rw [hcv, hd]) _ (Or.inl hi)).1
+        omega
+      · have := out _ (Or.inl (hdbg hz hi))
+        omega
 
 end
 

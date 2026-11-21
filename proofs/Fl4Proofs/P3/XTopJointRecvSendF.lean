@@ -1,23 +1,26 @@
 /-
-P3 (DESIGN.md §9), IPC: **`receive_ipc` from a waiting sender with a cap
-fault at `J`** (XTopJointRecvIpcLink's `JRecvSendHyp`, KENTRY-PLAN.md item 6
-(d4); l4v `receive_ipc`'s `send_ep` branch with `fault ≠ None`).
+P3 (DESIGN.md §9), IPC: **`receive_ipc` from a waiting faulted sender at
+`J`** (XTopJointRecvIpcLink's `JRecvSendHyp`, KENTRY-PLAN.md item 6 (d4),
+(d4'); l4v `receive_ipc`'s `send_ep` branch with `fault ≠ None`), any fault
+but a timeout fault of a sender with an SC.
 
-* `JAtZ.recvSendFJG`: the head sender holds a cap fault and no reply is
+* `JAtZ.recvSendFJG`: the head sender holds a fault (a timeout only without
+  an SC) and no reply is
   pushed (neither grant right, or no reply cap): XTopJointRecvSend's
-  `JAtZ.recvSendJG` with the transfer XTopJointFaultRecv's `xferFaultStepJ`
+  `JAtZ.recvSendJG` with the transfer XTopJointXferF's `xferFaultStepGJ`
   (on `IRel`, sender to receiver, back to `JAtZ` across the receive buffer by
   `JAtZ.bufRebaseX` as XTopJointFaultRecv's `JAtZ.sendFaultIJ`), the spec
   frame IpcRecvSendFr's `RSFr` from `σ`, `unblockHole`, FL4's fault word
-  `CapFault` (so the call-or-fault branch), the sender `Inactive`; the spec's
+  non-null (so the call-or-fault branch), the sender `Inactive`; the spec's
   outcome `receiveIpc_sendCall_eq` with the fault disjunct.
 * `SendOK`, `JAtZ.recvSendJX`: the head sender cases proved (unfaulted as in
-  `JAtZ.recvSendJG`, or cap-faulted as above), for any FL4 program reducing to
+  `JAtZ.recvSendJG`, or faulted as above), for any FL4 program reducing to
   the endpoint-state switch; `JAtZ.recvSendJ0X` with XTopJointRecvSend's
   `JAtZ.recvPreN`.
 -/
 import Fl4Proofs.P3.XTopJointRecvSend
-import Fl4Proofs.P3.XTopJointFaultRecv
+import Fl4Proofs.P3.XTopJointXferF
+import Fl4Proofs.P3.BufJ
 open Aeneas Aeneas.Std Result
 
 namespace Fl4Proofs.P3
@@ -27,11 +30,12 @@ noncomputable section
 
 /-- The head senders whose receive is proved at `J`: not faulted and either
 not calling or calling without a reply pushed (`JAtZ.recvSendJG`), or with a
-cap fault and no reply pushed (`JAtZ.recvSendFJG`). -/
+fault (a timeout only without an SC) and no reply pushed (`JAtZ.recvSendFJG`). -/
 def SendOK (xs : Fl4Spec.Tcb) (rc : capability.Cap) : Prop :=
   (xs.tcbFault = none ∧ ∀ e' dd, xs.tcbState = .blockedOnSend e' dd → dd.senderIsCall = false ∨
       ((dd.senderCanGrant = false ∧ dd.senderCanGrantReply = false) ∨ rc = .Null)) ∨
-    ((∃ cf rp lf, xs.tcbFault = some (.capFault cf rp lf)) ∧ ∀ e' dd, xs.tcbState = .blockedOnSend e' dd →
+    ((∃ f, xs.tcbFault = some f ∧ ∀ b, f = .timeout b → xs.tcbSchedContext = none) ∧
+      ∀ e' dd, xs.tcbState = .blockedOnSend e' dd →
       (dd.senderCanGrant = false ∧ dd.senderCanGrantReply = false) ∨ rc = .Null)
 
 section
@@ -40,10 +44,11 @@ variable {AR : A → Fl4Spec.Cr3 → Prop} {Z : XSets} {H : P1.Heap} {Cs Ac : Se
   {Lst : U64 → List U64} {D : Set U64} {s : S} {a : A} {σ : Fl4Spec.State Unit}
 
 set_option maxHeartbeats 64000000 in
-/-- **`receive_ipc` from a cap-faulted head sender at `J`**, no reply pushed
+/-- **`receive_ipc` from a faulted head sender at `J`** (a timeout fault only
+without an SC), no reply pushed
 (module docstring), for any FL4 program `m` reducing to the endpoint-state
 switch. -/
-theorem JAtZ.recvSendFJG (hZ : XferHZ L AR Z) (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ)
+theorem JAtZ.recvSendFJG (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ)
     {t : U64} (ht : t ∈ Z.T) {xt : Fl4Spec.Tcb} (hkt : σ.kheap t.bv = some (.tcb xt))
     (hrun : Fl4Spec.runnable xt.tcbState = true) {blk : Bool}
     (hbN : xt.tcbBoundNotification = none ∨ ∃ n xn, xt.tcbBoundNotification = some n ∧
@@ -52,8 +57,8 @@ theorem JAtZ.recvSendFJG (hZ : XferHZ L AR Z) (J : JAtZ (L := L) arI AR Z H Cs A
     (hct : σ.curThread = t.bv)
     {e sd : U64} (he : e ∈ Z.E) {q : List Fl4Spec.ObjRef}
     (hk : σ.kheap e.bv = some (.endpoint (.sendEP (sd.bv :: q))))
-    {xs : Fl4Spec.Tcb} (hks : σ.kheap sd.bv = some (.tcb xs)) {cf : Fl4Spec.ObjRef} {rp : Bool}
-    {lf : Fl4Spec.LookupFailure} (hft : xs.tcbFault = some (.capFault cf rp lf))
+    {xs : Fl4Spec.Tcb} (hks : σ.kheap sd.bv = some (.tcb xs)) {f : Fl4Spec.Fault}
+    (hft : xs.tcbFault = some f) (hto : ∀ b, f = .timeout b → xs.tcbSchedContext = none)
     (cb : U64) (c1 c2 c3 c4 : Bool) {rc : capability.Cap} {rc' : Fl4Spec.Cap} {rv : U64}
     (hrc : ReplyArg Z.R (L.mem s) rc rc' rv)
     (hnp : ∀ e' dd, xs.tcbState = .blockedOnSend e' dd →
@@ -173,20 +178,29 @@ theorem JAtZ.recvSendFJG (hZ : XferHZ L AR Z) (J : JAtZ (L := L) arI AR Z H Cs A
     congr 1
     exact UScalar.eq_of_val_eq hi2
   have hbb : bdg.bv = dd.senderBadge := by rw [hbdg, hbw]; exact hbadge
-  -- the transfer: the cap fault (XTopJointFaultRecv's `xferFaultStepJ`, on `IRel`)
+  -- the transfer: the fault (XTopJointXferF's `xferFaultStepGJ`, on `IRel`)
   set σ1 := Notif.updK σ e.bv (.endpoint (epDeq (.sendEP (sd'.bv :: q)) sd'.bv)) with hσ1
   have hkt1 : σ1.kheap t.bv = some (.tcb xt) := by simp [σ1, hte, hkt]
   have hks1 : σ1.kheap sd'.bv = some (.tcb xs) := by simp [σ1, hse, hks]
   have hk1e : σ1.kheap e.bv = some (.endpoint (epDeq (.sendEP (sd'.bv :: q)) sd'.bv)) := by simp [σ1]
-  have hOK1 : Endp.IpcBufCapOK σ1 := ipcBufCapOK_epStep (hZ Z s a σ rfl J.xtop).1 (EpStep.ep hk)
+  have hOK1 : Endp.IpcBufCapOK σ1 := ipcBufCapOK_epStep (J.xferH).1 (EpStep.ep hk)
   have hth : Z.th t = some .tcb := by
     obtain ⟨⟨⟨G0, hB0'⟩, -⟩, -⟩ := hS0.1.1
     exact Ipc.RelTopB.tcbT hB0' hkt
   have htH : t ∈ P1.Heap.tcbs H := J.zH.1 t ht
   have hTe : Z.T = P1.Heap.tcbs H := J.tcbs_eq.1
-  have hUt := J.rbufU hZ ht hth hkt
-  refine WP.spec_bind (xferFaultStepJ hP0 hP (hH.epHyps hP0) s1 a σ1 hR1 hS1 hOK1
-    (bufCover_epStep (hZ Z s a σ rfl J.xtop).2.1 (EpStep.ep hk)) hsT ht (Ne.symm hts) hks1 hkt1 hft e bdg (i != 0#u64)
+  have hUt := J.rbufU ht hth hkt
+  have hok : FaultOK (L := L) s1 sd' xs f := by
+    cases f with
+    | timeout b0 =>
+      have hsc := hto b0 rfl
+      obtain ⟨Q, R0, -, hsp⟩ := hS1.1.1.2.1.lists
+      obtain ⟨x, hk', -, -, hscw, -⟩ := hsp.tcb sd' hsT
+      rw [hks1] at hk'; cases hk'
+      exact ⟨hsc, optRef_none (hscw.symm.trans hsc)⟩
+    | _ => trivial
+  refine WP.spec_bind (xferFaultStepGJ hP0 hP (hH.epHyps hP0) s1 a σ1 hR1 hS1 hOK1
+    (bufCover_epStep (J.xferH).2.1 (EpStep.ep hk)) hsT ht (Ne.symm hts) hks1 hkt1 hft hok e bdg (i != 0#u64)
     hTP htH h1 hB1 hX1 hS1' hSg1 (fun b hb => ⟨(hUt b hb).1.ksb hW1.1, (hUt b hb).2⟩)) ?_
   rintro s2 ⟨x2, um2, e2, hx2, hR2, hS2, hA2, w2, h2, hB2, hX2, hS2'', hSg2, f2⟩
   set σ2 := Notif.updK (Endp.setUm σ1 um2) t.bv (.tcb x2) with hσ2
@@ -256,9 +270,10 @@ theorem JAtZ.recvSendFJG (hZ : XferHZ L AR Z) (J : JAtZ (L := L) arI AR Z H Cs A
   refine WP.spec_bind (Endp.obj.Tcb.fault_type.spec s3 sd') ?_
   rintro ft hft'
   have hftB : (ft != fl4_abi.consts.fault.NullFault) = true := by
-    have hfr := hxs3.faultR
-    unfold FaultRel at hfr; rw [hft] at hfr
-    rw [hft', hfr.1]; unfold fl4_abi.consts.fault.NullFault; decide
+    rw [hft']
+    have hne : L.mem s3 (tFaultA sd') ≠ fl4_abi.consts.fault.NullFault := fun e => by
+      have := hxs3.fault0.1 (by rw [e]; unfold fl4_abi.consts.fault.NullFault; rfl); rw [hft] at this; cases this
+    simpa using hne
   -- the sender is in no queue
   have eW : ∀ K : U64, K.val < 4096 → K.val % 8 = 0 → 3328 ≤ K.val → K.val ≠ 3496 → K.val ≠ 3504 →
       L.mem s3 (core.num.U64.wrapping_add sd' K) = L.mem s (core.num.U64.wrapping_add sd' K) := by
@@ -355,11 +370,21 @@ theorem JAtZ.recvSendFJG (hZ : XferHZ L AR Z) (J : JAtZ (L := L) arI AR Z H Cs A
   have IK5' : IK sd'.bv σ σ5' := IK2.trans (IK.updSelf (y := x5) hks2 rfl)
   have SK5' : Ipc.SKeep σ σ5' := SK2.trans (Ipc.SKeep.updK (p := sd'.bv) (o := .tcb x5)
     (fun y' h => ⟨xs, hks2, by cases h; rfl⟩) (fun _ _ h => by cases h))
-  have hrib : RelIfBound σ5' sd'.bv :=
-    Ipc.RelIfBound.of_keep (J.inv.rd sd'.bv xs hks (Or.inr (Or.inr (Or.inl ⟨_, _, hstd,
-      fun b' h => by rw [hft] at h; cases h⟩)))) SK5'
-  have I5' : Inv σ5' := ((J.inv.toBut sd'.bv).ik hnqS IK5').1.inv fun _ _ _ => hrib
   have hk5' : σ5'.kheap sd'.bv = some (.tcb x5) := by simp [σ5']
+  have hrib : RelIfBound σ5' sd'.bv := by
+    by_cases htf : ∃ b0, f = .timeout b0
+    · obtain ⟨b0, rfl⟩ := htf
+      intro y scp z n hy hscp
+      rw [hk5'] at hy
+      simp only [Option.some.injEq, Fl4Spec.KernelObject.tcb.injEq] at hy
+      subst hy
+      rw [hx5] at hscp
+      simp [hto b0 rfl] at hscp
+    · have hnt : ∀ b', xs.tcbFault ≠ some (.timeout b') := fun b' h =>
+        htf ⟨b', Option.some.inj (hft.symm.trans h)⟩
+      exact Ipc.RelIfBound.of_keep (J.inv.rd sd'.bv xs hks (Or.inr (Or.inr (Or.inl ⟨_, _, hstd,
+        fun b' h => hnt b' h⟩)))) SK5'
+  have I5' : Inv σ5' := ((J.inv.toBut sd'.bv).ik hnqS IK5').1.inv fun _ _ _ => hrib
   have I5 : Inv σ5 := by
     rcases hU3 with e3 | ⟨p, y', z, n, hxp, hkp, hne', hpc, e3, hz1, hz2, hz3, hz5, hz6⟩
     · rw [hσ5, stsAct_ne hsc3, e3]; exact I5'
@@ -380,7 +405,7 @@ theorem JAtZ.recvSendFJG (hZ : XferHZ L AR Z) (J : JAtZ (L := L) arI AR Z H Cs A
   have act5 : σ5.schedulerAction = σ.schedulerAction := by
     rw [hσ5, stsAct_ne hsc3]; exact act3
   -- back to `JAtZ`
-  obtain ⟨su, umu, Ju, hWu, hFu, -, -⟩ := J.bufRebaseX hZ ht hth hkt hW5' hfoot
+  obtain ⟨su, umu, Ju, hWu, hFu, -, -⟩ := J.bufRebaseX ht hth hkt hW5' hfoot
   have hIu := Ju.xtop.irelK Ju.ks Ju.buf
   have htD := Ju.not_dead_of_st hsT hks (by rw [hstd]; simp [tsCode])
   have hF : IFrame (L := L) Z.th su s5 := IRel.iframe_of hIu hWu fun b hb => CnW.oobj hIu.2.2.1 hb
@@ -396,7 +421,7 @@ theorem JAtZ.recvSendFJG (hZ : XferHZ L AR Z) (J : JAtZ (L := L) arI AR Z H Cs A
 
 /-- **`receive_ipc` from the head sender at `J`**, the cases of `SendOK`, for
 any FL4 program `m` reducing to the endpoint-state switch. -/
-theorem JAtZ.recvSendJX (hZ : XferHZ L AR Z) (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ)
+theorem JAtZ.recvSendJX (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ)
     {t : U64} (ht : t ∈ Z.T) {xt : Fl4Spec.Tcb} (hkt : σ.kheap t.bv = some (.tcb xt))
     (hrun : Fl4Spec.runnable xt.tcbState = true) {blk : Bool}
     (hbN : xt.tcbBoundNotification = none ∨ ∃ n xn, xt.tcbBoundNotification = some n ∧
@@ -421,14 +446,14 @@ theorem JAtZ.recvSendJX (hZ : XferHZ L AR Z) (J : JAtZ (L := L) arI AR Z H Cs Ac
     m ⦃ r =>
       ∃ z ∈ (Fl4Spec.receiveIpc (Z := Unit) t.bv (.endpointCap e.bv b rights) blk rc' σ).1,
         RJ (L := L) arI AR r.1 r.2 z.2 ⦄ := by
-  rcases hok with ⟨hfs, hcall⟩ | ⟨⟨cf, rp, lf, hft⟩, hnp⟩
-  · exact J.recvSendJG hZ ht hkt hrun hbN hct he hk hks hfs cb c1 c2 c3 c4 hrc hcall b rights hm
-  · exact J.recvSendFJG hZ ht hkt hrun hbN hct he hk hks hft cb c1 c2 c3 c4 hrc hnp b rights hm
+  rcases hok with ⟨hfs, hcall⟩ | ⟨⟨f, hft, hto⟩, hnp⟩
+  · exact J.recvSendJG ht hkt hrun hbN hct he hk hks hfs cb c1 c2 c3 c4 hrc hcall b rights hm
+  · exact J.recvSendFJG ht hkt hrun hbN hct he hk hks hft hto cb c1 c2 c3 c4 hrc hnp b rights hm
 
 /-- **`receive_ipc` from the head sender at `J`**, the cases of `SendOK`, the
 receiver without a bound notification or with one not active, polling or not
 lending its SC (XTopJointRecvSend's `JAtZ.recvPreN`). -/
-theorem JAtZ.recvSendJ0X (hZ : XferHZ L AR Z) (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ)
+theorem JAtZ.recvSendJ0X (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ)
     {t : U64} (ht : t ∈ Z.T) {xt : Fl4Spec.Tcb} (hkt : σ.kheap t.bv = some (.tcb xt))
     (hrun : Fl4Spec.runnable xt.tcbState = true) {blk : Bool}
     (hbN : xt.tcbBoundNotification = none ∨ ∃ n xn, xt.tcbBoundNotification = some n ∧
@@ -444,7 +469,7 @@ theorem JAtZ.recvSendJ0X (hZ : XferHZ L AR Z) (J : JAtZ (L := L) arI AR Z H Cs A
     endpoint.receive_ipc st arI s a t (.Endpoint e cb c1 c2 c3 c4) blk rc ⦃ r =>
       ∃ z ∈ (Fl4Spec.receiveIpc (Z := Unit) t.bv (.endpointCap e.bv b rights) blk rc' σ).1,
         RJ (L := L) arI AR r.1 r.2 z.2 ⦄ :=
-  J.recvSendJX hZ ht hkt hrun hbN hct he hk hks cb c1 c2 c3 c4 hrc hok b rights
+  J.recvSendJX ht hkt hrun hbN hct he hk hks cb c1 c2 c3 c4 hrc hok b rights
     (J.recvPreN ht hkt hbN e cb c1 c2 c3 c4 hrc)
 
 end

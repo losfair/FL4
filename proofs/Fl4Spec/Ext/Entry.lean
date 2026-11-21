@@ -7,7 +7,10 @@ FL4's dispatcher**.
   (Ext/ReplyError over Ext/Invocation): the same substitution one level up.
   The other events do not invoke (`fl4HandleEvent_other`, by `rfl`).
 * `fl4CallKernel rep` is l4v's `call_kernel` (`callKernel`) with
-  `fl4HandleEvent rep` for `handleEvent`.
+  `fl4HandleEvent rep` for `handleEvent` and FL4's TCB timer step
+  `fl4Awaken` (Ext/Timer, l4h 0003) before `schedule`: FL4's
+  `sched::schedule` first runs `sched::awaken`, which fires the expired TCB
+  timers (`timer::fire`) before l4v's release-queue `awaken`.
 * `fl4KernelEntrySyscall rep c`: the syscall entry. FL4's `handle_syscall`
   first writes the current thread's `FaultIP` register := `NextIP - 2` (the
   `syscall` instruction is two bytes long), so that a restarted thread
@@ -21,6 +24,7 @@ FL4's dispatcher**.
 The ported modules are not changed.
 -/
 import Fl4Spec.Ext.ReplyError
+import Fl4Spec.Ext.Timer
 
 namespace Fl4Spec
 
@@ -77,9 +81,11 @@ theorem fl4HandleEvent_other (rep : Bool) (ev : Event) (h : ∀ c, ev ≠ .sysca
   | syscallEvent c => exact absurd rfl (h c)
   | _ => rfl
 
-/-- l4v's `call_kernel` with `fl4HandleEvent rep`. -/
+/-- l4v's `call_kernel` with `fl4HandleEvent rep`, and FL4's TCB timers
+(`fl4Awaken`, Ext/Timer) before `schedule`. -/
 def fl4CallKernel (rep : Bool) (ev : Event) : SMonad Z Unit := do
   let _ ← ExceptT.run <| NonDetE.handleE (fl4HandleEvent rep ev) (fun _ => withoutPreemption preemptionPath)
+  fl4Awaken
   schedule
   activateThread
 

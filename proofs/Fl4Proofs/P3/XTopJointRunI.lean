@@ -93,6 +93,7 @@ theorem JAtZ.runIJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {t : U64} (
   rintro s6 ⟨⟨⟨⟨hR6, hS6r⟩, hw6⟩, hy6⟩, hblk, hfoot⟩
   have hX6 := IpcRel.ofSRN hR6 hS6r
   have hDbg := J.kw_dbg hfoot
+  have hKd := J.kw_dbgKeep hfoot
   set x6 : Fl4Spec.Tcb := { x with tcbState := .running } with hx6
   set σ1 := updK σ t.bv (.tcb x6) with hσ1
   set σ6 := stsAct σ1 t.bv with hσ6
@@ -256,7 +257,7 @@ theorem JAtZ.runIJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {t : U64} (
     (J.sc_utc hW hK hDbg) hNSC hInv hcur6 hown6 hoff hAI (BlockedScActive.tkw J.bsa hK fun p y n hp ha => by
       by_cases e : p = t.bv
       · rw [e, hk6] at hp; cases hp
-      · rw [hkp _ e] at hp; exact ⟨y, hp, ha, fun _ h => h, id⟩) hcr6 hblk⟩
+      · rw [hkp _ e] at hp; exact ⟨y, hp, ha, fun _ h => h, id⟩) hcr6 hblk hKd (J.idleW_keep hX'.fin.1.1.1 hfk.2.1 hfk.2.2).1 J.zD⟩
 
 end
 

@@ -342,7 +342,7 @@ theorem JAtZ.mpRegionCAt {s : S} {a : A} {σ : Fl4Spec.State Unit} (J : JAtZ (L 
     omega
   have hR := J.xtop.fin.2.1
   have hPt := J.xtop.fin.2.2.1
-  refine ⟨⟨hpal, hpfit, ?_, ?_, ?_, ?_, ?_, ?_, hks.2.2⟩, hpal, hpfit, J.mpOObjAt arI hx hE hcx,
+  refine ⟨⟨hpal, hpfit, ?_, ?_, ?_, ?_, ?_, ?_, by have := hks.2.2; omega⟩, hpal, hpfit, J.mpOObjAt arI hx hE hcx,
     fun wp hw => (hE.2.2 wp hw).2⟩
   · intro e
     have hh := U.high (Sched.notDev_ram hcx)

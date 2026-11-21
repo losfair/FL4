@@ -104,6 +104,7 @@ theorem JAtZ.stsIJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {t : U64} (
   rintro s6 ⟨⟨⟨⟨hR6, hS6r⟩, hw6⟩, hy6⟩, hblk, hfoot⟩
   have hX6 := IpcRel.ofSRN hR6 hS6r
   have hDbg := J.kw_dbg hfoot
+  have hKd := J.kw_dbgKeep hfoot
   set x6 : Fl4Spec.Tcb := { x with tcbState := ts } with hx6
   set σ1 := updK σ t.bv (.tcb x6) with hσ1
   set σ6 := stsAct σ1 t.bv with hσ6
@@ -262,7 +263,7 @@ theorem JAtZ.stsIJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {t : U64} (
     (J.sc_utc hW hK hDbg) hNSC hInv hcur6 hown6 hoff hAI (BlockedScActive.tkw J.bsa hK fun p y n hp ha => by
       by_cases e : p = t.bv
       · rw [e, hk6] at hp; cases hp
-      · rw [hkp _ e] at hp; exact ⟨y, hp, ha, fun _ h => h, id⟩) hcr6 hblk⟩
+      · rw [hkp _ e] at hp; exact ⟨y, hp, ha, fun _ h => h, id⟩) hcr6 hblk hKd (J.idleW_keep hX'.fin.1.1.1 hfk.2.1 hfk.2.2).1 J.zD⟩
 
 
 set_option maxHeartbeats 32000000 in
@@ -549,6 +550,7 @@ theorem JAtZ.rstPostJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {t : U64
     · rw [hkp7 p hp]; exact OL.refl _)
   have hfk : FK σ σ7 := ⟨e7_csc, e7_idle, e7_isc⟩
   have hDbg := J.kw_dbg (P1.Foot.trans hfoot6 hfoot7)
+  have hKd := J.kw_dbgKeep (P1.Foot.trans hfoot6 hfoot7)
   have hdead : ∀ q ∈ D, DeadP (L := L) H s7 q := fun q hq =>
     J.deadP_sc_stepQ hX7 hW7 hK7 (fun _ hp => absurd (show q = t from P1.eq_of_bv hp) (fun e => htD (e ▸ hq)))
       hlk hfk hAI.1 hY' ((hYK6.trans (YKeep.of_kheap hke)).dk q.bv) (fun h => h) (J.jcov.dead q hq)
@@ -558,7 +560,7 @@ theorem JAtZ.rstPostJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {t : U64
     (J.sc_utc hW7 hK7 hDbg) hNSC hI7 hcur7 hown7 hoff hAI (BlockedScActive.tkw J.bsa hK7 fun p y1 n1 hp ha => by
       by_cases e : p = t.bv
       · rw [e, hk7] at hp; cases hp
-      · rw [hkp7 _ e] at hp; exact ⟨y1, hp, ha, fun _ h => h, id⟩) hcr7 hblk⟩
+      · rw [hkp7 _ e] at hp; exact ⟨y1, hp, ha, fun _ h => h, id⟩) hcr7 hblk hKd (J.idleW_keep hX7.fin.1.1.1 hfk.2.1 hfk.2.2).1 J.zD⟩
 
 end
 

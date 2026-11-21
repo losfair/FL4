@@ -8,12 +8,18 @@ deletion loop by `WJL` (XTopJointWJL) from XTopJointEntry's `JEntryAt.live`.
 * `InUse m σ y`: the slot `y` holds a cap or an original bit.
 * `dbgNth m n h`: the `n`-th TCB of the debug list from `h` (`0` past its end).
 * `LiveJ th H G s σ` [J], on a `JAtZ` state, in four parts:
-  - `slots`: the container of a slot in use is named by a cap of the MDB
-    (l4v `if_unsafe_then_cap`: `cte_wp_at ((≠) NullCap) p s →
-    ex_cte_cap_wp_to (appropriate_cte_cap) p s`);
-  - `dbg`: a TCB on core 0's debug list is named by a thread cap of the MDB
-    (FL4's debug list holds the TCBs not yet finalised; l4v
-    `if_live_then_nonz_cap` for a live TCB);
+  - `slots`: the container of a slot in use is named by a cap of the MDB,
+    or the slot lies in the kernel-state block (`KsSlot`: the IRQ node's
+    one-slot CNodes, which no cap names; l4v `if_unsafe_then_cap`:
+    `cte_wp_at ((≠) NullCap) p s → ex_cte_cap_wp_to (appropriate_cte_cap) p s`,
+    where an IRQ node slot is covered by the IRQ state / handler cap, not a
+    CNode cap; KENTRY-PLAN g2d/g2e: `SetIRQHandler` fills such a slot);
+  - `dbg`: a TCB on core 0's debug list other than the spec's idle thread is
+    named by a thread cap of the MDB (FL4's debug list holds the TCBs not yet
+    finalised, and the idle threads since boot, `init_core_state` under
+    `DEBUG_BUILD`; l4v `if_live_then_nonz_cap` for a live TCB, the idle
+    thread exempt as not `live`; at a `JAtZ` state the spec's idle thread is
+    the idle word, `JAtZ.idleThread_bv`);
   - `zslots`: a zombie of count `n` leaves its object's slots from `n` on
     unused (l4v: `rec_del` deletes a zombie's slots from the last, the count
     the number not yet deleted; `zombies_final`, `cap_removeable`);
@@ -22,9 +28,9 @@ deletion loop by `WJL` (XTopJointWJL) from XTopJointEntry's `JEntryAt.live`.
   `LiveJ` reads the state, the MDB ghost and `H` only (no dead set), so that
   it can later become a field of `JAtZ`.
 * `ReadyLive th s σ G x`: the readiness the emptied slot `x` adds to
-  `EmptyReady`: every other slot in use, and core 0's debug-list head, live
-  without `x` (`SlotLiveAt`, `OtherCov`; what `DelUtFact` after reads,
-  XTopJointEmptyUt).
+  `EmptyReady`: every other slot in use, and core 0's debug-list head unless
+  it is the idle word, live without `x` (`SlotLiveAt`, `OtherCov`; what
+  `DelUtFact` after reads, XTopJointEmptyUt, the idle head by `JCovD.idleOut`).
 * `JAtZ.ref_cover`: a cap naming a container covers each of its slots.
 * `JAtZ.readyLive`: `ReadyLive` at `x` from `LiveJ`, when every cap at `x`
   naming a container in use, or a thread on the debug list, has another such
@@ -43,47 +49,31 @@ open fl4_core Classical Fl4Proofs.P3.Vs Fl4Proofs.P3.Notif Fl4Proofs.P3.Endp Fl4
 
 noncomputable section
 
-/-- The cap names the CNode or TCB `q` as a container (module docstring). -/
-def RefsObj (q : U64) : capability.Cap → Prop
-  | .CNode p _ _ _ => p = q
-  | .Thread p => p = q
-  | .Zombie p _ _ => p = q
-  | _ => False
-
-/-- The slot `y` holds a cap or an original bit. -/
-def InUse (m : U64 → U64) (σ : Fl4Spec.State Unit) (y : U64) : Prop :=
-  capV m y ≠ .Null ∨ ∃ x, cslotAddr x = y ∧ σ.isOriginalCap x = true
-
-/-- The `n`-th TCB of the debug list from `h` (`0` past its end). -/
-def dbgNth (m : U64 → U64) : Nat → U64 → U64
-  | 0, h => h
-  | n + 1, h => if h = 0#u64 then 0#u64 else dbgNth m n (m (P1.dnA h))
-
 section
 variable {S : Type} {st : machine.Store S} [L : P1.LawfulStore st] {A : Type} {arI : machine.Arch A}
-
-/-- Core 0's debug-list head. -/
-abbrev dbgHead (s : S) : U64 := L.mem s (L.nodeAt s 0#u64 layout.node.DEBUG_TCBS)
-
-/-- **The liveness invariant of FL4's caps** [J] (module docstring). -/
-structure LiveJ (th : TypedHeap) (H : P1.Heap) (G : MdbGhost) (s : S) (σ : Fl4Spec.State Unit) : Prop where
-  slots : ∀ q i, IsSlotAt th q i → InUse (L.mem s) σ (slotOf q i) →
-    ∃ y ∈ G.chains.flatten, RefsObj q (capV (L.mem s) y)
-  dbg : ∀ n, dbgNth (L.mem s) n (dbgHead (L := L) s) ≠ 0#u64 →
-    ∃ y ∈ G.chains.flatten, capV (L.mem s) y = .Thread (dbgNth (L.mem s) n (dbgHead (L := L) s))
-  zslots : ∀ y, IsSlot th y → ∀ p zt n, capV (L.mem s) y = .Zombie p zt n →
-    ∀ i, IsSlotAt th p i → n.val ≤ i → ¬ InUse (L.mem s) σ (slotOf p i)
-  zdead : ∀ y, IsSlot th y → ∀ p zt n, capV (L.mem s) y = .Zombie p zt n → zt.val = 65 →
-    DeadP (L := L) H s p
 
 /-- **The emptied slot's liveness readiness** (module docstring). -/
 def ReadyLive (th : TypedHeap) (s : S) (σ : Fl4Spec.State Unit) (G : MdbGhost) (x : U64) : Prop :=
   (∀ y, IsSlot th y → y ≠ x → InUse (L.mem s) σ y → SlotLiveAt (L.mem s) G (L.ksb s) x y) ∧
-  (dbgHead (L := L) s ≠ 0#u64 →
+  (dbgHead (L := L) s ≠ 0#u64 → dbgHead (L := L) s ≠ L.idleW s →
     OtherCov (L.mem s) G x (dbgHead (L := L) s).val ((dbgHead (L := L) s).val + 1))
 
 variable {AR : A → Fl4Spec.Cr3 → Prop} {Z : XSets} {H : P1.Heap} {Cs Ac : Set U64}
   {Lst : U64 → List U64} {D : Set U64} {s : S} {a : A} {σ : Fl4Spec.State Unit}
+
+/-- **The spec's idle thread is the idle word at `J`** (XTopJointDelR's
+`JAtZ.idleThread_eq`, here for XTopJointLive's readers). -/
+theorem JAtZ.idleThread_bv (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) :
+    σ.idleThread = (L.idleW s).bv := by
+  obtain ⟨Q, R, hc, hs⟩ := J.xtop.fin.1.1.1.lists
+  unfold P1.LawfulStore.idleW
+  have h2 := hs.idleTh
+  unfold nodeW at h2
+  rw [hc.cur, ← h2]
+
+/-- A word other than the idle word is not the spec's idle thread. -/
+theorem JAtZ.bv_ne_idleThread (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {w : U64} (h : w ≠ L.idleW s) :
+    w.bv ≠ σ.idleThread := fun e => h (P1.eq_of_bv (e.trans J.idleThread_bv))
 
 /-- **A cap naming a container covers each of its slots.** -/
 theorem JAtZ.ref_cover (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {y : U64}
@@ -185,16 +175,18 @@ theorem JAtZ.readyLive (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) (hL : L
     (hc2 : ∀ w, capV (L.mem s) x = .Thread w → ∃ y ∈ Z.G.chains.flatten, y ≠ x ∧ capV (L.mem s) y = .Thread w) :
     ReadyLive (L := L) Z.th s σ Z.G x := by
   have hP := J.xtop.rel.1
-  refine ⟨fun y hy hyx hu => ?_, fun h0 => ?_⟩
+  refine ⟨fun y hy hyx hu => ?_, fun h0 hi0 => ?_⟩
   · obtain ⟨q, i, hqi, rfl⟩ := hy
-    obtain ⟨y', hy', hr⟩ := hL.slots q i hqi hu
+    rcases hL.slots q i hqi hu with ⟨y', hy', hr⟩ | hb
+    rotate_left
+    · exact Or.inr hb
     obtain ⟨y'', hy'', hne, hr''⟩ : ∃ y ∈ Z.G.chains.flatten, y ≠ x ∧ RefsObj q (capV (L.mem s) y) := by
       by_cases e : y' = x
       · subst e; exact hc1 q i hqi hyx hu hr
       · exact ⟨y', hy', e, hr⟩
     obtain ⟨h1, h2, h3, h4⟩ := J.ref_cover hy'' hr'' hqi
     exact Or.inl ⟨y'', hy'', hne, h1, h2, h3, h4⟩
-  · obtain ⟨y', hy', hT⟩ := hL.dbg 0 h0
+  · obtain ⟨y', hy', hT⟩ := hL.dbg 0 h0 (J.bv_ne_idleThread hi0)
     obtain ⟨y'', hy'', hne, hT''⟩ : ∃ y ∈ Z.G.chains.flatten, y ≠ x ∧
         capV (L.mem s) y = .Thread (dbgHead (L := L) s) := by
       by_cases e : y' = x

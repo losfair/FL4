@@ -22,6 +22,7 @@ Delete and Revoke labels with the deletion at `WJL` (XTopJointWJLDel's
 -/
 import Fl4Proofs.P3.XTopJointWJLDel
 import Fl4Proofs.P3.XTopJointIrqDel
+import Fl4Proofs.P3.ZNoBlkJ
 open Aeneas Aeneas.Std Result
 
 namespace Fl4Proofs.P3
@@ -31,11 +32,6 @@ noncomputable section
 
 section
 variable {S : Type} {st : machine.Store S} [L : P1.LawfulStore st]
-
-/-- **`LiveJ`, `DbgWF` and `NullOrig` at a state** (module docstring). -/
-abbrev LiveDN (th : TypedHeap) (H : P1.Heap) (Cs : Set U64) (G : MdbGhost) (s : S) (σ : Fl4Spec.State Unit) :
-    Prop :=
-  LiveJ (L := L) th H G s σ ∧ DbgWF (P1.Heap.tcbs H) Cs (L.mem s) (dbgHd (L := L) s) ∧ NullOrig th (L.mem s) σ
 
 end
 
@@ -64,13 +60,10 @@ theorem WJL.restart {s : S} {ar : A} {σ : Fl4Spec.State Unit}
     exact of_eq_true this
   subst e
   obtain ⟨hL, hDW, hN⟩ := hLv
-  have J0 := J.addDeadSet (E := ZTcb (L := L) Z.th s) hL.ztcb
   have h := XTopAt.restart J.xtop hcur hk hrun
   rw [hs1, WP.spec_ok] at h
   obtain ⟨hX1, hSS, hk1⟩ := h
-  obtain ⟨hkb, hkz⟩ := kback_ksz_upd (σ' := Notif.stsAct (Notif.updK σ ct.bv
-    (.tcb { x with tcbState := .restart })) ct.bv) hk (by rw [stsAct_kheap]; rfl)
-  obtain ⟨Lst', R⟩ := jowes_restartD arI s ar σ ct x s1 hcur hk htcb hrun hs1 J0 hX1
+  obtain ⟨Ac1, Lst', J1⟩ := J.restartSJ (jStepHyps arI) hcur hk htcb hrun hs1
   have hns1 : Vs.NoSwitch (Notif.stsAct (Notif.updK σ ct.bv (.tcb { x with tcbState := .restart })) ct.bv) := by
     intro u e
     unfold Notif.stsAct at e
@@ -79,9 +72,6 @@ theorem WJL.restart {s : S} {ar : A} {σ : Fl4Spec.State Unit}
       | (have e2 : σ.schedulerAction = .switchThread u := e
          rw [hni.2] at e2; cases e2)
       | cases e
-  have J1 := J0.cs_frame (G' := Z.G) hk1 hX1 hkb
-    ((IpcFrKeep.of_updTcb (y := { x with tcbState := .restart }) hk rfl rfl).trans (IpcFrKeep.of_kheap (by rw [stsAct_kheap])))
-    (JCs.same J0 hSS hkz) R (Vs.VsSlotsT.of_eq fun y hy => hSS.capV hy)
   -- the debug words: P1's footprint of the restart
   have hT : ct ∈ Z.T := J.thT ct htcb
   have hK : P1.DbgKeep st (P1.Heap.tcbs H) Cs s s1 := by
@@ -100,8 +90,8 @@ theorem WJL.restart {s : S} {ar : A} {σ : Fl4Spec.State Unit}
   have hDS : DState (L := L) Z.th s σ Z.G := ⟨J.xtop.rel.2.1, J.del, J.xtop.rel.2.2.1⟩
   have hDS1 : DState (L := L) Z.th s1 (Notif.stsAct (Notif.updK σ ct.bv
       (.tcb { x with tcbState := .restart })) ct.bv) Z.G := ⟨J1.xtop.rel.2.1, J1.del, J1.xtop.rel.2.2.1⟩
-  obtain ⟨hL1, hDW1, hN1⟩ := wjl_keep arI (Z := Z) (G := Z.G) (V := Z.vs) (V1 := Z.vs) J hDS hL hDW hN J1 (fun p hp => Or.inr hp) hSS hDS1 hK
-  exact ⟨⟨Z.vs, Ac, Lst', _, J1, hk1, hns1, hsg1, hP0.of_ppk (PPK.restart hk .restart)⟩, hL1, hDW1, hN1⟩
+  obtain ⟨hL1, hDW1, hN1⟩ := wjl_keep arI (Z := Z) (G := Z.G) (V := Z.vs) (V1 := Z.vs) J hDS hL hDW hN J1 J.zD hSS hDS1 hK (by unfold Notif.stsAct; split <;> rfl)
+  exact ⟨⟨Z.vs, Ac1, Lst', D, J1, hk1, hns1, hsg1, hP0.of_ppk (PPK.restart hk .restart (Or.inl hcur.symm))⟩, hL1, hDW1, hN1⟩
 
 /-- **`DelE` and `WJL`** (the deletion's invariant at `WJL`, `JDelHypL`). -/
 abbrev EJL (AR : A → Fl4Spec.Cr3 → Prop) (Z : XSets) (H : P1.Heap) (Cs : Set U64) (kb : U64) (K : Nat) (s : S)
@@ -143,11 +133,11 @@ theorem cn_del_topJL {s : S} {ar : A} {σ : Fl4Spec.State Unit} (J : JAtZ (L := 
           hX'.rel.2.2.1, hX'.rel.2.2.2.1, hX'.rel.2.2.2.2.1⟩, ?_⟩
       simp only [reduceCtorEq, if_false]
       exact ⟨_, H, Cs, Ac', Lst', D', J'⟩
-    · obtain ⟨-, s0, a0, σ0, ⟨V, Ac', Lst', D', J0, -⟩, hpp, hspp, hDom, hMO⟩ := hE'
+    · obtain ⟨-, s0, a0, σ0, ⟨V, Ac', Lst', D', J0, -, hns0, -, hp00⟩, hpp, hspp, hDom, hMO⟩ := hE'
       refine Or.inr ⟨_, DecOut.of_eq (run_liftME_ok hrun), σ1, hst, (.error (), σ'),
         mem_bindE_err hx, ⟨Z.th, G', Or.inr ⟨rfl, rfl⟩, J.xtop.rel.1, hCR', hFI', hDom, hMO⟩, ?_⟩
       simp only [if_true]
-      exact Or.inr ⟨s0, a0, σ0, ⟨_, H, Cs, Ac', Lst', D', J0⟩, hpp, hspp⟩
+      exact ⟨s0, a0, σ0, ⟨⟨_, H, Cs, Ac', Lst', D', J0⟩, hns0, hp00⟩, hpp, hspp⟩
 
 set_option maxHeartbeats 4000000 in
 /-- **`XCap` at `JAt` at the Revoke label** (25): `cnode_revoke_refinesW` at
@@ -243,6 +233,17 @@ theorem decode_invocation_cnode_deleteJL [Fl4Proofs.P1.PlainStore st] (s : S) (a
     rw [if_neg (by simp)]
     exact ⟨Z, H, Cs, Ac, Lst, D, J⟩
 
+/-- **A CNode cap at an FL4 label other than Revoke and Delete** decodes to
+no invocation with a preemption point (`specDec_cnode_noPre`). -/
+theorem cnode_noPre_of {slbl : Fl4Spec.Data} {lbl : U64}
+    (hlbl : Fl4Spec.genInvocationType slbl = cnodeLabelOf lbl) (h : lbl.val ≠ 25 ∧ lbl.val ≠ 26)
+    {fp : Bool} {args : List Fl4Spec.Data} {ci : Fl4Spec.CapRef} {sl : Fl4Spec.CslotPtr}
+    {excaps : List (Fl4Spec.Cap × Fl4Spec.CslotPtr)} {buffer : Option Fl4Spec.ObjRef} {σ : Fl4Spec.State Unit}
+    {p r gs g : U64} :
+    ∀ inv, DecOut (specDec fp slbl args ci sl (.CNode p r gs g) excaps buffer) σ inv → ¬ NoPre.PreInv inv := by
+  refine specDec_cnode_noPre ?_ ?_ <;> rw [hlbl] <;> unfold cnodeLabelOf <;> intro e <;> split_ifs at e <;>
+    first | omega | cases e
+
 set_option maxHeartbeats 4000000 in
 /-- **The CNode cap, `JAt` after, with the deletion at `EJL`**:
 the former XTopJointCnDel `decode_invocation_cnodeJ_steps` with Revoke and Delete by
@@ -257,6 +258,7 @@ theorem decode_invocation_cnodeJ_stepsL [Fl4Proofs.P1.PlainStore st] (s : S) (ar
     (hnd : Fl4Spec.numDomains = 1) (hPP : PPPlat arI AR)
     (hRd0 : σ.consumedTime = 0 → ∀ y n, σ.kheap σ.curSc = some (.schedContext y n) → Fl4Spec.scActive y = true →
       Fl4Spec.refillReady σ.curTime (Fl4Spec.refillHd y) = true)
+    (hnq : ∀ d p, σ.curThread ∉ σ.readyQueues d p)
     (lbl : U64) (slbl : Fl4Spec.Data) (hlbl : Fl4Spec.genInvocationType slbl = cnodeLabelOf lbl)
     (length buf ct : U64) (hct : sched.cur_thread st s = ok ct) (args : List U64)
     (hlen : length.val = args.length)
@@ -275,15 +277,16 @@ theorem decode_invocation_cnodeJ_stepsL [Fl4Proofs.P1.PlainStore st] (s : S) (ar
   have hX := J.xtop
   have hJP : ∀ kb, PPHypDW (L := L) arI (WJL (L := L) arI AR Z H Cs kb) (WJP (L := L) arI AR Z H Cs kb) Z.th :=
     fun kb => jPreemptHypL arI hARI.toARKeep hT hnd hPP Z H Cs kb rfl
-  have hP0 := J.ppr0_start arI hni hRd0
+  have hP0 := J.ppr0_start arI hni hRd0 hnq
   have hJD := hJDP.jDelHypL arI hT hnd hPP hARI.toMask
   obtain ⟨hwf, hcv⟩ := slot_cap_wf hX hAs hsc
   by_cases hcp : 28 ≤ lbl.val ∧ lbl.val ≤ 32
   · obtain ⟨hcur, -⟩ := J.curEq hct
     exact (decode_invocation_cnode_copyXS arI s ar σ hX (J.curRun.run hni) ⟨Z, H, Cs, Ac, Lst, D, J⟩
-      (fun _ _ _ h => Steps.jat arI hARI.toMask hJ h rfl J) (fun _ _ _ h => JAt.xtop arI h) lbl hcp slbl hlbl
+      (fun _ _ _ h => Steps.jat arI hARI.toMask hJ h rfl J (J.zNoBlk hsg)) (fun _ _ _ h => JAt.xtop arI h) lbl hcp slbl hlbl
       length buf ct hct args hlen hargs p r gs g hwf hcv ⟨cslotAddr sl, hAs.isSlot, hsc⟩ extra x0 x1 hx0 hx1
-      excaps hex J.kern.act hcur (cslotAddr sl) blk call don fp ci sl buffer).toP arI fun _ _ _ h => Or.inl h
+      excaps hex J.kern.act hcur (cslotAddr sl) blk call don fp ci sl buffer).toPN arI
+      (cnode_noPre_of hlbl (by omega))
   by_cases hrd : 25 ≤ lbl.val ∧ lbl.val ≤ 26
   · rcases (show lbl.val = 25 ∨ lbl.val = 26 by omega) with h | h
     · have e : lbl = fl4_abi.label.CNodeRevoke := UScalar.eq_of_val_eq (by rw [h, lbl_revoke_val])
@@ -296,7 +299,7 @@ theorem decode_invocation_cnodeJ_stepsL [Fl4Proofs.P1.PlainStore st] (s : S) (ar
         length buf ct hct args hlen hargs p r gs g hwf hcv extra excaps (cslotAddr sl) blk call don fp ci sl buffer
   by_cases hlo : lbl.val < 25 ∨ 32 < lbl.val
   · exact (decode_invocation_cnode_illegalJ arI s ar σ J lbl hlo slbl hlbl length buf ct hct _ p r gs g extra excaps
-      (cslotAddr sl) blk call don fp ci sl buffer).toP arI fun _ _ _ h => Or.inl h
+      (cslotAddr sl) blk call don fp ci sl buffer).toPN arI (cnode_noPre_of hlbl (by omega))
   have h27 : lbl.val = 27 := by omega
   have e : lbl = fl4_abi.label.CNodeCancelBadgedSends := UScalar.eq_of_val_eq (by rw [h27, lbl_cancel_val])
   subst e
@@ -306,7 +309,7 @@ theorem decode_invocation_cnodeJ_stepsL [Fl4Proofs.P1.PlainStore st] (s : S) (ar
     hQ (fun u hu => by rw [hni.2] at hu; cases hu) (fun e b sl' hsl hcV => by
       obtain ⟨Tr, Cq, hJl⟩ := J.jpl
       exact J.hset.1 e ((hJl.typed _ hsl.isSlot).1 e b _ _ _ _ hcV)) (cslotAddr sl)
-    blk call don fp ci sl buffer).toP arI fun _ _ _ h => Or.inl h
+    blk call don fp ci sl buffer).toPN arI (cnode_noPre_of hlbl (by omega))
 
 end
 

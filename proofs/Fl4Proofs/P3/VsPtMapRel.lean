@@ -468,7 +468,7 @@ theorem pt_map_rel {A : Type} {ar : machine.Arch A} {th : TypedHeap} {P L4 L3 L2
               exact performPtMap_mem (setCap_cnode nc hkc1 hwf hidx) hstore hm' (hH.flushOK _ _ _)
             · exact (SlotFoot.of_same hSS1 _).trans (hF2.trans (SlotFoot.wr_out hPl s2 hbo _))
             · show VsLike (capV (L.mem s3) _) _
-              rw [hs3, capV_wr_out hPl hxsl s2 hbo, hcv2]; exact ⟨⟨rfl, rfl, rfl⟩, fun _ _ _ _ _ h => by
+              rw [hs3, capV_wr_out hPl hxsl s2 hbo, hcv2]; exact ⟨⟨rfl, rfl, rfl, rfl⟩, fun _ _ _ _ _ h => by
                 simp only [VCapOK] at h ⊢
                 refine ⟨h.1, h.2.1, fun _ => ⟨has1, ?_⟩, fun _ => userV_of_not_gt hv⟩
                 have e : Fl4Spec.ptTranslationBits + Fl4Spec.pageBits = Fl4Spec.pdShiftBits := rfl

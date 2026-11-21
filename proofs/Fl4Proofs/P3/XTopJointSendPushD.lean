@@ -19,6 +19,7 @@ the caller's SC's call stack and donates the SC to the receiver
   [W] is gone).
 -/
 import Fl4Proofs.P3.XTopJointPushDon
+import Fl4Proofs.P3.BufJ
 open Aeneas Aeneas.Std Result
 
 namespace Fl4Proofs.P3
@@ -42,7 +43,7 @@ XTopJointPushDon's `JAtZ.pushDonJ`; the receiver `Running` by XTopJointStsI's
 `JAtZ.stsIJ` (released: the caller's SC, `Inv.rd`), the tail
 `JAtZ.sendTailJ`; the spec's outcome `sendIpc_call_eq` with
 `replyPush_don_eq`/`pd_eq`. -/
-theorem JAtZ.sendCallPDJ (hAT : P0.ArchTotal arI) (hZ : XferHZ L AR Z) (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ)
+theorem JAtZ.sendCallPDJ (hAT : P0.ArchTotal arI) (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ)
     {t : U64} (ht : t ∈ Z.T) {xt : Fl4Spec.Tcb} (hkt : σ.kheap t.bv = some (.tcb xt))
     (hrs : xt.tcbState = .restart) (hft : xt.tcbFault = none) (hct : σ.curThread = t.bv)
     (hres : σ.schedulerAction = .resumeCurThread) (hti : σ.curThread ≠ σ.idleThread)
@@ -148,13 +149,13 @@ theorem JAtZ.sendCallPDJ (hAT : P0.ArchTotal arI) (hZ : XferHZ L AR Z) (J : JAtZ
   have IK1 : IK d'.bv σ σ1 := IK.updOther (o' := .endpoint (epDeq (.recvEP (d'.bv :: q)) d'.bv)) hk (fun o0 h => by
     rcases h with rfl | rfl <;> exact ⟨fun _ h => (by cases h), fun _ _ h => (by cases h), fun _ h => (by cases h)⟩)
   have SK1 : SKeep σ σ1 := SKeep.updK (p := e.bv) (o := .endpoint (epDeq (.recvEP (d'.bv :: q)) d'.bv)) (fun y h => by cases h) (fun _ _ h => by cases h)
-  have hOK1 : Endp.IpcBufCapOK σ1 := ipcBufCapOK_epStep (hZ Z s a σ rfl J.xtop).1 (EpStep.ep hk)
+  have hOK1 : Endp.IpcBufCapOK σ1 := ipcBufCapOK_epStep (J.xferH).1 (EpStep.ep hk)
   -- the transfer
   have hdth : Z.th d' = some .tcb := by
     obtain ⟨⟨⟨G0, hB0'⟩, -⟩, -⟩ := hS0.1.1
     exact Ipc.RelTopB.tcbT hB0' hkd
-  have hUd := J.rbufU hZ hdT hdth hkd
-  refine WP.spec_bind (J.xferStepGJ hZ hk (epDeq (.recvEP (d'.bv :: q)) d'.bv) hR1 hS1 hW1 F1 ht hdT htd hkt hkd hft
+  have hUd := J.rbufU hdT hdth hkd
+  refine WP.spec_bind (J.xferStepGJ hk (epDeq (.recvEP (d'.bv :: q)) d'.bv) hR1 hS1 hW1 F1 ht hdT htd hkt hkd hft
     badge g h1 hB1 hX1 hS1' hSg1) ?_
   rintro s2 ⟨x2, um2, yb, σy, Gy, Jy, e2, hx2, hR2, hS2', hA2, hW2, F2, h2, hB2, hX2, hS2'', hSg2, f2, hksy, hKy, hCnKy, hyk⟩
   have hncn : ∀ {q' : Fl4Spec.ObjRef} {o' : Fl4Spec.KernelObject}, σ.kheap q' = some o' →
@@ -512,7 +513,7 @@ theorem JAtZ.sendCallPDJ (hAT : P0.ArchTotal arI) (hZ : XferHZ L AR Z) (J : JAtZ
           (P1.Heap.scBits H) (P1.EH H) yb b ∨ RcvBufW xd b) :=
         footW_trans (footW_trans F3 (footW_of f1)) (footW_of f4)
       have hIR4 := IpcRel.ofSRN hR4 hS4
-      obtain ⟨su, umu, Ju, hWu, hFu, -, -⟩ := JAtZ.bufRebaseX (Z := Z.mv Gy Z.vs) (fun Z' s' a' σ' h => hZ Z' s' a' σ' h) J hdT hdth hkd hW4' hfoot4
+      obtain ⟨su, umu, Ju, hWu, hFu, -, -⟩ := JAtZ.bufRebaseX (Z := Z.mv Gy Z.vs) J hdT hdth hkd hW4' hfoot4
       have hIu := Ju.xtop.irelK Ju.ks Ju.buf
       have hRRu : ∀ q' ∈ Z.R, ∀ xr, (Endp.setUm σy umu).kheap q'.bv = some (.reply xr) → xr.replyTcb = some d'.bv →
           Detached Z.C Lst q' ∧ L.mem su (rNextA q') = 0#u64 ∧ L.mem su (rPrevA q') = 0#u64 :=
@@ -647,7 +648,7 @@ every such send, any grant (XTopJointXferG's `JAtZ.xferStepGJ`):
 `JAtZ.sendRecvJ0` for `SendRecvBasic`, `JAtZ.sendCallIJ` for `SendRecvCI`,
 `JAtZ.sendDonJ` for `SendRecvDon`, `JAtZ.sendCallPJ` for `SendRecvCP`,
 `JAtZ.sendCallPDJ` for `SendRecvCPD`. -/
-theorem jSendRest_of (hZ : XferHZ L AR Z) (hAT : P0.ArchTotal arI) {s1 : S} {ar : A} {σ1 : Fl4Spec.State Unit}
+theorem jSendRest_of (hAT : P0.ArchTotal arI) {s1 : S} {ar : A} {σ1 : Fl4Spec.State Unit}
     (J1 : JAtZ (L := L) arI AR Z H Cs Ac Lst D s1 ar σ1) {ct p : U64} (hct : ct ∈ Z.T) (hp : p ∈ Z.E)
     {xt : Fl4Spec.Tcb} (hkt : σ1.kheap ct.bv = some (.tcb xt)) (hrs : xt.tcbState = .restart)
     (hft0 : xt.tcbFault = none) (hcur : σ1.curThread = ct.bv) (hres : σ1.schedulerAction = .resumeCurThread)
@@ -664,7 +665,7 @@ theorem jSendRest_of (hZ : XferHZ L AR Z) (hAT : P0.ArchTotal arI) {s1 : S} {ar 
     simp only [List.map_cons, List.cons.injEq] at hq
     obtain ⟨hd, -⟩ := hq
     obtain rfl : dv = d.bv := by first | exact hd | exact hd.symm
-    exact J1.sendRecvJ0 hZ hct hkt hrs hft hcur hp hk' blk b g gr don hdon
+    exact J1.sendRecvJ0 hct hkt hrs hft hcur hp hk' blk b g gr don hdon
   by_cases hci : SendRecvCI σ1 call g gr ct.bv p.bv
   · obtain ⟨rfl, xt', dv, q, hkt', hft, hk', hno⟩ := hci
     rw [hkt] at hkt'; cases hkt'
@@ -674,7 +675,7 @@ theorem jSendRest_of (hZ : XferHZ L AR Z) (hAT : P0.ArchTotal arI) {s1 : S} {ar 
     simp only [List.map_cons, List.cons.injEq] at hq
     obtain ⟨hd, -⟩ := hq
     obtain rfl : dv = d.bv := by first | exact hd | exact hd.symm
-    exact J1.sendCallIJ hZ hct hkt hrs hft hcur hres hti hnq hp hk' blk b g gr don hno
+    exact J1.sendCallIJ hct hkt hrs hft hcur hres hti hnq hp hk' blk b g gr don hno
   by_cases hdo : SendRecvDon σ1 call don ct.bv p.bv
   · obtain ⟨rfl, rfl, xt', dv, q, hkt', hft, hk', hsn⟩ := hdo
     rw [hkt] at hkt'; cases hkt'
@@ -684,7 +685,7 @@ theorem jSendRest_of (hZ : XferHZ L AR Z) (hAT : P0.ArchTotal arI) {s1 : S} {ar 
     simp only [List.map_cons, List.cons.injEq] at hq
     obtain ⟨hd, -⟩ := hq
     obtain rfl : dv = d.bv := by first | exact hd | exact hd.symm
-    exact J1.sendDonJ hZ hAT hct hkt hrs hft hcur hres hti hnq hp hk' blk b g gr hsn
+    exact J1.sendDonJ hAT hct hkt hrs hft hcur hres hti hnq hp hk' blk b g gr hsn
   by_cases hcp : SendRecvCP σ1 call g gr don ct.bv p.bv
   · obtain ⟨rfl, xt', dv, q, hkt', hft, hk', hg, hrepn, hnd⟩ := hcp
     rw [hkt] at hkt'; cases hkt'
@@ -694,7 +695,7 @@ theorem jSendRest_of (hZ : XferHZ L AR Z) (hAT : P0.ArchTotal arI) {s1 : S} {ar 
     simp only [List.map_cons, List.cons.injEq] at hq
     obtain ⟨hd, -⟩ := hq
     obtain rfl : dv = d.bv := by first | exact hd | exact hd.symm
-    exact J1.sendCallPJ hAT hZ hct hkt hrs hft hcur hres hti hnq hp hk' blk b g gr don hg hrepn hnd
+    exact J1.sendCallPJ hAT hct hkt hrs hft hcur hres hti hnq hp hk' blk b g gr don hg hrepn hnd
   by_cases hcpd : SendRecvCPD σ1 call g gr don ct.bv p.bv
   · obtain ⟨rfl, rfl, xt', dv, q, hkt', hft, hk', hg, hrepn, hxdn⟩ := hcpd
     rw [hkt] at hkt'; cases hkt'
@@ -704,7 +705,7 @@ theorem jSendRest_of (hZ : XferHZ L AR Z) (hAT : P0.ArchTotal arI) {s1 : S} {ar 
     simp only [List.map_cons, List.cons.injEq] at hq
     obtain ⟨hd, -⟩ := hq
     obtain rfl : dv = d.bv := by first | exact hd | exact hd.symm
-    exact J1.sendCallPDJ hAT hZ hct hkt hrs hft hcur hres hti hnq hp hk' blk b g gr hg hrepn hxdn
+    exact J1.sendCallPDJ hAT hct hkt hrs hft hcur hres hti hnq hp hk' blk b g gr hg hrepn hxdn
   · -- every send to a waiting receiver is one of the five cases
     exfalso
     cases x with
@@ -758,7 +759,7 @@ theorem jSendRest_of (hZ : XferHZ L AR Z) (hAT : P0.ArchTotal arI) {s1 : S} {ar 
 set_option maxHeartbeats 4000000 in
 /-- **The endpoint cap's leaf at `J`** (XTopJointIpcJ's `sendLeafJ` with
 `jSendRest_of` at the restart state). -/
-theorem sendLeafJ2 (hZ : XferHZ L AR Z) (hAT : P0.ArchTotal arI) {s : S} {ar : A} {σ σ1 : Fl4Spec.State Unit}
+theorem sendLeafJ2 (hAT : P0.ArchTotal arI) {s : S} {ar : A} {σ σ1 : Fl4Spec.State Unit}
     (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s ar σ)
     (hni : Entered σ) (hnq : ∀ d q, σ.curThread ∉ σ.readyQueues d q)
     (hnf : ∀ x, σ.kheap σ.curThread = some (.tcb x) → x.tcbFault = none) {ct : U64} (hct : sched.cur_thread st s = ok ct)
@@ -807,7 +808,7 @@ theorem sendLeafJ2 (hZ : XferHZ L AR Z) (hAT : P0.ArchTotal arI) {s : S} {ar : A
   have e1 : s1' = s1 := eq_of_ok_eq (h1.symm.trans hs1)
   subst e1
   obtain rfl := restart_out_eq h2 hst
-  exact jSendRest_of hZ hAT J1 hctT hpE hkt1 rfl (hnf x (by rw [hcur]; exact hkx)) hc1 hres1 hti1 hnq1 blk call b g gr don
+  exact jSendRest_of hAT J1 hctT hpE hkt1 rfl (hnf x (by rw [hcur]; exact hkx)) hc1 hres1 hti1 hnq1 blk call b g gr don
 
 end
 

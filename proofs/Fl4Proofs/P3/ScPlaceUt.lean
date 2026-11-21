@@ -166,14 +166,25 @@ theorem IdleOut.keep {th : TypedHeap} {H : Heap} {G G' : MdbGhost} {s s' : S}
 node, and the VSpace ASID-table area `[ksb+288000, ksb+288000+16384)`**
 (l4v `valid_global_refs` for untyped caps, as `IdleOut`: the kernel
 window/globals lie in no untyped region; all three are statics of the
-kernel image). Not asked of device untypeds: since losfair/FL4#34 a device
+kernel image). The third part (KENTRY-PLAN g5a) asks the whole static area
+after the kernel-state base, `[ksb+13568, ksb+288000+16384)`: the 64
+cores' node slots (`layout::ks::NODES`, statically allocated whatever the
+number of cores, so also the nodes of cores outside `Cs`) and the ASID
+table; with the first part, the region misses `[ksb, ksb+304384)`. It gives
+`UtNodesJ` (formerly the entry premise `JEntryAt.utks`, `utNodesJ_of_ks`).
+Not asked of device untypeds: since losfair/FL4#34 a device
 untyped's pointer `paddr + PPTR_BASE` may lie in the kernel image, where
 the kernel-state block, the nodes and the ASID table are. -/
 def UtKsApart (G : MdbGhost) (Cs : Set U64) (s : S) : Prop :=
   ∀ x ∈ G.chains.flatten, ∀ p sb fi, capV (L.mem s) x = .Untyped p sb fi false →
     (p.val + 2 ^ sb.val ≤ (L.ksb s).val ∨ (L.ksb s).val + 13568 ≤ p.val) ∧
     (∀ c ∈ Cs, p.val + 2 ^ sb.val ≤ L.nodeBase s c ∨ L.nodeBase s c + 4288 ≤ p.val) ∧
-    (p.val + 2 ^ sb.val ≤ (L.ksb s).val + 288000 ∨ (L.ksb s).val + 288000 + 16384 ≤ p.val)
+    (p.val + 2 ^ sb.val ≤ (L.ksb s).val + 13568 ∨ (L.ksb s).val + 288000 + 16384 ≤ p.val)
+
+/-- `UtKsApart`'s third part in its former shape (the ASID-table area only). -/
+theorem UtKsApart.asidOf {kb p sb : U64}
+    (h : p.val + 2 ^ sb.val ≤ kb.val + 13568 ∨ kb.val + 288000 + 16384 ≤ p.val) :
+    p.val + 2 ^ sb.val ≤ kb.val + 288000 ∨ kb.val + 288000 + 16384 ≤ p.val := by omega
 
 /-- **`UtKsApart` across a step** keeping the kernel-state base and the
 untyped regions (each after an old one, same device flag). -/

@@ -12,6 +12,7 @@ aligned word at `addr`"), and `zero` only about ranges that do not wrap
 around the address space, so any word-addressed memory is a model.
 -/
 import Fl4Proofs.P0.Totality
+import Fl4Proofs.P1.SyscallGen
 open Aeneas Aeneas.Std Result
 
 namespace Fl4Proofs.P1

@@ -275,10 +275,11 @@ theorem JAtZ.setInactiveJD {AR : A → Fl4Spec.Cr3 → Prop} {Z : XSets} {H : P1
   obtain ⟨hblk', hfoot⟩ := P1.deact_all J.blk hpS hnbW hnnW r0
   rw [esp] at hblk' hfoot
   have hDbg := J.kw_dbg (hfoot.mono (Set.empty_subset _))
+  have hKd := J.kw_dbgKeep (hfoot.mono (Set.empty_subset _))
   exact ⟨Z.vs, Ac \ {p}, Lst', J.sc_frame hW6 hK6 hX' hCR' hRF' hY' hM' (J.sc_buf hW6 hK6) hRP'
     (J.sc_apart hW6 hK6) (J.sc_jpl hW6 hK6 (J.idleW_keep hX'.fin.1.1.1 hF.2.1 hF.2.2).2) (J.sc_jcov hW6 hDead (fun q hq hn => absurd hq hn) (J.idleW_keep hX'.fin.1.1.1 hF.2.1 hF.2.2))
     (J.sc_kern hW6 hK6 hF hX' hDbg fun _ h => h) (J.sc_utc hW6 hK6 hDbg) J.nsc.updSc hI'
-    (J.cur.imp id (hO.curInv J.inv)) (hO.own J.inv J.own) (hO.off hpi J.off) hact' (hO.bsa J.bsa) (hO.curRun J.curRun) hblk'⟩
+    (J.cur.imp id (hO.curInv J.inv)) (hO.own J.inv J.own) (hO.off hpi J.off) hact' (hO.bsa J.bsa) (hO.curRun J.curRun) hblk' hKd (J.idleW_keep hX'.fin.1.1.1 hF.2.1 hF.2.2).1 J.zD⟩
 
 
 set_option maxHeartbeats 4000000 in

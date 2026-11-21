@@ -19,6 +19,7 @@ XTopJointIpcJ's `JSendRestHyp`).
   `JAtZ.wake_postD`.
 -/
 import Fl4Proofs.P3.XTopJointXferG
+import Fl4Proofs.P3.BufJ
 open Aeneas Aeneas.Std Result
 
 namespace Fl4Proofs.P3
@@ -178,10 +179,11 @@ theorem JAtZ.unblockRJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {t : U6
   have hdead : ∀ q ∈ D, DeadP (L := L) H s' q := fun q hq =>
     J.deadP_sc_stepQ hX' hwT hK0 (fun _ hp => hp.elim) hL hFK hAI.1 hY' ((hsok.ykeep rfl).dk q.bv) (fun h => h) (J.jcov.dead q hq)
   have hDbg := J.kw_dbg hfoot
+  have hKd := J.kw_dbgKeep hfoot
   exact ⟨Lst', J.sc_frame hwT hK hX' hCR' hRF' hY' hM' (J.sc_buf hwT hK) hRP' (J.sc_apart hwT hK)
     (J.sc_jpl hwT hK (J.idleW_keep hX'.fin.1.1.1 hFK.2.1 hFK.2.2).2) (J.sc_jcov hwT hdead (fun q hq hn => absurd hq hn) (J.idleW_keep hX'.fin.1.1.1 hFK.2.1 hFK.2.2))
     (J.sc_kern hwT hK hFK hX' hDbg fun _ h => h) (J.sc_utc hwT hK hDbg) hN' hI' hC' hown' hoff hAI
-    (J.bsa.bk hBK hsok) hcr ⟨⟨Q1, R1, hq2⟩, hB2, hX2, hS2, hSg2⟩⟩
+    (J.bsa.bk hBK hsok) hcr ⟨⟨Q1, R1, hq2⟩, hB2, hX2, hS2, hSg2⟩ hKd (J.idleW_keep hX'.fin.1.1.1 hFK.2.1 hFK.2.2).1 J.zD⟩
 
 /-- What `sendUnblockJ` keeps of the spec's state. -/
 def UnblockKeep (σ σ' : Fl4Spec.State Unit) : Prop :=
@@ -341,7 +343,7 @@ woken as a cancelled receive: its TCB from receive-blocked to `Running`
 with a new user context, the endpoint's queue shrunk, its reply unbound),
 `Inv` by `InvBut.ik`; `JAtZ` by ScSignalDonJ's `JAtZ.wake_postD`; then the
 tail `JAtZ.sendTailJ`; the spec's outcome `sendIpc_recv_eqD`. -/
-theorem JAtZ.sendRecvJ0 (hZ : XferHZ L AR Z) (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ)
+theorem JAtZ.sendRecvJ0 (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ)
     {t : U64} (ht : t ∈ Z.T) {xt : Fl4Spec.Tcb} (hkt : σ.kheap t.bv = some (.tcb xt))
     (hrs : xt.tcbState = .restart) (hft : xt.tcbFault = none) (hct : σ.curThread = t.bv)
     {e d : U64} (he : e ∈ Z.E) {q : List Fl4Spec.ObjRef}
@@ -443,13 +445,13 @@ theorem JAtZ.sendRecvJ0 (hZ : XferHZ L AR Z) (J : JAtZ (L := L) arI AR Z H Cs Ac
   have IK1 : IK d'.bv σ σ1 := IK.updOther (o' := .endpoint (epDeq (.recvEP (d'.bv :: q)) d'.bv)) hk (fun o0 h => by
     rcases h with rfl | rfl <;> exact ⟨fun _ h => (by cases h), fun _ _ h => (by cases h), fun _ h => (by cases h)⟩)
   have SK1 : SKeep σ σ1 := SKeep.updK (p := e.bv) (o := .endpoint (epDeq (.recvEP (d'.bv :: q)) d'.bv)) (fun y h => by cases h) (fun _ _ h => by cases h)
-  have hOK1 : Endp.IpcBufCapOK σ1 := ipcBufCapOK_epStep (hZ Z s a σ rfl J.xtop).1 (EpStep.ep hk)
+  have hOK1 : Endp.IpcBufCapOK σ1 := ipcBufCapOK_epStep (J.xferH).1 (EpStep.ep hk)
   -- the transfer
   have hdth : Z.th d' = some .tcb := by
     obtain ⟨⟨⟨G0, hB0'⟩, -⟩, -⟩ := hS0.1.1
     exact Ipc.RelTopB.tcbT hB0' hkd
-  have hUd := J.rbufU hZ hdT hdth hkd
-  refine WP.spec_bind (J.xferStepGJ hZ hk (epDeq (.recvEP (d'.bv :: q)) d'.bv) hR1 hS1 hW1 F1 ht hdT htd hkt hkd hft
+  have hUd := J.rbufU hdT hdth hkd
+  refine WP.spec_bind (J.xferStepGJ hk (epDeq (.recvEP (d'.bv :: q)) d'.bv) hR1 hS1 hW1 F1 ht hdT htd hkt hkd hft
     badge g h1 hB1 hX1 hS1' hSg1) ?_
   rintro s2 ⟨x2, um2, y, σy, Gy, Jy, e2, hx2, hR2, hS2', hA2, hW2, F2, h2, hB2, hX2, hS2'', hSg2, f2, hksy, hKy, -, hyk⟩
   have hncn : ∀ {q' : Fl4Spec.ObjRef} {o' : Fl4Spec.KernelObject}, σ.kheap q' = some o' →
@@ -679,7 +681,7 @@ theorem JAtZ.sendRecvJ0 (hZ : XferHZ L AR Z) (J : JAtZ (L := L) arI AR Z H Cs Ac
   have hcur5 : σ5.schedulerAction = .chooseNewThread ∨ CurInv σ5 :=
     Jy.cur.imp (fun e0 => by rw [act5]; exact e0) Fr5.curInv
   have hrun5 : CurRunM σ5 := Jy.curRun.of_cn Fr5.curRunW (Or.inr act5)
-  obtain ⟨su, umu, Ju, hWu, hFu, -, -⟩ := JAtZ.bufRebaseX (Z := Z.mv Gy Z.vs) (fun Z' s' a' σ' h => hZ Z' s' a' σ' h) Jy hdT hdth hkdy
+  obtain ⟨su, umu, Ju, hWu, hFu, -, -⟩ := JAtZ.bufRebaseX (Z := Z.mv Gy Z.vs) Jy hdT hdth hkdy
     hW5' hfoot
   have hIu := Ju.xtop.irelK Ju.ks Ju.buf
   have htD := Ju.not_dead_of_st hdT hkdy (by rw [hstd]; simp [tsCode])

@@ -55,10 +55,12 @@ section
 variable {S : Type} {st : machine.Store S} [L : P1.LawfulStore st] {A : Type} {arI : machine.Arch A}
 
 /-- **The P1-supplied part of an SC step** (the node-0 `DEBUG_TCBS` word kept,
-`BlkOK` after). -/
+every debug word kept — KENTRY-PLAN g2i, for `JAtZ.live`; an SC decode writes
+no TCB debug link and no debug head —, `BlkOK` after). -/
 def ScStepP1 (Z : XSets) (H : P1.Heap) (Cs : Set U64) (s s' : S) : Prop :=
   ∃ (Ac' : Set U64),
     L.mem s' (L.nodeAt s 0#u64 layout.node.DEBUG_TCBS) = L.mem s (L.nodeAt s 0#u64 layout.node.DEBUG_TCBS) ∧
+    P1.DbgKeep st (P1.Heap.tcbs H) Cs s s' ∧
     P1.BlkOK st (P1.Heap.tcbs H) Cs (P1.Heap.omega H) H (P1.Heap.frame H) (P1.Heap.replies H)
       (P1.Heap.scs H) (P1.Heap.ntfns H) (P1.Heap.scBits H) Ac' s'
 
@@ -201,7 +203,7 @@ theorem sched_controlJ_step {AR : A → Fl4Spec.Cr3 → Prop} {Z : XSets} {H : P
       (pres_invokeSchedControlConfigureFlags (true, true) _ σ1 _ hm2)
   obtain ⟨-, hY', hM', ⟨Lst', hCR', hRF'⟩, hRP', -⟩ :=
     ScAll.of_k hS J.rp J.yld J.mcp J.call J.rfree ⟨⟨hS', hR', hN', hI'⟩, hw, hSOK⟩
-  obtain ⟨Ac', hDbg, hBlk'⟩ := hRst hr1 σ' inv σ1 hdec he1 he2
+  obtain ⟨Ac', hDbg, hKd, hBlk'⟩ := hRst hr1 σ' inv σ1 hdec he1 he2
   obtain ⟨a0, rest, hex', q, sz, rfl, b, per, k, badge, flag, rfl⟩ :=
     (rdp_decodeCfgHead slbl (args.map UScalar.bv) (excaps.map Prod.fst) σ _ (by rw [hdec]; exact Set.mem_singleton _)).2
       _ rfl
@@ -274,8 +276,10 @@ theorem sched_controlJ_step {AR : A → Fl4Spec.Cr3 → Prop} {Z : XSets} {H : P
   have hCR'' : CurRun σ' := curRun_sc_step hkc hcur he1 (NKT.of_eq (nkt_invokeSchedControlConfigureFlags _) he2)
   exact ⟨σ', Ac', Lst', D, J.sc_frame hwT hK hX' hCR' hRF' hY' hM' (J.sc_buf hwT hK) hRP' (J.sc_apart hwT hK)
     (J.sc_jpl hwT hK (J.idleW_keep hX'.fin.1.1.1 hF.2.1 hF.2.2).2) (J.sc_jcov hwT hDead (fun q hq hn => absurd hq hn) (J.idleW_keep hX'.fin.1.1.1 hF.2.1 hF.2.2)) (J.sc_kern hwT hK hF hX' hDbg fun _ h => h)
-    (J.sc_utc hwT hK hDbg) hN' hI' hC' (Or.inl (hC'.elim hOw' (curOwn_of_curInv hX'.fin.1.1.1 hI'))) hO' hAI' hB' (Or.inr (Or.inl hCR'')) hBlk',
+    (J.sc_utc hwT hK hDbg) hN' hI' hC' (Or.inl (hC'.elim hOw' (curOwn_of_curInv hX'.fin.1.1.1 hI'))) hO' hAI' hB' (Or.inr (Or.inl hCR'')) hBlk'
+    hKd (J.idleW_keep hX'.fin.1.1.1 hF.2.1 hF.2.2).1 J.zD,
     Or.inr ⟨hr1, rfl, _, σ1, hdec, he1, he2⟩⟩
+
 
 
 set_option maxHeartbeats 4000000 in
@@ -467,7 +471,7 @@ theorem sched_contextJ_step {AR : A → Fl4Spec.Cr3 → Prop} {Z : XSets} {H : P
       (f1 := decide (∀ p, inv ≠ .invokeSchedContextYieldTo p))
       ((pres_invokeSchedContext inv σ0 _ hm1).weaken (f' := (decide (∀ p, inv ≠ .invokeSchedContextYieldTo p), true))
         id (fun _ => hu))
-  obtain ⟨Ac', hDbg, hBlk'⟩ := hRst hr1 σ2 ⟨inv, σ0, hrun, he0, he1⟩
+  obtain ⟨Ac', hDbg, hKd, hBlk'⟩ := hRst hr1 σ2 ⟨inv, σ0, hrun, he0, he1⟩
   -- the mid-entry facts: the restart keeps them, the invocation is a `MidK` step
   have hC := J.curInv (by rw [hres]; simp)
   obtain ⟨hres0, hC0, hO0, hA0, hI0⟩ := restart_mid hcur hkc hcs hres hC J.off J.act J.inv
@@ -615,9 +619,51 @@ theorem sched_contextJ_step {AR : A → Fl4Spec.Cr3 → Prop} {Z : XSets} {H : P
       (∀ k, Z.th q = some k → Covered (L.mem s') Z.G q.val (q.val + max (objSize k) 1)) ∧
       (∀ k, H q = some k → Covered (L.mem s') Z.G q.val (q.val + 2 ^ k.bits)) := fun q hq hn =>
     hcovW q hq (by_contra fun h => hn ⟨hq, h⟩)
+  -- the TCB zombies' TCBs stay in the dead set: Bind's pair is named by the SC cap and the extra cap
+  have hzW : ∀ p ∈ ZTcb (L := L) Z.th s, ¬ invLinkW inv p.bv := by
+    intro p hp hqW
+    have hqsc : p.bv = sc.bv → p = sc := fun e => bv_inj e
+    rcases hl with l | l
+    · have hg : Fl4Spec.genInvocationType slbl = .schedContextBind := by rw [hlbl, l]; unfold scLabelOf; simp
+      simp only [Fl4Spec.decodeSchedContextInvocation, hg] at hrun
+      obtain ⟨a0, rest, hex', rfl⟩ := (retP_bindHead _ _).of_run hrun
+      rcases hex with ⟨-, he⟩ | ⟨hx0n, -, c, a1, rest', hc, hCR, hCV, he⟩
+      · rw [he] at hex'; cases hex'
+      rw [he] at hex'
+      injection hex' with ha
+      subst ha
+      have hCa := hCR.abs
+      have hxS := hx0S hx0n
+      have hscN : p = sc → False := fun e => J.not_ztcb hslotS
+        (fun _ _ _ h => by rw [capV_of_capAt hslot] at h; cases h)
+        (by rw [capV_of_capAt hslot, e]; simp [absCap, Fl4Spec.objRefs]) hp
+      cases a1 with
+      | threadCap t =>
+        rcases hqW with e | e
+        · exact hscN (hqsc e)
+        · cases c <;> simp only [absCap, reduceCtorEq, Fl4Spec.Cap.threadCap.injEq] at hCa
+          rename_i p'
+          exact J.not_ztcb hxS (fun _ _ _ h => by rw [capV_of_capAt hc] at h; cases h)
+            (by rw [capV_of_capAt hc]; show p.bv ∈ Fl4Spec.objRefs (absCap (.Thread p')); rw [e, hCa]
+                simp [absCap, Fl4Spec.objRefs]) hp
+      | notificationCap n b r =>
+        rcases hqW with e | e
+        · exact hscN (hqsc e)
+        · cases c <;> simp only [absCap, reduceCtorEq, Fl4Spec.Cap.notificationCap.injEq] at hCa
+          rename_i p' b' x1 x2
+          exact J.not_ztcb hxS (fun _ _ _ h => by rw [capV_of_capAt hc] at h; cases h)
+            (by rw [capV_of_capAt hc]; show p.bv ∈ Fl4Spec.objRefs (absCap (.Notification p' b' x1 x2))
+                rw [e, hCa.1]; simp [absCap, Fl4Spec.objRefs]) hp
+      | _ => exact hqW.elim
+    · have hg : Fl4Spec.genInvocationType slbl = .schedContextUnbindObject := by
+        rw [hlbl, l]; unfold scLabelOf; simp
+      simp only [Fl4Spec.decodeSchedContextInvocation, hg] at hrun
+      obtain ⟨cap, rfl⟩ := (retP_unbindObjDec _ _).of_run hrun
+      exact hqW.elim
   exact ⟨σ2, Ac', Lst', _, J.sc_frame hW hKt hX' hCR' hRF' hY' hM' (J.sc_buf hW hKt) hRP' (J.sc_apart hW hKt)
     (J.sc_jpl hW hKt (J.idleW_keep hX'.fin.1.1.1 hF.2.1 hF.2.2).2) (J.sc_jcov hW hDead hCov (J.idleW_keep hX'.fin.1.1.1 hF.2.1 hF.2.2)) (J.sc_kern hW hKt hF hX' hDbg fun _ h => h.1)
-    (J.sc_utc hW hKt hDbg) hN' hI' hC' (Or.inl (hC'.elim hOw' (curOwn_of_curInv hX'.fin.1.1.1 hI'))) hO' hAI' hB' (Or.inr (Or.inl hCR'')) hBlk',
+    (J.sc_utc hW hKt hDbg) hN' hI' hC' (Or.inl (hC'.elim hOw' (curOwn_of_curInv hX'.fin.1.1.1 hI'))) hO' hAI' hB' (Or.inr (Or.inl hCR'')) hBlk'
+    hKd (J.idleW_keep hX'.fin.1.1.1 hF.2.1 hF.2.2).1 (fun p hp => ⟨J.zD p hp, hzW p hp⟩),
     Or.inr ⟨hr1, rfl, inv, σ0, hrun, he0, he1⟩⟩
 
 

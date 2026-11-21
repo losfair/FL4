@@ -246,6 +246,7 @@ theorem JAtZ.linkYieldJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {ct sc
         have e : (scYieldFromA sc).val = sc.val + 56 := e56
         exact Or.inr (Or.inr (Or.inr (Or.inl ⟨sc, hscS, by rw [e]; omega, by rw [e]; omega⟩)))
   have hDbg := J.kw_dbg hKW
+  have hKd := J.kw_dbgKeep hKW
   have hX' : XTopAt (L := L) AR Z _ a σ' :=
     xtop_sc_step (ct := σ.curThread) J.xtop J.ip J.nk hW (hK.mono fun _ h => h.elim) hS2 hR2 id
   have hall := ScAll.of_tr hS J.rp J.mcp J.call J.rfree ⟨hS2, hR2, hN2, hI2⟩ hY2 (hW.mono fun b hb => Or.inl hb)
@@ -267,7 +268,7 @@ theorem JAtZ.linkYieldJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {ct sc
     (J.sc_jpl hW hK (J.idleW_keep hX'.fin.1.1.1 hA.fk.2.1 hA.fk.2.2).2) (J.sc_jcov hW hdead (fun q hq hn => absurd hq hn) (J.idleW_keep hX'.fin.1.1.1 hA.fk.2.1 hA.fk.2.2))
     (J.sc_kern hW hK hA.fk hX' hDbg fun _ h => h)
     (J.sc_utc hW hK hDbg) hN2 hI2 (hA.cur J.cur) (hA.own J.own) (hA.off J.off) hAI (hA.bsa J.bsa)
-    (hA.curRunM J.curRun) hblk⟩
+    (hA.curRunM J.curRun) hblk hKd (J.idleW_keep hX'.fin.1.1.1 hA.fk.2.1 hA.fk.2.2).1 J.zD⟩
 
 set_option maxHeartbeats 16000000 in
 /-- **`yield_switches` at `J`** (ScYieldTo's `yield_switches_refines` with

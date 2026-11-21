@@ -284,6 +284,11 @@ theorem JAtZ.reset_loopJ (hAK : ARKeep arI AR) (hA : P0.ArchTotal arI) (hnd : Fl
     · intro w hw h1 h2; exact hZ2 w hw (by omega) h2
   · rw [if_neg ho0]
     have ho0' : o.val ≠ 0 := fun e => ho0 (UScalar.eq_of_val_eq e)
+    -- #52: the cap just written reads back as the untyped cap, so the
+    -- doomed-transaction exit (`as_untyped` = `none`) is not taken.
+    have hcapS : obj.Slot.cap st xs s2 = ok (.Untyped p sb o false) := by rw [slot_cap_eq]; exact hcap2
+    simp only [hcapS, bind_ok, untyped.as_untyped, core.option.Option.is_none, Bool.false_eq_true,
+      ↓reduceIte]
     obtain ⟨⟨r, s3, a2⟩, hp3, σp, hcase, hJp, hXp, hSS3, hks3, -, hfr3⟩ :=
       spec_exists (J2.ppJS hAK hA hnd hPP hR02)
     rw [hp3]
@@ -322,7 +327,7 @@ theorem JAtZ.reset_loopJ (hAK : ARKeep arI AR) (hA : P0.ArchTotal arI) (hnd : Fl
         core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual, core.convert.FromSame.from]
       simp only [bind_tc_ok, bind_ok]
       have hmem := RContX.preempt hK (hchunk _ hy)
-      exact (WP.spec_ok _).2 (Or.inr ⟨rfl, σp, hmem, J2.jAtPre_pp hp3 hy, Z, hXp⟩)
+      exact (WP.spec_ok _).2 (Or.inr ⟨rfl, σp, hmem, J2.jAtPre_pp hp3 hy hR02, Z, hXp⟩)
 
 end
 

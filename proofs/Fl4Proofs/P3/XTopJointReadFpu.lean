@@ -16,30 +16,27 @@ P3 (DESIGN.md §9), TCB: **ReadFPU's frame writes at `J`** (for XTopJointTcb's
   `JAtZ.userWrJ` (the spec's user memory updated), another by
   `JAtZ.frameWrJ`.
 * `JAtZ.copyFrameJ`: the 337-word copy into the frame at `J`
-  (`copy_words_inv`), the spec's machine state some `ms`.
+  (`copy_words_inv`): every word of the frame is a word of a spec data page,
+  hence the IPC-buffer word `(w, w)` of `B` (JointAt's `FrameCover`), written
+  by `JAtZ.userWrJ`; the spec's user memory then agrees with the old one
+  outside the frame's 2696 bytes (the spec's `Fl4Spec.fl4FpuToFrame`).
+  (`frameWrJ`/`frameWordJ` are no longer used by it.)
 
 ## `FpuFrameJHyp` [J]
 
-For the frame cap in the first extra slot (non-device): (a) its range lies in
-a spec user data page (l4v `valid_cap`: `typ_at (AArch (AUserData sz)) p` for
+For the frame cap in the first extra slot (non-device): its range lies in a
+spec user data page (l4v `valid_cap`: `typ_at (AArch (AUserData sz)) p` for
 a non-device `PageCap`; a DeriveSubframe alias lies inside the large frame's
-page); (b) its range misses the CNodes of `Z.th` and (c) FL4's page tables
-and ASID pools (l4v `pspace_distinct` of the data page against the CNodes and
-the page tables, carried through the state relation; neither is derivable
-from `JAtZ`: `H` holds CNodes as `other` objects, which `FrApartH` does not
-cover, and FL4's tables are not tied to `H`'s objects); (d) its range
-misses FL4's kernel-global data `[ksb, ksb + ks::SIZE)` (`ks::SIZE` =
-304384: the kernel-state block, the 64 cores' nodes, the ASID table; l4v
-`valid_global_refs`: no cap's range meets the kernel's global references).
-For FL4 (crates/fl4-core, fl4-kernel): the kernel-global data is the static
-`KsArea` in the kernel image (fl4-kernel lib.rs), and RAM frames are retyped
-from RAM untypeds, which miss the kernel image; device frames are excluded
-(`fpu_transfer` rejects `is_device`). Only the entry state is asked; the
-facts are carried across the caller's restart and the arch's `fpu_flush`.
+page). Only the entry state is asked; the fact is carried across the
+caller's restart (the data page is not the caller's TCB) and the arch's
+`fpu_flush`. Until fpu1 (KENTRY-PLAN) it also asked the range to miss the
+CNodes, FL4's VSpace tables and ASID pools and the kernel-global data; those
+were needed only for frame words outside `B`, which `FrameCover` rules out.
 -/
 import Fl4Proofs.P3.XTopJointData
 import Fl4Proofs.P3.BufFr
 import Fl4Proofs.P3.BufFrA
+import Fl4Proofs.P3.BufJ
 open Aeneas Aeneas.Std Result
 
 namespace Fl4Proofs.P3
@@ -51,19 +48,19 @@ section
 variable {S : Type} {st : machine.Store S} [L : P1.LawfulStore st]
 
 /-- **ReadFPU's destination frame at the invocation's start** [J] (module
-docstring): the non-device frame cap at `x` lies in a spec data page (a),
-misses the CNodes of `Z.th` (b) and FL4's VSpace tables and ASID pools (c),
-and misses FL4's kernel-global data (d). (The TCBs' part of `VObj` is not
-asked: `JPlaced.tcb` with `JPlaced.cobj`'s `FrApartH`.) -/
+docstring): every byte of the non-device frame cap at `x` lies in a spec
+user frame (`UFr`: a non-device data page holds it; l4v `valid_cap` of a
+non-device `PageCap`). This is exactly what `JAtZ.fcap` says of the slot, so
+`JAtZ.fpuFrameJ` (XTopJointKEntry35E) proves it from `JAtZ` alone (g5b: the
+former "one data page contains the whole range" form needed the spec-only
+`SpecFrPg`; the copy needs only a page per written word, `ufr_word`). Asked
+only when `x` is a slot of the typed heap (KENTRY-PLAN g5a: the extra-cap
+array pads with slot 0, whose word nothing constrains; the consumer
+`tcb_read_fpuJ` has the slot from `XcRel`). -/
 def FpuFrameJHyp (Z : XSets) (s : S) (σ : Fl4Spec.State Unit) (x : U64) : Prop :=
-  ∀ (p : U64) (sz : capability.FrameSize) (r : U64) (m ep : Bool) (asid va : U64),
+  ∀ sl0 : Fl4Spec.CslotPtr, AbsSlot Z.th sl0 → x = cslotAddr sl0 → ∀ (p : U64) (sz : capability.FrameSize) (r : U64) (m ep : Bool) (asid va : U64),
     capV (L.mem s) x = .Frame p sz r false m ep asid va →
-    (∃ (o : Fl4Spec.ObjRef) (vms : Fl4Spec.VMPageSize), σ.kheap o = some (.archObj (.dataPage false vms)) ∧
-      o.toNat ≤ p.val ∧ p.val + 2 ^ frameBitsN sz ≤ o.toNat + 2 ^ Fl4Spec.pageBitsForSize vms) ∧
-    (∀ q rr, Z.th q = some (.cnode rr) → p.val + 2 ^ frameBitsN sz ≤ q.val ∨ q.val + 32 * 2 ^ rr ≤ p.val) ∧
-    (∀ q, (q ∈ Z.P ∨ q ∈ Z.L4 ∨ q ∈ Z.L3 ∨ q ∈ Z.L2 ∨ q ∈ Z.L1) →
-      p.val + 2 ^ frameBitsN sz ≤ q.val ∨ q.val + 4096 ≤ p.val) ∧
-    (p.val + 2 ^ frameBitsN sz ≤ (L.ksb s).val ∨ (L.ksb s).val + 304384 ≤ p.val)
+    ∀ a : Nat, p.val ≤ a → a < p.val + 2 ^ frameBitsN sz → _root_.Fl4Proofs.P3.UFr σ a
 
 end
 
@@ -257,7 +254,17 @@ theorem JAtZ.frameWrJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {w : U64
       J.apart.sc_frame hkb F.szKeep, hjpl, J.jcov_keep hkb hSS hdead (J.idleW_keep hX1.fin.1.1.1 F.idle F.isc), hkern,
       hutc, J.nsc.ar F, J.inv.ar F, CurInvW.ar J.cur F, J.own.ar F,
       J.off.ar F, hAI, J.bsa.ar F, J.isorted.ar F, J.curRun.ar F, hblk⟩
-  exact J.cs_frame (G' := Z.G) hkb hX1 F.kback F.ipcFr (JCs.same J hSS F.ksz) R (Vs.VsSlotsT.of_eq fun y hy => hSS.capV hy)
+  have hKd : P1.DbgKeep st (P1.Heap.tcbs H) Cs s s1 := dbgKeep_of_writes J.blk hW fun b hb => by
+    subst hb
+    refine J.notDbg (fun t ht => ?_) (fun c hc => ?_)
+    · rcases hAp t .tcb ht (fun _ e => by cases e) with e | e
+      · left; omega
+      · right; simpa [P1.HKind.bits] using e
+    · have hcl := J.kern.csLt c hc
+      have hnb : L.nodeBase s c = (L.ksb s).val + 13568 + c.val * 4288 := rfl
+      omega
+  exact J.cs_frameK hkb hX1 F.kback F.ipcFr (JCs.same J hSS F.ksz) R (Vs.VsSlotsT.of_eq fun y hy => hSS.capV hy) (fun t ht => tcbK t (J.thT t ht) _ (Sched.tVcpuA_aligned J.ip.e.tcb (J.thT t ht)) (by rw [Sched.tVcpuA_val J.ip.e.tcb (J.thT t ht)]; omega) (by rw [Sched.tVcpuA_val J.ip.e.tcb (J.thT t ht)]; omega))
+    hSS hKd F.idle
 
 /-- **A frame word written at `J`** (`JAtZ.userWrJ` for an IPC-buffer word,
 `JAtZ.frameWrJ` for another), the spec's machine state some `ms`. -/
@@ -274,25 +281,45 @@ theorem JAtZ.frameWordJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ)
   · push_neg at hB
     exact ⟨σ.machineState, J.frameWrJ hu hB hAp hObj hks v⟩
 
+/-- **An 8-aligned user-frame word lies with its 8 bytes in one data page**
+(the page `inUserFrame` names: its base is the word rounded down to the page
+size, a multiple of 8). -/
+theorem ufr_word {σ : Fl4Spec.State Unit} {w : U64} (h8 : w.val % 8 = 0)
+    (hU : _root_.Fl4Proofs.P3.UFr σ w.val) :
+    ∃ o vms, σ.kheap o = some (.archObj (.dataPage false vms)) ∧ o.toNat ≤ w.val ∧
+      w.val + 8 ≤ o.toNat + 2 ^ Fl4Spec.pageBitsForSize vms := by
+  obtain ⟨sz, hk⟩ := hU
+  refine ⟨_, sz, hk, ?_⟩
+  rw [Endp.and_not_mask_toNat _ _ (Endp.pageBits_mem sz)]
+  have hw : (BitVec.ofNat 64 w.val).toNat = w.val := by
+    rw [BitVec.toNat_ofNat]; exact Nat.mod_eq_of_lt w.bv.isLt
+  rw [hw]
+  have hm := Endp.pageBits_mem sz
+  generalize Fl4Spec.pageBitsForSize sz = b at hm ⊢
+  simp only [List.mem_cons, List.mem_nil_iff, or_false] at hm
+  rcases hm with rfl | rfl | rfl <;> norm_num <;> omega
+
 set_option maxHeartbeats 8000000 in
 /-- **ReadFPU's copy into the frame at `J`** (`copy_words_inv` with
-`JAtZ.frameWordJ`): the 2696 bytes at `f` miss every non-`other` object of
-`H`, the VSpace objects and the kernel-global data, and lie in a spec object;
-`BufPlaced` at every `XTopAt` state of the typed heap (the decode's premise). -/
+`JAtZ.userWrJ`): the 2696 bytes at `f` miss every non-`other` object of `H`
+and lie in spec user frames (`ufr_word`: a data page per word), so each word `w` written is the IPC-buffer word
+`(w, w)` of `B` (`FrameCover`); the spec's user memory is stored as FL4's
+there, and so agrees with the old one outside the 2696 bytes at `f`
+(`fpu_store_other`: the outcomes of `Fl4Spec.fl4FpuToFrame`). -/
 theorem JAtZ.copyFrameJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ)
-    (hBPl : ∀ (Z' : XSets) s' a' σ', Z'.th = Z.th → XTopAt (L := L) AR Z' s' a' σ' →
-      Vs.BufPlaced (L := L) Z'.N Z'.C Z'.B Z'.c s' σ')
     (src f : U64) (hf8 : f.val % 8 = 0) (hfit : f.val + 2696 ≤ 2 ^ 64)
     (hApR : ∀ q k, H q = some k → (∀ z, k ≠ .other z) → f.val + 2696 ≤ q.val ∨ q.val + 2 ^ k.bits ≤ f.val)
-    (hObjR : ∃ o ko, σ.kheap o = some ko ∧ o.toNat ≤ f.val ∧ f.val + 2696 ≤ o.toNat + 2 ^ Fl4Spec.objBits ko)
-    (hVR : ∀ w : U64, f.val ≤ w.val → w.val < f.val + 2696 → ¬ VObj Z.th Z.P Z.L4 Z.L3 Z.L2 Z.L1 (L.ksb s) w)
-    (hksR : f.val + 2696 ≤ (L.ksb s).val ∨ (L.ksb s).val + 304384 ≤ f.val) :
+    (hDP : ∀ a : Nat, f.val ≤ a → a < f.val + 2696 → _root_.Fl4Proofs.P3.UFr σ a) :
     tcb.copy_words st s src f 337#u64 ⦃ s' =>
-      ∃ ms, JAtZ (L := L) arI AR Z H Cs Ac Lst D s' a { σ with machineState := ms } ⦄ := by
+      ∃ um : Fl4Spec.Word → Fl4Spec.Word8,
+        (∀ a : Fl4Spec.Word, 2696 ≤ (a - f.bv).toNat → um a = σ.machineState.underlyingMemory a) ∧
+        JAtZ (L := L) arI AR Z H Cs Ac Lst D s' a (Endp.setUm σ um) ⦄ := by
   refine WP.spec_mono (copy_words_inv (fun s' => L.ksb s' = L.ksb s ∧
-    ∃ ms, JAtZ (L := L) arI AR Z H Cs Ac Lst D s' a { σ with machineState := ms }) s src f 337#u64
-    ⟨rfl, σ.machineState, J⟩ ?_) (fun _ h => h.2)
-  rintro s2 i ⟨hk2, ms, J2⟩ hi v
+    ∃ um : Fl4Spec.Word → Fl4Spec.Word8,
+      (∀ a : Fl4Spec.Word, 2696 ≤ (a - f.bv).toNat → um a = σ.machineState.underlyingMemory a) ∧
+      JAtZ (L := L) arI AR Z H Cs Ac Lst D s' a (Endp.setUm σ um)) s src f 337#u64
+    ⟨rfl, σ.machineState.underlyingMemory, fun _ _ => rfl, J⟩ ?_) (fun _ h => h.2)
+  rintro s2 i ⟨hk2, um, hag, J2⟩ hi v
   have hi' : i.val < 337 := hi
   set w := core.num.U64.wrapping_add f (core.num.U64.wrapping_mul i 8#u64) with hw
   have hwv : w.val = f.val + 8 * i.val := by
@@ -302,36 +329,18 @@ theorem JAtZ.copyFrameJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ)
     omega
   have hAp : ∀ q k, H q = some k → (∀ z, k ≠ .other z) → w.val + 8 ≤ q.val ∨ q.val + 2 ^ k.bits ≤ w.val :=
     fun q k hq hk => by rcases hApR q k hq hk with e | e <;> omega
-  have hks : w.val + 8 ≤ (L.ksb s2).val ∨ (L.ksb s2).val + 304384 ≤ w.val := by rw [hk2]; omega
-  obtain ⟨Q, R0, hc, -⟩ := J2.xtop.fin.1.1.1.lists
-  have hcZ : Z.c.val < 64 := by rw [← hc.cur]; exact J2.kern.csLt _ J2.kern.cpuCs
-  have hnbc : L.nodeBase s2 Z.c = (L.ksb s2).val + 13568 + Z.c.val * 4288 := rfl
-  obtain ⟨Tr, Cq, hJ⟩ := J2.jpl
-  have hu : UserW (L := L) Z s2 { σ with machineState := ms } w := by
-    refine ⟨show w.val % 8 = 0 by omega, ⟨by omega, fun t ht => ?_, fun sc hsc x n hk => ?_⟩,
-      fun hv => hVR w (by omega) (by omega) (by rw [← hk2]; exact hv), fun e he => ?_, fun r hr => ?_,
-      fun n hn => ?_⟩
-    · rcases hAp t _ (J2.zH.1 t ht) (fun _ e => by cases e) with e | e
-      · exact Or.inl e
-      · simp only [P1.HKind.bits] at e; exact Or.inr (by omega)
-    · rcases hAp sc _ (hJ.sc sc x n (J2.c0 sc hsc) hk).2 (fun _ e => by cases e) with e | e
-      · exact Or.inl e
-      · simp only [P1.HKind.bits] at e; exact Or.inr e
-    · rcases hAp e _ (J2.zH.2.1 e he) (fun _ e => by cases e) with e | e
-      · exact Or.inl e
-      · simp only [P1.HKind.bits] at e; exact Or.inr (by omega)
-    · rcases hAp r _ (J2.zH.2.2.1 r hr) (fun _ e => by cases e) with e | e
-      · exact Or.inl e
-      · simp only [P1.HKind.bits] at e; exact Or.inr (by omega)
-    · rcases hAp n _ (J2.zH.2.2.2 n hn) (fun _ e => by cases e) with e | e
-      · exact Or.inl e
-      · simp only [P1.HKind.bits] at e; exact Or.inr (by omega)
-  have hObj : ∃ o ko, ({ σ with machineState := ms } : Fl4Spec.State Unit).kheap o = some ko ∧ o.toNat ≤ w.val ∧
-      w.val < o.toNat + 2 ^ Fl4Spec.objBits ko := by
-    obtain ⟨o, ko, hko, g1, g2⟩ := hObjR
-    exact ⟨o, ko, hko, by omega, by omega⟩
-  obtain ⟨ms', J3⟩ := J2.frameWordJ (hBPl Z s2 a _ rfl J2.xtop) hu hAp hObj hks v
-  exact ⟨by rw [L.ksb_wr, hk2], ms', J3⟩
+  obtain ⟨o, vms, hko, g1, g2⟩ := ufr_word (σ := σ) (w := w) (by omega) (hDP w.val (by omega) (by omega))
+  have hwB : (w, w.bv) ∈ Z.B := J2.fcov o vms hko w (by omega) (by omega) (by omega)
+  have hObj : ∃ o ko, (Endp.setUm σ um).kheap o = some ko ∧ o.toNat ≤ (w, w.bv).1.val ∧
+      (w, w.bv).1.val < o.toNat + 2 ^ Fl4Spec.objBits ko :=
+    ⟨o, _, hko, by show o.toNat ≤ w.val; omega,
+      by show w.val < o.toNat + 2 ^ Fl4Spec.pageBitsForSize vms; omega⟩
+  have J3 := J2.userWrJ J2.xferH.2.2 hwB hAp hObj v
+  refine ⟨by rw [L.ksb_wr, hk2], Endp.storeMem um w.bv v.bv, fun b hb => ?_, J3⟩
+  have hwv' : w.val = (f.bv.toNat + 8 * i.val) % 2 ^ 64 := by
+    rw [hwv]; exact (Nat.mod_eq_of_lt (by show f.val + 8 * i.val < 2 ^ 64; omega)).symm
+  rw [fpu_store_other um f.bv w (8 * i.val) (by omega) hwv' v.bv b hb]
+  exact hag b hb
 
 end
 

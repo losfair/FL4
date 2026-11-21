@@ -28,6 +28,7 @@ import Fl4Proofs.P3.IpcSendDon
 import Fl4Proofs.P1.QueueReplyKw
 import Fl4Proofs.P3.BufFr
 import Fl4Proofs.P3.BufFrA
+import Fl4Proofs.P3.BufJ
 open Aeneas Aeneas.Std Result
 
 /-! ## P1: the donation's footprint from a thread in no queue -/
@@ -632,6 +633,7 @@ theorem JAtZ.wake_postG (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {n t :
     · obtain ⟨h1, h2, h3⟩ := hRR d hd x hx hxt
       exact ⟨h1, by rw [e2]; exact h2, by rw [e1]; exact h3⟩
   have hDbg := J.kw_dbg hfoot
+  have hKd := J.kw_dbgKeep hfoot
   have hS3 : SchedRel st Z.N Z.T Z.C Z.c s' σ' := hIR.2.2.1
   have hidl0 : σ'.idleThread = σ.idleThread := G.idle.trans F.sk.idle
   have hisc0 : σ'.idleSc = σ.idleSc := G.isc.trans F.sk.isc
@@ -665,8 +667,8 @@ theorem JAtZ.wake_postG (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {n t :
       hnsc3, I3, hcur3, hown3, hoff3, hAI3, B3, hiso3, hrun3, hblk⟩
   have hC0 := JCs.same J hF.1 (F.ksz.trans hkz1)
   have hC : JCs (L := L) (Z.mv Z.G V') s' σ' := ⟨hC0.del, hC0.ut, hC0.finM, hC0.sfree⟩
-  exact ⟨Z.vs, J.cs_frameI hks hX3 hw (fun b hb => Ipc.CnW.oobj J.xtop.fin.1.1.1 hb) (G.arch.trans F.sk.arch) (fun q ao h => hao1 q ao (F.othF h (fun _ e => by cases e) (fun _ _ e => by cases e) (fun _ e => by cases e)
-        (fun _ e => by cases e) (fun _ e => by cases e))) hsz hF.1 (F.kback.trans' hkb1) (F.ipcFr.trans hfk1) hC R⟩
+  exact ⟨Z.vs, J.cs_frameI hks hX3 hw (fun b hb => Ipc.CnW.oobj J.xtop.fin.1.1.1 hb) (fun b hb => J.cnW_nv hb) (G.arch.trans F.sk.arch) (fun q ao h => hao1 q ao (F.othF h (fun _ e => by cases e) (fun _ _ e => by cases e) (fun _ e => by cases e)
+        (fun _ e => by cases e) (fun _ e => by cases e))) hsz hF.1 (F.kback.trans' hkb1) (F.ipcFr.trans hfk1) hC R hKd (G.orig.trans F.sk.orig) (J.idleW_keep hS3 hidl0 hisc0).1 J.zD⟩
 
 
 /-- An SC bound to a thread is not dead (a dead SC's `TCB` word is 0). -/
@@ -697,7 +699,7 @@ receiver `Running`, `JAtZ` by `JAtZ.wake_postG` at `dnSt` (`dn_swap`), the
 tail `JAtZ.sendTailJ`; the spec's outcome `sendIpc_recv_eqDon`. The
 caller is current, resumed (`hres`), not idle (`hti`) and in no ready queue
 (`hnq`, JEntryAt's `ctnq`). -/
-theorem JAtZ.sendDonJ (hZ : XferHZ L AR Z) (hAT : P0.ArchTotal arI)
+theorem JAtZ.sendDonJ (hAT : P0.ArchTotal arI)
     (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ)
     {t : U64} (ht : t ∈ Z.T) {xt : Fl4Spec.Tcb} (hkt : σ.kheap t.bv = some (.tcb xt))
     (hrs : xt.tcbState = .restart) (hft : xt.tcbFault = none) (hct : σ.curThread = t.bv)
@@ -802,13 +804,13 @@ theorem JAtZ.sendDonJ (hZ : XferHZ L AR Z) (hAT : P0.ArchTotal arI)
   have IK1 : IK d'.bv σ σ1 := IK.updOther (o' := .endpoint (epDeq (.recvEP (d'.bv :: q)) d'.bv)) hk (fun o0 h => by
     rcases h with rfl | rfl <;> exact ⟨fun _ h => (by cases h), fun _ _ h => (by cases h), fun _ h => (by cases h)⟩)
   have SK1 : SKeep σ σ1 := SKeep.updK (p := e.bv) (o := .endpoint (epDeq (.recvEP (d'.bv :: q)) d'.bv)) (fun y h => by cases h) (fun _ _ h => by cases h)
-  have hOK1 : Endp.IpcBufCapOK σ1 := ipcBufCapOK_epStep (hZ Z s a σ rfl J.xtop).1 (EpStep.ep hk)
+  have hOK1 : Endp.IpcBufCapOK σ1 := ipcBufCapOK_epStep (J.xferH).1 (EpStep.ep hk)
   -- the transfer
   have hdth : Z.th d' = some .tcb := by
     obtain ⟨⟨⟨G0, hB0'⟩, -⟩, -⟩ := hS0.1.1
     exact Ipc.RelTopB.tcbT hB0' hkd
-  have hUd := J.rbufU hZ hdT hdth hkd
-  refine WP.spec_bind (J.xferStepGJ hZ hk (epDeq (.recvEP (d'.bv :: q)) d'.bv) hR1 hS1 hW1 F1 ht hdT htd hkt hkd hft
+  have hUd := J.rbufU hdT hdth hkd
+  refine WP.spec_bind (J.xferStepGJ hk (epDeq (.recvEP (d'.bv :: q)) d'.bv) hR1 hS1 hW1 F1 ht hdT htd hkt hkd hft
     badge g h1 hB1 hX1 hS1' hSg1) ?_
   rintro s2 ⟨x2, um2, yb, σy, Gy, Jy, e2, hx2, hR2, hS2', hA2, hW2, F2, h2, hB2, hX2, hS2'', hSg2, f2, hksy, hKy, hCnKy, hyk⟩
   have hncn : ∀ {q' : Fl4Spec.ObjRef} {o' : Fl4Spec.KernelObject}, σ.kheap q' = some o' →
@@ -1224,7 +1226,7 @@ theorem JAtZ.sendDonJ (hZ : XferHZ L AR Z) (hAT : P0.ArchTotal arI)
     exact J.scOwned_not_dead ht hky hyt (J.jcov.dead sc hq')
   have hkq : ∀ q ∈ D, σ'.kheap q.bv = σa.kheap q.bv := fun q hq =>
     dn_ko (hcD q hq) (htD q hq) (hpD q hq)
-  obtain ⟨su, umu, Ju, hWu, hFu, -, -⟩ := JAtZ.bufRebaseX (Z := Z.mv Gy Z.vs) (fun Z' s' a' σ' h => hZ Z' s' a' σ' h) J hdT hdth hkd
+  obtain ⟨su, umu, Ju, hWu, hFu, -, -⟩ := JAtZ.bufRebaseX (Z := Z.mv Gy Z.vs) J hdT hdth hkd
     hW5' hfoot
   have hIu := Ju.xtop.irelK Ju.ks Ju.buf
   have hRR : ∀ q' ∈ Z.R, ∀ xr, (Endp.setUm σy umu).kheap q'.bv = some (.reply xr) → xr.replyTcb = some d'.bv →

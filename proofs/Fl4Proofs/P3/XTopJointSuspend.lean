@@ -107,7 +107,7 @@ theorem JAtZ.suspendScJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {t : U
       ok (s6, a)) ⦃ r => r.2 = a ∧ ∀ Ac',
       P1.BlkOK st (P1.Heap.tcbs H) Cs (P1.Heap.omega H) H (P1.Heap.frame H) (P1.Heap.replies H)
         (P1.Heap.scs H) (P1.Heap.ntfns H) (P1.Heap.scBits H) Ac' r.1 →
-      L.mem r.1 (L.nodeAt s 0#u64 layout.node.DEBUG_TCBS) = L.mem s (L.nodeAt s 0#u64 layout.node.DEBUG_TCBS) →
+      P1.DbgKeep st (P1.Heap.tcbs H) Cs s r.1 →
       ∃ σ', suspendSc t.bv σ = ({((), σ')}, False) ∧
         ∃ (Lst' : U64 → List U64), JAtZ (L := L) arI AR Z H Cs Ac' Lst' D r.1 a σ' ⦄ := by
   have hP0 := J.ip
@@ -240,7 +240,9 @@ theorem JAtZ.suspendScJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {t : U
     (set_thread_state_sfoot hS5 ht _)) (set_thread_state_yw hS5 ht _)) ?_
   rintro s6 ⟨⟨⟨hR6, hS6r⟩, hw6⟩, hy6⟩
   rw [WP.spec_ok]
-  refine ⟨rfl, fun Ac' hblk hDbg => ?_⟩
+  refine ⟨rfl, fun Ac' hblk hKd0 => ?_⟩
+  have hDbg : L.mem s6 (L.nodeAt s 0#u64 layout.node.DEBUG_TCBS) = L.mem s (L.nodeAt s 0#u64 layout.node.DEBUG_TCBS) :=
+    hKd0.2 _ (Or.inr ⟨0#u64, J.kern.cs0, rfl⟩)
   have hX6 := IpcRel.ofSRN hR6 hS6r
   -- the spec's step
   have hsp : suspendSc t.bv σ = ({((), stsAct (updK σ5 t.bv
@@ -324,7 +326,8 @@ theorem JAtZ.suspendScJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {t : U
   refine ⟨_, hsp, Lst', J.sc_frame hW hK hX' hCR' hRF' hY' hM' (J.sc_buf hW hK) hRP' (J.sc_apart hW hK)
     (J.sc_jpl hW hK (J.idleW_keep hX'.fin.1.1.1 hF.fk.2.1 hF.fk.2.2).2) (J.sc_jcov hW hdead (fun q hq hn => absurd hq hn) (J.idleW_keep hX'.fin.1.1.1 hF.fk.2.1 hF.fk.2.2)) (J.sc_kern hW hK hF.fk hX' hDbg fun _ h => h)
     (J.sc_utc hW hK hDbg) hNSC hInv (J.cur.imp (fun e => hF.act.elim (fun e' => e'.trans e) id) hF.curInv)
-    (hF.own J.own) (hF.off J.off) hAI (hF.bsa J.bsa) (hF.curRun J.curRun) hblk⟩
+    (hF.own J.own) (hF.off J.off) hAI (hF.bsa J.bsa) (hF.curRun J.curRun) hblk
+    hKd0 (J.idleW_keep hX'.fin.1.1.1 hF.fk.2.1 hF.fk.2.2).1 J.zD⟩
 
 
 set_option maxHeartbeats 8000000 in
@@ -409,8 +412,7 @@ theorem JAtZ.restartPcJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {t : U
         Fl4Spec.NonDet.when (x.tcbState = .running) (Fl4Spec.updateRestartPc (Z := Unit) t.bv) σ =
           ({((), σ2)}, False) ∧ σ2.kheap t.bv = some (.tcb x2) ∧ x2.tcbState = x.tcbState ∧
           σ2.curThread = σ.curThread ∧ σ2.schedulerAction = σ.schedulerAction ∧ σ2.idleThread = σ.idleThread ∧
-          L.ksb s2 = L.ksb s ∧
-          L.mem s2 (L.nodeAt s 0#u64 layout.node.DEBUG_TCBS) = L.mem s (L.nodeAt s 0#u64 layout.node.DEBUG_TCBS) ∧
+          L.ksb s2 = L.ksb s ∧ P1.DbgKeep st (P1.Heap.tcbs H) Cs s s2 ∧
           ∃ V, JAtZ (L := L) arI AR (Z.mv Z.G V) H Cs Ac Lst D s2 a σ2 ⦄ := by
   have hP0 := J.ip
   have hI := J.xtop.irelK J.ks J.buf
@@ -457,11 +459,11 @@ theorem JAtZ.restartPcJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {t : U
       by rw [hb, hra]; omega⟩)) hA (YK.YKS.updTcb (y := setReg x .faultIP ip.bv) hk rfl).ykeep
       (J.inv.updSame (y := setReg x .faultIP ip.bv) hk rfl rfl (Or.inl rfl)) hblk hfoot
     refine ⟨updK σ t.bv (.tcb (setReg x .faultIP ip.bv)), setReg x .faultIP ip.bv, ?_, by simp [updK], rfl, rfl, rfl, rfl, L.ksb_wr _ _ _,
-      J.kw_dbg (hfoot.mono fun b hb => kw_empty_mono hb _), V, J2⟩
+      J.kw_dbgKeep (hfoot.mono fun b hb => kw_empty_mono hb _), V, J2⟩
     unfold Fl4Spec.NonDet.when
     rw [if_pos hr, updateRestartPc_eq hk, hipv]
   · rw [if_neg (fun h => hr (hrun.1 h)), WP.spec_ok]
-    refine ⟨σ, x, ?_, hk, rfl, rfl, rfl, rfl, rfl, rfl, Z.vs, J⟩
+    refine ⟨σ, x, ?_, hk, rfl, rfl, rfl, rfl, rfl, P1.DbgKeep.refl s, Z.vs, J⟩
     unfold Fl4Spec.NonDet.when
     rw [if_neg hr]; rfl
 
@@ -511,12 +513,12 @@ theorem JAtZ.suspendJD
     obtain ⟨h1, h2⟩ := hR.reply t htH hs
     exact ⟨h1, h2, hR.next _ h1, hR.prev _ h1⟩
   have hkwc : ipc.cancel_ipc st arI s a t ⦃ r => L.ksb r.1 = L.ksb s ∧
-      L.mem r.1 (L.nodeAt s 0#u64 layout.node.DEBUG_TCBS) = L.mem s (L.nodeAt s 0#u64 layout.node.DEBUG_TCBS) ⦄ := by
+      P1.DbgKeep st (P1.Heap.tcbs H) Cs s r.1 ⦄ := by
     refine WP.spec_mono (P1.ipc.cancel_ipc.kw s a t h0 htH hO hSg.sub hreply
       (fun h1 h2 => (hR.recv t htH h1 h2).1)) fun r hr => ?_
     obtain ⟨s1, a1⟩ := r
     try simp only [WP.uncurry'_pair] at hr
-    exact ⟨hr.1, J.kw_dbg hr⟩
+    exact ⟨hr.1, J.kw_dbgKeep hr⟩
   -- the cancel step
   have hcan : ipc.cancel_ipc st arI s a t ⦃ r => r.2 = a ∧ ∃ σ1,
       Fl4Spec.cancelIpc (Z := Unit) t.bv σ = ({((), σ1)}, False) ∧ ∃ x1, σ1.kheap t.bv = some (.tcb x1) ∧
@@ -558,7 +560,7 @@ theorem JAtZ.suspendJD
   -- the restart PC and the scheduler tail
   have hmain : sched.suspend st arI s a t ⦃ r => ∀ Ac', P1.BlkOK st (P1.Heap.tcbs H) Cs (P1.Heap.omega H) H
       (P1.Heap.frame H) (P1.Heap.replies H) (P1.Heap.scs H) (P1.Heap.ntfns H) (P1.Heap.scBits H) Ac' r.1 →
-      L.mem r.1 (L.nodeAt s 0#u64 layout.node.DEBUG_TCBS) = L.mem s (L.nodeAt s 0#u64 layout.node.DEBUG_TCBS) →
+      P1.DbgKeep st (P1.Heap.tcbs H) Cs s r.1 →
       r.2 = a ∧ ∃ σ', Fl4Spec.suspend (Z := Unit) t.bv σ = ({((), σ')}, False) ∧
         ∃ (V : XVs) (Ac' : Set U64) (Lst' : U64 → List U64),
           JAtZ (L := L) arI AR (Z.mv Z.G V) H Cs Ac' Lst' D r.1 r.2 σ' ⦄ := by
@@ -573,17 +575,15 @@ theorem JAtZ.suspendJD
     refine WP.spec_mono (J2.suspendScJ ht hk2 (by rw [hs2]; exact hf1) (by rw [hact2]; exact hsa1)
       (by rw [hidle2]; exact hid1)) ?_
     rintro r ⟨hr2, hr⟩ Ac' hblk hd6
-    have hn1 := P1.nodeAt_of_ksb hks1
-    have hn2 := P1.nodeAt_of_ksb hks2
-    obtain ⟨σ6, he6, Lst6, J6⟩ := hr Ac' hblk (by
-      rw [hn2, hn1, hd6]; rw [hn1] at hd2; rw [hd2, hd1])
+    have hd12 : P1.DbgKeep st (P1.Heap.tcbs H) Cs s s2 := hd1.trans hd2
+    obtain ⟨σ6, he6, Lst6, J6⟩ := hr Ac' hblk (dbgKeep_cancel hd12 hd6)
     refine ⟨hr2, σ6, ?_, V2, Ac', Lst6, by rw [hr2]; exact J6⟩
     rw [Sched.suspend_split, nd_bind_one hc1, nd_bind_one (getThreadState_eq hk1), nd_bind_one hw2]
     exact he6
   refine WP.spec_mono (WP.spec_and (P1.sched.suspend.blk s a t J.blk htH hna) hmain) ?_
   rintro ⟨s6, a6⟩ ⟨hP1, hM⟩
   try simp only [WP.uncurry'_pair] at hP1
-  exact hM Ac hP1.1 (J.kw_dbg hP1.2)
+  exact hM Ac hP1.1 (J.kw_dbgKeep hP1.2)
 
 /-- **`suspend` at `J`** (`JAtZ.suspendJD`, the dead set existential). -/
 theorem JAtZ.suspendJ

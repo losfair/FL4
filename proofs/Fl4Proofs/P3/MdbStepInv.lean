@@ -228,7 +228,7 @@ theorem Vs.FrameInv.insertC {src dest : U64} {c c1 : capability.Cap} (h : InsCtx
     (hF : Vs.FrameInv mem G) : Vs.FrameInv mem' (insG G src dest b) := by
   have ha := CapAlike.of_shape h.hsh hok hutc
   refine hF.insert_copy h.hsrc h.hdest b h.cd ⟨by rw [h.cs]; exact h.hsh1, by rw [h.cs, hc1]; exact okey_fullF _ _,
-    by rw [h.cs]; exact h.hbd1⟩ (fun z hz hzs => by rw [h.hcap z (h.sl hz), if_neg (h.dne hz), if_neg hzs])
+    by rw [h.cs]; exact h.hbd1, by rw [h.cs, hc1]; exact vtF_fullF _ _⟩ (fun z hz hzs => by rw [h.hcap z (h.sl hz), if_neg (h.dne hz), if_neg hzs])
     (fun q hq => by rw [← ha.refs]; exact hq) ha.frame ha.large
 
 theorem Vs.FrameInv.nonphys (hF : Vs.FrameInv mem G) {src dest : U64} {c : capability.Cap}

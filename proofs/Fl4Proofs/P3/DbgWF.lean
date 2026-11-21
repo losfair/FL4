@@ -19,23 +19,13 @@ lists of TCBs** (`DbgWF` [J], FL4-only: seL4 C's `tcbDebugAppend` /
 * `DbgApart`: the TCBs' debug and affinity words and the cores' head words
   pairwise apart (`dbgApart_of`, from `TcbPlaced` and `NodePlaced`).
 -/
-import Fl4Proofs.P3.XTopJointFinThread
+import Fl4Proofs.P3.LiveDefs
 open Aeneas Aeneas.Std Result
 
 namespace Fl4Proofs.P3
 open fl4_core Fl4Proofs.P1
 
 /-! ## Successor and predecessor in a list -/
-
-/-- The successor of `x` in `l` (`0` past the end or if absent). -/
-def nextIn : List U64 → U64 → U64
-  | [], _ => 0#u64
-  | a :: r, x => if a = x then r.headD 0#u64 else nextIn r x
-
-/-- The predecessor of `x` in `l`, `q` before the first. -/
-def prevA : U64 → List U64 → U64 → U64
-  | _, [], _ => 0#u64
-  | q, a :: r, x => if a = x then q else prevA a r x
 
 theorem nextIn_mem (l : List U64) (x : U64) : nextIn l x = 0#u64 ∨ nextIn l x ∈ l := by
   induction l with
@@ -214,19 +204,6 @@ theorem prevA_head {l : List U64} {t q : U64} (h : l.headD 0#u64 = t) : prevA q 
   | cons a r => simp only [List.headD_cons] at h; subst h; simp [prevA]
 
 /-! ## The invariant -/
-
-/-- **The debug lists' shape** (module docstring), with the lists given. -/
-structure DbgWFL (T Cs : Set U64) (m : U64 → U64) (hd : U64 → U64) (lst : U64 → List U64) : Prop where
-  head : ∀ c ∈ Cs, m (hd c) = (lst c).headD 0#u64
-  next : ∀ c ∈ Cs, ∀ x ∈ lst c, m (dnA x) = nextIn (lst c) x
-  prev : ∀ c ∈ Cs, ∀ x ∈ lst c, m (dpA x) = prevA 0#u64 (lst c) x
-  nodup : ∀ c ∈ Cs, (lst c).Nodup
-  zero : ∀ c ∈ Cs, 0#u64 ∉ lst c
-  mem : ∀ c ∈ Cs, ∀ x ∈ lst c, x ∈ T ∧ m (affA x) = c
-  off : ∀ y ∈ T, (∀ c ∈ Cs, y ∉ lst c) → m (dnA y) = 0#u64 ∧ m (dpA y) = 0#u64
-
-/-- **The debug lists are well formed** [J] (module docstring). -/
-def DbgWF (T Cs : Set U64) (m : U64 → U64) (hd : U64 → U64) : Prop := ∃ lst, DbgWFL T Cs m hd lst
 
 /-- The lists of different cores are disjoint. -/
 theorem DbgWFL.disj {T Cs : Set U64} {m hd : U64 → U64} {lst : U64 → List U64} (h : DbgWFL T Cs m hd lst)
@@ -488,26 +465,8 @@ theorem dbgRm_wf {T Cs : Set U64} {hd m : U64 → U64} {lst : U64 → List U64} 
       rw [if_neg c1, if_neg c2]
       exact hz
 
-/-- `DbgWFL` reads the TCBs' debug and affinity words and the cores' head
-words only. -/
-theorem DbgWFL.congr {T Cs : Set U64} {m m' hd hd' : U64 → U64} {lst : U64 → List U64} (h : DbgWFL T Cs m hd lst)
-    (hy : ∀ y ∈ T, m' (dnA y) = m (dnA y) ∧ m' (dpA y) = m (dpA y) ∧ m' (affA y) = m (affA y))
-    (hh : ∀ c ∈ Cs, m' (hd' c) = m (hd c)) : DbgWFL T Cs m' hd' lst :=
-  ⟨fun c hc => (hh c hc).trans (h.head c hc),
-    fun c hc x hx => ((hy x (h.mem c hc x hx).1).1).trans (h.next c hc x hx),
-    fun c hc x hx => ((hy x (h.mem c hc x hx).1).2.1).trans (h.prev c hc x hx),
-    h.nodup, h.zero,
-    fun c hc x hx => ⟨(h.mem c hc x hx).1, ((hy x (h.mem c hc x hx).1).2.2).trans (h.mem c hc x hx).2⟩,
-    fun y hyT hn => ⟨((hy y hyT).1).trans (h.off y hyT hn).1, ((hy y hyT).2.1).trans (h.off y hyT hn).2⟩⟩
-
 section Store
 variable {S : Type} {st : machine.Store S} [L : P1.LawfulStore st]
-
-/-- The cores' debug-list head words. -/
-abbrev dbgHd (s : S) : U64 → U64 := fun c => L.nodeAt s c layout.node.DEBUG_TCBS
-
-/-- **The debug lists of a state are well formed** [J] (module docstring). -/
-abbrev DbgWFs (T Cs : Set U64) (s : S) : Prop := DbgWF T Cs (L.mem s) (dbgHd (L := L) s)
 
 /-- The debug words apart, from the TCBs' and the nodes' placement. -/
 theorem dbgApart_of {T Cs : Set U64} {s : S} (hT : TcbPlaced T) (hN : ∀ c ∈ Cs, NodePlaced st T s c) :
@@ -530,9 +489,6 @@ theorem dbgApart_of {T Cs : Set U64} {s : S} (hT : TcbPlaced T) (hN : ∀ c ∈ 
     fun y hy y' hy' => hne2 (K1 := 3520#u64) (K2 := 3576#u64) hy hy' (by simp) (by simp) (by simp),
     fun y hy y' hy' => hne2 (K1 := 3520#u64) (K2 := 3584#u64) hy hy' (by simp) (by simp) (by simp),
     fun y hy c hc e => hnd (K := 3520#u64) hc hy (by simp) e.symm⟩
-
-theorem dbgHd_of_ksb {s s' : S} (h : L.ksb s' = L.ksb s) : dbgHd (L := L) s' = dbgHd (L := L) s := by
-  funext c; unfold dbgHd LawfulStore.nodeAt; rw [h]
 
 /-- **FL4's `debug_remove t`, word by word** (`dbgRmM`, every aligned word;
 the kernel-state base kept). -/
@@ -621,5 +577,110 @@ theorem debug_remove_wf {T Cs : Set U64} (s : S) (t : U64) (hT : TcbPlaced T)
     (fun c hc => by rw [dbgHd_of_ksb hk]; exact hm _ (nodeAt_aligned (hN c hc) (by simp [debug_val]) (by simp [debug_val])))
 
 end Store
+
+section Walk
+open Classical Fl4Proofs.P3.Vs Fl4Proofs.P3.Notif Fl4Proofs.P3.Endp Fl4Proofs.P3.Ipc Fl4Proofs.P3.Sched
+variable {S : Type} {st : machine.Store S} [L : P1.LawfulStore st]
+
+/-! ## Debug-list walks (moved from XTopJointWJLFinT, KENTRY-PLAN g2i) -/
+
+/-- `dbgNth` one step further, from the end. -/
+theorem dbgNth_succ' (m : U64 → U64) (n : Nat) (h : U64) :
+    dbgNth m (n + 1) h = (if dbgNth m n h = 0#u64 then 0#u64 else m (P1.dnA (dbgNth m n h))) := by
+  induction n generalizing h with
+  | zero => rfl
+  | succ n ih =>
+    by_cases h0 : h = 0#u64
+    · subst h0; simp [dbgNth]
+    · rw [show dbgNth m (n + 1 + 1) h = dbgNth m (n + 1) (m (P1.dnA h)) by simp [dbgNth, h0], ih,
+        show dbgNth m (n + 1) h = dbgNth m n (m (P1.dnA h)) by simp [dbgNth, h0]]
+
+/-- **A debug-list walk stays on the list** (`DbgWFL`). -/
+theorem dbgNth_mem_wf {T Cs : Set U64} {m hd : U64 → U64} {lst : U64 → List U64}
+    (hW : DbgWFL T Cs m hd lst) {c : U64} (hc : c ∈ Cs) (n : Nat) :
+    dbgNth m n (m (hd c)) = 0#u64 ∨ dbgNth m n (m (hd c)) ∈ lst c := by
+  induction n with
+  | zero =>
+    show m (hd c) = 0#u64 ∨ m (hd c) ∈ lst c
+    rw [hW.head c hc]
+    cases lst c with
+    | nil => exact Or.inl rfl
+    | cons a r => exact Or.inr (by simp)
+  | succ n ih =>
+    rw [dbgNth_succ']
+    split
+    · exact Or.inl rfl
+    · rename_i h0
+      rw [hW.next c hc _ (ih.resolve_left h0)]
+      exact nextIn_mem _ _
+
+theorem nextIn_getElem {l : List U64} (hnd : l.Nodup) {i : Nat} (hi : i + 1 < l.length) :
+    nextIn l (l[i]'(by omega)) = l[i + 1] := by
+  induction l generalizing i with
+  | nil => simp at hi
+  | cons a r ih =>
+    obtain ⟨ha, hr⟩ := List.nodup_cons.1 hnd
+    cases i with
+    | zero =>
+      cases r with
+      | nil => simp at hi
+      | cons b r' => simp [nextIn]
+    | succ j =>
+      have hj : j + 1 < r.length := by simp at hi; omega
+      have hne : a ≠ r[j] := fun e => ha (by rw [e]; exact List.getElem_mem _)
+      simp only [List.getElem_cons_succ, nextIn, if_neg hne]
+      exact ih hr hj
+
+theorem headD_getElem0 (l : List U64) (hi : 0 < l.length) : l.headD 0#u64 = l[0] := by
+  cases l with
+  | nil => simp at hi
+  | cons a r => rfl
+
+/-- **A debug-list walk visits the list in order** (`DbgWFL`). -/
+theorem dbgNth_getElem_wf {T Cs : Set U64} {m hd : U64 → U64} {lst : U64 → List U64}
+    (hW : DbgWFL T Cs m hd lst) {c : U64} (hc : c ∈ Cs) :
+    ∀ i (hi : i < (lst c).length), dbgNth m i (m (hd c)) = (lst c)[i] := by
+  intro i
+  induction i with
+  | zero =>
+    intro hi
+    show m (hd c) = _
+    rw [hW.head c hc]
+    exact headD_getElem0 _ hi
+  | succ i ih =>
+    intro hi
+    have hi' : i < (lst c).length := by omega
+    rw [dbgNth_succ', ih hi']
+    have hz : (lst c)[i] ≠ 0#u64 := fun e => hW.zero c hc (by rw [← e]; exact List.getElem_mem hi')
+    rw [if_neg hz, hW.next c hc _ (List.getElem_mem hi')]
+    exact nextIn_getElem (hW.nodup c hc) hi
+
+/-- **`LiveJ.of_sameZ` with the debug list shrunk** (module docstring): every
+debug-list member after one before. -/
+theorem LiveJ.of_sameDbg {th : TypedHeap} {H : P1.Heap} {G : MdbGhost} {s s' : S}
+    {σ σ' : Fl4Spec.State Unit} (hL : LiveJ (L := L) th H G s σ) (hSS : SlotsSame th (L.mem s) (L.mem s'))
+    (hmem : ∀ y ∈ G.chains.flatten, IsSlot th y) (horig : σ'.isOriginalCap = σ.isOriginalCap)
+    (hid : σ'.idleThread = σ.idleThread) (hks : L.ksb s' = L.ksb s)
+    (hdbg : ∀ n, dbgNth (L.mem s') n (dbgHead (L := L) s') ≠ 0#u64 → ∃ k,
+      dbgNth (L.mem s') n (dbgHead (L := L) s') = dbgNth (L.mem s) k (dbgHead (L := L) s) ∧
+      dbgNth (L.mem s) k (dbgHead (L := L) s) ≠ 0#u64)
+    (hdead : ∀ p ∈ ZTcb (L := L) th s, DeadP (L := L) H s' p) :
+    LiveJ (L := L) th H G s' σ' := by
+  have hU : ∀ y, IsSlot th y → InUse (L.mem s') σ' y → InUse (L.mem s) σ y := fun y hy hu => by
+    unfold InUse at hu ⊢
+    rw [hSS.capV hy, horig] at hu
+    exact hu
+  refine ⟨fun q i hqi hu => ?_, fun n hn hni => ?_, fun y hy p zt n hz i hpi hni hu => ?_,
+    fun y hy p zt n hz hzt => ?_⟩
+  · rcases hL.slots q i hqi (hU _ ⟨q, i, hqi, rfl⟩ hu) with ⟨y, hy, hr⟩ | hb
+    · exact Or.inl ⟨y, hy, by rw [hSS.capV (hmem y hy)]; exact hr⟩
+    · exact Or.inr (by rw [hks]; exact hb)
+  · obtain ⟨k, hk, hk0⟩ := hdbg n hn
+    obtain ⟨y, hy, hr⟩ := hL.dbg k hk0 (by rw [← hk, ← hid]; exact hni)
+    exact ⟨y, hy, by rw [hSS.capV (hmem y hy), hk]; exact hr⟩
+  · exact hL.zslots y hy p zt n (by rw [← hSS.capV hy]; exact hz) i hpi hni (hU _ ⟨p, i, hpi, rfl⟩ hu)
+  · exact hdead p ⟨y, hy, zt, n, by rw [← hSS.capV hy]; exact hz, hzt⟩
+
+end Walk
 
 end Fl4Proofs.P3

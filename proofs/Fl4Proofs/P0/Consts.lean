@@ -1689,6 +1689,9 @@ open fl4_core
 @[simp, scalar_tac_simps] theorem vcpu.SVM_I1_WRITABLE.val_eq : vcpu.SVM_I1_WRITABLE.val = 1673494480 := by
   unfold vcpu.SVM_I1_WRITABLE; rfl
 
+@[simp, scalar_tac_simps] theorem obj.EP_RECV.val_eq : obj.EP_RECV.val = 2 := by
+  unfold obj.EP_RECV; rfl
+
 @[simp, scalar_tac_simps] theorem tcb.N_FRAME.val_eq : tcb.N_FRAME.val = 18 := by
   unfold tcb.N_FRAME; rfl
 
@@ -1784,9 +1787,6 @@ open fl4_core
 
 @[simp, scalar_tac_simps] theorem layout.sc.NTFN.val_eq : layout.sc.NTFN.val = 40 := by
   unfold layout.sc.NTFN; rfl
-
-@[simp, scalar_tac_simps] theorem obj.EP_RECV.val_eq : obj.EP_RECV.val = 2 := by
-  unfold obj.EP_RECV; rfl
 
 @[simp, scalar_tac_simps] theorem interrupt.IRQ_RESERVED.val_eq : interrupt.IRQ_RESERVED.val = 4 := by
   unfold interrupt.IRQ_RESERVED; rfl

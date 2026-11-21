@@ -65,13 +65,12 @@ theorem jSwapHypL (Z : XSets) (H : P1.Heap) (Cs : Set U64) (kb : U64) (hth : Z.t
     have h := (home_abs hzok).isSlot
     rwa [home_addr] at h
   have hvT : Vs.VsSlotsT Z.th (L.mem s) (L.mem s') := by
-    refine ⟨fun P L4 L3 L2 L1 h y hy => ?_, fun U h y hy => ?_⟩ <;>
+    refine ⟨fun P L4 L3 L2 L1 h y hy => ?_, fun U h y hy => ?_, fun h y hy => ?_⟩ <;>
     · rw [hcap y hy]
       split_ifs
       · exact h p hpS
       · exact h _ hA.isSlot
       · exact h y hy
-  have J' := J0.cs_frameB hks (J0.xtop.vs_backC hX2 (SlotFrame2.writesIn hF) hnk) hkb2 (J0.bfK hfk2 hvT) hC R (J0.vsc.step hvT)
   have hpp : PPR0 σ' := hp0.of_ppk (PPK.of_cnK hnk)
   -- the swap of the slots
   set x := cslotAddr sl with hx
@@ -142,15 +141,16 @@ theorem jSwapHypL (Z : XSets) (H : P1.Heap) (Cs : Set U64) (kb : U64) (hth : Z.t
       exact dbgNth_keep (fun y hy => hdk.2 _ (Or.inl ⟨y, hy, Or.inl rfl⟩)) (fun y hy => hTz.dn y hy) k _
         (hTz.dh _ hc0)
   have hL' : LiveJ (L := L) Z.th H (renG G e) s' σ' := by
-    refine ⟨fun q i hqi hu => ?_, fun k hk => ?_, fun y hy p' zt' n' hz' i hpi hni hu => ?_,
+    refine ⟨fun q i hqi hu => ?_, fun k hk hki => ?_, fun y hy p' zt' n' hz' i hpi hni hu => ?_,
       fun y hy p' zt' n' hz' hzt => ?_⟩
     · rcases hU _ ⟨q, i, hqi, rfl⟩ hu with hu | hu
-      · obtain ⟨y, hy, hr⟩ := hL.slots q i hqi hu
-        exact ⟨e y, hmemG y hy, by rw [hsw_cap y (hmem y hy)]; exact hr⟩
+      · rcases hL.slots q i hqi hu with ⟨y, hy, hr⟩ | hb
+        · exact Or.inl ⟨e y, hmemG y hy, by rw [hsw_cap y (hmem y hy)]; exact hr⟩
+        · exact Or.inr (by rw [hdk.1]; exact hb)
       · obtain ⟨rfl, -⟩ := hatp q i hqi hu
-        exact ⟨q, hmd q hpS (by rw [hzp]; simp), by rw [hzp]; rfl⟩
-    · rw [hNt] at hk ⊢
-      obtain ⟨y, hy, hr⟩ := hL.dbg k hk
+        exact Or.inl ⟨q, hmd q hpS (by rw [hzp]; simp), by rw [hzp]; rfl⟩
+    · rw [hNt] at hk hki ⊢
+      obtain ⟨y, hy, hr⟩ := hL.dbg k hk (by rw [← hnk.idle]; exact hki)
       exact ⟨e y, hmemG y hy, by rw [hsw_cap y (hmem y hy)]; exact hr⟩
     · have hw : capV (L.mem s) (e y) = .Zombie p' zt' n' := by rw [← hcap' y hy]; exact hz'
       rcases hU _ ⟨p', i, hpi, rfl⟩ hu with hu | hu
@@ -163,10 +163,16 @@ theorem jSwapHypL (Z : XSets) (H : P1.Heap) (Cs : Set U64) (kb : U64) (hth : Z.t
           subst e3; omega
         · exact J.del.zu (e y) x (heS y hy) hxs hey p' zt' n' p' zt n hw hz rfl
     · have hw : capV (L.mem s) (e y) = .Zombie p' zt' n' := by rw [← hcap' y hy]; exact hz'
-      exact J'.jcov.dead p' (Or.inr ⟨e y, heS y hy, zt', n', hw, hzt⟩)
-  refine ⟨⟨V, Ac', Lst', D ∪ E, J', hks.trans hkb, (ak_capSwapForDelete' _ _).noSwitch (mem_of_single hsw) hns,
-    hsg2, hpp⟩, hL', ⟨lst, ?_⟩, hN.swap hP hA hzok hsw hz hpx hcap⟩
-  exact J.dbgWF_keep J' rfl rfl hDW hdk
+      exact R.jcov.dead p' (Or.inr ⟨e y, heS y hy, zt', n', hw, hzt⟩)
+  have hDW' := dbgWFL_step J.xtop hX2 rfl rfl J.tcbs_eq.1 hDW hdk
+  have hN' := hN.swap hP hA hzok hsw hz hpx hcap
+  have hZf : ∀ p ∈ ZTcb (L := L) Z.th s', p ∈ D ∪ E := fun p ⟨y, hy, zt', n', hz', hzt⟩ => by
+    have hw : capV (L.mem s) (e y) = .Zombie p zt' n' := by rw [← hcap' y hy]; exact hz'
+    exact Or.inr ⟨e y, heS y hy, zt', n', hw, hzt⟩
+  have J' := J0.cs_frameB hks (J0.xtop.vs_backC hX2 (SlotFrame2.writesIn hF) hnk) hkb2 (J0.bfK hfk2 hvT) hC R (J0.vsc.step hvT) (J0.ext.step hvT (J0.vkeep_slot ((SlotFrame2.writesIn hF).mono fun b hb => slotWd_range J0.xtop.rel.1 hb)))
+    ⟨hL', ⟨lst, hDW'⟩, hN'⟩ hZf
+  exact ⟨⟨V, Ac', Lst', D ∪ E, J', hks.trans hkb, (ak_capSwapForDelete' _ _).noSwitch (mem_of_single hsw) hns,
+    hsg2, hpp⟩, hL', ⟨lst, hDW'⟩, hN'⟩
 
 end
 

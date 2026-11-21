@@ -27,6 +27,7 @@ blocked but in no queue, so no `JAtZ` state), and the way back to `JAtZ`.
   the receive buffer (no cap transferred: `XferNoCap`).
 -/
 import Fl4Proofs.P3.XTopJointIpcJ
+import Fl4Proofs.P3.BufJ
 open Aeneas Aeneas.Std Result
 
 namespace Fl4Proofs.P3
@@ -704,7 +705,7 @@ theorem do_ipc_transfer_bufE {T E R : Set U64} {B : Set (U64 × Fl4Spec.Word)}
 set_option maxHeartbeats 16000000 in
 /-- The receiver's buffer words of a list written at `J` with the values of
 `t`, each by `JAtZ.userWrJ` (the spec changing only user memory). -/
-theorem JAtZ.bufWrites (hZ : XferHZ L AR Z) {d : U64} (hdT : d ∈ Z.T) (hdth : Z.th d = some .tcb)
+theorem JAtZ.bufWrites {d : U64} (hdT : d ∈ Z.T) (hdth : Z.th d = some .tcb)
     {xd : Fl4Spec.Tcb} (hkd : σ.kheap d.bv = some (.tcb xd)) {rp : Fl4Spec.ObjRef}
     (hrp : Endp.ipcBufOf true xd = some rp) (t : S) :
     ∀ (l : List U64), (∀ b ∈ l, RBufW ⟨rp⟩ b) → ∀ (s0 : S) (um : Fl4Spec.Word → Fl4Spec.Word8),
@@ -716,7 +717,7 @@ theorem JAtZ.bufWrites (hZ : XferHZ L AR Z) {d : U64} (hdT : d ∈ Z.T) (hdth : 
   | cons b l ih =>
     intro hl s0 um J0
     obtain ⟨i, hi, rfl⟩ := hl _ (List.mem_cons_self ..)
-    obtain ⟨hOK, hBC, hBP⟩ := hZ Z s0 a _ rfl J0.xtop
+    obtain ⟨hOK, hBC, hBP⟩ := J0.xferH
     have hkd' : (Endp.setUm σ um).kheap d.bv = some (.tcb xd) := hkd
     have hwB : (Endp.fl4BufA ⟨rp⟩ i, Endp.bufAddr rp i.val) ∈ Z.B := hBC d hdT xd true rp hkd' hrp ⟨rp⟩ rfl i hi
     obtain ⟨hAp, hObj⟩ := J0.bufWord hOK hdth hkd' hrp i.val hi (b := Endp.fl4BufA ⟨rp⟩ i) (by rw [fl4BufA_bv])
@@ -729,7 +730,7 @@ docstring): from `J` at `s` and a state `s'` written from `s` in `CnW` (and
 `KW`) and the buffer words, `JAtZ` at `mixS s s'` (the buffer words of `s'`
 written at `J`, `JAtZ.bufWrites`) with the spec's user memory changed, from
 which `s'` writes only in `CnW` and `KW`. -/
-theorem JAtZ.bufRebase (hZ : XferHZ L AR Z) (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {d : U64}
+theorem JAtZ.bufRebase (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {d : U64}
     (hdT : d ∈ Z.T) (hdth : Z.th d = some .tcb) {xd : Fl4Spec.Tcb} (hkd : σ.kheap d.bv = some (.tcb xd))
     {rp : Fl4Spec.ObjRef} (hrp : Endp.ipcBufOf true xd = some rp) {s' : S}
     (hw : P1.WritesIn st s s' (fun b => CnW (st := st) Z.T Z.N Z.C Z.E Z.R Z.c s σ b ∨ RBufW ⟨rp⟩ b))
@@ -740,11 +741,11 @@ theorem JAtZ.bufRebase (hZ : XferHZ L AR Z) (J : JAtZ (L := L) arI AR Z H Cs Ac 
       P1.WritesIn st su s' (P1.KW st (P1.Heap.tcbs H) Cs (P1.Heap.frame H) (P1.Heap.scs H) (P1.Heap.scBits H)
         (P1.EH H) su) ∧
       L.ksb su = L.ksb s ∧ (∀ b, P1.Aligned b → ¬ RBufW ⟨rp⟩ b → L.mem su b = L.mem s b) := by
-  obtain ⟨-, hBC, -⟩ := hZ Z s a σ rfl J.xtop
+  obtain ⟨-, hBC, -⟩ := J.xferH
   have hal : ∀ b ∈ rbList ⟨rp⟩, P1.Aligned b := fun b hb => by
     obtain ⟨i, hi, rfl⟩ := mem_rbList.1 hb
     exact (J.xtop.fin.1.2.ep.balign _ (hBC d hdT xd true rp hkd hrp ⟨rp⟩ rfl i hi)).1
-  obtain ⟨um, Ju⟩ := JAtZ.bufWrites hZ hdT hdth hkd hrp s' (rbList ⟨rp⟩) (fun b hb => mem_rbList.1 hb) s
+  obtain ⟨um, Ju⟩ := JAtZ.bufWrites hdT hdth hkd hrp s' (rbList ⟨rp⟩) (fun b hb => mem_rbList.1 hb) s
     σ.machineState.underlyingMemory J
   have hks : L.ksb (mixS (L := L) s s' (rbList ⟨rp⟩)) = L.ksb s := mixS_ksb _ _ _
   refine ⟨_, um, Ju, ?_, ?_, hks, fun b hb hn => ?_⟩
@@ -775,12 +776,12 @@ theorem setUm_self (σ0 : Fl4Spec.State Unit) : Endp.setUm σ0 σ0.machineState.
 set_option maxHeartbeats 8000000 in
 /-- The receiver's buffer words at `J` are untracked for P1 (`JAtZ.bufWord`,
 `JAtZ`'s `nodeB`). -/
-theorem JAtZ.rbufU (hZ : XferHZ L AR Z) (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {d : U64}
+theorem JAtZ.rbufU (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {d : U64}
     (hdT : d ∈ Z.T) (hdth : Z.th d = some .tcb) {xd : Fl4Spec.Tcb} (hkd : σ.kheap d.bv = some (.tcb xd)) :
     ∀ b, RcvBufW xd b → P1.OutsideObjs st (P1.Heap.tcbs H) Cs s b ∧
       (∀ e, (H e = some .ep ∨ H e = some .ntfn) → b.val + 8 ≤ e.val ∨ e.val + 16 ≤ b.val) ∧ b ∉ P1.Heap.frame H := by
   rintro b ⟨rp, hrp, i, hi, rfl⟩
-  obtain ⟨hOK, hBC, -⟩ := hZ Z s a σ rfl J.xtop
+  obtain ⟨hOK, hBC, -⟩ := J.xferH
   have hwB := hBC d hdT xd true rp hkd hrp ⟨rp⟩ rfl i hi
   have hal := (J.xtop.fin.1.2.ep.balign _ hwB).1
   obtain ⟨hAp, -⟩ := J.bufWord hOK hdth hkd hrp i.val hi (b := Endp.fl4BufA ⟨rp⟩ i) (by rw [fl4BufA_bv])
@@ -806,7 +807,7 @@ theorem JAtZ.rbufU (hZ : XferHZ L AR Z) (J : JAtZ (L := L) arI AR Z H Cs Ac Lst 
 
 set_option maxHeartbeats 8000000 in
 /-- `JAtZ.bufRebase` for the receiver's buffer words, none or some. -/
-theorem JAtZ.bufRebaseX (hZ : XferHZ L AR Z) (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {d : U64}
+theorem JAtZ.bufRebaseX (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {d : U64}
     (hdT : d ∈ Z.T) (hdth : Z.th d = some .tcb) {xd : Fl4Spec.Tcb} (hkd : σ.kheap d.bv = some (.tcb xd)) {s' : S}
     (hw : P1.WritesIn st s s' (fun b => CnW (st := st) Z.T Z.N Z.C Z.E Z.R Z.c s σ b ∨ RcvBufW xd b))
     (hfoot : P1.WritesIn st s s' (fun b => P1.KW st (P1.Heap.tcbs H) Cs (P1.Heap.frame H) (P1.Heap.scs H)
@@ -822,7 +823,7 @@ theorem JAtZ.bufRebaseX (hZ : XferHZ L AR Z) (J : JAtZ (L := L) arI AR Z H Cs Ac
       hfoot.mono fun b hb => hb.resolve_right (hn b), rfl, fun _ _ _ => rfl⟩
   | some rp =>
     have hc : ∀ b, RcvBufW xd b → RBufW ⟨rp⟩ b := fun b ⟨rp', h, hb⟩ => by rw [hrp] at h; cases h; exact hb
-    obtain ⟨su, um, Ju, h1, h2, h3, h4⟩ := J.bufRebase hZ hdT hdth hkd hrp
+    obtain ⟨su, um, Ju, h1, h2, h3, h4⟩ := J.bufRebase hdT hdth hkd hrp
       (hw.mono fun b hb => hb.imp_right (hc b)) (hfoot.mono fun b hb => hb.imp_right (hc b))
     exact ⟨su, um, Ju, h1, h2, h3, fun b hb hn => h4 b hb fun h => hn ⟨rp, hrp, h⟩⟩
 

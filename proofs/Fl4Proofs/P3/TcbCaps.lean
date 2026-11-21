@@ -756,7 +756,8 @@ def NewCapOK (th : TypedHeap) (mem0 : U64 → U64) (nc : capability.Cap) (sl : F
     (badgeF nc = badgeF (capV mem0 (cslotAddr sl)) ∨ badgeF (capV mem0 (cslotAddr sl)) = 0#u64) ∧
     okey nc = okey (capV mem0 (cslotAddr sl)) ∧
     (∀ P L4 L3 L2 L1 : Set U64, Vs.VCapOK P L4 L3 L2 L1 (capV mem0 (cslotAddr sl)) → Vs.VCapOK P L4 L3 L2 L1 nc) ∧
-    (Vs.TabUn nc → Vs.TabUn (capV mem0 (cslotAddr sl)))
+    (Vs.TabUn nc → Vs.TabUn (capV mem0 (cslotAddr sl))) ∧
+    (Vs.NativeCap (capV mem0 (cslotAddr sl)) → Vs.NativeCap nc)
 
 /-- FL4's buffer argument: no frame is source slot `0`. -/
 def bufArg (bc0 : capability.Cap) : Option (capability.Cap × Fl4Spec.CslotPtr) → capability.Cap × U64
@@ -865,7 +866,7 @@ theorem check_insert (th : TypedHeap) (hP : Placed th) (s s1 : S) (σ1 : Fl4Spec
               ({((), σ')}, False) ∧ capV (L.mem s1) (cslotAddr ssl) = .Thread t ∧
             capV (L.mem s1) (cslotAddr srcSl) = capV (L.mem s) (cslotAddr srcSl) ∧ nc ≠ .Null ∧
             isUt nc = false ∧ capV (L.mem s4) (cslotAddr (t.bv, Fl4Spec.tcbCnodeIndex n)) = nc)) ⦄ := by
-  obtain ⟨ps, rs, hps, h1s, hls, hwf, hcv, he, hfw, hsh, hbd, hkey, hvk, htu⟩ := hok
+  obtain ⟨ps, rs, hps, h1s, hls, hwf, hcv, he, hfw, hsh, hbd, hkey, hvk, htu, -⟩ := hok
   obtain ⟨sa, idxs⟩ := srcSl
   simp only at h1s hls; subst h1s
   obtain ⟨⟨hR, hV, hM, hC, hI⟩, hD, hFI⟩ := hDS1
@@ -1117,7 +1118,7 @@ theorem install_okW [Fl4Proofs.P1.PlainStore st] (W : S → A → Fl4Spec.State 
     (hep : n = 3 → nc ≠ .Null → ∃ e b x1 x2 x3 x4, nc = .Endpoint e b x1 x2 x3 x4) :
     tcb.install_tcb_cap st arI s a t (cslotAddr ssl) idx nc (cslotAddr sl) ⦃ res =>
       InstPostW (L := L) W th t (Fl4Spec.installTcbCap t.bv ssl n (some (absCap nc, sl))) s0 σ res ⦄ := by
-  obtain ⟨ps, rs, hps, h1s, hls, hwf, hcv, he, hfw, hsh, hbd, hkey, hvk, htu⟩ := hok
+  obtain ⟨ps, rs, hps, h1s, hls, hwf, hcv, he, hfw, hsh, hbd, hkey, hvk, htu, -⟩ := hok
   obtain ⟨sa, idxs⟩ := sl
   simp only at h1s hls; subst h1s
   exact install_tcb_cap_refinesW arI W th hP hH K hK hK6 hB s0 s a σ G hDS hMO t ht n hn idx hidx hcz0 ssl hAs
@@ -1136,7 +1137,7 @@ theorem install_okQ [Fl4Proofs.P1.PlainStore st] {Q : (U64 → U64) → MdbGhost
     (hep : n = 3 → nc ≠ .Null → ∃ e b x1 x2 x3 x4, nc = .Endpoint e b x1 x2 x3 x4) :
     tcb.install_tcb_cap st arI s a t (cslotAddr ssl) idx nc (cslotAddr sl) ⦃ res =>
       InstPostQ (L := L) Q th t (Fl4Spec.installTcbCap t.bv ssl n (some (absCap nc, sl))) s0 σ res ⦄ := by
-  obtain ⟨ps, rs, hps, h1s, hls, hwf, hcv, he, hfw, hsh, hbd, hkey, hvk, htu⟩ := hok
+  obtain ⟨ps, rs, hps, h1s, hls, hwf, hcv, he, hfw, hsh, hbd, hkey, hvk, htu, -⟩ := hok
   obtain ⟨sa, idxs⟩ := sl
   simp only at h1s hls; subst h1s
   exact install_tcb_cap_refinesQ arI hQ th hP hO hPP hPD K hK hK6 hB s0 s a σ G hDS hMO t ht n hn idx hidx hcz0 ssl hAs

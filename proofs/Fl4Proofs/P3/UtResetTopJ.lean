@@ -46,7 +46,7 @@ theorem JAtZ.rgClear_drop (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {sl 
   obtain ⟨-, ⟨-, -, hML, -, -⟩, -⟩ := J.xtop.rel
   have hx : cslotAddr sl ∈ Z.G.chains.flatten := (hML.members _).2 ⟨hsl.isSlot, _, hcap, by simp⟩
   obtain ⟨hks, hnd, has⟩ := J.jcov.ks (cslotAddr sl) hx p sb fi (capV_of_capAt hcap)
-  refine ⟨fun r k hr => ?_, fun x hx => ?_, fun wp hw => hw.2.2, hks, fun c hc => hnd c hc, has⟩
+  refine ⟨fun r k hr => ?_, fun x hx => ?_, fun wp hw => hw.2.2, hks, fun c hc => hnd c hc, UtKsApart.asidOf has⟩
   · rw [P1.Heap.drop_eq_some] at hr
     obtain ⟨hnr, hr⟩ := hr
     unfold P1.RegionD P1.MeetsR at hnr
@@ -127,13 +127,17 @@ theorem JAtZ.reset_untypedJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ)
   have hncD : ¬ ∃ y, (delSt p.bv sb.val σ).cdt y = some (pp.bv, idx) := by rw [hcdt]; exact hnc
   have hR0D : PPR0 (delSt p.bv sb.val σ) := by
     refine hR0.of_ppk ⟨hSD.cons, hSD.time, hSD.csc, fun u hu => by rw [hSD.rel] at hu; exact hu,
-      fun q y n hq => ?_, fun q y hq => ?_⟩
+      fun q y n hq => ?_, fun q y hq => ?_, rfl, rfl, fun h => h, fun q x y hx hq hi => ?_, fun h => h⟩
+    rotate_right
+    · by_cases hr : RgOf p sb q
+      · rw [hSD.kin q hr] at hq; cases hq
+      · rw [hSD.kout q hr, hx] at hq; cases hq; exact Or.inl hi
     · by_cases hr : RgOf p sb q
       · rw [hSD.kin q hr] at hq; cases hq
       · rw [hSD.kout q hr] at hq; exact hq
     · by_cases hr : RgOf p sb q
       · rw [hSD.kin q hr] at hq; cases hq
-      · rw [hSD.kout q hr] at hq; exact ⟨y, hq, rfl⟩
+      · rw [hSD.kout q hr] at hq; exact ⟨y, hq, rfl, id⟩
   have hc0' : Z'.c = 0#u64 := hc0
   have hP' : Placed Z'.th := J'.xtop.rel.1
   have hAs' : AbsSlot Z'.th (pp.bv, idx) := ⟨pp, rfl, Or.inl (by simpa [hidx] using hpp')⟩

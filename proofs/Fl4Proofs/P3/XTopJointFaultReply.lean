@@ -19,6 +19,7 @@ import Fl4Proofs.P3.IpcFaultReply
 import Fl4Proofs.P3.XTopJointWriteRegs
 import Fl4Proofs.P3.XTopJointCancelReply
 import Fl4Proofs.P3.XTopJointStsI
+import Fl4Proofs.P3.BufJ
 open Aeneas Aeneas.Std Result
 
 namespace Fl4Proofs.P3.Endp
@@ -211,8 +212,6 @@ set_option maxHeartbeats 8000000 in
 words of the replier; its buffer looked up at the `J` state after the first
 loop. -/
 theorem cmfrJ_top
-    (hZ : ∀ (Z' : XSets) (s' : S) (a' : A) σ', Z'.th = Z.th → XTopAt (L := L) AR Z' s' a' σ' →
-      Endp.IpcBufCapOK σ' ∧ Endp.BufCover Z'.T Z'.B σ' ∧ Vs.BufPlaced (L := L) Z'.N Z'.C Z'.B Z'.c s' σ')
     (s : S) (σ : Fl4Spec.State Unit) (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ)
     {snd rcv : U64} (hs : snd ∈ Z.T) (hr : rcv ∈ Z.T) (hne : snd ≠ rcv) {xs xr : Fl4Spec.Tcb}
     (hks : σ.kheap snd.bv = some (.tcb xs)) (hkr : σ.kheap rcv.bv = some (.tcb xr))
@@ -290,7 +289,7 @@ theorem cmfrJ_top
     simp [hσ1, updK, show snd.bv ≠ rcv.bv from fun e => hne (eq_of_bv e), hks]
   obtain ⟨Tr, Cq, hJ⟩ := J1.jpl
   have thT : Z.th snd = some .tcb := (hJ.tcb snd).2 (J1.zH.1 snd hs)
-  obtain ⟨hOK1, hBC1, -⟩ := hZ (Z.mv Z.G V1) s1 a σ1 rfl J1.xtop
+  obtain ⟨hOK1, hBC1, -⟩ := J1.xferH
   obtain ⟨xs', hks', hws⟩ := J1.buf snd hs
   rw [hk1] at hks'; cases hks'
   refine WP.spec_bind (lookup_buf_full s1 σ1 J1.xtop.rel.2.1.1 J1.xtop.rel.2.1.2.1 thT hk1 hOK1 false) ?_
@@ -320,8 +319,6 @@ set_option maxHeartbeats 8000000 in
 updated in its user context (`x'`), and the whole spec prefix of the fault
 reply up to the fault clear is identified. -/
 theorem _root_.Fl4Proofs.P3.JAtZ.hfrJ
-    (hZ : ∀ (Z' : XSets) (s' : S) (a' : A) σ', Z'.th = Z.th → XTopAt (L := L) AR Z' s' a' σ' →
-      Endp.IpcBufCapOK σ' ∧ Endp.BufCover Z'.T Z'.B σ' ∧ Vs.BufPlaced (L := L) Z'.N Z'.C Z'.B Z'.c s' σ')
     {s : S} {σ : Fl4Spec.State Unit} (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ)
     {rcv snd : U64} (hr : rcv ∈ Z.T) (hs : snd ∈ Z.T) (hne : snd ≠ rcv) {xr xs : Fl4Spec.Tcb}
     (hkr : σ.kheap rcv.bv = some (.tcb xr)) (hks : σ.kheap snd.bv = some (.tcb xs))
@@ -343,7 +340,7 @@ theorem _root_.Fl4Proofs.P3.JAtZ.hfrJ
   have hR : EpStateRel Z.T Z.E Z.R Z.B (L.mem s) σ := hI.1.toE
   have hxs := hR.at_tcb hs hks
   have hxr := hR.at_tcb hr hkr
-  obtain ⟨-, hBC, -⟩ := hZ Z s a σ rfl J.xtop
+  obtain ⟨-, hBC, -⟩ := J.xferH
   -- the replier's buffer words are aligned
   have hal : ∀ sb, ipcBufOf false xs = some sb → ∀ k, k < 128 → (bufAddr sb k).toNat % 8 = 0 := by
     intro sb hsb k hk
@@ -414,7 +411,7 @@ theorem _root_.Fl4Proofs.P3.JAtZ.hfrJ
         x' = { xr with tcbArch := x'.tcbArch } ∧
         ∃ V', JAtZ (L := L) arI AR (Z.mv Z.G V') H Cs Ac Lst D res.2.1 a (updK σ rcv.bv (.tcb x')) ⦄ := by
     intro sl lst hsl hl hspec
-    refine WP.spec_bind (cmfrJ_top (L := L) hZ s σ J hs hr hne hks hkr hsl hl tag.length hle) ?_
+    refine WP.spec_bind (cmfrJ_top (L := L) s σ J hs hr hne hks hkr hsl hl tag.length hle) ?_
     intro s2 hJ2
     rw [hlv] at hJ2
     refine (WP.spec_ok _).2 ⟨rfl, sanRegs xr lst V, by rw [hspec, hlab0],

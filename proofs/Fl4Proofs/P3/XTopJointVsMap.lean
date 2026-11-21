@@ -428,6 +428,7 @@ theorem JAtZ.vsStepJX {s : S} {a : A} {σ : Fl4Spec.State Unit} (J : JAtZ (L := 
     (hsh : shape (capV (L.mem s') (cslotAddr (pc.bv, idx))) = shape (capV (L.mem s) (cslotAddr (pc.bv, idx))))
     (hok : okey (capV (L.mem s') (cslotAddr (pc.bv, idx))) = okey (capV (L.mem s) (cslotAddr (pc.bv, idx))))
     (hnu : isUt (capV (L.mem s) (cslotAddr (pc.bv, idx))) = false)
+    (hvf : Vs.vtF (capV (L.mem s') (cslotAddr (pc.bv, idx))) = Vs.vtF (capV (L.mem s) (cslotAddr (pc.bv, idx))))
     (hl : ∀ y, IsSlot Z.th y → L.mem s' (wordOf y 16#u64) = L.mem s (wordOf y 16#u64) ∧
       L.mem s' (wordOf y 24#u64) = L.mem s (wordOf y 24#u64))
     (hvc : Vs.VsSlotsW Z.th Z.P Z.L4 L3' L2' L1' (L.mem s')) :
@@ -662,8 +663,19 @@ theorem JAtZ.vsStepJX {s : S} {a : A} {σ : Fl4Spec.State Unit} (J : JAtZ (L := 
     · rw [e]
       exact Vs.FrIn.of_okey hok ((J.fcap x (by rw [← e]; exact hy)).mono fun _ => UFr.keep hfk.page)
     · rw [hcap y hy e]; exact (J.fcap y hy).mono fun _ => UFr.keep hfk.page
+  have hKd : P1.DbgKeep st (P1.Heap.tcbs H) Cs s s' := dbgKeep_of_writes J.blk hW fun b hb =>
+    J.notDbg (fun p hp => J.vsxObjWX Ap hXa hpc hidx hb hp (fun z h => by cases h))
+      (fun c hc => J.vsxNodeWX hXa hpc hidx hb hc)
+  have hLS := LiveDN.simX J J.live hX' rfl rfl rfl (fun p hp => R.jcov.dead p (J.zD p hp)) F.idle hKd
+    (fun sl h => by first | rwa [F.orig] at h | rwa [← F.orig] at h)
+    (fun y hy => LSim.of_shape (hS y hy))
   exact J.cs_frameV (V' := (Z.P, Z.L4, L3', L2', L1')) hkb hX' F.kback hbf ⟨hJC.del, hJC.ut, hJC.finM, hJC.sfree⟩ R
-    hvc
+    hvc ⟨fun y hy => by
+      by_cases e : y = x
+      · subst e; exact (J.ext.nat _ hy).of_vtF hvf
+      · rw [hcap y hy e]; exact J.ext.nat y hy,
+      J.ext.vkeep (fun t ht => tcbK t (J.thT t ht) _ (Sched.tVcpuA_aligned J.ip.e.tcb (J.thT t ht)) (by rw [Sched.tVcpuA_val J.ip.e.tcb (J.thT t ht)]; omega) (by rw [Sched.tVcpuA_val J.ip.e.tcb (J.thT t ht)]; omega))⟩
+    hLS.1 (fun p hp => J.zD p (hLS.2 p hp))
 
 set_option maxHeartbeats 4000000 in
 /-- **`vsStepJX` at the same sets, no off-set table frame written.** -/
@@ -676,11 +688,12 @@ theorem JAtZ.vsStepJ {s : S} {a : A} {σ : Fl4Spec.State Unit} (J : JAtZ (L := L
     (hsh : shape (capV (L.mem s') (cslotAddr (pc.bv, idx))) = shape (capV (L.mem s) (cslotAddr (pc.bv, idx))))
     (hok : okey (capV (L.mem s') (cslotAddr (pc.bv, idx))) = okey (capV (L.mem s) (cslotAddr (pc.bv, idx))))
     (hnu : isUt (capV (L.mem s) (cslotAddr (pc.bv, idx))) = false)
+    (hvf : Vs.vtF (capV (L.mem s') (cslotAddr (pc.bv, idx))) = Vs.vtF (capV (L.mem s) (cslotAddr (pc.bv, idx))))
     (hl : ∀ y, IsSlot Z.th y → L.mem s' (wordOf y 16#u64) = L.mem s (wordOf y 16#u64) ∧
       L.mem s' (wordOf y 24#u64) = L.mem s (wordOf y 24#u64))
     (hvc : Vs.VsSlotsW Z.th Z.P Z.L4 Z.L3 Z.L2 Z.L1 (L.mem s')) :
     JAtZ (L := L) arI AR Z H Cs Ac Lst D s' a' σ' :=
-  J.vsStepJX Ap hpc hidx (TabsArch.empty σ) (L3' := Z.L3) (L2' := Z.L2) (L1' := Z.L1) hX' F (hW.mono fun _ h => Or.inl h) hcap hsh hok hnu hl hvc
+  J.vsStepJX Ap hpc hidx (TabsArch.empty σ) (L3' := Z.L3) (L2' := Z.L2) (L1' := Z.L1) hX' F (hW.mono fun _ h => Or.inl h) hcap hsh hok hnu hvf hl hvc
 
 end
 
@@ -857,7 +870,7 @@ theorem JAtZ.vsPostJ {s : S} {ar : A} {σ : Fl4Spec.State Unit} (J : JAtZ (L := 
       exact (hLk.2 _ _ _ _ _ hok).toW
     · rw [hcap y hy e]; exact J1.vsc y hy
   have J' := J1.vsStepJ Ap hpc hidx hX' F hW hcap (by rw [hcv1]; exact hLk.1.1) (by rw [hcv1]; exact hLk.1.2.1)
-    (by rw [hcv1]; exact hnu)
+    (by rw [hcv1]; exact hnu) (by rw [hcv1]; exact hLk.1.2.2.2)
     (fun y hy => ⟨(hSlot y hy).1, (hSlot y hy).2.1⟩) hvc
   exact ⟨Z, H, Cs, Ac1, Lst1, D1, J'⟩
 

@@ -555,7 +555,10 @@ theorem JAtZ.undead (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {x t : U64
     jcov := J.sc_jcov hw (fun q hq => J.jcov.dead q hq.1) (fun q hq hn => by
       have e : q = t := Classical.byContradiction fun e => hn ⟨hq, e⟩
       subst e; exact hcov) ⟨rfl, rfl⟩
-    kern := J.sc_kern hw hK (FK.refl σ) J.xtop rfl Set.sdiff_subset }
+    kern := J.sc_kern hw hK (FK.refl σ) J.xtop rfl Set.sdiff_subset
+    zD := fun q hq => ⟨J.zD q hq, fun (e : q = t) => J.not_ztcb hxS
+      (by rw [ok_inj ((capAt_capV _ _).symm.trans hc)]; intro _ _ _ h; cases h)
+      (by rw [ok_inj ((capAt_capV _ _).symm.trans hc), e]; simp [absCap, Fl4Spec.objRefs]) hq⟩ }
 
 set_option maxHeartbeats 16000000 in
 /-- **`restart`'s tail at `J`** (module docstring). -/
@@ -571,7 +574,7 @@ theorem JAtZ.restartTailJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ)
         ({((), σd)}, False) → Inv σd) :
     restartTailF st arI s a t ⦃ r => r.2 = a ∧ ∀ Ac', P1.BlkOK st (P1.Heap.tcbs H) Cs (P1.Heap.omega H) H
       (P1.Heap.frame H) (P1.Heap.replies H) (P1.Heap.scs H) (P1.Heap.ntfns H) (P1.Heap.scBits H) Ac' r.1 →
-      L.mem r.1 (L.nodeAt s 0#u64 layout.node.DEBUG_TCBS) = L.mem s (L.nodeAt s 0#u64 layout.node.DEBUG_TCBS) →
+      P1.DbgKeep st (P1.Heap.tcbs H) Cs s r.1 →
       ∃ σ', specRestartTail t.bv x.tcbSchedContext σ = ({((), σ')}, False) ∧
         ∃ Lst' : U64 → List U64, JAtZ (L := L) arI AR Z H Cs Ac' Lst' D r.1 a σ' ⦄ := by
   have hX := J.xtop
@@ -592,7 +595,9 @@ theorem JAtZ.restartTailJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ)
   rintro ⟨s', a'⟩ ⟨ha', σb, σc, σd, σ', hb, hc, hd, he, hR', hS', hI', hw⟩
   simp only at ha' hR' hS' hw ⊢
   subst a'
-  refine ⟨rfl, fun Ac' hblk hDbg => ⟨σ', specRestartTail_eq hb hc hd he, ?_⟩⟩
+  refine ⟨rfl, fun Ac' hblk hKd0 => ⟨σ', specRestartTail_eq hb hc hd he, ?_⟩⟩
+  have hDbg : L.mem s' (L.nodeAt s 0#u64 layout.node.DEBUG_TCBS) = L.mem s (L.nodeAt s 0#u64 layout.node.DEBUG_TCBS) :=
+    hKd0.2 _ (Or.inr ⟨0#u64, J.kern.cs0, rfl⟩)
   have hId : Inv σd := (hRS σb σc hb hc).2.2 σd hd
   obtain ⟨hK, hL, hF, hsok, hBK⟩ := restartTail_frame hk hin hb hc hd he
   have hwT := WritesIn.tfoot_of_kfoot hw
@@ -645,7 +650,8 @@ theorem JAtZ.restartTailJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ)
   exact ⟨Lst', J.sc_frame hwT hK hX' hCR' hRF' hY' hM' (J.sc_buf hwT hK) hRP' (J.sc_apart hwT hK)
     (J.sc_jpl hwT hK (J.idleW_keep hX'.fin.1.1.1 hF.2.1 hF.2.2).2) (J.sc_jcov hwT hdead (fun q hq hn => absurd hq hn) (J.idleW_keep hX'.fin.1.1.1 hF.2.1 hF.2.2))
     (J.sc_kern hwT hK hF hX' hDbg fun _ h => h) (J.sc_utc hwT hK hDbg) hN' hI' hC'
-    hOw' hO' hAI (J.bsa.bk hBK hsok) hcr hblk⟩
+    hOw' hO' hAI (J.bsa.bk hBK hsok) hcr hblk
+    hKd0 (J.idleW_keep hX'.fin.1.1.1 hF.2.1 hF.2.2).1 J.zD⟩
 
 set_option maxHeartbeats 16000000 in
 /-- **`sched::restart` at `J`** (module docstring), the target not dead
@@ -668,14 +674,14 @@ theorem JAtZ.restartTcbJD (hAT : P0.ArchTotal arI)
   -- P1's `BlkOK` and the debug word across the whole restart
   have hP1 : sched.restart st arI s a t ⦃ r => P1.BlkOK st (P1.Heap.tcbs H) Cs (P1.Heap.omega H) H
       (P1.Heap.frame H) (P1.Heap.replies H) (P1.Heap.scs H) (P1.Heap.ntfns H) (P1.Heap.scBits H) Ac r.1 ∧
-      L.mem r.1 (L.nodeAt s 0#u64 layout.node.DEBUG_TCBS) = L.mem s (L.nodeAt s 0#u64 layout.node.DEBUG_TCBS) ⦄ := by
+      P1.DbgKeep st (P1.Heap.tcbs H) Cs s r.1 ⦄ := by
     obtain ⟨⟨Q, R, h0⟩, hB, hX, hS, hSg⟩ := J.blk
     refine WP.spec_mono (P1.sched.restart.allK hAT s a t Q R h0 htH hB hX hS) fun r hr => ?_
     obtain ⟨s', a'⟩ := r
     try simp only [WP.uncurry'_pair] at hr
     obtain ⟨Q', R', h1, hB1, hX1, hS1, -, hF⟩ := hr
     exact ⟨⟨⟨Q', R', h1⟩, hB1, hX1, hS1, ⟨hSg.sub, fun b hb => by rw [hF.1]; exact hSg.ks b hb,
-      fun o h1' h2' => by rw [hF.1]; exact hSg.ksΩ o h1' h2'⟩⟩, J.kw_dbg hF⟩
+      fun o h1' h2' => by rw [hF.1]; exact hSg.ksΩ o h1' h2'⟩⟩, J.kw_dbgKeep hF⟩
   -- the debug word and the kernel-state base through `cancel_ipc`
   obtain ⟨⟨Q0, R0, h0⟩, -, ⟨hO, hR, -⟩, -, hSg⟩ := J.blk
   have hreply : L.mem s (P1.stA t) = sched.TS_BLOCKED_ON_REPLY → P1.ReplyT st (P1.Heap.replies H)
@@ -683,12 +689,12 @@ theorem JAtZ.restartTcbJD (hAT : P0.ArchTotal arI)
     obtain ⟨h1, h2⟩ := hR.reply t htH hs
     exact ⟨h1, h2, hR.next _ h1, hR.prev _ h1⟩
   have hkwc : ipc.cancel_ipc st arI s a t ⦃ r => L.ksb r.1 = L.ksb s ∧
-      L.mem r.1 (L.nodeAt s 0#u64 layout.node.DEBUG_TCBS) = L.mem s (L.nodeAt s 0#u64 layout.node.DEBUG_TCBS) ⦄ := by
+      P1.DbgKeep st (P1.Heap.tcbs H) Cs s r.1 ⦄ := by
     refine WP.spec_mono (P1.ipc.cancel_ipc.kw s a t h0 htH hO hSg.sub hreply
       (fun h1 h2 => (hR.recv t htH h1 h2).1)) fun r hr => ?_
     obtain ⟨s1, a1⟩ := r
     try simp only [WP.uncurry'_pair] at hr
-    exact ⟨hr.1, J.kw_dbg hr⟩
+    exact ⟨hr.1, J.kw_dbgKeep hr⟩
   have hspec0 : Fl4Spec.restart (Z := Unit) t.bv σ =
       Fl4Spec.NonDet.when (¬ Fl4Spec.runnable x.tcbState = true ∧ ¬ Fl4Spec.idle x.tcbState) (do
         Fl4Spec.cancelIpc t.bv
@@ -700,7 +706,7 @@ theorem JAtZ.restartTcbJD (hAT : P0.ArchTotal arI)
     rw [nd_bind_one (getThreadState_eq hk), nd_bind_one (getTcbObjRef_eq _ hk)]
   have hmain : sched.restart st arI s a t ⦃ r => ∀ Ac', P1.BlkOK st (P1.Heap.tcbs H) Cs (P1.Heap.omega H) H
       (P1.Heap.frame H) (P1.Heap.replies H) (P1.Heap.scs H) (P1.Heap.ntfns H) (P1.Heap.scBits H) Ac' r.1 →
-      L.mem r.1 (L.nodeAt s 0#u64 layout.node.DEBUG_TCBS) = L.mem s (L.nodeAt s 0#u64 layout.node.DEBUG_TCBS) →
+      P1.DbgKeep st (P1.Heap.tcbs H) Cs s r.1 →
       r.2 = a ∧ ∃ σ', Fl4Spec.restart (Z := Unit) t.bv σ = ({((), σ')}, False) ∧
         ∃ (V : XVs) (Ac' : Set U64) (Lst' : U64 → List U64) (D' : Set U64),
           JAtZ (L := L) arI AR (Z.mv Z.G V) H Cs Ac' Lst' D' r.1 r.2 σ' ⦄ := by
@@ -774,8 +780,7 @@ theorem JAtZ.restartTcbJD (hAT : P0.ArchTotal arI)
     show restartTailF st arI s1 a t ⦃ _ ⦄
     refine WP.spec_mono (J1.restartTailJ hmb ht htD hka hina hnsa hRS) ?_
     rintro r ⟨hr2, hr⟩ Ac' hblk hd6
-    have hn1 := P1.nodeAt_of_ksb hks1
-    obtain ⟨σ', he', Lst', J'⟩ := hr Ac' hblk (by rw [hn1, hd6, hd1])
+    obtain ⟨σ', he', Lst', J'⟩ := hr Ac' hblk (dbgKeep_cancel hd1 hd6)
     refine ⟨hr2, σ', ?_, V1, Ac', Lst', D, by rw [hr2]; exact J'⟩
     rw [hspec0, Fl4Spec.NonDet.when, if_pos hc, nd_bind_one hca]
     rw [hxsa] at he'

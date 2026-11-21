@@ -38,6 +38,7 @@ import Fl4Proofs.P3.ScIpcSorted
 import Fl4Proofs.P3.ScRecvLinks
 import Fl4Proofs.P3.VsCapW
 import Fl4Proofs.P3.BufDefs
+import Fl4Proofs.P3.LiveDefs
 open Aeneas Aeneas.Std Result
 
 namespace Fl4Proofs.P3
@@ -120,6 +121,63 @@ structure JKern (H : P1.Heap) (Cs D : Set U64) (th : TypedHeap) (s : S) (σ : Fl
   /-- [carried] Core 0, the boot core, is among the cores (boot; `Cs` never
   shrinks). -/
   cs0 : 0#u64 ∈ Cs
+
+/-- **The joint extension** (INV-PLAN §4 G2; KENTRY-PLAN g2a): the facts
+carried with `JAtZ` as one sub-structure `JAtZ.ext`, so that a new fact adds
+one component to `JAtZ`'s anonymous constructions. Field so far:
+* `nat` [S] (G2 `nativeScopeX`, VT-x out of scope; l4v: x64 has no VT-x
+  objects, so no valid VCPU / EPT cap): every slot's cap is `Vs.NativeCap`
+  (no VCPU or EPT cap, no EPT-mapped frame cap, no IO-port cap owned by a
+  VCPU). Kept by every native step: slots kept (`of_eq`), stepped
+  (`Vs.VsSlotsT`'s third part: emptied slots, copies of a native cap, native
+  new caps), or a retype's new native caps. A VT-x invocation (`JVtxScope`)
+  breaks it: its statement then asks `JAt` after a step outside the scope.
+* `vw` [S] (G2 `nativeScopeX`, KENTRY-PLAN g2b; l4v: no counterpart, the
+  spec has no TCB–VCPU binding): every TCB of the typed heap has its VCPU
+  word (`tVcpuA t`, offset 3664) zero. FL4 writes that word only in
+  `vcpu::detach` (writes 0) and the `X86VCPUSetTCB` invocation of a Vcpu cap
+  (excluded by `nat`); a TCB retype zeroes it. So every native step keeps it:
+  the frames below take `VKeep` (the word of every TCB kept), proved from
+  each step's footprint (`TFoot` / `FinW` / `WideW` exclude it). -/
+structure JExt (th : TypedHeap) (s : S) : Prop where
+  nat : Vs.VsNat th (L.mem s)
+  vw : ∀ t, th t = some .tcb → L.mem s (tVcpuA t) = 0#u64
+
+/-- The VCPU words of the typed heap's TCBs kept from `s` to `s'`. -/
+def VKeep (th : TypedHeap) (s s' : S) : Prop :=
+  ∀ t, th t = some .tcb → L.mem s' (tVcpuA t) = L.mem s (tVcpuA t)
+
+theorem VKeep.rfl' {th : TypedHeap} {s : S} : VKeep (L := L) th s s := fun _ _ => rfl
+
+theorem VKeep.trans {th : TypedHeap} {s s1 s2 : S} (h1 : VKeep (L := L) th s s1) (h2 : VKeep (L := L) th s1 s2) :
+    VKeep (L := L) th s s2 := fun t ht => (h2 t ht).trans (h1 t ht)
+
+/-- `VKeep` from a `WritesIn` footprint missing every TCB's VCPU word. -/
+theorem VKeep.of_writes {th : TypedHeap} {T : Set U64} (hT : P1.TcbPlaced T) (hth : ∀ t, th t = some .tcb → t ∈ T)
+    {s s' : S} {W : U64 → Prop} (hW : P1.WritesIn st s s' W) (hWV : ∀ b, W b → ∀ t ∈ T, b ≠ tVcpuA t) :
+    VKeep (L := L) th s s' := fun t ht =>
+  hW.mem_eq (Sched.tVcpuA_aligned hT (hth t ht)) fun hb => hWV _ hb t (hth t ht) rfl
+
+theorem JExt.vkeep {th : TypedHeap} {s s' : S} (E : JExt (L := L) th s) (hv : VKeep (L := L) th s s') :
+    ∀ t, th t = some .tcb → L.mem s' (tVcpuA t) = 0#u64 := fun t ht => (hv t ht).trans (E.vw t ht)
+
+theorem JExt.of_eq {th : TypedHeap} {s s' : S} (E : JExt (L := L) th s)
+    (hc : ∀ y, IsSlot th y → capV (L.mem s') y = capV (L.mem s) y) (hv : VKeep (L := L) th s s') :
+    JExt (L := L) th s' :=
+  ⟨E.nat.of_eq hc, E.vkeep hv⟩
+
+theorem JExt.step {th : TypedHeap} {s s' : S} (E : JExt (L := L) th s)
+    (hT : Vs.VsSlotsT th (L.mem s) (L.mem s')) (hv : VKeep (L := L) th s s') : JExt (L := L) th s' :=
+  ⟨E.nat.step hT, E.vkeep hv⟩
+
+theorem JExt.ss {th : TypedHeap} {s s' : S} (E : JExt (L := L) th s)
+    (hSS : SlotsSame th (L.mem s) (L.mem s')) (hv : VKeep (L := L) th s s') : JExt (L := L) th s' :=
+  E.of_eq (fun _ hy => hSS.capV hy) hv
+
+/-- `JExt` at the same memory. -/
+theorem JExt.mem {th : TypedHeap} {s s' : S} (E : JExt (L := L) th s) (h : L.mem s' = L.mem s) :
+    JExt (L := L) th s' :=
+  E.of_eq (fun y _ => by rw [h]) fun t _ => by rw [h]
 
 /-- **The joint invariant at the ghosts** (module docstring; plan §1). -/
 structure JAtZ (AR : A → Fl4Spec.Cr3 → Prop) (Z : XSets) (H : P1.Heap) (Cs Ac : Set U64)
@@ -247,6 +305,20 @@ structure JAtZ (AR : A → Fl4Spec.Cr3 → Prop) (Z : XSets) (H : P1.Heap) (Cs A
   move, swap, DeriveSubframe's sub-range), set at the frame retype for the new
   pages, released at the detype by `FrameOffJ`. -/
   fcap : Vs.FrSlots Z.th (UFr σ) (L.mem s)
+  /-- [carried] **The joint extension** (`JExt`, G2). -/
+  ext : JExt (L := L) Z.th s
+  /-- [carried] **The liveness bundle at the ghosts** (KENTRY-PLAN g2i; INV-PLAN
+  E15, the former `JEntryAt.live` / `kernel_entryJ33`'s `hLv` [J]): `LiveJ`
+  (l4v `if_unsafe_then_cap`, `if_live_then_nonz_cap`, `zombies_final`; the idle
+  thread and the kernel-state block exempt, KENTRY-PLAN g2e), `DbgWF` (FL4's
+  debug lists) and `NullOrig` (l4v `valid_nullcaps`) at `Z.th`, `H`, `Cs`,
+  `Z.G`. Each construction proves it where its frames are visible
+  (`JAtZ.liveX` for a step keeping the slots). -/
+  live : LiveDN (L := L) Z.th H Cs Z.G s σ
+  /-- [carried] **The TCB zombies' TCBs are in the dead set** (so a frame step's
+  dead-set carry keeps `LiveJ.zdead`; every TCB zombie's TCB is `DeadP` by
+  `live`, so `D ∪ ZTcb` is always a dead set: `JAtZ.addDeadSet`). -/
+  zD : ∀ p ∈ ZTcb (L := L) Z.th s, p ∈ D
 
 /-- **`JAt`: the joint invariant at a state** (the ghosts existential). -/
 def JAt (AR : A → Fl4Spec.Cr3 → Prop) (s : S) (a : A) (σ : Fl4Spec.State Unit) : Prop :=
@@ -448,6 +520,128 @@ theorem mpPlaced (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) (hD : D = ∅
   obtain ⟨Tr, Cq, hJ⟩ := J.jpl
   obtain ⟨-, ⟨-, -, -, -, hI⟩, -⟩ := J.xtop.rel
   exact mpPlacedHyp_of hJC hJ J.ut hI hc J.zH.1 J.zH.2.1 J.zH.2.2.1 J.zH.2.2.2 J.c0 hB
+
+/-- **A slot word is no TCB's VCPU word** (KENTRY-PLAN g2b; `SlotsApart`:
+a TCB's own slots lie below its offset 256). -/
+theorem inSlot_nv (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {b : U64} (hb : InSlot Z.th b) :
+    ∀ t ∈ Z.T, b ≠ tVcpuA t := by
+  obtain ⟨x, hx, h1, h2⟩ := hb
+  intro t ht e
+  have h3 := (J.apart x hx).1 t ht
+  rw [e, Sched.tVcpuA_val J.ip.e.tcb ht] at h1 h2
+  omega
+
+/-- **A step writing slot words only keeps the VCPU words.** -/
+theorem vkeep_slot (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {s' : S}
+    (hw : P1.WritesIn st s s' (InSlot Z.th)) : VKeep (L := L) Z.th s s' :=
+  VKeep.of_writes J.ip.e.tcb J.thT hw fun _ hb => J.inSlot_nv hb
+
+/-- **A kernel-state block word is no TCB's VCPU word** (P1's `ksOut`). -/
+theorem ks_nv (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {b : U64} (h1 : (L.ksb s).val ≤ b.val)
+    (h2 : b.val < (L.ksb s).val + 13568) : ∀ t ∈ Z.T, b ≠ tVcpuA t := by
+  intro t ht e
+  obtain ⟨⟨Q, R, hq⟩, -⟩ := J.blk
+  have hv := Sched.tVcpuA_val J.ip.e.tcb ht
+  rw [e] at h1 h2
+  rcases hq.ksOut t (J.zH.1 t ht) with h | h <;> omega
+
+theorem ksW_nv (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {b : U64} (hb : KsW (L.ksb s) b) :
+    ∀ t ∈ Z.T, b ≠ tVcpuA t := by
+  obtain ⟨K, h1, h2, -, e, -⟩ := hb
+  exact J.ks_nv (by omega) (by omega)
+
+/-! ## The liveness bundle across a step (KENTRY-PLAN g2i) -/
+
+/-- The spec's idle thread is the idle word at an `XTopAt` state. -/
+theorem _root_.Fl4Proofs.P3.XTopAt.idleThread_bv {Z' : XSets} {s' : S} {a' : A} {σ' : Fl4Spec.State Unit}
+    (hX : XTopAt (L := L) AR Z' s' a' σ') : σ'.idleThread = (L.idleW s').bv := by
+  obtain ⟨Q, R, hc, hs⟩ := hX.fin.1.1.1.lists
+  unfold P1.LawfulStore.idleW
+  have h2 := hs.idleTh
+  unfold Sched.nodeW at h2
+  rw [hc.cur, ← h2]
+
+/-- **`LiveJ` at another MDB tree of the same slots** (the trees' members are
+the slots holding a non-null cap). -/
+theorem _root_.Fl4Proofs.P3.LiveJ.regh {th : TypedHeap} {H : P1.Heap} {G G' : MdbGhost} {s : S}
+    {σ : Fl4Spec.State Unit} (hL : LiveJ (L := L) th H G s σ) (hG : ∀ y ∈ G.chains.flatten, IsSlot th y)
+    (hG' : ∀ y, IsSlot th y → capV (L.mem s) y ≠ .Null → y ∈ G'.chains.flatten) :
+    LiveJ (L := L) th H G' s σ := by
+  refine ⟨fun q i hqi hu => ?_, fun n hn hni => ?_, hL.zslots, hL.zdead⟩
+  · rcases hL.slots q i hqi hu with ⟨y, hy, hr⟩ | hb
+    · refine Or.inl ⟨y, hG' y (hG y hy) fun e => ?_, hr⟩
+      rw [e] at hr; exact hr
+    · exact Or.inr hb
+  · obtain ⟨y, hy, hr⟩ := hL.dbg n hn hni
+    exact ⟨y, hG' y (hG y hy) (by rw [hr]; intro e; cases e), hr⟩
+
+/-- `ZTcb` across a step keeping the slots. -/
+theorem _root_.Fl4Proofs.P3.ZTcb.of_same {th : TypedHeap} {s s' : S} (hSS : SlotsSame th (L.mem s) (L.mem s'))
+    {p : U64} (hp : p ∈ ZTcb (L := L) th s') : p ∈ ZTcb (L := L) th s := by
+  obtain ⟨y, hy, zt, n, hz, h65⟩ := hp
+  exact ⟨y, hy, zt, n, by rw [← hSS.capV hy]; exact hz, h65⟩
+
+/-- **`LiveDN` across a step keeping the slots** (KENTRY-PLAN g2i, the core of
+the construction sites' frame, from the fields `JAtZ` and `JAtZR` share): the
+slots (`SlotsSame`), the debug words (`DbgKeep`), the original bits and the
+idle word kept, the dead set's objects dead after (the TCB zombies' TCBs among
+them), the ghost tree `Z'.G` any tree of the sets after (`XTopAt`). -/
+theorem _root_.Fl4Proofs.P3.liveDN_frame {Z : XSets} {H : P1.Heap} {Cs : Set U64} {s : S} {a : A}
+    {σ : Fl4Spec.State Unit} (hX0 : XTopAt (L := L) AR Z s a σ) (hL : LiveDN (L := L) Z.th H Cs Z.G s σ)
+    (hTz : P1.DbgTz st (P1.Heap.tcbs H) Cs s) (hcs0 : 0#u64 ∈ Cs)
+    (hTe : Z.T = P1.Heap.tcbs H)
+    {Z' : XSets} {s' : S} {a' : A}
+    {σ' : Fl4Spec.State Unit} (hX : XTopAt (L := L) AR Z' s' a' σ') (hth : Z'.th = Z.th) (hT : Z'.T = Z.T)
+    (hc : Z'.c = Z.c) (hSS : SlotsSame Z.th (L.mem s) (L.mem s'))
+    (hK : P1.DbgKeep st (P1.Heap.tcbs H) Cs s s') (horig : σ'.isOriginalCap = σ.isOriginalCap)
+    (hidl : L.idleW s' = L.idleW s) (hdead : ∀ p ∈ ZTcb (L := L) Z.th s, Sched.DeadP (L := L) H s' p) :
+    LiveDN (L := L) Z.th H Cs Z'.G s' σ' := by
+  obtain ⟨hLJ, ⟨lst, hDW⟩, hN⟩ := hL
+  have hmem : ∀ y ∈ Z.G.chains.flatten, IsSlot Z.th y := fun y hy => ((hX0.rel.2.1.2.2.1.members y).1 hy).1
+  have hid : σ'.idleThread = σ.idleThread := by
+    rw [XTopAt.idleThread_bv hX, XTopAt.idleThread_bv hX0, hidl]
+  have hM' : MdbLinks Z.th (L.mem s') Z'.G := by rw [← hth]; exact hX.rel.2.1.2.2.1
+  refine ⟨(hLJ.of_sameZ hSS hmem horig hid hK hcs0 hTz hdead).regh hmem
+      fun y hy hne => (hM'.members y).2 ⟨hy, _, capAt_capV _ _, hne⟩, ⟨lst, ?_⟩,
+    hN.of_same (fun y hy => hSS.capV hy) horig⟩
+  obtain ⟨Q0, R0, hc0, -⟩ := hX0.fin.1.1.1.lists
+  obtain ⟨Q1, R1, hc1, -⟩ := hX.fin.1.1.1.lists
+  refine hDW.of_keep hK fun y hy => ?_
+  rw [hc1.aff y (by rw [hT, hTe]; exact hy), hc0.aff y (by rw [hTe]; exact hy), hc]
+
+/-- **`LiveDN` across a step keeping the slots**, at `J` (`liveDN_frame`). -/
+theorem liveX (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {Z' : XSets} {s' : S} {a' : A}
+    {σ' : Fl4Spec.State Unit} (hX : XTopAt (L := L) AR Z' s' a' σ') (hth : Z'.th = Z.th) (hT : Z'.T = Z.T)
+    (hc : Z'.c = Z.c) (hSS : SlotsSame Z.th (L.mem s) (L.mem s'))
+    (hK : P1.DbgKeep st (P1.Heap.tcbs H) Cs s s') (horig : σ'.isOriginalCap = σ.isOriginalCap)
+    (hidl : L.idleW s' = L.idleW s) (hdead : ∀ p ∈ ZTcb (L := L) Z.th s, Sched.DeadP (L := L) H s' p) :
+    LiveDN (L := L) Z.th H Cs Z'.G s' σ' :=
+  liveDN_frame J.xtop J.live ⟨J.blk.2.2.1.2.2.tm.dn, J.blk.2.2.1.2.2.tm.dp, J.blk.2.2.1.2.2.tm.dh⟩ J.kern.cs0
+    (by obtain ⟨Tr, Cq, hJ⟩ := J.jpl
+        exact Set.ext fun t => ⟨fun h => J.zH.1 t h, fun h => J.thT t ((hJ.tcb t).2 h)⟩)
+    hX hth hT hc hSS hK horig hidl hdead
+
+/-- A TCB zombie's object is a TCB of the typed heap (`DelInv.zwf`). -/
+theorem ztcb_tcb (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {p : U64}
+    (hp : p ∈ ZTcb (L := L) Z.th s) : Z.th p = some .tcb := by
+  obtain ⟨y, hy, zt, n, hz, h65⟩ := hp
+  rcases J.del.zwf y hy p zt n hz with ⟨-, h, -⟩ | ⟨h, -⟩
+  · exact h
+  · exact absurd h65 h
+
+/-- **An object named by a non-zombie cap of a slot is no TCB zombie's TCB**
+(`FinInv.zombie_alone`). -/
+theorem not_ztcb (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {x : U64} (hx : IsSlot Z.th x)
+    (hnz : ∀ p zt n, capV (L.mem s) x ≠ .Zombie p zt n) {p : U64}
+    (hp : p.bv ∈ Fl4Spec.objRefs (absCap (capV (L.mem s) x))) : p ∉ ZTcb (L := L) Z.th s := by
+  rintro ⟨y, hy, zt, n, hz, -⟩
+  have hne : x ≠ y := fun e => hnz p zt n (by rw [e, hz])
+  exact FinInv.zombie_alone J.xtop.rel.2.2.1 J.mdbL hy hz x hx hne hp
+
+/-- **`JAtZ.zD` across a step keeping the slots**, the dead set grown. -/
+theorem zDX (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {s' : S} {D' : Set U64}
+    (hSS : SlotsSame Z.th (L.mem s) (L.mem s')) (hDD : ∀ p ∈ ZTcb (L := L) Z.th s, p ∈ D') :
+    ∀ p ∈ ZTcb (L := L) Z.th s', p ∈ D' := fun p hp => hDD p (ZTcb.of_same hSS hp)
 
 end JAtZ
 

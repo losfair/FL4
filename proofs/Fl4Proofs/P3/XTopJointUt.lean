@@ -115,10 +115,7 @@ theorem decode_invocation_untypedJ [Fl4Proofs.P1.PlainStore st] (s : S) (ar : A)
     hct argsU hlen hargs hNative _ sl rfl hAs p sb fi dev hc extra x0 hx0 _ hex hfan
     (fun inv res => UtRetPostJ (L := L) arI AR σ blk call don inv res) hR) ?_
   rintro res (⟨e, e', rfl, h1, h2⟩ | ⟨inv, hrun, σ1, hst, y, hy, hrel, hx⟩)
-  · refine Or.inl ⟨e, rfl, rfl, ⟨e', run_liftME_err h1, Or.inl h2⟩, ?_⟩
-    split
-    · exact Or.inl hX0
-    · exact hX0
+  · exact TopPostDMX.errP ⟨e, rfl, rfl, ⟨e', run_liftME_err h1, Or.inl h2⟩, hX0⟩
   · exact Or.inr ⟨.invokeUntyped inv, DecOut.of_eq (run_liftME_ok hrun), σ1, hst, y, hy, hrel, hx⟩
 
 end

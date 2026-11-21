@@ -10,7 +10,7 @@ info, the badge) from `JAtZ` before to `JAtZ` after, against the spec's
   (`mrState` into a buffer, `mrStateN` without one); `MrJ`: `JAtZ` at it.
 * `MrJ.reg` (a message register, `JAtZ.regWrJ` with `reg_wr_irel`),
   `MrJ.buf` (a buffer word, `JAtZ.userWrJ` with `JAtZ.bufWord`;
-  `IpcBufCapOK`, `BufPlaced` [J] as XTopJointXfer's `hZ`), `MrJ.appendN`
+  `IpcBufCapOK`, `BufPlaced` by BufJ's `JAtZ.xferH`), `MrJ.appendN`
   (past the registers without a buffer nothing is written); `setMrJ`: FL4's
   `set_mr` of the next word, either way.
 * `setMrsLfJ`, `copyMrsFaultJ`: the lookup-failure words, and
@@ -27,6 +27,7 @@ info, the badge) from `JAtZ` before to `JAtZ` after, against the spec's
 -/
 import Fl4Proofs.P3.XTopJointXfer
 import Fl4Proofs.P3.ScJointConsumed
+import Fl4Proofs.P3.BufJ
 open Aeneas Aeneas.Std Result
 
 namespace Fl4Proofs.P3
@@ -80,13 +81,6 @@ def MrJ {S : Type} {st : machine.Store S} [L : P1.LawfulStore st] {A : Type} (ar
     (D : Set U64) (a : A) (σ0 : Fl4Spec.State Unit) (rcv : U64) (x0 : Fl4Spec.Tcb) (pb : Option Fl4Spec.ObjRef)
     (s : S) (ms : List Fl4Spec.Word) : Prop :=
   ∃ V, JAtZ (L := L) arI AR (Z.mv Z.G V) H Cs Ac Lst D s a (jMrSt σ0 rcv.bv x0 pb ms)
-
-/-- JEntryGlob's `ipcBufOK`, `bufCover`, `bufPlaced` [J] at the `XTopAt` states
-of the typed heap of `Z` (XTopJointXfer's `hZ`). -/
-abbrev XferHZ {S : Type} {st : machine.Store S} (L : P1.LawfulStore st) {A : Type}
-    (AR : A → Fl4Spec.Cr3 → Prop) (Z : XSets) : Prop :=
-  ∀ (Z' : XSets) (s' : S) (a' : A) σ', Z'.th = Z.th → XTopAt (L := L) AR Z' s' a' σ' →
-    Endp.IpcBufCapOK σ' ∧ Endp.BufCover Z'.T Z'.B σ' ∧ Vs.BufPlaced (L := L) Z'.N Z'.C Z'.B Z'.c s' σ'
 
 section
 variable {S : Type} {st : machine.Store S} [L : P1.LawfulStore st] {A : Type} {arI : machine.Arch A}
@@ -144,8 +138,6 @@ set_option maxHeartbeats 8000000 in
 of the receive buffer, `4 ≤ |ms| < 120`). -/
 theorem MrJ.buf {ms : List Fl4Spec.Word} {p : Fl4Spec.ObjRef}
     (h : MrJ (L := L) arI AR Z H Cs Ac Lst D a σ0 rcv x0 (some p) s ms)
-    (hZ : ∀ (Z' : XSets) (s' : S) (a' : A) σ', Z'.th = Z.th → XTopAt (L := L) AR Z' s' a' σ' →
-      Endp.IpcBufCapOK σ' ∧ Endp.BufCover Z'.T Z'.B σ' ∧ Vs.BufPlaced (L := L) Z'.N Z'.C Z'.B Z'.c s' σ')
     (hr : rcv ∈ Z.T) (hq : Endp.ipcBufOf true x0 = some p) {rw : U64} (hmr : Endp.BufMap Z.B rw p)
     (hrw : rw.bv = p) (i1 : U64) (hi1 : i1.val = ms.length + 1) (h4 : 4 ≤ ms.length) (h120 : ms.length < 120)
     (v : U64) :
@@ -153,7 +145,7 @@ theorem MrJ.buf {ms : List Fl4Spec.Word} {p : Fl4Spec.ObjRef}
   obtain ⟨V, J⟩ := h
   obtain ⟨Tr, Cq, hJ⟩ := J.jpl
   have hrT : Z.th rcv = some .tcb := (hJ.tcb rcv).2 (J.zH.1 rcv hr)
-  obtain ⟨hOK, -, hBP⟩ := hZ (Z.mv Z.G V) s a _ rfl J.xtop
+  obtain ⟨hOK, -, hBP⟩ := J.xferH
   have hwB := hmr i1 (by omega)
   have hk := jMrSt_rcv σ0 rcv.bv x0 (some p) ms
   obtain ⟨hAp, hObj⟩ := J.bufWord hOK hrT hk (q := p) hq i1.val (by omega) (b := Endp.fl4BufA rw i1)
@@ -168,8 +160,6 @@ set_option maxHeartbeats 8000000 in
 /-- **FL4's `set_mr` of the next message word at `J`**, into a receive
 buffer or without one. -/
 theorem setMrJ
-    (hZ : ∀ (Z' : XSets) (s' : S) (a' : A) σ', Z'.th = Z.th → XTopAt (L := L) AR Z' s' a' σ' →
-      Endp.IpcBufCapOK σ' ∧ Endp.BufCover Z'.T Z'.B σ' ∧ Vs.BufPlaced (L := L) Z'.N Z'.C Z'.B Z'.c s' σ')
     (hr : rcv ∈ Z.T) (hq : ∀ p, pb = some p → Endp.ipcBufOf true x0 = some p) {rw : U64} (hb : JBufR Z.B rw pb)
     {ms : List Fl4Spec.Word} (h : MrJ (L := L) arI AR Z H Cs Ac Lst D a σ0 rcv x0 pb s ms)
     (i : U64) (hi : i.val = ms.length) (hi' : i.val < 120) (v : U64) :
@@ -213,13 +203,11 @@ theorem setMrJ
       have hiv : (core.num.U64.wrapping_add i 1#u64).val = ms.length + 1 := by
         simp [core.num.U64.wrapping_add_val_eq, U64.size_def, U64.numBits]; omega
       refine ⟨by rw [hiv]; simp only [jMrRet]; omega,
-        h.buf hZ hr (hq p rfl) hmr hrw _ hiv (by omega) (by omega) v⟩
+        h.buf hr (hq p rfl) hmr hrw _ hiv (by omega) (by omega) v⟩
 
 set_option maxHeartbeats 8000000 in
 /-- **`set_mrs_lookup_failure` at `J`**: the lookup-failure words, appended. -/
 theorem setMrsLfJ
-    (hZ : ∀ (Z' : XSets) (s' : S) (a' : A) σ', Z'.th = Z.th → XTopAt (L := L) AR Z' s' a' σ' →
-      Endp.IpcBufCapOK σ' ∧ Endp.BufCover Z'.T Z'.B σ' ∧ Vs.BufPlaced (L := L) Z'.N Z'.C Z'.B Z'.c s' σ')
     (hr : rcv ∈ Z.T) (hq : ∀ p, pb = some p → Endp.ipcBufOf true x0 = some p) {rw : U64} (hb : JBufR Z.B rw pb)
     {ms : List Fl4Spec.Word} (h : MrJ (L := L) arI AR Z H Cs Ac Lst D a σ0 rcv x0 pb s ms)
     (off : U64) (hoff : off.val = ms.length) (hlen : ms.length + 4 ≤ 120) (lfv : error.LookupFault) :
@@ -227,7 +215,7 @@ theorem setMrsLfJ
       r.1.val = jMrRet pb (ms.length + (Endp.fl4LfMsg lfv).length) ∧
       MrJ (L := L) arI AR Z H Cs Ac Lst D a σ0 rcv x0 pb r.2 (ms ++ ((Endp.fl4LfMsg lfv).map UScalar.bv : List Fl4Spec.Word)) ⦄ := by
   have hset := fun {s' : S} {ms' : List Fl4Spec.Word}
-      (h' : MrJ (L := L) arI AR Z H Cs Ac Lst D a σ0 rcv x0 pb s' ms') => setMrJ hZ hr hq hb h'
+      (h' : MrJ (L := L) arI AR Z H Cs Ac Lst D a σ0 rcv x0 pb s' ms') => setMrJ hr hq hb h'
   unfold faults.set_mrs_lookup_failure error.LookupFault.type_code
   cases lfv with
   | InvalidRoot =>
@@ -353,8 +341,6 @@ set_option maxHeartbeats 8000000 in
 /-- **`copy_mrs_fault`'s second loop at `J`**: message words `4 .. |rl|`,
 in the receive buffer. -/
 theorem copyMrsFaultJ_loop1
-    (hZ : ∀ (Z' : XSets) (s' : S) (a' : A) σ', Z'.th = Z.th → XTopAt (L := L) AR Z' s' a' σ' →
-      Endp.IpcBufCapOK σ' ∧ Endp.BufCover Z'.T Z'.B σ' ∧ Vs.BufPlaced (L := L) Z'.N Z'.C Z'.B Z'.c s' σ')
     (hr : rcv ∈ Z.T) {snd : U64} (hs : snd ∈ Z.T) (hne : snd.bv ≠ rcv.bv)
     {xs : Fl4Spec.Tcb} (hks : σ0.kheap snd.bv = some (.tcb xs)) {p : Fl4Spec.ObjRef}
     (hq : Endp.ipcBufOf true x0 = some p) {rw : U64} (hmr : Endp.BufMap Z.B rw p) (hrw : rw.bv = p)
@@ -387,7 +373,7 @@ theorem copyMrsFaultJ_loop1
       have hlen' : ((rl.take i.val).map xs.tcbArch.tcbContext.userRegs).length = i.val := by simp; omega
       refine WP.spec_bind (Endp.msg.buf_set.spec s' rw i4 _) ?_
       rintro s3 rfl
-      have hI3 := hI'.buf hZ hr hq hmr hrw i4 (by omega) (by omega) (by omega) (L.mem s' (regA snd r))
+      have hI3 := hI'.buf hr hq hmr hrw i4 (by omega) (by omega) (by omega) (L.mem s' (regA snd r))
       step as ⟨i5, hi5⟩
       have hi5v : i5.val = i.val + 1 := by simpa using hi5
       have hvb : (L.mem s' (regA snd r)).bv = xs.tcbArch.tcbContext.userRegs rl[i.val] := by
@@ -408,8 +394,6 @@ set_option maxHeartbeats 8000000 in
 /-- **`copy_mrs_fault` at `J`** of the sender's registers `rl`: the words
 `0 .. |rl|` (into a buffer), or the first four (without one). -/
 theorem copyMrsFaultJ
-    (hZ : ∀ (Z' : XSets) (s' : S) (a' : A) σ', Z'.th = Z.th → XTopAt (L := L) AR Z' s' a' σ' →
-      Endp.IpcBufCapOK σ' ∧ Endp.BufCover Z'.T Z'.B σ' ∧ Vs.BufPlaced (L := L) Z'.N Z'.C Z'.B Z'.c s' σ')
     (hr : rcv ∈ Z.T) {snd : U64} (hs : snd ∈ Z.T) (hne : snd.bv ≠ rcv.bv)
     {xs : Fl4Spec.Tcb} (hks : σ0.kheap snd.bv = some (.tcb xs))
     (hq : ∀ p, pb = some p → Endp.ipcBufOf true x0 = some p) {rw : U64} (hb : JBufR Z.B rw pb)
@@ -440,14 +424,14 @@ theorem copyMrsFaultJ
     obtain ⟨hrw0, hmr, hrw⟩ := hb
     have hb1 : (rw != 0#u64) = true := by simp [hrw0]
     simp only [hb1, ↓reduceIte]
-    exact copyMrsFaultJ_loop1 hZ hr hs hne hks (hq p rfl) hmr hrw hsl hn s1 i hi hI
+    exact copyMrsFaultJ_loop1 hr hs hne hks (hq p rfl) hmr hrw hsl hn s1 i hi hI
 
 
 theorem fault_ip_idx : layout.reg.FAULT_IP = regIdx .faultIP := by unfold layout.reg.FAULT_IP; rfl
 
 set_option maxHeartbeats 16000000 in
 /-- **`set_mrs_fault` of a cap fault at `J`**. -/
-theorem setMrsFaultCapJ (hZ : XferHZ L AR Z) (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ)
+theorem setMrsFaultCapJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ)
     {snd : U64} (hr : rcv ∈ Z.T) (hs : snd ∈ Z.T) (hne : snd.bv ≠ rcv.bv) {xs xr : Fl4Spec.Tcb}
     (hks : σ.kheap snd.bv = some (.tcb xs)) (hkr : σ.kheap rcv.bv = some (.tcb xr))
     (hq : ∀ p, pb = some p → Endp.ipcBufOf true xr = some p) {rw : U64} (hb : JBufR Z.B rw pb)
@@ -461,7 +445,7 @@ theorem setMrsFaultCapJ (hZ : XferHZ L AR Z) (J : JAtZ (L := L) arI AR Z H Cs Ac
   rw [hf] at hfr
   obtain ⟨hty, hw0, hw1, -⟩ := hfr
   have hset := fun {s' : S} {ms' : List Fl4Spec.Word}
-      (h' : MrJ (L := L) arI AR Z H Cs Ac Lst D a σ rcv xr pb s' ms') => setMrJ hZ hr hq hb h'
+      (h' : MrJ (L := L) arI AR Z H Cs Ac Lst D a σ rcv xr pb s' ms') => setMrJ hr hq hb h'
   have hpc : (L.mem s (regA snd layout.reg.FAULT_IP)).bv = xs.tcbArch.tcbContext.userRegs .faultIP := by
     rw [fault_ip_idx]; exact J.regRead hs hks _
   unfold faults.set_mrs_fault
@@ -488,7 +472,7 @@ theorem setMrsFaultCapJ (hZ : XferHZ L AR Z) (J : JAtZ (L := L) arI AR Z H Cs Ac
     refine WP.spec_bind (Endp.obj.Tcb.lf_w1.spec s3 snd) ?_; rintro _ rfl
     exact Endp.decode_rel hf3.2.2.2
   rintro lfv hlfv
-  refine WP.spec_mono (setMrsLfJ hZ hr hq hb hI3 3#u64 rfl (by simp) lfv) ?_
+  refine WP.spec_mono (setMrsLfJ hr hq hb hI3 3#u64 rfl (by simp) lfv) ?_
   rintro ⟨n, s4⟩ ⟨hn, hI4⟩
   have hlist : [(L.mem s (regA snd layout.reg.FAULT_IP)).bv, (L.mem s (tFw0A snd)).bv, (L.mem s (tFw1A snd)).bv] ++
       ((Endp.fl4LfMsg lfv).map UScalar.bv : List Fl4Spec.Word) =
@@ -507,7 +491,7 @@ theorem setMrsFaultCapJ (hZ : XferHZ L AR Z) (J : JAtZ (L := L) arI AR Z H Cs Ac
 
 set_option maxHeartbeats 16000000 in
 /-- **`set_mrs_fault` of an unknown-syscall fault at `J`**. -/
-theorem setMrsFaultUnknownJ (hZ : XferHZ L AR Z) (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ)
+theorem setMrsFaultUnknownJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ)
     {snd : U64} (hr : rcv ∈ Z.T) (hs : snd ∈ Z.T) (hne : snd.bv ≠ rcv.bv) {xs xr : Fl4Spec.Tcb}
     (hks : σ.kheap snd.bv = some (.tcb xs)) (hkr : σ.kheap rcv.bv = some (.tcb xr))
     (hq : ∀ p, pb = some p → Endp.ipcBufOf true xr = some p) {rw : U64} (hb : JBufR Z.B rw pb)
@@ -529,10 +513,10 @@ theorem setMrsFaultUnknownJ (hZ : XferHZ L AR Z) (J : JAtZ (L := L) arI AR Z H C
     ite_eq_left_of_eq_true _ _ (eq_true (by unfold fl4_abi.consts.fault.UnknownSyscall; rfl))]
   unfold lift
   apply ok_bind_spec
-  refine WP.spec_bind (copyMrsFaultJ hZ hr hs hne hks hq hb (MrJ.init (V := Z.vs) J hkr pb)
+  refine WP.spec_bind (copyMrsFaultJ hr hs hne hks hq hb (MrJ.init (V := Z.vs) J hkr pb)
     Endp.syscall_slice_val (by decide)) ?_
   rintro s2 hI2
-  refine WP.spec_mono (setMrJ hZ hr hq hb hI2 18#u64 (by simp [Endp.syscall_len]) (by decide)
+  refine WP.spec_mono (setMrJ hr hq hb hI2 18#u64 (by simp [Endp.syscall_len]) (by decide)
     (L.mem s (tFw0A snd))) ?_
   rintro ⟨k, s3⟩ ⟨hk, hI3⟩
   rw [hw0] at hI3
@@ -540,7 +524,7 @@ theorem setMrsFaultUnknownJ (hZ : XferHZ L AR Z) (J : JAtZ (L := L) arI AR Z H C
 
 set_option maxHeartbeats 16000000 in
 /-- **`set_mrs_fault` of a user exception at `J`**. -/
-theorem setMrsFaultUserJ (hZ : XferHZ L AR Z) (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ)
+theorem setMrsFaultUserJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ)
     {snd : U64} (hr : rcv ∈ Z.T) (hs : snd ∈ Z.T) (hne : snd.bv ≠ rcv.bv) {xs xr : Fl4Spec.Tcb}
     (hks : σ.kheap snd.bv = some (.tcb xs)) (hkr : σ.kheap rcv.bv = some (.tcb xr))
     (hq : ∀ p, pb = some p → Endp.ipcBufOf true xr = some p) {rw : U64} (hb : JBufR Z.B rw pb)
@@ -563,13 +547,13 @@ theorem setMrsFaultUserJ (hZ : XferHZ L AR Z) (J : JAtZ (L := L) arI AR Z H Cs A
     ite_eq_left_of_eq_true _ _ (eq_true (by unfold fl4_abi.consts.fault.UserException; rfl))]
   unfold lift
   apply ok_bind_spec
-  refine WP.spec_bind (copyMrsFaultJ hZ hr hs hne hks hq hb (MrJ.init (V := Z.vs) J hkr pb)
+  refine WP.spec_bind (copyMrsFaultJ hr hs hne hks hq hb (MrJ.init (V := Z.vs) J hkr pb)
     Endp.exc_slice_val (by decide)) ?_
   rintro s2 hI2
-  refine WP.spec_bind (setMrJ hZ hr hq hb hI2 3#u64 (by simp [Fl4Spec.exceptionMessage]) (by decide)
+  refine WP.spec_bind (setMrJ hr hq hb hI2 3#u64 (by simp [Fl4Spec.exceptionMessage]) (by decide)
     (L.mem s (tFw0A snd))) ?_
   rintro ⟨k3, s3⟩ ⟨-, hI3⟩
-  refine WP.spec_mono (setMrJ hZ hr hq hb hI3 4#u64 (by simp [Fl4Spec.exceptionMessage]) (by decide)
+  refine WP.spec_mono (setMrJ hr hq hb hI3 4#u64 (by simp [Fl4Spec.exceptionMessage]) (by decide)
     (L.mem s (tFw1A snd))) ?_
   rintro ⟨k4, s4⟩ ⟨hk4, hI4⟩
   rw [hw0, hw1, List.append_assoc] at hI4
@@ -578,7 +562,7 @@ theorem setMrsFaultUserJ (hZ : XferHZ L AR Z) (J : JAtZ (L := L) arI AR Z H Cs A
 set_option maxHeartbeats 16000000 in
 /-- **`set_mrs_fault` of a timeout fault of a sender without an SC at
 `J`**. -/
-theorem setMrsFaultTmoJ (hZ : XferHZ L AR Z) (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ)
+theorem setMrsFaultTmoJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ)
     {snd : U64} (hr : rcv ∈ Z.T) (hs : snd ∈ Z.T) {xs xr : Fl4Spec.Tcb}
     (hks : σ.kheap snd.bv = some (.tcb xs)) (hkr : σ.kheap rcv.bv = some (.tcb xr))
     (hq : ∀ p, pb = some p → Endp.ipcBufOf true xr = some p) {rw : U64} (hb : JBufR Z.B rw pb)
@@ -604,7 +588,7 @@ theorem setMrsFaultTmoJ (hZ : XferHZ L AR Z) (J : JAtZ (L := L) arI AR Z H Cs Ac
   unfold obj.Sc.is_null
   apply ok_bind_spec
   simp only [hsc0, decide_true, ↓reduceIte]
-  refine WP.spec_mono (setMrJ hZ hr hq hb (MrJ.init (V := Z.vs) J hkr pb) 0#u64 rfl (by decide)
+  refine WP.spec_mono (setMrJ hr hq hb (MrJ.init (V := Z.vs) J hkr pb) 0#u64 rfl (by decide)
     (L.mem s (tFw0A snd))) ?_
   rintro ⟨k, s1⟩ ⟨hk, hI⟩
   rw [hw0, List.nil_append] at hI
@@ -612,7 +596,7 @@ theorem setMrsFaultTmoJ (hZ : XferHZ L AR Z) (J : JAtZ (L := L) arI AR Z H Cs Ac
 
 set_option maxHeartbeats 16000000 in
 /-- **`set_mrs_fault` of a VM fault at `J`**. -/
-theorem setMrsFaultVmJ (hZ : XferHZ L AR Z) (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ)
+theorem setMrsFaultVmJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ)
     {snd : U64} (hr : rcv ∈ Z.T) (hs : snd ∈ Z.T) {xs xr : Fl4Spec.Tcb}
     (hks : σ.kheap snd.bv = some (.tcb xs)) (hkr : σ.kheap rcv.bv = some (.tcb xr))
     (hq : ∀ p, pb = some p → Endp.ipcBufOf true xr = some p) {rw : U64} (hb : JBufR Z.B rw pb)
@@ -625,7 +609,7 @@ theorem setMrsFaultVmJ (hZ : XferHZ L AR Z) (J : JAtZ (L := L) arI AR Z H Cs Ac 
   rw [hf] at hfr
   obtain ⟨hty, hw0, hd⟩ := hfr
   have hset := fun {s' : S} {ms' : List Fl4Spec.Word}
-      (h' : MrJ (L := L) arI AR Z H Cs Ac Lst D a σ rcv xr pb s' ms') => setMrJ hZ hr hq hb h'
+      (h' : MrJ (L := L) arI AR Z H Cs Ac Lst D a σ rcv xr pb s' ms') => setMrJ hr hq hb h'
   have hpc : (L.mem s (regA snd layout.reg.FAULT_IP)).bv = xs.tcbArch.tcbContext.userRegs .faultIP := by
     rw [fault_ip_idx]; exact J.regRead hs hks _
   unfold faults.set_mrs_fault
@@ -660,7 +644,7 @@ set_option maxHeartbeats 16000000 in
 `update_consumed` (`JAtZ.updConsumedJ`, with `update_consumed_irel` for the
 word written and the time returned), then the badge and the consumed time.
 [P] `hAT`, `hmax`, `htu` (as ScJointConsumed). -/
-theorem setMrsFaultTmoScJ (hZ : XferHZ L AR Z) (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ)
+theorem setMrsFaultTmoScJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ)
     (hAT : P0.ArchTotal arI) (hmax : Fl4Spec.maxTicksToUs = core.num.U64.MAX.bv)
     (htu : ∀ v, arI.ticks_to_us a v ⦃ r => r.bv = Fl4Spec.ticksToUs v.bv ⦄)
     {snd : U64} (hr : rcv ∈ Z.T) (hs : snd ∈ Z.T) {xs xr : Fl4Spec.Tcb}
@@ -703,11 +687,11 @@ theorem setMrsFaultTmoScJ (hZ : XferHZ L AR Z) (J : JAtZ (L := L) arI AR Z H Cs 
     exact congrArg Prod.snd (Set.singleton_eq_singleton_iff.1 e)
   subst eσ
   have hM0 := MrJ.init (L := L) (arI := arI) (AR := AR) (Z := Z) (V := V1) J1 hkr1 pb
-  refine WP.spec_bind (setMrJ hZ hr hq hb hM0 0#u64 rfl (by decide) (L.mem s (tFw0A snd))) ?_
+  refine WP.spec_bind (setMrJ hr hq hb hM0 0#u64 rfl (by decide) (L.mem s (tFw0A snd))) ?_
   rintro ⟨k, s2⟩ ⟨hk, hM1⟩
   simp only at hk hM1
   have hk1 : k.val = 1 := by rw [hk]; cases pb <;> rfl
-  refine WP.spec_mono (setMrJ hZ hr hq hb hM1 k (by rw [hk1]; rfl) (by omega) cv) ?_
+  refine WP.spec_mono (setMrJ hr hq hb hM1 k (by rw [hk1]; rfl) (by omega) cv) ?_
   rintro ⟨k2, s3⟩ ⟨hk2, hM2⟩
   simp only at hk2 hM2 ⊢
   rw [hw0, hcv, List.nil_append, List.singleton_append] at hM2
@@ -735,7 +719,7 @@ theorem doFaultTransfer_j {σ σm : Fl4Spec.State Unit} {snd rcv : Fl4Spec.ObjRe
 set_option maxHeartbeats 16000000 in
 /-- **`do_fault_transfer` at `J`**, given that `set_mrs_fault` writes the
 spec's fault message `ms` (from the state `σm` after `make_fault_msg`). -/
-theorem doFaultXferJ (hZ : XferHZ L AR Z) {snd : U64} (hr : rcv ∈ Z.T) (hs : snd ∈ Z.T)
+theorem doFaultXferJ {snd : U64} (hr : rcv ∈ Z.T) (hs : snd ∈ Z.T)
     (hne : snd.bv ≠ rcv.bv) {xs xr : Fl4Spec.Tcb} (hks : σ.kheap snd.bv = some (.tcb xs)) {f : Fl4Spec.Fault}
     (hf : xs.tcbFault = some f) {σm : Fl4Spec.State Unit} (hksm : σm.kheap snd.bv = some (.tcb xs))
     (hkrm : σm.kheap rcv.bv = some (.tcb xr))
@@ -810,7 +794,7 @@ fault branch, then `doFaultXferJ` with the fault type's `set_mrs_fault`.
 The spec's outcome changes only the receiver's TCB (in its user context) and,
 for a timeout with an SC, that SC. [P] `hAT`, `hmax`, `htu` (only for a
 timeout with an SC). -/
-theorem JAtZ.xferFaultJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) (hZ : XferHZ L AR Z)
+theorem JAtZ.xferFaultJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) 
     {snd : U64} (hs : snd ∈ Z.T) (hr : rcv ∈ Z.T) (hne : snd ≠ rcv) {xs xr : Fl4Spec.Tcb}
     (hks : σ.kheap snd.bv = some (.tcb xs)) (hkr : σ.kheap rcv.bv = some (.tcb xr)) {f : Fl4Spec.Fault}
     (hf : xs.tcbFault = some f)
@@ -829,7 +813,7 @@ theorem JAtZ.xferFaultJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) (hZ : 
   have hxs := hI.1.toE.at_tcb hs hks
   obtain ⟨Tr, Cq, hJ⟩ := J.jpl
   have thT : ∀ t ∈ Z.T, Z.th t = some .tcb := fun t ht => (hJ.tcb t).2 (J.zH.1 t ht)
-  obtain ⟨hOK, hBC, -⟩ := hZ Z s a σ rfl J.xtop
+  obtain ⟨hOK, hBC, -⟩ := J.xferH
   obtain ⟨xr', hkr', hwr⟩ := J.buf rcv hr
   rw [hkr] at hkr'; cases hkr'
   have hspec : Fl4Spec.doIpcTransfer (Z := Unit) snd.bv epo badge.bv grant rcv.bv σ =
@@ -873,29 +857,29 @@ theorem JAtZ.xferFaultJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) (hZ : 
         (∃ x', σ'.kheap rcv.bv = some (.tcb x') ∧ x' = { xr with tcbArch := x'.tcbArch }) ∧
         ∃ V, JAtZ (L := L) arI AR (Z.mv Z.G V) H Cs Ac Lst D s' a σ' ⦄ :=
     fun hmsg hlen _ hlab0 hlab hset =>
-      WP.spec_mono (doFaultXferJ hZ hr hs hne' hks hf hks hkr hu hmsg hlen hlab0 hlab hb badge hset)
+      WP.spec_mono (doFaultXferJ hr hs hne' hks hf hks hkr hu hmsg hlen hlab0 hlab hb badge hset)
         fun _ ⟨σ', h1, h2, h3, h4⟩ => ⟨σ', h1, fun q hq _ => h2 q hq, h3, h4⟩
   cases f with
   | capFault c rp lf =>
     exact hgen (Endp.makeFaultMsg_cap hks c rp lf)
       (by have := Endp.msgFromLookupFailure_len lf; simp [Endp.capFaultMsg]; omega)
       1#u64 (fun m h => by unfold FaultRel at h; rw [hf] at h; exact h.1) (by rw [Endp.mask52]; decide)
-      (setMrsFaultCapJ hZ J hr hs hne' hks hkr hq hb hf)
+      (setMrsFaultCapJ J hr hs hne' hks hkr hq hb hf)
   | unknownSyscallException n =>
     exact hgen (Endp.makeFaultMsg_unknown hks n) (by rw [Endp.usMsg_length]; omega)
       2#u64 (fun m h => by unfold FaultRel at h; rw [hf] at h; exact h.1) (by rw [Endp.mask52]; decide)
-      (setMrsFaultUnknownJ hZ J hr hs hne' hks hkr hq hb hf)
+      (setMrsFaultUnknownJ J hr hs hne' hks hkr hq hb hf)
   | userException e c =>
     exact hgen (Endp.makeFaultMsg_user hks e c) (by rw [Endp.ueMsg_length]; omega)
       3#u64 (fun m h => by unfold FaultRel at h; rw [hf] at h; exact h.1) (by rw [Endp.mask52]; decide)
-      (setMrsFaultUserJ hZ J hr hs hne' hks hkr hq hb hf)
+      (setMrsFaultUserJ J hr hs hne' hks hkr hq hb hf)
   | archFault af =>
     cases af with
     | vmFault va d =>
       have hd := hfr.2.2
       exact hgen (Endp.makeFaultMsg_vm hks va d) (by rw [hd]; simp [Endp.vmMsg])
         6#u64 (fun m h => by unfold FaultRel at h; rw [hf] at h; exact h.1) (by rw [Endp.mask52]; decide)
-        (setMrsFaultVmJ hZ J hr hs hks hkr hq hb hf)
+        (setMrsFaultVmJ J hr hs hks hkr hq hb hf)
   | timeout bb =>
     obtain ⟨Q, R0, hc, hsp⟩ := J.xtop.fin.1.1.1.lists
     obtain ⟨x0, hk0, -, -, hscw, -⟩ := hsp.tcb snd hs
@@ -908,7 +892,7 @@ theorem JAtZ.xferFaultJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) (hZ : 
         cases e
       exact hgen (Endp.makeFaultMsg_timeout hks hscb bb) (by simp)
         5#u64 (fun m h => by unfold FaultRel at h; rw [hf] at h; exact h.1) (by rw [Endp.mask52]; decide)
-        (setMrsFaultTmoJ hZ J hr hs hks hkr hq hb hf hsc0)
+        (setMrsFaultTmoJ J hr hs hks hkr hq hb hf hsc0)
     · obtain ⟨scb, hscb⟩ := Option.ne_none_iff_exists'.1 hscb
       set sc := L.mem s (P1.scA snd) with hscdef
       obtain ⟨hsc0, hscbv⟩ := Notif.optRef_some (hscw.symm.trans hscb)
@@ -931,9 +915,9 @@ theorem JAtZ.xferFaultJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) (hZ : 
           intro e'; rw [e', hky] at hz; cases hz
         simp [Sched.updSc, Notif.updK, hne2, hz]
       have hmsg := Ipc.makeFaultMsg_timeoutSC hks hscx (Ipc.schedContextUpdateConsumed_eq hky hmax) bb
-      refine WP.spec_mono (doFaultXferJ hZ hr hs hne' hks hf hksm hkrm hu' hmsg (by simp)
+      refine WP.spec_mono (doFaultXferJ hr hs hne' hks hf hksm hkrm hu' hmsg (by simp)
         (lab := 5#u64) (fun m h => by unfold FaultRel at h; rw [hf] at h; exact h.1) (by rw [Endp.mask52]; decide)
-        hb badge (setMrsFaultTmoScJ hZ J hAT hmax htu hr hs hks hkr hq hb hf rfl hsc0 hscC hky)) ?_
+        hb badge (setMrsFaultTmoScJ J hAT hmax htu hr hs hks hkr hq hb hf rfl hsc0 hscC hky)) ?_
       rintro s' ⟨σ', h1, h2, h3, h4⟩
       refine ⟨σ', h1, fun q hq hqs => ?_, h3, h4⟩
       rw [h2 q hq, hkm q (hqs bb _ hf hscx)]

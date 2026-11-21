@@ -282,6 +282,12 @@ theorem reset_loop (hP : Placed th) (hN : NoStraddle th p.val (p.val + 2 ^ sb.va
     · simpa [hov] using hZ2
   · rw [if_neg ho0]
     have ho0' : o.val ≠ 0 := fun e => ho0 (UScalar.eq_of_val_eq e)
+    -- #52: the cap just written reads back as the untyped cap, so the
+    -- doomed-transaction exit (`as_untyped` = `none`) is not taken.
+    have hcap2 : obj.Slot.cap st xs s2 = ok (.Untyped p sb o dev) := by
+      rw [slot_cap_eq, capAt_capV, hRR2.cap]
+    simp only [hcap2, bind_ok, untyped.as_untyped, core.option.Option.is_none, Bool.false_eq_true,
+      ↓reduceIte]
     obtain ⟨⟨r, s3, a2⟩, hp3, hS3, hreg3, hE3, hr3⟩ := spec_exists (hPP s2 a1 hE2)
     rw [hp3]
     simp only [bind_ok]

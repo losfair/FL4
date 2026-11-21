@@ -73,7 +73,7 @@ variable {AR : A → Fl4Spec.Cr3 → Prop} {Z : XSets} {H : P1.Heap} {Cs Ac : Se
 (`decode_invocation_irq_controlJ_step`, `jStepHyps`). -/
 theorem decode_invocation_irq_controlJ [Fl4Proofs.P1.PlainStore st] (s : S) (ar : A) (σ : Fl4Spec.State Unit)
     (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s ar σ) (hni : Entered σ)
-    (hARI : ARIface arI AR) (hT : P0.ArchTotal arI)
+    (hARI : ARIface arI AR) (hT : P0.ArchTotal arI) (hZB : ZNoBlk Z.th (L.mem s) (L.ksb s))
     (hHA : HandlersActive (L.mem s) (L.ksb s) Z.G)
     (lbl : U64) (slbl : Fl4Spec.Data) (hlbl : IrqCLabel lbl slbl)
     (hrm : decide (lbl.val = 72) = Fl4Spec.isFl4RemappedLabel slbl)
@@ -90,14 +90,14 @@ theorem decode_invocation_irq_controlJ [Fl4Proofs.P1.PlainStore st] (s : S) (ar 
     (buffer : Option Fl4Spec.ObjRef) :
     XCap (L := L) arI (JAt (L := L) arI AR) s ar σ lbl length (cslotAddr (ps.bv, idxs)) .IrqControl blk call don fp
       buf extra slbl (args.map UScalar.bv) ci (ps.bv, idxs) excaps buffer ct :=
-  decode_invocation_irq_controlJ_step arI s ar σ J hni hARI hT (jStepHyps arI) hHA lbl slbl hlbl hrm
+  decode_invocation_irq_controlJ_step arI s ar σ J hni hARI hT (jStepHyps arI) hZB hHA lbl slbl hlbl hrm
     length buf ct hct args hlen hargs hact2 extra x0 hx0 excaps hex hps hls hsrcC nA hnum hnA hAR blk call don fp ci
     buffer
 
 /-- **The IO port control cap at `JAt`**. -/
 theorem decode_invocation_ioport_controlJ [Fl4Proofs.P1.PlainStore st] (s : S) (ar : A) (σ : Fl4Spec.State Unit)
     (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s ar σ) (hni : Entered σ)
-    (hARI : ARIface arI AR) (hT : P0.ArchTotal arI)
+    (hARI : ARIface arI AR) (hT : P0.ArchTotal arI) (hZB : ZNoBlk Z.th (L.mem s) (L.ksb s))
     (hPA : IoPortsAlloc (L.mem s) (L.ksb s) Z.G)
     (lbl : U64) (slbl : Fl4Spec.Data)
     (hlbl : lbl.val = 63 ↔ Fl4Spec.invocationType slbl = .archInvocationLabel .x64IOPortControlIssue)
@@ -112,14 +112,14 @@ theorem decode_invocation_ioport_controlJ [Fl4Proofs.P1.PlainStore st] (s : S) (
     (blk call don fp : Bool) (ci : Fl4Spec.CapRef) (buffer : Option Fl4Spec.ObjRef) :
     XCap (L := L) arI (JAt (L := L) arI AR) s ar σ lbl length (cslotAddr (ps.bv, idxs)) .IoPortControl blk call don fp
       buf extra slbl (args.map UScalar.bv) ci (ps.bv, idxs) excaps buffer ct :=
-  decode_invocation_ioport_controlJ_step arI s ar σ J hni hARI hT (jStepHyps arI) hPA lbl slbl hlbl
+  decode_invocation_ioport_controlJ_step arI s ar σ J hni hARI hT (jStepHyps arI) hZB hPA lbl slbl hlbl
     length buf ct hct args hlen hargs hact3 extra x0 hx0 excaps hex hps hls hsrcC blk call don fp ci buffer
 
 /-- **The domain cap at `JAt`**. -/
 theorem decode_invocation_domainJ [Fl4Proofs.P1.PlainStore st] (hcfg : DomConfig) (s : S) (ar : A)
     (σ : Fl4Spec.State Unit)
     (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s ar σ) (hni : Entered σ)
-    (hARI : ARIface arI AR)
+    (hARI : ARIface arI AR) (hZB : ZNoBlk Z.th (L.mem s) (L.ksb s))
     (ct : U64) (hct : sched.cur_thread st s = ok ct)
     (hksO : ∀ o : U64, o.val < 256 → o.val % 8 = 0 → OutsideObjects Z.th (ksW (L.ksb s) o))
     (hactK : ∀ o : U64, o.val < 256 → (L.nodeAt s (L.cpu s) layout.node.SCHED_ACTION).val ≠ (ksW (L.ksb s) o).val)
@@ -132,7 +132,7 @@ theorem decode_invocation_domainJ [Fl4Proofs.P1.PlainStore st] (hcfg : DomConfig
     (buffer : Option Fl4Spec.ObjRef) :
     XCap (L := L) arI (JAt (L := L) arI AR) s ar σ lbl length slot .Domain blk call don fp buf extra slbl
       (args.map UScalar.bv) ci sl excs buffer ct :=
-  decode_invocation_domainJ_step arI hcfg s ar σ J hni hARI (jStepHyps arI) ct hct hksO hactK lbl slbl hlbl
+  decode_invocation_domainJ_step arI hcfg s ar σ J hni hARI (jStepHyps arI) hZB ct hct hksO hactK lbl slbl hlbl
     length buf args hlen hargs extra x0 hx0 excs hex slot blk call don fp ci sl buffer
 
 end

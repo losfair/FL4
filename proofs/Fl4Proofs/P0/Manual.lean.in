@@ -3,13 +3,18 @@
 -- `theorem NAME.p0` and states the same P0 property the generator would.
 
 -- The loop clears chunks downwards; `offset` is nonzero where it goes on,
--- so taking a chunk off (saturating) makes it smaller.
+-- so taking a chunk off (saturating) makes it smaller. Since #52 it reads the
+-- cap back first and stops (`Preempted`) when it is not an untyped cap.
 @[step] theorem untyped.reset_untyped_loop.p0 {S : Type _} {A : Type _} (machineStoreInst : machine.Store S) (machineArchInst : machine.Arch A) (s : S) (a : A) (slot : obj.Slot) (ptr : Std.U64) (block : Std.U64) (device : Bool) (offset : Std.U64) (hS : StoreTotal machineStoreInst) (hA : ArchTotal machineArchInst) :
     untyped.reset_untyped_loop machineStoreInst machineArchInst s a slot ptr block device offset ⦃ _ => True ⦄ := by
   unfold untyped.reset_untyped_loop
   apply loop.spec_decr_nat (measure := fun x => match x with | (_, _, x2) => x2.val) (inv := fun _ => True)
   · rintro ⟨x0, x1, x2⟩ -
     unfold untyped.reset_untyped_loop.body
+    p0_body
+    -- #52: the cap read back; `none` (a doomed transaction) ends the loop.
+    p0_ite_head
+    · exact (WP.spec_ok _).2 trivial
     p0_body
     all_goals
       simp only [lift, bind_ok, WP.spec_ok, saturating_sub_u64_val]
@@ -126,8 +131,8 @@
   p0_structural
 
 
-@[step] theorem syscall.handle_unknown_syscall.p0 {S : Type _} {A : Type _} (machineStoreInst : machine.Store S) (machineArchInst : machine.Arch A) (s : S) (a : A) (number : Std.I64) (hS : StoreTotal machineStoreInst) (hA : ArchTotal machineArchInst) :
-    syscall.handle_unknown_syscall machineStoreInst machineArchInst s a number ⦃ _ => True ⦄ := by
+@[step] theorem syscall.handle_unknown_syscall.p0 {S : Type _} {A : Type _} (machineStoreInst : machine.Store S) (machineArchInst : machine.Arch A) (s : S) (a : A) (number : Std.I64) (fast : Bool) (hS : StoreTotal machineStoreInst) (hA : ArchTotal machineArchInst) :
+    syscall.handle_unknown_syscall machineStoreInst machineArchInst s a number fast ⦃ _ => True ⦄ := by
   set_option maxHeartbeats 4000000 in
   unfold syscall.handle_unknown_syscall
   p0_structural

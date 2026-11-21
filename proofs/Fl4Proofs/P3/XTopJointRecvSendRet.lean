@@ -89,7 +89,7 @@ set_option maxHeartbeats 8000000 in
 /-- **The blocking receive from a waiting sender with a bound notification
 lending the receiver its SC at `J`** (module docstring), the sender as in
 XTopJointRecvSendF's `SendOK`. -/
-theorem JAtZ.recvSendRetJ (hZ : XferHZ L AR Z) (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ)
+theorem JAtZ.recvSendRetJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ)
     {t : U64} (ht : t ∈ Z.T) (hcur : σ.curThread = t.bv) (hni : Entered σ)
     (hnq : ∀ d p, σ.curThread ∉ σ.readyQueues d p)
     {xt : Fl4Spec.Tcb} (hkt : σ.kheap t.bv = some (.tcb xt))
@@ -176,7 +176,7 @@ theorem JAtZ.recvSendRetJ (hZ : XferHZ L AR Z) (J : JAtZ (L := L) arI AR Z H Cs 
       xn.ntfnSc ≠ none) := fun h => h.2 h.1
   have hsp := receiveIpc_lend_eq b rights (replyArg_spec J.ip.e hI.1.toE hrc)
     (replyArg_spec J2.ip.e hI2.1.toE hrc2) hkt kt hbn hbn hk hk2 hkn hkn2 hna he2 hnr2
-  have key := J2.recvSendJX hZ ht kt hr (Or.inr ⟨n.bv, xn, hbn, hkn2, hna, fun _ => hnr2⟩) hcur2 he hk2 hks2
+  have key := J2.recvSendJX ht kt hr (Or.inr ⟨n.bv, xn, hbn, hkn2, hna, fun _ => hnr2⟩) hcur2 he hk2 hks2
     cb c1 c2 c3 c4 hrc2 hok b rights (m := Endp.recvTail st arI s' a t e rv) (fun h => by unfold Endp.recvTail; exact h)
   rw [hsp]
   exact key

@@ -250,6 +250,7 @@ theorem JAtZ.finNtfnJ {AR : A → Fl4Spec.Cr3 → Prop} {Z : XSets} {H : P1.Heap
   have hRF' := RFree.carry J.rfree J.call k4 ck
   have hRR' := J.rrecv.frame k4 F.khrb
   have hDbg := J.kw_dbg hfoot
+  have hKd := J.kw_dbgKeep hfoot
   have hS3 : SchedRel st Z.N Z.T Z.C Z.c s3 σ3 := hI3.2.2.1
   -- the scheduler fields
   have hAI3 : ActIdle σ3 := by
@@ -285,7 +286,7 @@ theorem JAtZ.finNtfnJ {AR : A → Fl4Spec.Cr3 → Prop} {Z : XSets} {H : P1.Heap
       hAI3, B3, F.isorted J.isorted, hrun3, hblk⟩
   have hC0 := JCs.same J hF.1 F.ksz
   have hC : JCs (L := L) (Z.mv Z.G V') s3 σ3 := ⟨hC0.del, hC0.ut, hC0.finM, hC0.sfree⟩
-  exact ⟨e1, e2, σ3, Z.vs, hmem, J.cs_frameI hks hX3 hw (fun b hb => Ipc.FinW.oobj J.xtop.fin.1.1.1 hb) F.sk.arch (fun q ao h => F.othF h (fun _ e => by cases e) (fun _ _ e => by cases e) (fun _ e => by cases e)) F.szKeep hF.1 F.kback F.ipcFr hC R, F.kback, F.ipcFr, hF.1, hks⟩
+  exact ⟨e1, e2, σ3, Z.vs, hmem, J.cs_frameI hks hX3 hw (fun b hb => Ipc.FinW.oobj J.xtop.fin.1.1.1 hb) (fun b hb => Ipc.FinW.nv J.xtop.fin.1.1.1 hb) F.sk.arch (fun q ao h => F.othF h (fun _ e => by cases e) (fun _ _ e => by cases e) (fun _ e => by cases e)) F.szKeep hF.1 F.kback F.ipcFr hC R hKd F.sk.orig (J.idleW_keep hS3 F.sk.idle F.sk.isc).1 J.zD, F.kback, F.ipcFr, hF.1, hks⟩
 
 end
 

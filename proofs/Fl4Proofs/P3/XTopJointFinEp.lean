@@ -171,6 +171,7 @@ theorem JAtZ.finEpJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ)
     · obtain ⟨h1, h2, h3⟩ := recvReplyHyp_holds Z Ac Lst D s a σ J d hd x t xt hx hxt hkt hrb
       exact ⟨h1, by rw [r2]; exact h2, by rw [r1]; exact h3⟩
   have hDbg := J.kw_dbg hfoot
+  have hKd := J.kw_dbgKeep hfoot
   have hS3 : SchedRel st Z.N Z.T Z.C Z.c s3 σ3 := hI3.2.2.1
   -- the scheduler fields
   have hAI3 : ActIdle σ3 := by
@@ -204,8 +205,8 @@ theorem JAtZ.finEpJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ)
       hAI3, B3, F.isorted J.isorted, hrun3, hblk⟩
   have hC0 := JCs.same J hF.1 F.ksz
   have hC : JCs (L := L) (Z.mv Z.G V') s3 σ3 := ⟨hC0.del, hC0.ut, hC0.finM, hC0.sfree⟩
-  exact ⟨e1, e2, σ3, Z.vs, hmem, J.cs_frameI hks hX3 hw (fun b hb => Ipc.CnW.oobj J.xtop.fin.1.1.1 hb) F.sk.arch (fun q ao h => F.othF h (fun _ e => by cases e) (fun _ _ e => by cases e) (fun _ e => by cases e)
-      (fun _ e => by cases e)) F.szKeep hF.1 F.kback F.ipcFr hC R, F.kback, hF.1, hks⟩
+  exact ⟨e1, e2, σ3, Z.vs, hmem, J.cs_frameI hks hX3 hw (fun b hb => Ipc.CnW.oobj J.xtop.fin.1.1.1 hb) (fun b hb => J.cnW_nv hb) F.sk.arch (fun q ao h => F.othF h (fun _ e => by cases e) (fun _ _ e => by cases e) (fun _ e => by cases e)
+      (fun _ e => by cases e)) F.szKeep hF.1 F.kback F.ipcFr hC R hKd F.sk.orig (J.idleW_keep hS3 F.sk.idle F.sk.isc).1 J.zD, F.kback, hF.1, hks⟩
 
 end
 

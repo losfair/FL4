@@ -55,7 +55,7 @@ theorem bufHypW_JL {t : U64} (ht : Z.th t = some .tcb) (kb addr : U64) :
       dbgKeep_of_writes J.blk (P1.writesIn_wr hwa) fun b hb => by
         subst hb
         exact P1.dbgW_not_kw J.blk (Or.inl ⟨t, J.zH.1 t htT, 3512#u64, by decide, by decide, by decide, by decide, rfl⟩)
-    obtain ⟨hL1, hDW1, hN1⟩ := wjl_keep arI (V1 := V') J hDS hL hDW hN J' (fun p hp => Or.inr hp) hSS hDS1 hdk
+    obtain ⟨hL1, hDW1, hN1⟩ := wjl_keep arI (V1 := V') J hDS hL hDW hN J' (fun p hp => Or.inr hp) hSS hDS1 hdk rfl
     refine ⟨hSS, _, ?_, hCR', hstep.ksub, ⟨V', Ac, Lst, _, J', by rw [L.ksb_wr]; exact hkb, fun u e => hns u e,
       hsg.of_slotK (SlotK.ipcBuf hk addr.bv) rfl rfl, hp0.of_ppk (PPK.updTcbSc hk rfl)⟩, hL1, hDW1, hN1⟩
     rw [Notif.threadSet_eq _ hk]; rfl
@@ -100,11 +100,11 @@ theorem bufHypW_JL {t : U64} (ht : Z.th t = some .tcb) (kb addr : U64) :
       have hmem : ∀ y ∈ G.chains.flatten, IsSlot Z.th y := fun y hy => ((hDS.1.2.2.1.members y).1 hy).1
       have hTz : P1.DbgTz st (P1.Heap.tcbs H) Cs s :=
         ⟨J.blk.2.2.1.2.2.tm.dn, J.blk.2.2.1.2.2.tm.dp, J.blk.2.2.1.2.2.tm.dh⟩
-      have hL1 := hL.of_sameZ hSS hmem horig hdk J.kern.cs0 hTz hdead
+      have hL1 := hL.of_sameZ hSS hmem horig (congrArg Prod.snd hgk) hdk J.kern.cs0 hTz hdead
       rw [WP.spec_ok]
       refine ⟨rfl, rfl, hSS, σ', ?_, J5.xtop.rel.2.1, KSub.of_kheap hK'.kh, ⟨V, Ac5, Lst5, D5, J5,
         by rw [hw.1]; exact hkb, (fun u e' => by rw [hact5] at e'; cases e'),
-        hsg.of_eq hK'.kh (congrArg Prod.fst hgk) (congrArg Prod.snd hgk), hp0.of_ppk (PPK.of_schedK hK')⟩,
+        hsg.of_eq hK'.kh (congrArg Prod.fst hgk) (congrArg Prod.snd hgk), hp0.of_ppk (PPK.of_schedK hK' (fun u e' => by rw [hact5] at e'; cases e') (rq_of_resched hns hres))⟩,
         hL1, ⟨lst, J.dbgWF_keep J5 rfl rfl hDW hdk⟩, hN.of_same (fun y hy => hSS.capV hy) horig⟩
       refine mem_bindE_ok (a := σ.curThread) (s' := σ) (mem_liftE_ok (x := (σ.curThread, σ)) rfl) ?_
       have hb : t.bv = σ.curThread := by rw [hcur, e]

@@ -81,6 +81,31 @@ theorem dbg0_not_schedW {s : S} (h : BlkOK st T Cs Ω H Sg Rp Scs Nt Z Ac s) (h0
     rw [this] at e'
     omega
 
+/-- **`schedule`'s footprint keeps every debug word** (KENTRY-PLAN g2i: `KW`
+leaves them out, the kernel-state block holds none: the TCBs and the nodes lie
+outside it). -/
+theorem dbgKeep_schedW {s s' : S} (h : BlkOK st T Cs Ω H Sg Rp Scs Nt Z Ac s)
+    (hf : (L.ksb s).val + 13568 ≤ 2 ^ 64) (hw : WritesIn st s s' (SchedW st T Cs Sg Scs Z H s)) :
+    DbgKeep st T Cs s s' :=
+  ⟨hw.1, fun b hb => hw.mem_eq (dbgW_aligned h hb) fun hs => by
+    rcases hs with hk | ⟨o, ho, rfl⟩
+    · exact dbgW_not_kw h hk hb
+    · obtain ⟨⟨Q, R, hq⟩, -⟩ := h
+      have hv : (core.num.U64.wrapping_add (L.ksb s) o).val = (L.ksb s).val + o.val := wadd_val (by omega)
+      have hnb : ∀ c, L.nodeBase s c = (L.ksb s).val + 13568 + c.val * 4288 := fun _ => rfl
+      rcases hb with ⟨y, hy, e | e⟩ | ⟨c, hc, e⟩
+      · have hyv : (dnA y).val = y.val + 3576 := field_val (hq.tcbs y hy) (K := 3576#u64) (by simp)
+        have e' := congrArg UScalar.val e
+        rw [hv, hyv] at e'
+        rcases hq.ksOut y hy with h1 | h1 <;> omega
+      · have hyv : (dpA y).val = y.val + 3584 := field_val (hq.tcbs y hy) (K := 3584#u64) (by simp)
+        have e' := congrArg UScalar.val e
+        rw [hv, hyv] at e'
+        rcases hq.ksOut y hy with h1 | h1 <;> omega
+      · have e' := congrArg UScalar.val e
+        rw [hv, nodeAt_val (hq.nodes c hc) (by simp [debug_val]), hnb, debug_val] at e'
+        omega⟩
+
 end
 
 end Fl4Proofs.P1
@@ -191,7 +216,7 @@ theorem jat_scheduleT2 {AR : A → Fl4Spec.Cr3 → Prop} {Z : XSets} {H : P1.Hea
       (J1.jcov.dead q hq)
   have hT2 : SchTailHyps (L := L) AR Z H Cs D1 rf.1 s' a' σ' Ac :=
     ⟨hcur, hTl.ar, hdbg, hdw, hdead,
-      ⟨⟨Q', R', hq'⟩, hBd', hXi', hSc', hSg.ksb' hks'⟩⟩
+      ⟨⟨Q', R', hq'⟩, hBd', hXi', hSc', hSg.ksb' hks'⟩, P1.dbgKeep_schedW J1.blk J1.kern.ksbFit hkw⟩
   obtain ⟨Lst', J'⟩ := J1.sch_tail hsc hw hS' hR' hN' hI' hC' hA' (RunW.scAndTimer (hr3 J1.curRun) he3)
     (OffOK.scAndTimer ho3 he3) (bsa_schedule J1.bsa hsc) hT2
   exact ⟨σ', Ac, Lst', D1, J', hC'⟩

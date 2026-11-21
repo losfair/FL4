@@ -385,14 +385,17 @@ theorem decode_rotate_rel (th : TypedHeap) (s : S) (σ : Fl4Spec.State Unit) (G 
                 (by rw [capV_of_capAt hsc2]; exact update_vcap hns) (by rw [capV_of_capAt hsc2]; exact update_tabun hns)
                 (by rw [capV_of_capAt hpc2]; exact update_vcap hnp) (by rw [capV_of_capAt hpc2]; exact update_tabun hnp)
                 (by rw [capV_of_capAt hsc2]; exact update_okey hns hnsn)
-                (by rw [capV_of_capAt hpc2]; exact update_okey hnp hnpn),
+                (by rw [capV_of_capAt hpc2]; exact update_okey hnp hnpn)
+                (by rw [capV_of_capAt hsc2]; exact update_nat hns) (by rw [capV_of_capAt hpc2]; exact update_nat hnp),
               coverUt_swap hAs.isSlot hAp.isSlot (fun h => e1 h.symm) (capV_of_capAt hsc2) (capV_of_capAt hpc2)
                 htr.2.2.1 htr.2.2.2 htr.2.1 hshs hshp (fun _ _ _ _ hc _ _ hs => by
                 have hu : isUt srcC = true := by rw [hs]; rfl
                 rw [update_ut hns hu, hs] at hc; cases hc; exact ⟨rfl, Or.inl le_rfl⟩)
                 (fun _ _ _ _ hc _ _ hs => by
                 have hu : isUt pivC = true := by rw [hs]; rfl
-                rw [update_ut hnp hu, hs] at hc; cases hc; exact ⟨rfl, Or.inl le_rfl⟩)⟩
+                rw [update_ut hnp hu, hs] at hc; cases hc; exact ⟨rfl, Or.inl le_rfl⟩),
+              cnLive_swap e3.symm (capV_of_capAt hsc2) hsn (capV_of_capAt hpc2) hpn htr.2.2.2 htr.2.2.1 hnsn hnpn hshs hshp,
+              nullSrc_swap e3.symm htr.2.2.2 htr.2.2.1 hnsn hnpn⟩
             simp only [hnsan, hnpan, Fl4Spec.NonDetE.whenE, ↓reduceIte, ndE_pure_bind]; rfl
 
           · have e3' : (ps.bv, sb) ≠ (pd.bv, db) := fun h => e3 (by rw [h])
@@ -566,11 +569,13 @@ theorem decode_rotate_rel (th : TypedHeap) (s : S) (σ : Fl4Spec.State Unit) (G 
                     rw [capV_of_capAt hsc3, ← update_ut hns hu, h]) htr2.2.1),
               (vsSlotsT_move hAp.isSlot htr1.2.1 htr1.2.2.1 htr1.2.2.2 (by rw [capV_of_capAt hpc2]; exact update_vcap hnp)
                 (by rw [capV_of_capAt hpc2]; exact update_tabun hnp)
-                (by rw [capV_of_capAt hpc2]; exact update_okey hnp hnpn)).trans
+                (by rw [capV_of_capAt hpc2]; exact update_okey hnp hnpn)
+                (by rw [capV_of_capAt hpc2]; exact update_nat hnp)).trans
                 (vsSlotsT_move hAs.isSlot htr2.2.1 htr2.2.2.1 htr2.2.2.2 (by rw [capV_of_capAt hsc3]; exact update_vcap hns)
                 (by rw [capV_of_capAt hsc3]; exact update_tabun hns)
-                (by rw [capV_of_capAt hsc3]; exact update_okey hns hnsn)),
-              (coverUt_mov hAd.isSlot (fun e => hdm (e ▸ hpm)) (capV_of_capAt hpc2) (capV_of_capAt hdc2)
+                (by rw [capV_of_capAt hsc3]; exact update_okey hns hnsn)
+                (by rw [capV_of_capAt hsc3]; exact update_nat hns)),
+              ⟨(coverUt_mov hAd.isSlot (fun e => hdm (e ▸ hpm)) (capV_of_capAt hpc2) (capV_of_capAt hdc2)
                 htr1.2.2.1 htr1.2.2.2 htr1.2.1 hshp hAp.isSlot (fun _ _ _ _ hc _ _ hs => by
                 have hu : isUt pivC = true := by rw [hs]; rfl
                 rw [update_ut hnp hu, hs] at hc; cases hc; exact ⟨rfl, Or.inl le_rfl⟩)).1.trans
@@ -585,7 +590,11 @@ theorem decode_rotate_rel (th : TypedHeap) (s : S) (σ : Fl4Spec.State Unit) (G 
                 (coverUt_mov hAp.isSlot (fun h => e1 h.symm) (capV_of_capAt hsc3) (capV_of_capAt hpc3)
                 htr2.2.2.1 htr2.2.2.2 htr2.2.1 hshs hAs.isSlot (fun _ _ _ _ hc _ _ hs => by
                 have hu : isUt srcC = true := by rw [hs]; rfl
-                rw [update_ut hns hu, hs] at hc; cases hc; exact ⟨rfl, Or.inl le_rfl⟩)).2⟩
+                rw [update_ut hns hu, hs] at hc; cases hc; exact ⟨rfl, Or.inl le_rfl⟩)).2⟩,
+              cnLive_rot (capV_of_capAt hsc2) hsn (capV_of_capAt hpc2) hpn (capV_of_capAt hdc2) htr2.2.2.2 htr2.2.2.1
+                ((htr2.2.1 _ hAd.isSlot (fun h => e3 h.symm) (fun h => e2 h.symm)).trans htr1.2.2.1) hnsn hnpn hshs hshp,
+              nullSrc_rot e3' htr2.2.2.1
+                ((htr2.2.1 _ hAd.isSlot (fun h => e3 h.symm) (fun h => e2 h.symm)).trans htr1.2.2.1) hnsn hnpn⟩
             simp only [hnsan, hnpan, Fl4Spec.NonDetE.whenE, ↓reduceIte, ndE_pure_bind]; rfl
 
 

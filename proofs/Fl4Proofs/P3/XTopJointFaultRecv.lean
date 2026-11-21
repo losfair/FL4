@@ -42,6 +42,7 @@ import Fl4Proofs.P3.XTopJointSendPushD
 import Fl4Proofs.P3.EpSendF
 import Fl4Proofs.P3.BufFr
 import Fl4Proofs.P3.BufFrA
+import Fl4Proofs.P3.BufJ
 open Aeneas Aeneas.Std Result
 
 namespace Fl4Proofs.P3
@@ -82,6 +83,7 @@ theorem JAtZ.fin_frameF (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {s' : 
   have hRF' := RFree.carry J.rfree J.call k4 ck
   have hRR' := J.rrecv.frame k4 hA.khrb
   have hDbg := J.kw_dbg (hfoot.mono fun b hb => kw_empty_mono hb _)
+  have hKd := J.kw_dbgKeep (hfoot.mono fun b hb => kw_empty_mono hb _)
   have hS3 : SchedRel st Z.N Z.T Z.C Z.c s' σ' := hI3.2.2.1
   have hAI3 : ActIdle σ' := hA.actIdle J.act
   have hdead : ∀ q ∈ D, DeadP (L := L) H s' q := J.deadP_qk hA hS3 hI3.1 hwF k3 hAI3.1 (J.yld.frame k2 hyk) hyk
@@ -100,7 +102,7 @@ theorem JAtZ.fin_frameF (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {s' : 
       hAI3, hA.bsa J.bsa, hA.isorted J.isorted, hA.curRunM J.curRun, hblk⟩
   have hC0 := JCs.same J hF.1 hA.ksz
   have hC : JCs (L := L) (Z.mv Z.G V') s' σ' := ⟨hC0.del, hC0.ut, hC0.finM, hC0.sfree⟩
-  exact ⟨Z.vs, J.cs_frameI hks hX3 hwF (fun b hb => Ipc.FinW.oobj J.xtop.fin.1.1.1 hb) hA.arch (fun q ao h => (hA.oth (fun _ e => by cases e) (fun _ _ e => by cases e)).2 h) hA.szKeep hF.1 hA.kback hA.ipcFr hC R⟩
+  exact ⟨Z.vs, J.cs_frameI hks hX3 hwF (fun b hb => Ipc.FinW.oobj J.xtop.fin.1.1.1 hb) (fun b hb => Ipc.FinW.nv J.xtop.fin.1.1.1 hb) hA.arch (fun q ao h => (hA.oth (fun _ e => by cases e) (fun _ _ e => by cases e)).2 h) hA.szKeep hF.1 hA.kback hA.ipcFr hC R hKd hck.orig (J.idleW_keep hS3 hA.idle hA.isc).1 J.zD⟩
 
 set_option maxHeartbeats 16000000 in
 /-- **`set_fault` of a cap fault at `J`** (module docstring): the thread not
@@ -134,7 +136,7 @@ theorem JAtZ.setFaultCapJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {t :
       (writesIn_wr (v := if rp then 1#u64 else 0#u64) (a_fw1 hta).1)).trans
       (writesIn_wr (v := 0#u64) (a_fw2 hta).1)
     refine w.mono fun w0 hw0 => ?_
-    have k : ∃ K : Nat, 256 ≤ K ∧ K < 4096 ∧ K ≠ 3440 ∧ K ≠ 3472 ∧ K ≠ 3512 ∧ w0.val = t.val + K := by
+    have k : ∃ K : Nat, 256 ≤ K ∧ K < 4096 ∧ K ≠ 3440 ∧ K ≠ 3472 ∧ (K ≠ 3512 ∧ K ≠ 3664) ∧ w0.val = t.val + K := by
       rcases hw0 with ((((((h | h) | h) | h) | h) | h) | h) <;> subst h
       · exact ⟨3408, by omega, by omega, by omega, by omega, by omega, val_lf hta⟩
       · exact ⟨3416, by omega, by omega, by omega, by omega, by omega, val_lf0 hta⟩
@@ -646,7 +648,7 @@ reply unlink, then the caller `Inactive` on `IRel` (its queue bits clear by
 release queue, `CurInv.notRel`), the receiver `Running`, `JAtZ` by
 `JAtZ.wake_postCI` (the spec's two state changes swapped, `ciSt_swap`), the
 tail `JAtZ.sendTailJ`; the spec's outcome `sendIpc_callInactive_eq`. -/
-theorem JAtZ.sendFaultIJ (hZ : XferHZ L AR Z) (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ)
+theorem JAtZ.sendFaultIJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ)
     {t : U64} (ht : t ∈ Z.T) {xt : Fl4Spec.Tcb} (hkt : σ.kheap t.bv = some (.tcb xt))
     (hrn : Fl4Spec.runnable xt.tcbState = true) {cf : Fl4Spec.ObjRef} {rp : Bool} {lf : Fl4Spec.LookupFailure}
     (hft : xt.tcbFault = some (.capFault cf rp lf)) (hct : σ.curThread = t.bv)
@@ -752,14 +754,14 @@ theorem JAtZ.sendFaultIJ (hZ : XferHZ L AR Z) (J : JAtZ (L := L) arI AR Z H Cs A
   have IK1 : IK d'.bv σ σ1 := IK.updOther (o' := .endpoint (epDeq (.recvEP (d'.bv :: q)) d'.bv)) hk (fun o0 h => by
     rcases h with rfl | rfl <;> exact ⟨fun _ h => (by cases h), fun _ _ h => (by cases h), fun _ h => (by cases h)⟩)
   have SK1 : SKeep σ σ1 := SKeep.updK (p := e.bv) (o := .endpoint (epDeq (.recvEP (d'.bv :: q)) d'.bv)) (fun y h => by cases h) (fun _ _ h => by cases h)
-  have hOK1 : Endp.IpcBufCapOK σ1 := ipcBufCapOK_epStep (hZ Z s a σ rfl J.xtop).1 (EpStep.ep hk)
+  have hOK1 : Endp.IpcBufCapOK σ1 := ipcBufCapOK_epStep (J.xferH).1 (EpStep.ep hk)
   -- the transfer
   have hdth : Z.th d' = some .tcb := by
     obtain ⟨⟨⟨G0, hB0'⟩, -⟩, -⟩ := hS0.1.1
     exact Ipc.RelTopB.tcbT hB0' hkd
-  have hUd := J.rbufU hZ hdT hdth hkd
+  have hUd := J.rbufU hdT hdth hkd
   refine WP.spec_bind (xferFaultStepJ hP0 hP (hH.epHyps hP0) s1 a σ1 hR1 hS1 hOK1
-    (bufCover_epStep (hZ Z s a σ rfl J.xtop).2.1 (EpStep.ep hk)) ht hdT htd hkt1 hkd1 hft e badge g
+    (bufCover_epStep (J.xferH).2.1 (EpStep.ep hk)) ht hdT htd hkt1 hkd1 hft e badge g
     hTP hdH h1 hB1 hX1 hS1' hSg1 (fun b hb => ⟨(hUd b hb).1.ksb hW1.1, (hUd b hb).2⟩)) ?_
   rintro s2 ⟨x2, um2, e2, hx2, hR2, hS2, hA2, w2, h2, hB2, hX2, hS2'', hSg2, f2⟩
   set σ2 := Notif.updK (Endp.setUm σ1 um2) d'.bv (.tcb x2) with hσ2
@@ -1044,7 +1046,7 @@ theorem JAtZ.sendFaultIJ (hZ : XferHZ L AR Z) (J : JAtZ (L := L) arI AR Z H Cs A
     ⟨fun u hu => (by rw [hcn] at hu; cases hu), ciSt_idleOK hidT (Fr5.idleOK J.act.2)⟩
   have hrun5 : CurRunM (ciSt σa t.bv xt) := Or.inl (by rw [hcn]; intro h; cases h)
   have hcD : ∀ q ∈ D, q.bv ≠ t.bv := J.notDead ht hkt (by have := runnable_code hrn; omega)
-  obtain ⟨su, umu, Ju, hWu, hFu, -, -⟩ := J.bufRebaseX hZ hdT hdth hkd hW5' hfoot
+  obtain ⟨su, umu, Ju, hWu, hFu, -, -⟩ := J.bufRebaseX hdT hdth hkd hW5' hfoot
   have hIu := Ju.xtop.irelK Ju.ks Ju.buf
   have htD := Ju.not_dead_of_st hdT hkd (by rw [hstd]; simp [tsCode])
   have hRR : ∀ q' ∈ Z.R, ∀ xr, (Endp.setUm σ umu).kheap q'.bv = some (.reply xr) → xr.replyTcb = some d'.bv →
@@ -1103,7 +1105,7 @@ then `reply_push` on `IRel` (`reply_push_iG`, no donation), P1's
 `reply_push.ipc` and `reply_push.nd`, the receiver `Running`, `JAtZ` by
 `JAtZ.wake_postGR` at `pushSt` (`ps_swap`), the tail `JAtZ.sendTailJ`; the
 spec's outcome `sendIpc_call_eq`. -/
-theorem JAtZ.sendFaultPJ (hAT : P0.ArchTotal arI) (hZ : XferHZ L AR Z) (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ)
+theorem JAtZ.sendFaultPJ (hAT : P0.ArchTotal arI) (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ)
     {t : U64} (ht : t ∈ Z.T) {xt : Fl4Spec.Tcb} (hkt : σ.kheap t.bv = some (.tcb xt))
     (hrn : Fl4Spec.runnable xt.tcbState = true) {cf : Fl4Spec.ObjRef} {rp : Bool} {lf : Fl4Spec.LookupFailure}
     (hft : xt.tcbFault = some (.capFault cf rp lf)) (hct : σ.curThread = t.bv)
@@ -1210,14 +1212,14 @@ theorem JAtZ.sendFaultPJ (hAT : P0.ArchTotal arI) (hZ : XferHZ L AR Z) (J : JAtZ
   have IK1 : IK d'.bv σ σ1 := IK.updOther (o' := .endpoint (epDeq (.recvEP (d'.bv :: q)) d'.bv)) hk (fun o0 h => by
     rcases h with rfl | rfl <;> exact ⟨fun _ h => (by cases h), fun _ _ h => (by cases h), fun _ h => (by cases h)⟩)
   have SK1 : SKeep σ σ1 := SKeep.updK (p := e.bv) (o := .endpoint (epDeq (.recvEP (d'.bv :: q)) d'.bv)) (fun y h => by cases h) (fun _ _ h => by cases h)
-  have hOK1 : Endp.IpcBufCapOK σ1 := ipcBufCapOK_epStep (hZ Z s a σ rfl J.xtop).1 (EpStep.ep hk)
+  have hOK1 : Endp.IpcBufCapOK σ1 := ipcBufCapOK_epStep (J.xferH).1 (EpStep.ep hk)
   -- the transfer
   have hdth : Z.th d' = some .tcb := by
     obtain ⟨⟨⟨G0, hB0'⟩, -⟩, -⟩ := hS0.1.1
     exact Ipc.RelTopB.tcbT hB0' hkd
-  have hUd := J.rbufU hZ hdT hdth hkd
+  have hUd := J.rbufU hdT hdth hkd
   refine WP.spec_bind (xferFaultStepJ hP0 hP (hH.epHyps hP0) s1 a σ1 hR1 hS1 hOK1
-    (bufCover_epStep (hZ Z s a σ rfl J.xtop).2.1 (EpStep.ep hk)) ht hdT htd hkt1 hkd1 hft e badge g
+    (bufCover_epStep (J.xferH).2.1 (EpStep.ep hk)) ht hdT htd hkt1 hkd1 hft e badge g
     hTP hdH h1 hB1 hX1 hS1' hSg1 (fun b hb => ⟨(hUd b hb).1.ksb hW1.1, (hUd b hb).2⟩)) ?_
   rintro s2 ⟨x2, um2, e2, hx2, hR2, hS2, hA2, w2, h2, hB2, hX2, hS2'', hSg2, f2⟩
   set σ2 := Notif.updK (Endp.setUm σ1 um2) d'.bv (.tcb x2) with hσ2
@@ -1570,7 +1572,7 @@ theorem JAtZ.sendFaultPJ (hAT : P0.ArchTotal arI) (hZ : XferHZ L AR Z) (J : JAtZ
     rw [hb', d1, optRef_zero] at hxr'
     cases hxr'
   have hkq : ∀ q ∈ D, σ'.kheap q.bv = σa.kheap q.bv := fun q hq => ps_ko (hcD q hq) (hwD q hq)
-  obtain ⟨su, umu, Ju, hWu, hFu, -, -⟩ := J.bufRebaseX hZ hdT hdth hkd hW5' hfoot
+  obtain ⟨su, umu, Ju, hWu, hFu, -, -⟩ := J.bufRebaseX hdT hdth hkd hW5' hfoot
   have hIu := Ju.xtop.irelK Ju.ks Ju.buf
   have hRR : ∀ q' ∈ Z.R, ∀ xr, (Endp.setUm σ umu).kheap q'.bv = some (.reply xr) → xr.replyTcb = some d'.bv →
       Detached Z.C Lst q' ∧ L.mem su (rNextA q') = 0#u64 ∧ L.mem su (rPrevA q') = 0#u64 :=
@@ -1628,7 +1630,7 @@ XTopJointPushDon's `JAtZ.pushDonJ`; the receiver `Running` by XTopJointStsI's
 `JAtZ.stsIJ` (released: the caller's SC, `Inv.rd`), the tail
 `JAtZ.sendTailJ`; the spec's outcome `sendIpc_call_eq` with
 `replyPush_don_eq`/`pd_eq`. -/
-theorem JAtZ.sendFaultPDJ (hAT : P0.ArchTotal arI) (hZ : XferHZ L AR Z) (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ)
+theorem JAtZ.sendFaultPDJ (hAT : P0.ArchTotal arI) (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ)
     {t : U64} (ht : t ∈ Z.T) {xt : Fl4Spec.Tcb} (hkt : σ.kheap t.bv = some (.tcb xt))
     (hrn : Fl4Spec.runnable xt.tcbState = true) {cf : Fl4Spec.ObjRef} {rp : Bool} {lf : Fl4Spec.LookupFailure}
     (hft : xt.tcbFault = some (.capFault cf rp lf)) (hct : σ.curThread = t.bv)
@@ -1735,14 +1737,14 @@ theorem JAtZ.sendFaultPDJ (hAT : P0.ArchTotal arI) (hZ : XferHZ L AR Z) (J : JAt
   have IK1 : IK d'.bv σ σ1 := IK.updOther (o' := .endpoint (epDeq (.recvEP (d'.bv :: q)) d'.bv)) hk (fun o0 h => by
     rcases h with rfl | rfl <;> exact ⟨fun _ h => (by cases h), fun _ _ h => (by cases h), fun _ h => (by cases h)⟩)
   have SK1 : SKeep σ σ1 := SKeep.updK (p := e.bv) (o := .endpoint (epDeq (.recvEP (d'.bv :: q)) d'.bv)) (fun y h => by cases h) (fun _ _ h => by cases h)
-  have hOK1 : Endp.IpcBufCapOK σ1 := ipcBufCapOK_epStep (hZ Z s a σ rfl J.xtop).1 (EpStep.ep hk)
+  have hOK1 : Endp.IpcBufCapOK σ1 := ipcBufCapOK_epStep (J.xferH).1 (EpStep.ep hk)
   -- the transfer
   have hdth : Z.th d' = some .tcb := by
     obtain ⟨⟨⟨G0, hB0'⟩, -⟩, -⟩ := hS0.1.1
     exact Ipc.RelTopB.tcbT hB0' hkd
-  have hUd := J.rbufU hZ hdT hdth hkd
+  have hUd := J.rbufU hdT hdth hkd
   refine WP.spec_bind (xferFaultStepJ hP0 hP (hH.epHyps hP0) s1 a σ1 hR1 hS1 hOK1
-    (bufCover_epStep (hZ Z s a σ rfl J.xtop).2.1 (EpStep.ep hk)) ht hdT htd hkt1 hkd1 hft e badge g
+    (bufCover_epStep (J.xferH).2.1 (EpStep.ep hk)) ht hdT htd hkt1 hkd1 hft e badge g
     hTP hdH h1 hB1 hX1 hS1' hSg1 (fun b hb => ⟨(hUd b hb).1.ksb hW1.1, (hUd b hb).2⟩)) ?_
   rintro s2 ⟨x2, um2, e2, hx2, hR2, hS2, hA2, w2, h2, hB2, hX2, hS2'', hSg2, f2⟩
   set σ2 := Notif.updK (Endp.setUm σ1 um2) d'.bv (.tcb x2) with hσ2
@@ -2069,7 +2071,7 @@ theorem JAtZ.sendFaultPDJ (hAT : P0.ArchTotal arI) (hZ : XferHZ L AR Z) (J : JAt
           (P1.Heap.scBits H) (P1.EH H) s b ∨ RcvBufW xd b) :=
         footW_trans (footW_trans F3 (footW_of f1)) (footW_of f4)
       have hIR4 := IpcRel.ofSRN hR4 hS4
-      obtain ⟨su, umu, Ju, hWu, hFu, -, -⟩ := J.bufRebaseX hZ hdT hdth hkd hW4' hfoot4
+      obtain ⟨su, umu, Ju, hWu, hFu, -, -⟩ := J.bufRebaseX hdT hdth hkd hW4' hfoot4
       have hIu := Ju.xtop.irelK Ju.ks Ju.buf
       have hRRu : ∀ q' ∈ Z.R, ∀ xr, (Endp.setUm σ umu).kheap q'.bv = some (.reply xr) → xr.replyTcb = some d'.bv →
           Detached Z.C Lst q' ∧ L.mem su (rNextA q') = 0#u64 ∧ L.mem su (rPrevA q') = 0#u64 :=
@@ -2198,7 +2200,7 @@ with or without a receive buffer** (module docstring): XTopJointFaultEp's
 reply right or no reply object: the sender `Inactive`), `JAtZ.sendFaultPJ`
 (the reply pushed, no donation: `can_donate` false or the receiver with an
 SC), `JAtZ.sendFaultPDJ` (the reply pushed and the sender's SC donated). -/
-theorem JAtZ.faultRecvJ (hZ : XferHZ L AR Z) (hAT : P0.ArchTotal arI) (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ)
+theorem JAtZ.faultRecvJ (hAT : P0.ArchTotal arI) (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ)
     (hni : Entered σ) {ct : U64}
     (hct : sched.cur_thread st s = ok ct) (hnq : ∀ d p, σ.curThread ∉ σ.readyQueues d p)
     {ptr bdg : U64} {sd rv g gr : Bool}
@@ -2316,7 +2318,6 @@ theorem JAtZ.faultRecvJ (hZ : XferHZ L AR Z) (hAT : P0.ArchTotal arI) (J : JAtZ 
   have htq : ct.bv ∉ (Fl4Spec.Endpoint.recvEP (d.bv :: q)).epQueue :=
     Endp.not_queued hI.1.toE ht hk hnb0 ptr hpE _ hkq
   have hdc : d.bv ≠ ct.bv := fun e0 => htq (by rw [← e0]; simp [Fl4Spec.Endpoint.epQueue])
-  have hZ7 : XferHZ L AR (Z.mv Z.G V) := fun Z' s' a' σ' e hX => hZ Z' s' a' σ' e hX
   have hpost : ∀ don : Bool, endpoint.send_ipc st arI s7 a true false bdg g gr don ct ptr ⦃ r =>
       ∃ z ∈ (Fl4Spec.sendIpc (Z := Unit) true false bdg.bv g gr don ct.bv ptr.bv σf).1,
         JAt (L := L) arI AR r.1 r.2 z.2 ⦄ := by
@@ -2325,24 +2326,24 @@ theorem JAtZ.faultRecvJ (hZ : XferHZ L AR Z) (hAT : P0.ArchTotal arI) (J : JAtZ 
     · by_cases hA : ∀ xd, σf.kheap d.bv = some (.tcb xd) → ∀ e' rep dd,
           xd.tcbState = .blockedOnReceive e' rep dd → rep ≠ none
       · by_cases hS : don = false ∨ ∀ xd, σf.kheap d.bv = some (.tcb xd) → xd.tcbSchedContext ≠ none
-        · exact J7.sendFaultPJ hAT hZ7 ht hkf hrn rfl hcur hni.2 hti hnq' hpE hkef true bdg g gr don hgg hA hS
+        · exact J7.sendFaultPJ hAT ht hkf hrn rfl hcur hni.2 hti hnq' hpE hkef true bdg g gr don hgg hA hS
         · have hd1 : don = true := by
             cases don
             · exact absurd (Or.inl rfl) hS
             · rfl
           subst hd1
-          refine J7.sendFaultPDJ hAT hZ7 ht hkf hrn rfl hcur hni.2 hti hnq' hpE hkef true bdg g gr hgg hA ?_
+          refine J7.sendFaultPDJ hAT ht hkf hrn rfl hcur hni.2 hti hnq' hpE hkef true bdg g gr hgg hA ?_
           intro xd hxd
           by_contra hne
           exact hS (Or.inr fun xd' hxd' => by rw [hxd] at hxd'; cases hxd'; exact hne)
-      · refine J7.sendFaultIJ hZ7 ht hkf hrn rfl hcur hni.2 hti hnq' hpE hkef true bdg g gr don (Or.inr ?_)
+      · refine J7.sendFaultIJ ht hkf hrn rfl hcur hni.2 hti hnq' hpE hkef true bdg g gr don (Or.inr ?_)
         intro xd hxd e' rep dd hst
         by_contra hne
         apply hA
         intro xd' hxd' e'' rep' dd' hst'
         rw [hxd] at hxd'; cases hxd'
         rw [hst] at hst'; cases hst'; exact hne
-    · exact J7.sendFaultIJ hZ7 ht hkf hrn rfl hcur hni.2 hti hnq' hpE hkef true bdg g gr don
+    · exact J7.sendFaultIJ ht hkf hrn rfl hcur hni.2 hti hnq' hpE hkef true bdg g gr don
         (Or.inl ⟨Bool.eq_false_iff.2 fun h => hgg (Or.inl h), Bool.eq_false_iff.2 fun h => hgg (Or.inr h)⟩)
   refine WP.spec_bind (hpost _) ?_
   rintro ⟨s', a'⟩ ⟨z, hz, hJ⟩
@@ -2365,7 +2366,7 @@ set_option maxHeartbeats 4000000 in
 endpoint by `JAtZ.faultRecvJ` (a waiting receiver, with or without a receive
 buffer) or `JAtZ.faultBlockJ` (an idle or sending endpoint), any other cap
 excluded by l4v `valid_fault_handler` (`hvfh`). -/
-theorem JAtZ.faultHypJZ (hZ : XferHZ L AR Z) (hAT : P0.ArchTotal arI)
+theorem JAtZ.faultHypJZ (hAT : P0.ArchTotal arI)
     (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) (hni : Entered σ) {ct : U64}
     (hct : sched.cur_thread st s = ok ct) (hnq : ∀ d p, σ.curThread ∉ σ.readyQueues d p)
     (hvfh : ∀ x, σ.kheap σ.curThread = some (.tcb x) → Fl4Spec.validFaultHandler x.tcbFaultHandler)
@@ -2392,7 +2393,7 @@ theorem JAtZ.faultHypJZ (hZ : XferHZ L AR Z) (hAT : P0.ArchTotal arI)
     obtain ⟨d', xs', rfl⟩ := List.exists_cons_of_ne_nil hxs0
     simp only [List.map_cons] at hq
     subst hq
-    exact J.faultRecvJ hZ hAT hni hct hnq hc1 hke hf
+    exact J.faultRecvJ hAT hni hct hnq hc1 hke hf
   | idleEP =>
     exact J.faultBlockJ hni hct hnq hc1 (fun xe h => by rw [hke] at h; cases h; trivial) hf
   | sendEP q =>

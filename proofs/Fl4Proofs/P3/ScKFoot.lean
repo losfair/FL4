@@ -36,6 +36,13 @@ def SOffL (K : U64) : Prop :=
 `IPC_BUFFER` (3512) words. -/
 def SOff (K : U64) : Prop := 256 ≤ K.val ∧ K.val < 4096 ∧ K ≠ 3440#u64 ∧ K ≠ 3472#u64 ∧ K ≠ 3512#u64 ∧ SOffL K
 
+/-- A TCB's VCPU word (`layout::tcb::VCPU`, offset 3664; KENTRY-PLAN g2b):
+written by FL4 only in `vcpu::detach` (0) and `X86VCPUSetTCB`. -/
+def _root_.Fl4Proofs.P3.tVcpuA (t : U64) : U64 := core.num.U64.wrapping_add t 3664#u64
+
+/-- 3664 is no scheduler offset. -/
+theorem not_sOff_vcpu : ¬ SOff 3664#u64 := by unfold SOff SOffL; decide
+
 /-- The scheduler footprint: words of the TCBs at `SOff` offsets, and of the
 node. -/
 def SFoot (st : machine.Store S) [L : LawfulStore st] (T : Set U64) (c : U64) (s : S) (b : U64) : Prop :=

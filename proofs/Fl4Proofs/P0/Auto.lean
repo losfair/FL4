@@ -983,25 +983,25 @@ theorem regs.FLAGS_USER_DEFAULT.p0  :
     tcbqueue.Queue.is_empty self ⦃ _ => True ⦄ := by
   unfold tcbqueue.Queue.is_empty; p0_auto
 
-@[step] theorem obj.Tcb.set_ep_prev.p0 {S : Type _} (machineStoreInst : machine.Store S) (self : obj.Tcb) (s : S) (v : Std.U64) (hS : StoreTotal machineStoreInst) :
-    obj.Tcb.set_ep_prev machineStoreInst self s v ⦃ _ => True ⦄ := by
-  unfold obj.Tcb.set_ep_prev; p0_auto
-
 @[step] theorem obj.Tcb.set_sched_prev.p0 {S : Type _} (machineStoreInst : machine.Store S) (self : obj.Tcb) (s : S) (v : Std.U64) (hS : StoreTotal machineStoreInst) :
     obj.Tcb.set_sched_prev machineStoreInst self s v ⦃ _ => True ⦄ := by
   unfold obj.Tcb.set_sched_prev; p0_auto
+
+@[step] theorem obj.Tcb.set_ep_prev.p0 {S : Type _} (machineStoreInst : machine.Store S) (self : obj.Tcb) (s : S) (v : Std.U64) (hS : StoreTotal machineStoreInst) :
+    obj.Tcb.set_ep_prev machineStoreInst self s v ⦃ _ => True ⦄ := by
+  unfold obj.Tcb.set_ep_prev; p0_auto
 
 @[step] theorem tcbqueue.set_prev.p0 {S : Type _} (machineStoreInst : machine.Store S) (s : S) (l : tcbqueue.Link) (t : obj.Tcb) (v : Std.U64) (hS : StoreTotal machineStoreInst) :
     tcbqueue.set_prev machineStoreInst s l t v ⦃ _ => True ⦄ := by
   unfold tcbqueue.set_prev; p0_auto
 
-@[step] theorem obj.Tcb.set_ep_next.p0 {S : Type _} (machineStoreInst : machine.Store S) (self : obj.Tcb) (s : S) (v : Std.U64) (hS : StoreTotal machineStoreInst) :
-    obj.Tcb.set_ep_next machineStoreInst self s v ⦃ _ => True ⦄ := by
-  unfold obj.Tcb.set_ep_next; p0_auto
-
 @[step] theorem obj.Tcb.set_sched_next.p0 {S : Type _} (machineStoreInst : machine.Store S) (self : obj.Tcb) (s : S) (v : Std.U64) (hS : StoreTotal machineStoreInst) :
     obj.Tcb.set_sched_next machineStoreInst self s v ⦃ _ => True ⦄ := by
   unfold obj.Tcb.set_sched_next; p0_auto
+
+@[step] theorem obj.Tcb.set_ep_next.p0 {S : Type _} (machineStoreInst : machine.Store S) (self : obj.Tcb) (s : S) (v : Std.U64) (hS : StoreTotal machineStoreInst) :
+    obj.Tcb.set_ep_next machineStoreInst self s v ⦃ _ => True ⦄ := by
+  unfold obj.Tcb.set_ep_next; p0_auto
 
 @[step] theorem tcbqueue.set_next.p0 {S : Type _} (machineStoreInst : machine.Store S) (s : S) (l : tcbqueue.Link) (t : obj.Tcb) (v : Std.U64) (hS : StoreTotal machineStoreInst) :
     tcbqueue.set_next machineStoreInst s l t v ⦃ _ => True ⦄ := by
@@ -1015,10 +1015,6 @@ theorem regs.FLAGS_USER_DEFAULT.p0  :
     sched.cur_domain machineStoreInst s ⦃ _ => True ⦄ := by
   unfold sched.cur_domain; p0_auto
 
-@[step] theorem obj.Tcb.affinity.p0 {S : Type _} (machineStoreInst : machine.Store S) (self : obj.Tcb) (s : S) (hS : StoreTotal machineStoreInst) :
-    obj.Tcb.affinity machineStoreInst self s ⦃ _ => True ⦄ := by
-  unfold obj.Tcb.affinity; p0_auto
-
 @[step] theorem obj.Tcb.prio.p0 {S : Type _} (machineStoreInst : machine.Store S) (self : obj.Tcb) (s : S) (hS : StoreTotal machineStoreInst) :
     obj.Tcb.prio machineStoreInst self s ⦃ _ => True ⦄ := by
   unfold obj.Tcb.prio; p0_auto
@@ -1026,6 +1022,10 @@ theorem regs.FLAGS_USER_DEFAULT.p0  :
 @[step] theorem obj.Tcb.domain.p0 {S : Type _} (machineStoreInst : machine.Store S) (self : obj.Tcb) (s : S) (hS : StoreTotal machineStoreInst) :
     obj.Tcb.domain machineStoreInst self s ⦃ _ => True ⦄ := by
   unfold obj.Tcb.domain; p0_auto
+
+@[step] theorem obj.Tcb.affinity.p0 {S : Type _} (machineStoreInst : machine.Store S) (self : obj.Tcb) (s : S) (hS : StoreTotal machineStoreInst) :
+    obj.Tcb.affinity machineStoreInst self s ⦃ _ => True ⦄ := by
+  unfold obj.Tcb.affinity; p0_auto
 
 @[step] theorem smp.remote_queue_update.p0 {S : Type _} (machineStoreInst : machine.Store S) (s : S) (t : obj.Tcb) (hS : StoreTotal machineStoreInst) :
     smp.remote_queue_update machineStoreInst s t ⦃ _ => True ⦄ := by
@@ -1394,13 +1394,13 @@ theorem obj.Sc.Insts.CoreCmpPartialEqSc.eq.p0 (self : obj.Sc) (other : obj.Sc) :
     tcbqueue.prev machineStoreInst s l t ⦃ _ => True ⦄ := by
   unfold tcbqueue.prev; p0_auto
 
-@[step] theorem obj.Tcb.ep_next.p0 {S : Type _} (machineStoreInst : machine.Store S) (self : obj.Tcb) (s : S) (hS : StoreTotal machineStoreInst) :
-    obj.Tcb.ep_next machineStoreInst self s ⦃ _ => True ⦄ := by
-  unfold obj.Tcb.ep_next; p0_auto
-
 @[step] theorem obj.Tcb.sched_next.p0 {S : Type _} (machineStoreInst : machine.Store S) (self : obj.Tcb) (s : S) (hS : StoreTotal machineStoreInst) :
     obj.Tcb.sched_next machineStoreInst self s ⦃ _ => True ⦄ := by
   unfold obj.Tcb.sched_next; p0_auto
+
+@[step] theorem obj.Tcb.ep_next.p0 {S : Type _} (machineStoreInst : machine.Store S) (self : obj.Tcb) (s : S) (hS : StoreTotal machineStoreInst) :
+    obj.Tcb.ep_next machineStoreInst self s ⦃ _ => True ⦄ := by
+  unfold obj.Tcb.ep_next; p0_auto
 
 @[step] theorem tcbqueue.next.p0 {S : Type _} (machineStoreInst : machine.Store S) (s : S) (l : tcbqueue.Link) (t : obj.Tcb) (hS : StoreTotal machineStoreInst) :
     tcbqueue.next machineStoreInst s l t ⦃ _ => True ⦄ := by
@@ -2465,12 +2465,24 @@ theorem vcpu.svm.CR3.p0  :
     syscall.set_tls_base_self machineStoreInst machineArchInst s a ⦃ _ => True ⦄ := by
   unfold syscall.set_tls_base_self; p0_split
 
-@[step] theorem syscall.unknown_syscall_fault.p0 {S : Type _} {A : Type _} (machineStoreInst : machine.Store S) (machineArchInst : machine.Arch A) (s : S) (a : A) (number : Std.U64) (hS : StoreTotal machineStoreInst) (hA : ArchTotal machineArchInst) :
-    syscall.unknown_syscall_fault machineStoreInst machineArchInst s a number ⦃ _ => True ⦄ := by
-  unfold syscall.unknown_syscall_fault; p0_split
+@[step] theorem fastpath.switch_to.p0 {S : Type _} {A : Type _} (machineStoreInst : machine.Store S) (machineArchInst : machine.Arch A) (s : S) (a : A) («to» : obj.Tcb) (hS : StoreTotal machineStoreInst) (hA : ArchTotal machineArchInst) :
+    fastpath.switch_to machineStoreInst machineArchInst s a «to» ⦃ _ => True ⦄ := by
+  unfold fastpath.switch_to; p0_split
 
-@[step] theorem syscall.handle_unknown_syscall.p0 {S : Type _} {A : Type _} (machineStoreInst : machine.Store S) (machineArchInst : machine.Arch A) (s : S) (a : A) (number : Std.I64) (hS : StoreTotal machineStoreInst) (hA : ArchTotal machineArchInst) :
-    syscall.handle_unknown_syscall machineStoreInst machineArchInst s a number ⦃ _ => True ⦄ := by
+@[step] theorem fastpath.schedulable_here.p0 {S : Type _} (machineStoreInst : machine.Store S) (s : S) («to» : obj.Tcb) (hS : StoreTotal machineStoreInst) :
+    fastpath.schedulable_here machineStoreInst s «to» ⦃ _ => True ⦄ := by
+  unfold fastpath.schedulable_here; p0_auto
+
+@[step] theorem fastpath.fault.p0 {S : Type _} {A : Type _} (machineStoreInst : machine.Store S) (machineArchInst : machine.Arch A) (s : S) (a : A) (t : obj.Tcb) (number : Std.U64) (hS : StoreTotal machineStoreInst) (hA : ArchTotal machineArchInst) :
+    fastpath.fault machineStoreInst machineArchInst s a t number ⦃ _ => True ⦄ := by
+  unfold fastpath.fault; p0_split
+
+@[step] theorem syscall.unknown_syscall_fault.p0 {S : Type _} {A : Type _} (machineStoreInst : machine.Store S) (machineArchInst : machine.Arch A) (s : S) (a : A) (number : Std.U64) (fast : Bool) (hS : StoreTotal machineStoreInst) (hA : ArchTotal machineArchInst) :
+    syscall.unknown_syscall_fault machineStoreInst machineArchInst s a number fast ⦃ _ => True ⦄ := by
+  unfold syscall.unknown_syscall_fault; p0_auto
+
+@[step] theorem syscall.handle_unknown_syscall.p0 {S : Type _} {A : Type _} (machineStoreInst : machine.Store S) (machineArchInst : machine.Arch A) (s : S) (a : A) (number : Std.I64) (fast : Bool) (hS : StoreTotal machineStoreInst) (hA : ArchTotal machineArchInst) :
+    syscall.handle_unknown_syscall machineStoreInst machineArchInst s a number fast ⦃ _ => True ⦄ := by
   set_option maxHeartbeats 4000000 in
   unfold syscall.handle_unknown_syscall
   p0_structural
@@ -3743,14 +3755,6 @@ theorem domain.MAX_DURATION.p0  :
     error.SysError.code self ⦃ _ => True ⦄ := by
   unfold error.SysError.code; p0_auto
 
-@[step] theorem faults.valid_fault_handler.p0 (cap : capability.Cap) :
-    faults.valid_fault_handler cap ⦃ _ => True ⦄ := by
-  unfold faults.valid_fault_handler; p0_auto
-
-@[step] theorem faults.set_mrs_lookup_failure_at.p0 {S : Type _} (machineStoreInst : machine.Store S) (s : S) (receiver : obj.Tcb) (buf : Std.U64) (lf : error.LookupFault) (offset : Std.U64) (hS : StoreTotal machineStoreInst) :
-    faults.set_mrs_lookup_failure_at machineStoreInst s receiver buf lf offset ⦃ _ => True ⦄ := by
-  unfold faults.set_mrs_lookup_failure_at; p0_auto
-
 @[step] theorem faults.copy_mrs_fault_reply_loop0.p0 {S : Type _} (machineStoreInst : machine.Store S) (s : S) (sender : obj.Tcb) (receiver : obj.Tcb) (regs_list : Slice Std.U64) (n : Std.Usize) (i : Std.Usize) (hS : StoreTotal machineStoreInst) :
     faults.copy_mrs_fault_reply_loop0 machineStoreInst s sender receiver regs_list n i ⦃ _ => True ⦄ := by
   unfold faults.copy_mrs_fault_reply_loop0
@@ -3776,6 +3780,26 @@ theorem domain.MAX_DURATION.p0  :
 @[step] theorem faults.handle_fault_reply.p0 {S : Type _} {A : Type _} (machineStoreInst : machine.Store S) (machineArchInst : machine.Arch A) (s : S) (a : A) (receiver : obj.Tcb) (sender : obj.Tcb) (hS : StoreTotal machineStoreInst) (hA : ArchTotal machineArchInst) :
     faults.handle_fault_reply machineStoreInst machineArchInst s a receiver sender ⦃ _ => True ⦄ := by
   unfold faults.handle_fault_reply; p0_split
+
+@[step] theorem fastpath.reply_recv_found.p0 {S : Type _} {A : Type _} (machineStoreInst : machine.Store S) (machineArchInst : machine.Arch A) (s : S) (a : A) (t : obj.Tcb) (rptr : Std.U64) (ep_ptr : Std.U64) (hS : StoreTotal machineStoreInst) (hA : ArchTotal machineArchInst) :
+    fastpath.reply_recv_found machineStoreInst machineArchInst s a t rptr ep_ptr ⦃ _ => True ⦄ := by
+  unfold fastpath.reply_recv_found; set_option maxHeartbeats 4000000 in p0_structural
+
+@[step] theorem fastpath.reply_caps.p0 {S : Type _} (machineStoreInst : machine.Store S) (s : S) (t : obj.Tcb) (hS : StoreTotal machineStoreInst) :
+    fastpath.reply_caps machineStoreInst s t ⦃ _ => True ⦄ := by
+  unfold fastpath.reply_caps; p0_auto
+
+@[step] theorem fastpath.reply_recv.p0 {S : Type _} {A : Type _} (machineStoreInst : machine.Store S) (machineArchInst : machine.Arch A) (s : S) (a : A) (hS : StoreTotal machineStoreInst) (hA : ArchTotal machineArchInst) :
+    fastpath.reply_recv machineStoreInst machineArchInst s a ⦃ _ => True ⦄ := by
+  unfold fastpath.reply_recv; p0_split
+
+@[step] theorem faults.valid_fault_handler.p0 (cap : capability.Cap) :
+    faults.valid_fault_handler cap ⦃ _ => True ⦄ := by
+  unfold faults.valid_fault_handler; p0_auto
+
+@[step] theorem faults.set_mrs_lookup_failure_at.p0 {S : Type _} (machineStoreInst : machine.Store S) (s : S) (receiver : obj.Tcb) (buf : Std.U64) (lf : error.LookupFault) (offset : Std.U64) (hS : StoreTotal machineStoreInst) :
+    faults.set_mrs_lookup_failure_at machineStoreInst s receiver buf lf offset ⦃ _ => True ⦄ := by
+  unfold faults.set_mrs_lookup_failure_at; p0_auto
 
 @[step] theorem interrupt.decode_irq_handler.p0 {S : Type _} {A : Type _} (machineStoreInst : machine.Store S) (machineArchInst : machine.Arch A) (s : S) (a : A) (lbl : Std.U64) (irq : Std.U64) (extra : Array obj.Slot 3#usize) (hS : StoreTotal machineStoreInst) (hA : ArchTotal machineArchInst) :
     interrupt.decode_irq_handler machineStoreInst machineArchInst s a lbl irq extra ⦃ _ => True ⦄ := by
@@ -3810,9 +3834,17 @@ theorem domain.MAX_DURATION.p0  :
     ioport.port_size lbl ⦃ _ => True ⦄ := by
   unfold ioport.port_size; p0_auto
 
+@[step] theorem ioport.is_port_label.p0 (lbl : Std.U64) :
+    ioport.is_port_label lbl ⦃ _ => True ⦄ := by
+  unfold ioport.is_port_label; p0_auto
+
 @[step] theorem ioport.is_port_in.p0 (lbl : Std.U64) :
     ioport.is_port_in lbl ⦃ _ => True ⦄ := by
   unfold ioport.is_port_in; p0_auto
+
+@[step] theorem ioport.invocation_ok.p0 {S : Type _} (machineStoreInst : machine.Store S) (s : S) (t : obj.Tcb) (cptr : Std.U64) (info : msginfo.MessageInfo) (hS : StoreTotal machineStoreInst) :
+    ioport.invocation_ok machineStoreInst s t cptr info ⦃ _ => True ⦄ := by
+  unfold ioport.invocation_ok; p0_split
 
 @[step] theorem ioport.decode.p0 {S : Type _} {A : Type _} (machineStoreInst : machine.Store S) (machineArchInst : machine.Arch A) (s : S) (a : A) (lbl : Std.U64) (length : Std.U64) (cap : capability.Cap) (call : Bool) (buf : Std.U64) (hS : StoreTotal machineStoreInst) (hA : ArchTotal machineArchInst) :
     ioport.decode machineStoreInst machineArchInst s a lbl length cap call buf ⦃ _ => True ⦄ := by
@@ -4285,6 +4317,10 @@ theorem vcpu.svm.RAX.p0  :
   · rintro ⟨x0, x1, x2⟩ -
     unfold untyped.reset_untyped_loop.body
     p0_body
+    -- #52: the cap read back; `none` (a doomed transaction) ends the loop.
+    p0_ite_head
+    · exact (WP.spec_ok _).2 trivial
+    p0_body
     all_goals
       simp only [lift, bind_ok, WP.spec_ok, saturating_sub_u64_val]
       have h0 : x2.val ≠ 0 := by intro h; apply ‹¬x2 = 0#u64›; scalar_tac
@@ -4713,9 +4749,29 @@ theorem vcpu.svm.RAX.p0  :
     syscall.dispatch_syscall machineStoreInst machineArchInst s a number ⦃ _ => True ⦄ := by
   unfold syscall.dispatch_syscall; p0_auto
 
+@[step] theorem syscall.syscall.p0 {S : Type _} {A : Type _} (machineStoreInst : machine.Store S) (machineArchInst : machine.Arch A) (s : S) (a : A) (number : Std.I64) (fast : Bool) (hS : StoreTotal machineStoreInst) (hA : ArchTotal machineArchInst) :
+    syscall.syscall machineStoreInst machineArchInst s a number fast ⦃ _ => True ⦄ := by
+  unfold syscall.syscall; p0_auto
+
 @[step] theorem syscall.handle_syscall.p0 {S : Type _} {A : Type _} (machineStoreInst : machine.Store S) (machineArchInst : machine.Arch A) (s : S) (a : A) (number : Std.I64) (hS : StoreTotal machineStoreInst) (hA : ArchTotal machineArchInst) :
     syscall.handle_syscall machineStoreInst machineArchInst s a number ⦃ _ => True ⦄ := by
   unfold syscall.handle_syscall; p0_split
+
+@[step] theorem syscall.handle_syscall_fast.p0 {S : Type _} {A : Type _} (machineStoreInst : machine.Store S) (machineArchInst : machine.Arch A) (s : S) (a : A) (number : Std.I64) (hS : StoreTotal machineStoreInst) (hA : ArchTotal machineArchInst) :
+    syscall.handle_syscall_fast machineStoreInst machineArchInst s a number ⦃ _ => True ⦄ := by
+  unfold syscall.handle_syscall_fast; p0_auto
+
+@[step] theorem syscall.handle_syscall_general.p0 {S : Type _} {A : Type _} (machineStoreInst : machine.Store S) (machineArchInst : machine.Arch A) (s : S) (a : A) (number : Std.I64) (hS : StoreTotal machineStoreInst) (hA : ArchTotal machineArchInst) :
+    syscall.handle_syscall_general machineStoreInst machineArchInst s a number ⦃ _ => True ⦄ := by
+  unfold syscall.handle_syscall_general; p0_auto
+
+@[step] theorem syscall.handle_syscall_local.p0 {S : Type _} {A : Type _} (machineStoreInst : machine.Store S) (machineArchInst : machine.Arch A) (s : S) (a : A) (number : Std.I64) (found : (Std.U64 × Std.U64)) (hS : StoreTotal machineStoreInst) (hA : ArchTotal machineArchInst) :
+    syscall.handle_syscall_local machineStoreInst machineArchInst s a number found ⦃ _ => True ⦄ := by
+  unfold syscall.handle_syscall_local; p0_split
+
+@[step] theorem syscall.handle_ioport_local.p0 {S : Type _} {A : Type _} (machineStoreInst : machine.Store S) (machineArchInst : machine.Arch A) (s : S) (a : A) (number : Std.I64) (hS : StoreTotal machineStoreInst) (hA : ArchTotal machineArchInst) :
+    syscall.handle_ioport_local machineStoreInst machineArchInst s a number ⦃ _ => True ⦄ := by
+  unfold syscall.handle_ioport_local; p0_auto
 
 @[step] theorem syscall.handle_interrupt_entry.p0 {S : Type _} {A : Type _} (machineStoreInst : machine.Store S) (machineArchInst : machine.Arch A) (s : S) (a : A) (irq : Std.U64) (hS : StoreTotal machineStoreInst) (hA : ArchTotal machineArchInst) :
     syscall.handle_interrupt_entry machineStoreInst machineArchInst s a irq ⦃ _ => True ⦄ := by

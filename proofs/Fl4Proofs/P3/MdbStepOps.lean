@@ -58,6 +58,48 @@ theorem derive_vcap {S : Type} {st : machine.Store S} {s : S} {slot : obj.Slot} 
   all_goals simp only [objects.derive_cap] at h
   all_goals (repeat' split at h) <;> (simp at h; try subst h; exact hv)
 
+/-- **Nativeness of the cap operations** (g2a, as the `_vcap` lemmas): `mask_cap_rights`,
+`update_cap_data` and `derive_cap` keep a cap native. -/
+theorem mask_nat {r : capability.Rights} {c c' : capability.Cap} (h : capability.mask_cap_rights r c = ok c')
+    (hv : Vs.NativeCap c) : Vs.NativeCap c' := by
+  cases c <;> simp only [capability.mask_cap_rights] at h
+  case Frame p sz v dev m ept a va =>
+    unfold capability.mask_vm_rights at h
+    repeat' split at h
+    all_goals (simp at h; subst h; exact hv)
+  all_goals (repeat' split at h) <;> (simp at h; subst h; exact hv)
+
+theorem update_nat {pr : Bool} {d : U64} {c c' : capability.Cap} (h : objects.update_cap_data pr d c = ok c')
+    (hv : Vs.NativeCap c) : Vs.NativeCap c' := by
+  cases c <;> simp only [objects.update_cap_data] at h
+  case CNode p r gs g =>
+    simp only [lift, bind_ok] at h
+    split at h
+    · simp at h; subst h; trivial
+    · revert h; generalize d >>> 6#i32 = x; cases x <;> simp
+      generalize objects.mask (d &&& 63#u64) = y; cases y <;> simp
+      intro h; subst h; trivial
+  all_goals (repeat' split at h) <;> (simp at h; subst h; exact hv)
+
+theorem derive_nat {S : Type} {st : machine.Store S} {s : S} {slot : obj.Slot} {c c' : capability.Cap}
+    (h : objects.derive_cap st s slot c = ok (.Ok c'))
+    (hv : Vs.NativeCap c) : Vs.NativeCap c' := by
+  cases c
+  case Untyped p sb fi dev =>
+    unfold objects.derive_cap at h
+    revert h; generalize cdt.ensure_no_children st s slot = r
+    cases r with
+    | ret v =>
+      cases v <;> simp [core.result.Result.Insts.CoreOpsTry.branch,
+        core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual]
+      intro h; subst h; trivial
+    | _ => simp
+  case Frame p sz r dv m ept a va =>
+    simp only [objects.derive_cap] at h; simp at h; subst h
+    simp [Vs.NativeCap]
+  all_goals simp only [objects.derive_cap] at h
+  all_goals (repeat' split at h) <;> (simp at h; try subst h; exact hv)
+
 section
 variable {th : TypedHeap} {S : Type} {st : machine.Store S} [L : P1.LawfulStore st]
 

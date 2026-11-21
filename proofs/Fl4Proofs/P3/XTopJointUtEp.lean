@@ -107,6 +107,31 @@ theorem winZero_field {m : U64 → U64} {A k win : Nat} {T : Prop} (hz : WinZero
   · exact h
   · exact absurd h hT
 
+/-- **A range of the spec's memory is zero** (a RAM untyped cap's free part
+`[lo, hi)` at the retype: the frame retype's new pages read zero, so `B`
+grows there with `IpcRel.buf`; from `JEntryAt.urz`, or the reset's
+`clear_memory`). -/
+def UtFreeZ (σ : Fl4Spec.State Unit) (lo hi : Nat) : Prop :=
+  ∀ a : Fl4Spec.Word, lo ≤ a.toNat → a.toNat < hi → σ.machineState.underlyingMemory a = 0
+
+/-- **A RAM untyped region misses the 64 cores' node slots** of the
+kernel-state block (`[ksb + 13568, ksb + 288000)`; `UtKsApart` asks only the
+nodes of the cores of `Cs`). The frame retype's new `B` words must miss
+every node (`JAtZ.nodeB`, all 64 cores). -/
+def UtNodesAt (kb : U64) (p sb : U64) : Prop :=
+  p.val + 2 ^ sb.val ≤ kb.val + 13568 ∨ kb.val + 288000 ≤ p.val
+
+/-- **[J] Every RAM untyped region misses the 64 cores' node slots**
+(`UtNodesAt` at every RAM untyped cap of the MDB slots). l4v:
+`kernel_window`/`valid_untyped`: an untyped's range is free physical memory,
+apart from the kernel's static data, here FL4's kernel-state block with all
+`MAX_NODES` = 64 per-core nodes (`layout::ks::NODES` up to `ks::ASID_TABLE`,
+statically allocated whatever the number of cores). True from boot (the untypeds are built from the free memory) and kept
+by every step (child untypeds lie inside their parent's range). Not derivable
+from `JAtZ`: `JCovD.ks` (`UtKsApart`) names only the nodes of `Cs`. -/
+def UtNodesJ (m : U64 → U64) (G : MdbGhost) (kb : U64) : Prop :=
+  ∀ x ∈ G.chains.flatten, ∀ p sb fi, capV m x = .Untyped p sb fi false → UtNodesAt kb p sb
+
 /-- **[J] The IPC-buffer words miss the free part of every RAM untyped
 region** (`B` at `m`, `G`). l4v: `valid_untyped` (an untyped cap's free part
 `[p + fi, p + 2^sb)` holds no object) with `valid_ipc_buffer_cap` /
@@ -171,6 +196,36 @@ theorem Vs.FrSlots.retype {th th' th2 : TypedHeap} {m m' : U64 → U64} {G G' : 
     · exact Vs.frIn_ut (hE.utk y hy0 hu)
     · rw [(hE.keep y hy0 (by simpa using hu)).2]
       exact (h y ((hM.members y).1 hy0).1).mono hU
+  · rw [hE.newc j hj]; exact hn j hj
+
+/-- An untyped cap is native. -/
+theorem Vs.nativeCap_ut {c : capability.Cap} (h : isUt c = true) : Vs.NativeCap c := by
+  cases c <;> first | trivial | (simp [isUt] at h)
+
+/-- A retype's new cap is native (`newCapOf` makes no VT-x cap). -/
+theorem Vs.nativeCap_newCapOf (n : Nat) (base us : U64) (dev : Bool) : Vs.NativeCap (newCapOf n base us dev) := by
+  have hf : ∀ sz, Vs.NativeCap (.Frame base sz 3#u64 dev false false 0#u64 0#u64) :=
+    fun _ h => Bool.noConfusion h.1
+  exact newCapOf_ind Vs.NativeCap n base us dev (fun _ => True.intro) (fun _ => True.intro) (fun _ => True.intro)
+    (fun _ => True.intro) (fun _ => True.intro) (fun _ => True.intro) (fun _ => True.intro) (fun _ => True.intro)
+    (fun _ => hf _) (fun _ => hf _) (fun _ => hf _) (fun _ => True.intro) (fun _ => True.intro) True.intro
+
+/-- **`VsNat` across a retype** (`RetExp`; g2a, as `Vs.FrSlots.retype`): an
+old cap kept or an untyped cap, a new cap native by `hn`. -/
+theorem Vs.VsNat.retype {th th' th2 : TypedHeap} {m m' : U64 → U64} {G G' : MdbGhost} {A0 k w : Nat}
+    {dslot : Nat → U64} {cj : Nat → capability.Cap} {xs : U64}
+    (h : Vs.VsNat th m) (hE : RetExp th th' m m' G G' A0 k w dslot cj xs)
+    (hM : MdbLinks th m G) (hM' : MdbLinks th2 m' G')
+    (hn : ∀ j, j < w → Vs.NativeCap (cj j)) : Vs.VsNat th2 m' := by
+  intro y hy
+  by_cases hnull : capV m' y = .Null
+  · rw [hnull]; trivial
+  have hy' : y ∈ G'.chains.flatten := (hM'.members y).2 ⟨hy, _, capAt_capV m' y, hnull⟩
+  rcases hE.gmem y hy' with hy0 | ⟨j, hj, rfl⟩
+  · by_cases hu : isUt (capV m y) = true
+    · exact Vs.nativeCap_ut (hE.utk y hy0 hu)
+    · rw [(hE.keep y hy0 (by simpa using hu)).2]
+      exact h y ((hM.members y).1 hy0).1
   · rw [hE.newc j hj]; exact hn j hj
 
 section
@@ -529,7 +584,8 @@ theorem JAtZ.add_frame {s : S} {a : A} {σ : Fl4Spec.State Unit} (J : JAtZ (L :=
       (∀ r, H' r = some .reply → r ∈ Z'.R))
     (hscC : ∀ c z, H' c = some (.sc z) → c ∈ Z'.C)
     (hvc : Vs.VsSlotsW Z'.th Z'.P Z'.L4 Z'.L3 Z'.L2 Z'.L1 (L.mem s'))
-    (hbf : JBuf (L := L) Z' s' σ') :
+    (hbf : JBuf (L := L) Z' s' σ') (hext : JExt (L := L) Z'.th s')
+    (hlv : LiveDN (L := L) Z'.th H' Cs Z'.G s' σ') (hzD : ∀ p ∈ ZTcb (L := L) Z'.th s', p ∈ D') :
     JAtZ (L := L) arI AR Z' H' Cs Ac' Lst' D' s' a' σ' := by
   have hTe : Z'.T = P1.Heap.tcbs H' := by
     obtain ⟨Tr, Cq, hJ⟩ := R.jpl
@@ -543,7 +599,52 @@ theorem JAtZ.add_frame {s : S} {a : A} {σ : Fl4Spec.State Unit} (J : JAtZ (L :=
     R.jpl, hcov, hobj, hzH, hCs.sfree, hset, hscC, R.jcov,
     R.kern, hCs.del, hCs.ut, by rw [hth]; exact J.bound, hCs.finM, R.utc, R.nsc, R.inv, R.cur, R.own, R.off, R.act,
     hc0, R.bsa, schedValid_rebuild hX hTe hRe hobj R.blk hset.1 hset.2.1 R.call R.yld hc0 R.inv hsl, R.isorted, hsl,
-    R.curRun, R.blk, by rw [hth, hks]; exact J.intL, hvc, hbf.1, hbf.2.1, hbf.2.2⟩
+    R.curRun, R.blk, by rw [hth, hks]; exact J.intL, hvc, hbf.1, hbf.2.1, hbf.2.2, hext, hlv, hzD⟩
+
+
+set_option maxHeartbeats 1000000 in
+/-- **`JAtZ.add_frame` with `B` changed** (the frame retype, UtFrameAdd): the
+IPC-buffer words' node apartness `hnB` given at the new `Z'.B`.
+
+**`JAtZ` at enlarged sets and a grown heap** (the variant of
+`JAtZ.cs_frameV` for a retype's endpoints or notifications, `XSets.addW`,
+with `H` grown by the window's objects): `XTopAt`, the CSpace fields (`JCs`)
+and the re-established fields (`JRest`) at the new sets `Z'` and heap `H'`;
+the fields that read the enlarged sets or `H'` given (`ks`, `thT`, `ip`,
+`nk`, `cover`, `obj`, `zH`, `hset`, `hscC`); the rest from `J` (`Z'` keeps
+`Z`'s typed heap, SCs and buffer words, the kernel-state base kept).
+`SchedValid` and the spec's links rebuilt as in `cs_frameV`. -/
+theorem JAtZ.add_frameB {s : S} {a : A} {σ : Fl4Spec.State Unit} (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ)
+    {Z' : XSets} {H' : P1.Heap} {s' : S} {a' : A} {σ' : Fl4Spec.State Unit} {Ac' : Set U64}
+    {Lst' : U64 → List U64} {D' : Set U64}
+    (hth : Z'.th = Z.th) (hC : Z'.C = Z.C) (hks : L.ksb s' = L.ksb s)
+    (hnB : ∀ wp ∈ Z'.B, ∀ c : U64, c.val < 64 → wp.1.val + 8 ≤ L.nodeBase s' c ∨ L.nodeBase s' c + 4288 ≤ wp.1.val)
+    (hX : XTopAt (L := L) AR Z' s' a' σ') (hCs : JCs (L := L) Z' s' σ') (R : JRest (L := L) arI Z' H' Cs Ac' Lst' D' s' σ')
+    (hKs : KsApart Z'.N Z'.T Z'.E Z'.R Z'.B (L.ksb s')) (hthT : ∀ t, Z'.th t = some .tcb → t ∈ Z'.T)
+    (hIp : IPlaced Z'.N Z'.T Z'.E Z'.R Z'.B)
+    (hnk : ∀ n ∈ Z'.N, n.val + 40 ≤ (L.ksb s').val ∨ (L.ksb s').val + 13568 ≤ n.val)
+    (hcov : Sched.SpecCover H' σ') (hobj : Sched.ObjCover Z'.N Z'.T Z'.E Z'.R Z'.C σ')
+    (hzH : (∀ t ∈ Z'.T, H' t = some .tcb) ∧ (∀ e ∈ Z'.E, H' e = some .ep) ∧ (∀ r ∈ Z'.R, H' r = some .reply) ∧
+      (∀ n ∈ Z'.N, H' n = some .ntfn))
+    (hset : (∀ e, H' e = some .ep → e ∈ Z'.E) ∧ (∀ n, H' n = some .ntfn → n ∈ Z'.N) ∧
+      (∀ r, H' r = some .reply → r ∈ Z'.R))
+    (hscC : ∀ c z, H' c = some (.sc z) → c ∈ Z'.C)
+    (hvc : Vs.VsSlotsW Z'.th Z'.P Z'.L4 Z'.L3 Z'.L2 Z'.L1 (L.mem s'))
+    (hbf : JBuf (L := L) Z' s' σ') (hext : JExt (L := L) Z'.th s')
+    (hlv : LiveDN (L := L) Z'.th H' Cs Z'.G s' σ') (hzD : ∀ p ∈ ZTcb (L := L) Z'.th s', p ∈ D') :
+    JAtZ (L := L) arI AR Z' H' Cs Ac' Lst' D' s' a' σ' := by
+  have hTe : Z'.T = P1.Heap.tcbs H' := by
+    obtain ⟨Tr, Cq, hJ⟩ := R.jpl
+    exact Set.ext fun t => ⟨fun h => hzH.1 t h, fun h => hthT t ((hJ.tcb t).2 h)⟩
+  have hRe : Z'.R = P1.Heap.replies H' := Set.ext fun r => ⟨fun h => hzH.2.2.1 r h, fun h => hset.2.2 r h⟩
+  have hc0 : ∀ q ∈ Z'.C, q ≠ 0#u64 := by rw [hC]; exact J.c0
+  have hsl : Sched.ScLinkHyp σ' := scLink_rebuild hX hTe hobj R.blk hset.2.1 R.jpl hc0
+  exact ⟨hX, R.call, R.rfree, R.rrecv, R.yld, R.mcp, R.buf, hKs, hthT, by rw [hth]; exact J.thk, hIp, R.rp, R.apart,
+    hnk, hnB,
+    R.jpl, hcov, hobj, hzH, hCs.sfree, hset, hscC, R.jcov,
+    R.kern, hCs.del, hCs.ut, by rw [hth]; exact J.bound, hCs.finM, R.utc, R.nsc, R.inv, R.cur, R.own, R.off, R.act,
+    hc0, R.bsa, schedValid_rebuild hX hTe hRe hobj R.blk hset.1 hset.2.1 R.call R.yld hc0 R.inv hsl, R.isorted, hsl,
+    R.curRun, R.blk, by rw [hth, hks]; exact J.intL, hvc, hbf.1, hbf.2.1, hbf.2.2, hext, hlv, hzD⟩
 
 end
 

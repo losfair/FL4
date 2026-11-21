@@ -59,6 +59,9 @@ struct Machine {
     ioapics: u64,
     ioapic_ok: bool,
     routed: Vec<(u64, u64, u64)>,
+    /// How often `irq_pending` was read, and what it answers.
+    irq_reads: u64,
+    irq_line: bool,
 }
 impl Arch for Machine {
     fn now(&mut self) -> u64 {
@@ -78,7 +81,8 @@ impl Arch for Machine {
         1
     }
     fn irq_pending(&mut self) -> bool {
-        false
+        self.irq_reads += 1;
+        self.irq_line
     }
     fn take_pending_irq(&mut self) -> u64 {
         u64::MAX
@@ -601,5 +605,29 @@ fn an_ioapic_route_the_backend_refuses_issues_no_handler() {
                 assert_eq!(caller.state(&s), sched::TS_RUNNING, "remapped {remapped}");
             }
         }
+    }
+}
+
+/// The preemption point reads the pending IRQ line whenever the work count
+/// expires, before the budget test (C seL4 preemption.c tests
+/// `isIRQPending()` first; the abstract spec's preemptionPoint always calls
+/// getActiveIRQ). Here the current SC (null) is inactive, so the budget
+/// test alone already preempts.
+#[test]
+fn preemption_point_reads_the_irq_line_even_without_budget() {
+    use fl4_core::layout::ks;
+    use fl4_core::obj::{ks_get, ks_set};
+    use fl4_core::sched::{self, MAX_WORK_UNITS_PER_PREEMPTION};
+    for line in [false, true] {
+        let mut s = Memory::default();
+        let mut a = Machine { irq_line: line, ..Machine::default() };
+        ks_set(&mut s, ks::WORK_UNITS, MAX_WORK_UNITS_PER_PREEMPTION - 1);
+        let r = sched::preemption_point(&mut s, &mut a);
+        assert!(r == Err(fl4_core::error::Exc::Preempted), "line {line}");
+        assert_eq!(a.irq_reads, 1, "line {line}: the IRQ line was not read");
+        assert_eq!(ks_get(&s, ks::WORK_UNITS), 0);
+        // Below the work limit nothing is read.
+        assert!(sched::preemption_point(&mut s, &mut a).is_ok());
+        assert_eq!(a.irq_reads, 1);
     }
 }

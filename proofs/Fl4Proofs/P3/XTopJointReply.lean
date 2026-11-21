@@ -107,13 +107,15 @@ theorem JAtZ.regWrJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {t : U64} 
     (J.inv.updSame (y := setReg x r v.bv) hk rfl rfl (Or.inl rfl)) hblk hfoot
 
 set_option maxHeartbeats 16000000 in
-/-- **`set_thread_state Running` of a `Restart` thread at `J`** (module
-docstring). -/
-theorem JAtZ.runJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {t : U64} (ht : t ∈ Z.T)
+/-- **`set_thread_state Running` of a `Restart` thread at `J`, the dead set
+kept** (XTopJointReply's `JAtZ.runJ`, same proof; the post names the dead
+set `D` and adds the slot and debug-word frames). -/
+theorem JAtZ.runJD (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {t : U64} (ht : t ∈ Z.T)
     {x : Fl4Spec.Tcb} (hk : σ.kheap t.bv = some (.tcb x)) (hrs : x.tcbState = .restart) :
-    sched.set_thread_state st s t sched.TS_RUNNING ⦃ s6 => ∃ (Lst' : U64 → List U64) (D' : Set U64),
-      JAtZ (L := L) arI AR Z H Cs Ac Lst' D' s6 a
-        (stsAct (updK σ t.bv (.tcb { x with tcbState := .running })) t.bv) ⦄ := by
+    sched.set_thread_state st s t sched.TS_RUNNING ⦃ s6 => ∃ (Lst' : U64 → List U64),
+      JAtZ (L := L) arI AR Z H Cs Ac Lst' D s6 a
+        (stsAct (updK σ t.bv (.tcb { x with tcbState := .running })) t.bv) ∧
+      SlotsSame Z.th (L.mem s) (L.mem s6) ∧ P1.DbgKeep st (P1.Heap.tcbs H) Cs s s6 ⦄ := by
   have hP0 := J.ip
   have hI := J.xtop.irelK J.ks J.buf
   have hS := J.xtop.fin.1.1.1
@@ -136,6 +138,7 @@ theorem JAtZ.runJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {t : U64} (h
   rintro s6 ⟨⟨⟨⟨hR6, hS6r⟩, hw6⟩, hy6⟩, hblk, hfoot⟩
   have hX6 := IpcRel.ofSRN hR6 hS6r
   have hDbg := J.kw_dbg hfoot
+  have hKd := J.kw_dbgKeep hfoot
   set x6 : Fl4Spec.Tcb := { x with tcbState := .running } with hx6
   set σ1 := updK σ t.bv (.tcb x6) with hσ1
   set σ6 := stsAct σ1 t.bv with hσ6
@@ -295,12 +298,22 @@ theorem JAtZ.runJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {t : U64} (h
     J.deadP_sc_stepG hX' hW hK (fun p x' hp hk' h0 y hy => by
         subst hp; rw [hk] at hk'; cases hk'; rw [hrs] at h0; simp [tsCode] at h0)
       hlk hfk hAI.1 hY' (hYK6.dk q.bv) (fun h => h) (J.jcov.dead q hq)
-  exact ⟨Lst', D, J.sc_frame hW hK hX' hCR' hRF' hY' hM' (J.sc_buf hW hK) hRP' (J.sc_apart hW hK)
+  exact ⟨Lst', J.sc_frame hW hK hX' hCR' hRF' hY' hM' (J.sc_buf hW hK) hRP' (J.sc_apart hW hK)
     (J.sc_jpl hW hK (J.idleW_keep hX'.fin.1.1.1 hfk.2.1 hfk.2.2).2) (J.sc_jcov hW hdead (fun q hq hn => absurd hq hn) (J.idleW_keep hX'.fin.1.1.1 hfk.2.1 hfk.2.2)) (J.sc_kern hW hK hfk hX' hDbg fun _ h => h)
     (J.sc_utc hW hK hDbg) hNSC hInv hcur6 hown6 hoff hAI (BlockedScActive.tkw J.bsa hK fun p y n hp ha => by
       by_cases e : p = t.bv
       · rw [e, hk6] at hp; cases hp
-      · rw [hkp _ e] at hp; exact ⟨y, hp, ha, fun _ h => h, id⟩) hcr6 hblk⟩
+      · rw [hkp _ e] at hp; exact ⟨y, hp, ha, fun _ h => h, id⟩) hcr6 hblk hKd (J.idleW_keep hX'.fin.1.1.1 hfk.2.1 hfk.2.2).1 J.zD,
+    J.xtop.slotsSame_of hW (fun b hb => tfoot_oobj hS hb), P1.Foot.dbgKeep J.blk (fun _ h => h) hfoot⟩
+
+/-- **`set_thread_state Running` of a `Restart` thread at `J`** (module
+docstring; `runJD` with the dead set hidden). -/
+theorem JAtZ.runJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {t : U64} (ht : t ∈ Z.T)
+    {x : Fl4Spec.Tcb} (hk : σ.kheap t.bv = some (.tcb x)) (hrs : x.tcbState = .restart) :
+    sched.set_thread_state st s t sched.TS_RUNNING ⦃ s6 => ∃ (Lst' : U64 → List U64) (D' : Set U64),
+      JAtZ (L := L) arI AR Z H Cs Ac Lst' D' s6 a
+        (stsAct (updK σ t.bv (.tcb { x with tcbState := .running })) t.bv) ⦄ :=
+  WP.spec_mono (J.runJD ht hk hrs) fun _ ⟨Lst', J', _⟩ => ⟨Lst', D, J'⟩
 
 set_option maxHeartbeats 16000000 in
 /-- **`reply1` at `J`** (module docstring): every outcome of the spec's
@@ -404,7 +417,7 @@ set_option maxHeartbeats 4000000 in
 primitive steps' closure `jStepHyps`). -/
 theorem decode_invocation_ioportJ [Fl4Proofs.P1.PlainStore st] (s : S) (ar : A) (σ : Fl4Spec.State Unit)
     (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s ar σ) (hni : Entered σ)
-    (hARI : ARIface arI AR) (hT : P0.ArchTotal arI)
+    (hARI : ARIface arI AR) (hT : P0.ArchTotal arI) (hZB : ZNoBlk Z.th (L.mem s) (L.ksb s))
     (lbl : U64) (slbl : Fl4Spec.Data) (hlbl : PortLabel lbl slbl)
     (length buf ct : U64) (hct : sched.cur_thread st s = ok ct) (args : List U64)
     (hlen : length.val = args.length)
@@ -416,7 +429,7 @@ theorem decode_invocation_ioportJ [Fl4Proofs.P1.PlainStore st] (s : S) (ar : A) 
     (excaps : List (Fl4Spec.Cap × Fl4Spec.CslotPtr)) (buffer : Option Fl4Spec.ObjRef) :
     XCap (L := L) arI (JAt (L := L) arI AR) s ar σ lbl length (cslotAddr sl) (.IoPort first last 0#u64) blk call don fp
       buf extra slbl (args.map UScalar.bv) ci sl excaps buffer ct :=
-  decode_invocation_ioportJ_steps arI s ar σ J hni hARI hT (jStepHyps arI) (jReplyHyp arI Z.th) lbl slbl hlbl length buf ct hct
+  decode_invocation_ioportJ_steps arI s ar σ J hni hARI hT (jStepHyps arI) (jReplyHyp arI Z.th) hZB lbl slbl hlbl length buf ct hct
     args hlen hargs sl hAs first last hsc call hval blk don fp extra ci excaps buffer
 
 end

@@ -40,6 +40,15 @@ theorem fl4DecodeTcb_flags {label : Fl4Spec.Data} (h1 : Fl4Spec.genInvocationTyp
   unfold Fl4Spec.fl4DecodeTcbInvocation
   rw [if_pos h1]
 
+/-- The spec's ReadFPU step (`Fl4Spec.fl4FpuToFrame F`) has the outcome
+with any user memory agreeing outside the 2696 bytes at `F`, the rest of the
+machine state kept. -/
+theorem fpuToFrame_mem (F : Fl4Spec.Word) (ms : Fl4Spec.MachineState) (um : Fl4Spec.Word64 → Fl4Spec.Word8)
+    (h : ∀ a : Fl4Spec.Word64, Fl4Spec.fl4FpuStateSize ≤ (a - F).toNat → um a = ms.underlyingMemory a) :
+    ((), { ms with underlyingMemory := um }) ∈ (Fl4Spec.fl4FpuToFrame F ms).1 := by
+  unfold Fl4Spec.fl4FpuToFrame
+  exact mem_bind_nd (x := (ms.underlyingMemory, ms)) rfl (mem_bind_nd (x := (um, ms)) ⟨h, rfl⟩ rfl)
+
 section
 variable {S : Type} {st : machine.Store S} [L : P1.LawfulStore st] {A : Type} (arI : machine.Arch A)
 
@@ -988,7 +997,7 @@ theorem fpu_refines (th : TypedHeap) (hP : Placed th)
     · show _ ∈ ((Fl4Spec.NonDetE.liftE _).run σ1).1
       refine mem_liftE (x := ([], σ1)) ?_
       refine mem_bind_nd (x := ((), { σ1 with machineState := σ1.machineState })) ?_ (Set.mem_singleton_iff.2 rfl)
-      exact dmo_ex _ σ1 (mem_bind_nd (x := (σ1.machineState, σ1.machineState)) ⟨trivial, rfl⟩ rfl)
+      exact dmo_ex _ σ1 (fpuToFrame_mem _ σ1.machineState σ1.machineState.underlyingMemory fun _ _ => rfl)
   have hge : (⟨length, buf, call, slot, extra⟩ : tcb.Ctx).length >= 1#u64 := by show length >= 1#u64; scalar_tac
   have hic : ∀ (k : Unit → Fl4Spec.SEMonad Unit Fl4Spec.Fl4TcbInvocation),
       (Fl4Spec.NonDetE.liftME Fl4Spec.Fl4Invocation.invokeFl4TCB

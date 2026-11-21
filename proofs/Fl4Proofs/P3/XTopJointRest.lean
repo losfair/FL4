@@ -677,6 +677,15 @@ theorem JAtZ.cn_utc {AR : A → Fl4Spec.Cr3 → Prop} {Z : XSets} {H : P1.Heap} 
       fun _ h0 => absurd hch h0,
       fun g => by rw [hna]; exact U.dwReg (B g), fun g => by rw [hgp]; exact U.gReg (B g)⟩
 
+theorem JOwesD.toOwes {AR : A → Fl4Spec.Cr3 → Prop} {th : TypedHeap} {s s' : S} {a a' : A}
+    {σ σ' : Fl4Spec.State Unit} (h : JOwesD (L := L) arI AR th s a σ s' a' σ') : JOwes (L := L) arI AR th s a σ s' a' σ' :=
+  fun Z H Cs Ac Lst D hth J hX' => let ⟨Ac', Lst', R⟩ := h Z H Cs Ac Lst D hth J hX'; ⟨Ac', Lst', D, R⟩
+
+theorem JOwesCsD.toCs {AR : A → Fl4Spec.Cr3 → Prop} {th : TypedHeap} {G' : MdbGhost} {s s' : S} {a a' : A}
+    {σ σ' : Fl4Spec.State Unit} (h : JOwesCsD (L := L) arI AR th G' s a σ s' a' σ') :
+    JOwesCs (L := L) arI AR th G' s a σ s' a' σ' :=
+  fun Z H Cs Ac Lst D hth J hX' => let ⟨hC, Ac', Lst', R⟩ := h Z H Cs Ac Lst D hth J hX'; ⟨hC, Ac', Lst', D, R⟩
+
 /-- **What a slot step still owes** [W] (each reads the caps changed): the covering caps
 surviving and no new untyped region (`CoverKept`, `UtKept`: `jcov_cover`),
 the new original bits at `AbsSlot`s (`kern_keep`) and the untyped caps'
@@ -701,7 +710,7 @@ theorem jowes_slotOf {AR : A → Fl4Spec.Cr3 → Prop} {th : TypedHeap} {G' : Md
     (hR : ∀ (Z : XSets) (H : P1.Heap) (Cs Ac : Set U64) (Lst : U64 → List U64) (D : Set U64), Z.th = th →
       JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ → XTopAt (L := L) AR { Z with G := G' } s' a σ' →
       SlotRest (L := L) arI { Z with G := G' } s s' σ σ') :
-    JOwesCs (L := L) arI AR th G' s a σ s' a σ' := by
+    JOwesCsD (L := L) arI AR th G' s a σ s' a σ' := by
   intro Z H Cs Ac Lst D hth J hX'
   subst hth
   have hC := CnStep.of_cnK hcn
@@ -739,7 +748,7 @@ theorem jowes_slotOf {AR : A → Fl4Spec.Cr3 → Prop} {th : TypedHeap} {G' : Md
   have hkern := J.kern_keep hw.1 hw.2.1 hX'.fin.1.1.1 hC.ct hC.csc horig hgp
     (fun p ao h => (hC.look (fun _ _ e => by cases e) (fun _ e => by cases e)).2 h) hDbg
     (D' := D)
-  refine ⟨hJC, Ac, Lst, D, ⟨hCR', hRF', hRR', J.yld.frame k2 yk, J.mcp.frame k1 mk,
+  refine ⟨hJC, Ac, Lst, ⟨hCR', hRF', hRR', J.yld.frame k2 yk, J.mcp.frame k1 mk,
     J.buf.frame kb (fun p x hp => let ⟨y, hy, hc⟩ := hC.tcbF hp; ⟨y, hy, hc.buf⟩), hRP', J.apart.sc_frame hw.1 (SzKeep.of_keepC hkc), hjpl,
     hjc, hkern, hutc, J.nsc.cn hC.toHStep, J.inv.cn hC, CurInvW.cn J.cur hC, J.own.cn hC.toHStep, J.off.cn hC.toHStep,
     J.act.cn hC,
@@ -762,7 +771,7 @@ theorem jowes_ins {AR : A → Fl4Spec.Cr3 → Prop} {th : TypedHeap} {G' : MdbGh
     (hTK : TypedKept th (L.mem s) (L.mem s'))
     (hT3 : ∀ t, th t = some .tcb → capAt (L.mem s') (slotOf t 3) = capAt (L.mem s) (slotOf t 3))
     (hDL : DestLive th (L.mem s) (L.ksb s) pd) (hDl : DelInv th (L.mem s) → DelInv th (L.mem s')) :
-    JOwesCs (L := L) arI AR th G' s a σ s' a σ' := by
+    JOwesCsD (L := L) arI AR th G' s a σ s' a σ' := by
   intro Z H Cs Ac Lst D hth J hX'
   have hmem : ((), σ') ∈ (Fl4Spec.capInsert (Z := Unit) c (ps.bv, idxs) (pd.bv, idxd) σ).1 := by rw [hci]; rfl
   have hcn := capInsert_nkn c _ _ σ _ hmem
@@ -812,7 +821,7 @@ theorem jowes_cn {AR : A → Fl4Spec.Cr3 → Prop} {th : TypedHeap} {G' : MdbGho
     (hcW : ∀ y, IsSlot th y → (∀ sl ∈ W, y ≠ cslotAddr sl) → capV (L.mem s') y = capV (L.mem s) y)
     (hoW : ∀ sl, σ'.isOriginalCap sl = true → σ.isOriginalCap sl = true ∨ sl ∈ W)
     (hUS : UtSrc th (L.mem s) (L.mem s') σ σ') :
-    JOwesCs (L := L) arI AR th G' s a σ s' a σ' := by
+    JOwesCsD (L := L) arI AR th G' s a σ s' a σ' := by
   intro Z H Cs Ac Lst D hth J hX'
   have hPl : Placed th := hth ▸ J.xtop.rel.1
   refine jowes_slotOf arI s s' a σ σ' hcn hkc hw hFI hMO hkz hTK hT3 ?_ hDl (fun Z2 H2 Cs2 Ac2 Lst2 D2 hth2 J2 hX2 => ?_)
@@ -1054,7 +1063,7 @@ gain schedulable threads only, the action kept or `chooseNewThread`); P1's
 facts kept (the footprint `SchW` misses them). -/
 theorem jowes_sched {AR : A → Fl4Spec.Cr3 → Prop} {th : TypedHeap} (s s' : S) (a : A) (σ σ' : Fl4Spec.State Unit)
     (hS : SchedStep (L := L) th s σ s' σ') :
-    JOwes (L := L) arI AR th s a σ s' a σ' := by
+    JOwesD (L := L) arI AR th s a σ s' a σ' := by
   intro Z H Cs Ac Lst D hth J hX'
   subst hth
   obtain ⟨hK, hS2, hQ, hBK⟩ := hS
@@ -1166,7 +1175,7 @@ theorem jowes_sched {AR : A → Fl4Spec.Cr3 → Prop} {th : TypedHeap} (s s' : S
   have hdead : ∀ q ∈ D, DeadP (L := L) H s' q := fun q hq =>
     J.deadP_hstep hX' hC k3 (fun q z hq K h8 hK => J.schW_scKeep hw hq h8 hK) hA'.1 (J.yld.frame k2 yk) yk
       (J.jcov.dead q hq)
-  exact ⟨Ac, Lst, D, ⟨hCR', hRF', hRR', J.yld.frame k2 yk, J.mcp.frame k1 mk,
+  exact ⟨Ac, Lst, ⟨hCR', hRF', hRR', J.yld.frame k2 yk, J.mcp.frame k1 mk,
     J.buf.frame kb (fun p x hp => let ⟨y, hy, hc⟩ := hC.tcbF hp; ⟨y, hy, hc.buf⟩), hRP', J.apart.sc_frame hw.1 (SzKeep.of_kheap hK.kh),
     J.jpl_keep arI hSS hK.kh hw.1 hI (J.idleW_keep hX'.fin.1.1.1 hC.idle hC.isc).2, J.jcov_keep hw.1 hSS hdead (J.idleW_keep hX'.fin.1.1.1 hC.idle hC.isc), hkern, hutc, J.nsc.cn hC, hI', hcur', J.own.cn hC, J.off.cn hC, hA', J.bsa.cn hC, J.isorted.cn hC,
     J.curRun.cn hC hQ.2, hblk⟩⟩
@@ -1178,13 +1187,16 @@ notification cap's deletion is no primitive step (StepSem; the IRQ handler
 invocations' deletion at `J` in XTopJointIrqL). -/
 theorem jStepHyps {AR : A → Fl4Spec.Cr3 → Prop} {th : TypedHeap} :
     JStepHyps (L := L) arI AR th where
-  restart := fun s a σ ct x s1 hcur hk htcb hrun hs1 => jowes_restart arI s a σ ct x s1 hcur hk htcb hrun hs1
-  ks := fun s s' a a' σ σ' hw hO _ _ _ _ _ _ => jowes_ks arI s s' a a' σ σ' hw hO
+  restart := fun s a σ ct x s1 hcur hk htcb hrun hs1 Z H Cs Ac Lst D hth J hX1 => by
+    subst hth
+    obtain ⟨Lst', R⟩ := jowes_restartD arI s a σ ct x s1 hcur hk htcb hrun hs1 J hX1
+    exact ⟨Ac, Lst', R⟩
+  ks := fun s s' a a' σ σ' hw hO _ _ _ _ _ _ => jowes_ksD arI s s' a a' σ σ' hw hO
   slot := fun s s' a σ σ' G' c ps pd rs rd idxs idxd hps hpd hci hld hcap hnull hnu hw _ hFI hMO _ hTK hT3 hDL hDl =>
-    jowes_ins arI s s' a σ σ' c ps pd rs rd idxs idxd hps hpd hci hld hcap hnull hnu hw hFI hMO hTK hT3 hDL hDl
+    (jowes_ins arI s s' a σ σ' c ps pd rs rd idxs idxd hps hpd hci hld hcap hnull hnu hw hFI hMO hTK hT3 hDL hDl)
   sched := fun s s' a σ σ' hS => jowes_sched arI s s' a σ σ' hS
   cslot := fun s s' a σ σ' G' hcn hkc hCK hUK horig hw _ hFI hMO _ hTK hT3 hkz hDl W hW hcW hoW hUS =>
-    jowes_cn arI s s' a σ σ' hcn hkc hCK hUK horig hw hFI hMO hkz hTK hT3 hDl W hW hcW hoW hUS
+    (jowes_cn arI s s' a σ σ' hcn hkc hCK hUK horig hw hFI hMO hkz hTK hT3 hDl W hW hcW hoW hUS)
 
 end
 

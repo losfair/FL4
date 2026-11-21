@@ -335,7 +335,7 @@ theorem assign_rel {A : Type} {ar : machine.Arch A} {th : TypedHeap} {P : Set U6
           (SlotFoot.of_same hSS1 _).trans (hF2.trans (SlotFoot.wr_out hPl s2 hbo _))
         have hLk : VsLike (capV (L.mem (L.wr s2 (peA ptr (asid &&& 511#u64)) ptr1)) (cslotAddr (pc.bv, idx)))
             (.Pml4 ptr1 false asid0) := by
-          rw [capV_wr_out hPl hxsl s2 hbo, hcv2]; exact ⟨⟨rfl, rfl, rfl⟩, fun _ _ _ _ _ h => by
+          rw [capV_wr_out hPl hxsl s2 hbo, hcv2]; exact ⟨⟨rfl, rfl, rfl, rfl⟩, fun _ _ _ _ _ h => by
             simp only [VCapOK] at h ⊢
             refine ⟨h.1, h.2.1, fun _ => ⟨h0, ?_⟩⟩
             have : asid.val = base.val + i1.val := by

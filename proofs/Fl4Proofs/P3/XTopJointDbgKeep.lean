@@ -54,42 +54,6 @@ variable {S : Type} {st : machine.Store S} [L : P1.LawfulStore st] {A : Type} {a
   {AR : A → Fl4Spec.Cr3 → Prop} {Z : XSets} {H : P1.Heap} {Cs Ac : Set U64} {Lst : U64 → List U64}
   {D : Set U64}
 
-/-- **Writes avoiding the debug words keep them.** -/
-theorem dbgKeep_of_writes {T Cs Ω : Set U64} {H : P1.Heap} {Sg Rp Scs Nt : Set U64} {Zb : U64 → Nat}
-    {Ac : Set U64} {s s' : S} (h : P1.BlkOK st T Cs Ω H Sg Rp Scs Nt Zb Ac s) {B : U64 → Prop}
-    (hw : P1.WritesIn st s s' B) (hB : ∀ b, B b → ¬ P1.DbgW st T Cs s b) : P1.DbgKeep st T Cs s s' :=
-  ⟨hw.1, fun b hb => hw.mem_eq (P1.dbgW_aligned h hb) fun h' => hB b h' hb⟩
-
-/-- **A word outside the TCBs and off the nodes' head words is no debug word.** -/
-theorem JAtZ.notDbg' {s : S} {a : A} {σ : Fl4Spec.State Unit} (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ)
-    {b : U64} (hobj : ∀ p, H p = some .tcb → b.val < p.val ∨ p.val + 2 ^ P1.HKind.bits .tcb ≤ b.val)
-    (hnode : ∀ c ∈ Cs, b.val ≠ L.nodeBase s c + 88) :
-    ¬ P1.DbgW st (P1.Heap.tcbs H) Cs s b := by
-  obtain ⟨⟨Q, R, hq⟩, -⟩ := J.blk
-  have hT := hq.tcbs
-  have e12 : (2 : Nat) ^ P1.HKind.bits .tcb = 4096 := rfl
-  rintro (⟨y, hy, e | e⟩ | ⟨c, hc, e⟩)
-  · have h1 := hobj y hy
-    rw [e, show P1.dnA y = core.num.U64.wrapping_add y 3576#u64 from rfl, P1.field_val (hT y hy) (by simp), e12]
-      at h1
-    have : (3576#u64 : U64).val = 3576 := by simp
-    omega
-  · have h1 := hobj y hy
-    rw [e, show P1.dpA y = core.num.U64.wrapping_add y 3584#u64 from rfl, P1.field_val (hT y hy) (by simp), e12]
-      at h1
-    have : (3584#u64 : U64).val = 3584 := by simp
-    omega
-  · have h1 := hnode c hc
-    rw [e, P1.nodeAt_val (hq.nodes c hc) (by simp [P1.debug_val]), P1.debug_val] at h1
-    exact h1 rfl
-
-/-- **A word outside the TCBs and the nodes is no debug word.** -/
-theorem JAtZ.notDbg {s : S} {a : A} {σ : Fl4Spec.State Unit} (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ)
-    {b : U64} (hobj : ∀ p, H p = some .tcb → b.val < p.val ∨ p.val + 2 ^ P1.HKind.bits .tcb ≤ b.val)
-    (hnode : ∀ c ∈ Cs, b.val + 8 ≤ L.nodeBase s c ∨ L.nodeBase s c + 4288 ≤ b.val) :
-    ¬ P1.DbgW st (P1.Heap.tcbs H) Cs s b :=
-  J.notDbg' hobj fun c hc => by rcases hnode c hc with h | h <;> omega
-
 /-- A `VtOut` word is no debug word. -/
 theorem JAtZ.vtOut_notDbg {s : S} {a : A} {σ : Fl4Spec.State Unit} (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ)
     {b : U64} (hb : VtOut (L := L) Z H Cs s σ b) : ¬ P1.DbgW st (P1.Heap.tcbs H) Cs s b :=
@@ -135,22 +99,22 @@ set_option maxHeartbeats 4000000 in
 theorem JAtZ.frVtDbg [Fl4Proofs.P1.PlainStore st] (hA : ArchRefines arI AR) (hK : ARKeep arI AR) {s : S} {a : A}
     {σ : Fl4Spec.State Unit}
     (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) (hV : JVtHyps (L := L) arI AR Z.th)
-    {c : capability.Cap} (hk : FrVtK c) (b : Bool) :
+    {c : capability.Cap} {x : U64} (hx : IsSlot Z.th x) (hcv : capV (L.mem s) x = c) (hk : FrVtK c) (b : Bool) :
     objects.finalise_cap st arI s a c b false ⦃ r => P1.DbgKeep st (P1.Heap.tcbs H) Cs s r.2.1 ⦄ := by
   have har := J.xtop.fin.1.1.2.2.2.2.2.2
-  rcases hk with ⟨p, sz, r, d, asid, va, rfl⟩ | ⟨f, l, o, rfl, -⟩
+  rcases hk with ⟨p, sz, r, d, asid, va, rfl⟩ | ⟨f, l, o, rfl, ho⟩
   · obtain ⟨i, hi⟩ : ∃ i, capability.FrameSize.bits sz = ok i := by cases sz <;> exact ⟨_, rfl⟩
     simp only [objects.finalise_cap, objects.finalise_cap_object, P1.plain_retire, bind_ok, ↓reduceIte, hi,
       ite_self]
     split
     · refine WP.spec_bind (ept_unmap_vt hA a har asid va p i false (X := VtOut (L := L) Z H Cs s σ)
-        (fun x hx => hx.al) (hV.ept Z H Cs Ac Lst D s a σ rfl J asid)) ?_
+        (fun x hx => hx.al) (hV.ept Z H Cs Ac Lst D s a σ rfl J _ hx (by rw [hcv]; simp [Vs.NativeCap]) asid)) ?_
       rintro ⟨s1, a1⟩ ⟨hw, -⟩
       try simp only [uncurry_apply_pair]
       exact (WP.spec_ok _).2 (dbgKeep_of_writes J.blk hw fun b hb => J.vtOut_notDbg hb)
     · try simp only [P1.plain_retire, ite_self, bind_ok, uncurry_apply_pair]
       exact (WP.spec_ok _).2 (P1.DbgKeep.refl s)
-  · have P := hV.io Z H Cs Ac Lst D s a σ rfl J
+  · have P := hV.io Z H Cs Ac Lst D s a σ rfl J _ hx (by rw [hcv]; exact ho)
     simp only [objects.finalise_cap, objects.finalise_cap_object, bind_ok]
     refine WP.spec_bind (revoke_ports_vt hK J P o f l) ?_
     rintro ⟨s1, a1⟩ ⟨hw, -⟩
@@ -167,7 +131,7 @@ set_option maxHeartbeats 4000000 in
 `JAtZ.finEptJ`). -/
 theorem JAtZ.finEptDbg (hA : ArchRefines arI AR) {s : S} {a : A} {σ : Fl4Spec.State Unit}
     (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) (hV : JVtHyps (L := L) arI AR Z.th)
-    {c : capability.Cap} (hk : EptK c) :
+    {c : capability.Cap} {x : U64} (hx : IsSlot Z.th x) (hcv : capV (L.mem s) x = c) (hk : EptK c) :
     objects.finalise_cap st arI s a c true false ⦃ r => P1.DbgKeep st (P1.Heap.tcbs H) Cs s r.2.1 ⦄ := by
   obtain ⟨p, lv, m, asid, va, rfl, hnr⟩ := hk
   have har := J.xtop.fin.1.1.2.2.2.2.2.2
@@ -179,7 +143,7 @@ theorem JAtZ.finEptDbg (hA : ArchRefines arI AR) {s : S} {a : A} {σ : Fl4Spec.S
   · have hl0 : lv ≠ 0#u64 := fun e => hnr ⟨rfl, e⟩
     simp only [objects.finalise_cap, objects.finalise_cap_object, ept.finalise, bind_ok, ↓reduceIte, hl0]
     refine WP.spec_bind (ept_unmap_vt hA a har asid va p lv true (X := VtOut (L := L) Z H Cs s σ)
-      (fun x hx => hx.al) (hV.ept Z H Cs Ac Lst D s a σ rfl J asid)) ?_
+      (fun x hx => hx.al) (hV.ept Z H Cs Ac Lst D s a σ rfl J _ hx (by rw [hcv]; simp [Vs.NativeCap]) asid)) ?_
     rintro ⟨s1, a1⟩ ⟨hw, -⟩
     try simp only [uncurry_apply_pair]
     exact (WP.spec_ok _).2 (dbgKeep_of_writes J.blk hw fun b hb => J.vtOut_notDbg hb)
@@ -211,68 +175,12 @@ theorem JAtZ.finVcpuDbg (hK : ARKeep arI AR) {s : S} {a : A} {σ : Fl4Spec.State
   · exact J.vtOut_notDbg hb
   · exact J.vHead_notDbg
 
-/-- A slot lies apart from every core's node (its object, an object of `H`,
-does: `JKern.hnd`). -/
-theorem JAtZ.slot_node {s : S} {a : A} {σ : Fl4Spec.State Unit} (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ)
-    {x : U64} (hx : IsSlot Z.th x) {c : U64} (hc : c ∈ Cs) :
-    x.val + 32 ≤ L.nodeBase s c ∨ L.nodeBase s c + 4288 ≤ x.val := by
-  obtain ⟨p, i, hpi, rfl⟩ := hx
-  have hv := hpi.val J.xtop.rel.1
-  obtain ⟨Tr, Cq, hJ⟩ := J.jpl
-  rcases hpi with ⟨r, hp, hi⟩ | ⟨hp, hi⟩
-  · have h1 := J.kern.hnd p _ (hJ.cnode p r hp) c hc
-    simp only [P1.HKind.bits] at h1
-    rw [pow_add] at h1
-    rw [hv]
-    generalize 2 ^ r = M at h1 hi
-    omega
-  · have h1 := J.kern.hnd p _ ((hJ.tcb p).1 hp) c hc
-    simp only [P1.HKind.bits, tcbSlots] at h1 hi
-    rw [hv]
-    omega
-
-/-- **A slot word is no debug word** (the TCBs' slots below their offset
-256, `SlotsApart`; the slots apart from the nodes, `JAtZ.slot_node`). -/
-theorem JAtZ.inSlot_notDbg {s : S} {a : A} {σ : Fl4Spec.State Unit} (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ)
-    {b : U64} (hb : InSlot Z.th b) : ¬ P1.DbgW st (P1.Heap.tcbs H) Cs s b := by
-  obtain ⟨x, hx, h1, h2⟩ := hb
-  obtain ⟨⟨Q, R, hq⟩, -⟩ := J.blk
-  have hT := hq.tcbs
-  have hTe : Z.T = P1.Heap.tcbs H := J.tcbs_eq.1
-  rintro (⟨y, hy, e | e⟩ | ⟨c, hc, e⟩)
-  · have h3 := (J.apart x hx).1 y (hTe ▸ hy)
-    rw [e, show P1.dnA y = core.num.U64.wrapping_add y 3576#u64 from rfl, P1.field_val (hT y hy) (by simp)]
-      at h1 h2
-    have : (3576#u64 : U64).val = 3576 := by simp
-    omega
-  · have h3 := (J.apart x hx).1 y (hTe ▸ hy)
-    rw [e, show P1.dpA y = core.num.U64.wrapping_add y 3584#u64 from rfl, P1.field_val (hT y hy) (by simp)]
-      at h1 h2
-    have : (3584#u64 : U64).val = 3584 := by simp
-    omega
-  · have h3 := J.slot_node hx hc
-    rw [e, P1.nodeAt_val (hq.nodes c hc) (by simp [P1.debug_val]), P1.debug_val] at h1 h2
-    omega
-
 /-- **The deletion loop's slot edits keep the debug words** (a
 `SlotFrame2` step: swap, zombie write, empty). -/
 theorem JAtZ.slotFrame_dbgKeep {s : S} {a : A} {σ : Fl4Spec.State Unit}
     (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {s' : S} (hF : Vs.SlotFrame2 (L := L) Z.th s s') :
     P1.DbgKeep st (P1.Heap.tcbs H) Cs s s' :=
   dbgKeep_of_writes J.blk (SlotFrame2.writesIn hF) fun _ hb => J.inSlot_notDbg (slotWd_range J.xtop.rel.1 hb)
-
-/-- A kernel-state word (`KsW`) is no debug word: below the nodes, outside
-the TCBs (`ksOut`). -/
-theorem JAtZ.ksW_notDbg {s : S} {a : A} {σ : Fl4Spec.State Unit} (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ)
-    {b : U64} (hb : KsW (L.ksb s) b) : ¬ P1.DbgW st (P1.Heap.tcbs H) Cs s b := by
-  obtain ⟨K, h1, h2, -, e, -⟩ := hb
-  refine J.notDbg' (fun p hp => ?_) (fun c _ => ?_)
-  · obtain ⟨⟨Q, R, hq⟩, -⟩ := J.blk
-    have e12 : (2 : Nat) ^ P1.HKind.bits .tcb = 4096 := rfl
-    rw [e12]
-    rcases hq.ksOut p hp with h | h <;> omega
-  · have hnb : L.nodeBase s c = (L.ksb s).val + 13568 + c.val * 4288 := rfl
-    rw [hnb]; omega
 
 /-- **The preemption point keeps the debug words** (P1's
 `preemption_point.pp`: `WORK_UNITS` and the current node's `CUR_TIME`,

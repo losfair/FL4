@@ -1,0 +1,1 @@
+decodeCopyRegisters decodeReadRegisters decodeWriteRegisters invokeUntyped invokeUntypedWith fl4InvokeUntyped resetUntypedCap performAsidControlInvocation retypeRegion retypeRegionWith deleteObjects completeSignal sendSignal receiveSignal schedContextBindNtfn

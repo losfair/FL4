@@ -33,6 +33,7 @@ the window's `sc` objects) and the dead set without the new objects.
 import Fl4Proofs.P3.UtReplyAdd
 import Fl4Proofs.P3.UtScAdd
 import Fl4Proofs.P3.UtBodyJ
+import Fl4Proofs.P3.UtRetLive
 open Aeneas Aeneas.Std Result
 
 namespace Fl4Proofs.P3
@@ -746,6 +747,9 @@ theorem JAtZ.utScBodyJ {s : S} {ar : A} {σ : Fl4Spec.State Unit} (J : JAtZ (L :
     rw [hoffD _ kd hkd (J.cscLive.resolve_right hres)]; simp
   have hcurR : (L.curW res.2.1).val + 2 ^ 12 ≤ Aw ∨ Aw + win.val * 2 ^ zOf nt.val us.val ≤ (L.curW res.2.1).val := by
     have := hU.free _ .tcb K1.curT; simp only [objSize] at this; omega
+  have hTb : ∀ q, H q = some .tcb → q.val + 4096 ≤ Aw ∨ Aw + win.val * 2 ^ zOf nt.val us.val ≤ q.val :=
+    fun q hq => by
+      have := hU.free q .tcb ((hJp.tcb q).2 hq); simp only [objSize] at this; omega
   have hnewK : ∀ q kd, NewAt Aw (2 ^ zOf nt.val us.val) win.val q → newKind nt.val us.val = some kd →
       (q.val + 2 ^ kd.bits ≤ (L.ksb res.2.1).val ∨ (L.ksb res.2.1).val + 13568 ≤ q.val) ∧
       ∀ c ∈ Cs, q.val + 2 ^ kd.bits ≤ L.nodeBase res.2.1 c ∨ L.nodeBase res.2.1 c + 4288 ≤ q.val := by
@@ -945,9 +949,28 @@ theorem JAtZ.utScBodyJ {s : S} {ar : A} {σ : Fl4Spec.State Unit} (J : JAtZ (L :
     by obtain ⟨-, hCRZ, -⟩ := hX'.rel
        exact ⟨J.bok.keep hfk, J.fcov.ipcFr hfk, J.fcap.retype hE hM hCRZ.2.2.1 (fun _ => UFr.keep hfk.page)
          (fun j _ => by rw [hcj]; simp [cjOf, newCapOf, hnt, Vs.FrIn])⟩
+  -- `LiveDN` and `zD` after (UtRetLive's `ret_liveN`)
+  have hTH : P1.Heap.tcbs H' = P1.Heap.tcbs H :=
+    tcbs_hout hout0 (newKind_ne_tcb (by omega)) hE.k1 hTb
+  have hnewZ : ∀ q ∈ ZTcb (L := L) Z.th s,
+      q ∈ {q | q ∈ D ∧ ¬ NewQ Aw (2 ^ zOf nt.val us.val) win.val cj q} :=
+    fun q hq => ⟨J.zD q hq, not_newQ_of_off hE.k1 (hTb q (J.zH.1 q (J.thT q (J.ztcb_tcb hq))))⟩
+  have hWd : ∀ sl ∈ windowSlots dest r off.val win.val, ∃ p r', sl.1 = p.bv ∧ Z.th p = some (.cnode r') ∧
+      sl.2.length = r' ∧ DestCap Z.th (L.mem s) p := fun sl hsl => by
+    obtain ⟨-, i, -, -, rfl⟩ := hslA sl hsl
+    obtain ⟨-, -, -, y, rr, gs, g, hy, hcy⟩ := hctx.cnode
+    exact ⟨dest, r, rfl, hctx.cnode.1, natToCref_length _ _ (by have := hctx.cnode.2.1; omega),
+      y, rr, gs, g, hy, capV_of_capAt hcy⟩
+  obtain ⟨hLvN, hzDN⟩ := J.ret_liveN hX' rfl rfl rfl (fun _ _ h => h) (NewEmpty.refl _ _ _) hTH
+    (dbgKeep_of_writes J.blk hwI fun _ hb => J.inSlot_notDbg hb)
+    (fun q hq => hjc'.dead q (hnewZ q hq)) hnewZ (hC2.idle.trans hidB) hE hcjZ
+    (windowSlots dest r off.val win.val) hWd hAs.isSlot hcapK (fun d hd => capV_of_capAt (hDn0 d hd))
+    (fun d hd => invokeUntyped_cdt_slots _ _ _ _ _ _ _ _ _ σ (.ok (), σ') (by rw [hrun]; rfl) rfl d hd)
+    horgK
   have JZ := J.add_frameC (Z' := { Z with G := G', C := Z.C ∪ winSet Aw (2 ^ zOf nt.val us.val) win.val })
     rfl rfl hW0 rfl hwI.1 hX' hCs hJR (by rw [hwI.1]; exact J.ks) J.thT J.ip
     (fun n hn => by rw [hwI.1]; exact J.nk n hn) hcov' hobj' hzH' hset' hscC' hvc hbf
+    ⟨J.ext.nat.retype hE hM hX'.rel.2.1.2.2.1 (fun j _ => by rw [hcj]; exact Vs.nativeCap_newCapOf _ _ _ _), J.ext.vkeep (J.vkeep_slot hwI)⟩ hLvN hzDN
   refine ⟨σ', hrun, hok, ⟨Z.th, G', ?_⟩, ?_⟩
   · obtain ⟨hPl, hCR, hFI, hD, hMO, -, -⟩ := hX'.rel
     exact ⟨hPl, hCR, hFI, hD, hMO⟩

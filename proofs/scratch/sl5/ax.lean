@@ -1,0 +1,22 @@
+import Fl4Proofs.P3.SpecInvSlKT
+#print axioms Fl4Proofs.P3.SInvL.kentry_slB2_of
+#print axioms Fl4Proofs.P3.SInvL.kcall_slB2_of
+#print axioms Fl4Proofs.P3.SInvL.kentry_scLive2_of
+#print axioms Fl4Proofs.P3.SInvL.kcall_scLive2_of
+#print axioms Fl4Proofs.P3.SInvL.kentry_scKindR_of
+#print axioms Fl4Proofs.P3.SInvL.kcall_scKindR_of
+#print axioms Fl4Proofs.P3.SInvL.boot_scKindR
+#print axioms Fl4Proofs.P3.SInvL.ks_fl4Perform
+#print axioms Fl4Proofs.P3.SInvL.ks_handleInvocationR
+#print axioms Fl4Proofs.P3.SInvL.ks_recDel
+#print axioms Fl4Proofs.P3.SInvL.ks_capRevoke
+#print axioms Fl4Proofs.P3.SInvL.ks_invokeTcb
+#print axioms Fl4Proofs.P3.SInvL.ks_doNormalTransfer
+#print axioms Fl4Proofs.P3.SInvL.kr_okv_fl4Decode
+#print axioms Fl4Proofs.P3.SInvL.okv_cnK
+#print axioms Fl4Proofs.P3.SInvL.skr_invokeUntyped0
+#print axioms Fl4Proofs.P3.SInvL.skr_tail
+#print axioms Fl4Proofs.P3.SInvL.skr_ccLoop
+#print axioms Fl4Proofs.P3.SInvL.KS.cur
+#print axioms Fl4Proofs.P3.SInvL.KS.refl
+#print axioms Fl4Proofs.P3.SInvL.kd_of_so

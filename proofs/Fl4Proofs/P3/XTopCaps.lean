@@ -68,9 +68,9 @@ theorem stepClosed_xtop {AR : A → Fl4Spec.Cr3 → Prop} (hAM : ARMask arI AR) 
   refine ⟨fun s1 a1 σ1 s2 a2 σ2 s3 a3 σ3 h1 h2 Z hth hX hK hTh => ?_,
     fun s a σ ct x s1 hcur hk htcb hrun hs1 Z hth hX hK hTh => ?_,
     fun s s' a a' σ σ' hw hO hdk hdl hds hirq hio harch Z hth hX hK hTh => ?_,
-    fun s s' a σ σ' G' c ps pd rs rd idxs idxd hps hpd hci _ _ _ _ hw hCR hFI hMO hTS _ _ _ _ _ Z hth hX hK hTh => ?_,
+    fun s s' a σ σ' G' c ps pd rs rd idxs idxd hps hpd hci _ _ _ _ hw hCR hFI hMO hTS _ _ _ _ _ _ _ Z hth hX hK hTh => ?_,
     fun s s' a σ σ' hS Z hth hX hK hTh => ?_,
-    fun s s' a σ σ' G' hcn hkc _ _ _ hw hCR hFI hMO hTS _ _ _ _ _ _ _ _ _ _ Z hth hX hK hTh => ?_⟩
+    fun s s' a σ σ' G' hcn hkc _ _ _ hw hCR hFI hMO hTS _ _ _ _ _ _ _ _ _ _ _ _ Z hth hX hK hTh => ?_⟩
   · obtain ⟨G1, V1, hX1, hk1⟩ := h1 Z hth hX hK hTh
     obtain ⟨G2, V2, hX2, hk2⟩ := h2 (Z.mv G1 V1) hth hX1 (by rw [hk1]; exact hK) hTh
     exact ⟨G2, V2, hX2, hk2.trans hk1⟩

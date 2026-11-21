@@ -1,0 +1,1 @@
+dk_portIn dk_setIrqState' dke_preemptionPoint' dk_unmapPage dk_flushTable dk_flushAll dk_invalidatePageStructureCacheAsid dk_hwAsidInvalidate' dk_saveFpuState' dk_loadFpuState' dk_switchLocalFpuOwner' dk_invokeSchedContext' fn:getActiveIRQ fn:getCurrentTime fn:maskInterrupt fn:ackInterrupt fn:portOut fn:setDeadline fn:ackDeadlineIRQ fn:clearMemory fn:freeMemory

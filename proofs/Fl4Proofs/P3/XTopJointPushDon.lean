@@ -1211,6 +1211,7 @@ theorem JAtZ.pushDonJ (hAT : P0.ArchTotal arI) (J : JAtZ (L := L) arI AR Z H Cs 
   have hFK : FK σ σ' := ⟨pd_csc, pd_idle, pd_isc⟩
   have hIK := J.idleW_keep hS' pd_idle pd_isc
   have hDbg := J.kw_dbg hfoot
+  have hKd := J.kw_dbgKeep hfoot
   -- the bound-before objects at `σB`
   have hktB : σB.kheap t.bv = some (.tcb xt) := bd_oth hky hkw hws hh (fun _ e => by cases e) (Ne.symm hst') hkt
   have hkdB : σB.kheap d.bv = some (.tcb xd) := bd_oth hky hkw hws hh (fun _ e => by cases e) (Ne.symm hsd') hkd
@@ -1264,11 +1265,11 @@ theorem JAtZ.pushDonJ (hAT : P0.ArchTotal arI) (J : JAtZ (L := L) arI AR Z H Cs 
     dn_bsa hktB hkdB hkpB htd' hst' hsd' (by rw [hsd]; rfl) (bd_bsa hky hkw hws hh J.bsa hya)
   have hjpl : ∃ Tr Cq, JPlaced (L := L) Z.th H Tr Cq s' σ' :=
     ⟨Tr, Cq, hJ.same hSS (fun q y n _ hq => hK.szKeep q.bv y n hq) hks (J.rmW_irq hwR) hIK.2⟩
-  exact J.sc_frameS hks hSS hK hX' hCR' hRF' hrr (J.yld.frame k2 hyk) (J.mcp.frame k1 hmk)
+  exact J.sc_frameS hks hSS (J.vkeep_of hwR fun b hb => J.rmW_nv hb) hK hX' hCR' hRF' hrr (J.yld.frame k2 hyk) (J.mcp.frame k1 hmk)
     (J.buf.frame kb hK.bufKeep) hRP' (J.apart.sc_frame hks hK.szKeep) hjpl (J.jcov_keep hks hSS hdead hIK)
     (J.sc_kernW hW hK hFK hX' hDbg (subset_refl D))
     (J.rmW_utc hwR hSS hK.cdt hK.orig pd_arch hDbg) hN' hI' (Or.inl hcn') hown hoff hact hbsa
-    (Or.inl (by rw [hcn']; intro h; cases h)) hblk
+    (Or.inl (by rw [hcn']; intro h; cases h)) hblk hKd hIK.1 J.zD
 
 end
 

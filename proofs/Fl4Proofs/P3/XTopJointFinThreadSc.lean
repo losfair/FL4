@@ -329,9 +329,10 @@ theorem JAtZ.unbindTcbJD (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {t i 
     J.deadP_sc_step hX' hW hK (fun _ _ h => h.elim) hL hF hact'.1 hY'
       ((((pres_schedContextUnbindTcb (true, true) _).of_eq he).ykeep rfl).dk q.bv) (fun h => h) (J.jcov.dead q hq)
   have hDbg := J.kw_dbg (hfoot.mono (Set.empty_subset _))
+  have hKd := J.kw_dbgKeep (hfoot.mono (Set.empty_subset _))
   exact ⟨σ', he, Ac, Lst', J.sc_frame hW hK hX' hCR' hRF' hY' hM' (J.sc_buf hW hK) hRP' (J.sc_apart hW hK)
     (J.sc_jpl hW hK (J.idleW_keep hX'.fin.1.1.1 hF.2.1 hF.2.2).2) (J.sc_jcov hW hdead (fun q hq hn => absurd hq hn) (J.idleW_keep hX'.fin.1.1.1 hF.2.1 hF.2.2)) (J.sc_kern hW hK hF hX' hDbg fun _ h => h)
-    (J.sc_utc hW hK hDbg) hN' hI' hcur' hown' hoff' hact' hB' hcr' hblk⟩
+    (J.sc_utc hW hK hDbg) hN' hI' hcur' hown' hoff' hact' hB' hcr' hblk hKd (J.idleW_keep hX'.fin.1.1.1 hF.2.1 hF.2.2).1 J.zD⟩
 
 /-- `unbindTcbJD` with the dead set existential. -/
 theorem JAtZ.unbindTcbJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {t i : U64} {x : Fl4Spec.Tcb}

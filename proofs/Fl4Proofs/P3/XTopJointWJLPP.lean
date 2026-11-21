@@ -67,11 +67,12 @@ theorem jPreemptHypL (hAK : ARKeep arI AR) (hA : P0.ArchTotal arI) (hnd : Fl4Spe
     have hTz : P1.DbgTz st (P1.Heap.tcbs H) Cs s :=
       ⟨J.blk.2.2.1.2.2.tm.dn, J.blk.2.2.1.2.2.tm.dp, J.blk.2.2.1.2.2.tm.dh⟩
     have hL' : LiveJ (L := L) Z.th H G s' σ' :=
-      hL.of_sameZ hSS hmem horig hK J.kern.cs0 hTz fun p hp => J'.jcov.dead p (Or.inr hp)
+      hL.of_sameZ hSS hmem horig (congrArg Prod.snd (Vs.gke_preemptionPoint' σ _ hm0)) hK J.kern.cs0 hTz
+        fun p hp => J'.jcov.dead p (Or.inr hp)
     exact ⟨⟨V, Ac', Lst', _, J', by rw [hks]; exact hkb, Vs.ake_preemptionPoint'.noSwitch hm0 hns,
       SpecGlob.pp hm0 hsg, hp'⟩, hL', ⟨lst, J.dbgWF_keep J' rfl rfl hDW hK⟩,
       hN.of_same (fun y hy => hSS.capV hy) horig⟩
-  · exact ⟨s, a, σ, ⟨V, Ac, Lst, D, J, hkb, hns, hsg⟩, hr, hm, hX'.rel.2.2.2.1, hX'.rel.2.2.2.2.1⟩
+  · exact ⟨s, a, σ, ⟨V, Ac, Lst, D, J, hkb, hns, hsg, hp0⟩, hr, hm, hX'.rel.2.2.2.1, hX'.rel.2.2.2.2.1⟩
 
 set_option maxHeartbeats 4000000 in
 /-- **A cleanup cap's `post_cap_deletion` keeps `WJL`** (module docstring). -/
@@ -90,15 +91,16 @@ theorem jPostDelHypL (hAM : ARMask arI AR)
       CRel Z.th (L.mem s') σ' G → P1.DbgKeep st (P1.Heap.tcbs H) Cs s s' →
       WJL (L := L) arI AR Z H Cs kb s' a' σ' G := fun s' a' σ' hSS hw hO hX' hCR hK => by
     obtain ⟨Ac', Lst', R⟩ := jowes_ksD arI s s' a a' σ σ' hw hO _ H Cs Ac Lst _ rfl J0 hX'
-    have J' := J0.cs_frame hw.1 hX' (KBack.of_kheap hO.kh) (IpcFrKeep.of_kheap hO.kh)
-      (JCs.same J0 hSS (KSz.of_kheap hO.kh)) R (Vs.VsSlotsT.of_eq fun y hy => hSS.capV hy)
+    have J' := J0.cs_frameK hw.1 hX' (KBack.of_kheap hO.kh) (IpcFrKeep.of_kheap hO.kh)
+      (JCs.same J0 hSS (KSz.of_kheap hO.kh)) R (Vs.VsSlotsT.of_eq fun y hy => hSS.capV hy) (J0.vkeep_of hw fun _ hb => J0.ksW_nv hb)
+      hSS hK hO.idle
     have hmem : ∀ y ∈ G.chains.flatten, IsSlot Z.th y := fun y hy => ((hDS.1.2.2.1.members y).1 hy).1
     have horig : σ'.isOriginalCap = σ.isOriginalCap :=
       orig_eq_of_slots hDS.1.2.2.2.1 hCR.2.2.2.1 J.kern.orig J'.kern.orig hSS
     have hTz : P1.DbgTz st (P1.Heap.tcbs H) Cs s :=
       ⟨J.blk.2.2.1.2.2.tm.dn, J.blk.2.2.1.2.2.tm.dp, J.blk.2.2.1.2.2.tm.dh⟩
     have hL' : LiveJ (L := L) Z.th H G s' σ' :=
-      hL.of_sameZ hSS hmem horig hK J.kern.cs0 hTz fun p hp => J'.jcov.dead p (Or.inr hp)
+      hL.of_sameZ hSS hmem horig hO.idle hK J.kern.cs0 hTz fun p hp => J'.jcov.dead p (Or.inr hp)
     exact ⟨⟨V, Ac', Lst', _, J', by rw [hw.1]; exact hkb, fun u e => hns u (by rw [← hO.act]; exact e),
       hsg.of_eq hO.kh hO.inode hO.idle, hp0.of_ppk (PPK.of_ksStep hO)⟩, hL',
       ⟨lst, J.dbgWF_keep J' rfl rfl hDW hK⟩, hN.of_same (fun y hy => hSS.capV hy) horig⟩

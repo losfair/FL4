@@ -65,7 +65,7 @@ theorem jFinAtL_reply [Fl4Proofs.P1.PlainStore st] (hT : P0.ArchTotal arI) : JFi
   have hcv1 : capV (L.mem s1) (cslotAddr sl) = .Reply p g := by
     rw [hSS1.capV hA.isSlot, hcv]
   have hDS1 : DState (L := L) Z.th s1 σ1 G := ⟨J1.xtop.rel.2.1, J1.del, J1.xtop.rel.2.2.1⟩
-  obtain ⟨hL1, hDW1, hN1⟩ := wjl_keep arI J hDS hL hDW hN J1 (fun p hp => Or.inr hp) hSS1 hDS1 hK
+  obtain ⟨hL1, hDW1, hN1⟩ := wjl_keep arI J hDS hL hDW hN J1 (fun p hp => Or.inr hp) hSS1 hDS1 hK (gk_idle (Vs.gk_finaliseCap _ _) hmem1)
   have hn : ∀ q, ¬ RefsObj q (capV (L.mem s1) (cslotAddr sl)) := fun q h => by rw [hcv1] at h; exact h
   exact ⟨rfl, trivial, trivial, σ1, G, hmem1, hDS1, hcv1,
     fun y hy _ => Or.inl (hSS1.capV hy), (MdbStep.refl hDS.1.2.2.1).same_right hDS.1.2.2.1 hSS1,
@@ -73,101 +73,6 @@ theorem jFinAtL_reply [Fl4Proofs.P1.PlainStore st] (hT : P0.ArchTotal arI) : JFi
       hL1, hDW1, hN1⟩,
     fun _ => rdLO_noRef arI J1 hL1 (JAtZ.reply_ready arI J1 hA.isSlot hcv1 hdp) hn,
     fun _ _ _ _ q h => by rw [hcv1] at h; cases h⟩
-
-/-- `dbgNth` one step further, from the end. -/
-theorem dbgNth_succ' (m : U64 → U64) (n : Nat) (h : U64) :
-    dbgNth m (n + 1) h = (if dbgNth m n h = 0#u64 then 0#u64 else m (P1.dnA (dbgNth m n h))) := by
-  induction n generalizing h with
-  | zero => rfl
-  | succ n ih =>
-    by_cases h0 : h = 0#u64
-    · subst h0; simp [dbgNth]
-    · rw [show dbgNth m (n + 1 + 1) h = dbgNth m (n + 1) (m (P1.dnA h)) by simp [dbgNth, h0], ih,
-        show dbgNth m (n + 1) h = dbgNth m n (m (P1.dnA h)) by simp [dbgNth, h0]]
-
-/-- **A debug-list walk stays on the list** (`DbgWFL`). -/
-theorem dbgNth_mem_wf {T Cs : Set U64} {m hd : U64 → U64} {lst : U64 → List U64}
-    (hW : DbgWFL T Cs m hd lst) {c : U64} (hc : c ∈ Cs) (n : Nat) :
-    dbgNth m n (m (hd c)) = 0#u64 ∨ dbgNth m n (m (hd c)) ∈ lst c := by
-  induction n with
-  | zero =>
-    show m (hd c) = 0#u64 ∨ m (hd c) ∈ lst c
-    rw [hW.head c hc]
-    cases lst c with
-    | nil => exact Or.inl rfl
-    | cons a r => exact Or.inr (by simp)
-  | succ n ih =>
-    rw [dbgNth_succ']
-    split
-    · exact Or.inl rfl
-    · rename_i h0
-      rw [hW.next c hc _ (ih.resolve_left h0)]
-      exact nextIn_mem _ _
-
-theorem nextIn_getElem {l : List U64} (hnd : l.Nodup) {i : Nat} (hi : i + 1 < l.length) :
-    nextIn l (l[i]'(by omega)) = l[i + 1] := by
-  induction l generalizing i with
-  | nil => simp at hi
-  | cons a r ih =>
-    obtain ⟨ha, hr⟩ := List.nodup_cons.1 hnd
-    cases i with
-    | zero =>
-      cases r with
-      | nil => simp at hi
-      | cons b r' => simp [nextIn]
-    | succ j =>
-      have hj : j + 1 < r.length := by simp at hi; omega
-      have hne : a ≠ r[j] := fun e => ha (by rw [e]; exact List.getElem_mem _)
-      simp only [List.getElem_cons_succ, nextIn, if_neg hne]
-      exact ih hr hj
-
-theorem headD_getElem0 (l : List U64) (hi : 0 < l.length) : l.headD 0#u64 = l[0] := by
-  cases l with
-  | nil => simp at hi
-  | cons a r => rfl
-
-/-- **A debug-list walk visits the list in order** (`DbgWFL`). -/
-theorem dbgNth_getElem_wf {T Cs : Set U64} {m hd : U64 → U64} {lst : U64 → List U64}
-    (hW : DbgWFL T Cs m hd lst) {c : U64} (hc : c ∈ Cs) :
-    ∀ i (hi : i < (lst c).length), dbgNth m i (m (hd c)) = (lst c)[i] := by
-  intro i
-  induction i with
-  | zero =>
-    intro hi
-    show m (hd c) = _
-    rw [hW.head c hc]
-    exact headD_getElem0 _ hi
-  | succ i ih =>
-    intro hi
-    have hi' : i < (lst c).length := by omega
-    rw [dbgNth_succ', ih hi']
-    have hz : (lst c)[i] ≠ 0#u64 := fun e => hW.zero c hc (by rw [← e]; exact List.getElem_mem hi')
-    rw [if_neg hz, hW.next c hc _ (List.getElem_mem hi')]
-    exact nextIn_getElem (hW.nodup c hc) hi
-
-/-- **`LiveJ.of_sameZ` with the debug list shrunk** (module docstring): every
-debug-list member after one before. -/
-theorem LiveJ.of_sameDbg {th : TypedHeap} {H : P1.Heap} {G : MdbGhost} {s s' : S}
-    {σ σ' : Fl4Spec.State Unit} (hL : LiveJ (L := L) th H G s σ) (hSS : SlotsSame th (L.mem s) (L.mem s'))
-    (hmem : ∀ y ∈ G.chains.flatten, IsSlot th y) (horig : σ'.isOriginalCap = σ.isOriginalCap)
-    (hdbg : ∀ n, dbgNth (L.mem s') n (dbgHead (L := L) s') ≠ 0#u64 → ∃ k,
-      dbgNth (L.mem s') n (dbgHead (L := L) s') = dbgNth (L.mem s) k (dbgHead (L := L) s) ∧
-      dbgNth (L.mem s) k (dbgHead (L := L) s) ≠ 0#u64)
-    (hdead : ∀ p ∈ ZTcb (L := L) th s, DeadP (L := L) H s' p) :
-    LiveJ (L := L) th H G s' σ' := by
-  have hU : ∀ y, IsSlot th y → InUse (L.mem s') σ' y → InUse (L.mem s) σ y := fun y hy hu => by
-    unfold InUse at hu ⊢
-    rw [hSS.capV hy, horig] at hu
-    exact hu
-  refine ⟨fun q i hqi hu => ?_, fun n hn => ?_, fun y hy p zt n hz i hpi hni hu => ?_,
-    fun y hy p zt n hz hzt => ?_⟩
-  · obtain ⟨y, hy, hr⟩ := hL.slots q i hqi (hU _ ⟨q, i, hqi, rfl⟩ hu)
-    exact ⟨y, hy, by rw [hSS.capV (hmem y hy)]; exact hr⟩
-  · obtain ⟨k, hk, hk0⟩ := hdbg n hn
-    obtain ⟨y, hy, hr⟩ := hL.dbg k hk0
-    exact ⟨y, hy, by rw [hSS.capV (hmem y hy), hk]; exact hr⟩
-  · exact hL.zslots y hy p zt n (by rw [← hSS.capV hy]; exact hz) i hpi hni (hU _ ⟨p, i, hpi, rfl⟩ hu)
-  · exact hdead p ⟨y, hy, zt, n, by rw [← hSS.capV hy]; exact hz, hzt⟩
 
 set_option maxHeartbeats 4000000 in
 /-- **A final thread cap's finalisation at `WJL`** (module docstring). -/
@@ -233,7 +138,7 @@ theorem jFinAtL_thread (hT : P0.ArchTotal arI) (hK : ARKeep arI AR)
     have e2 : dbgNth (L.mem s) k (dbgHead (L := L) s) = (lst 0#u64)[k] := dbgNth_getElem_wf hDW c0 k hk
     exact ⟨k, by rw [e2, ek], by rw [e2, ek]; exact hn⟩
   have hL1 : LiveJ (L := L) Z.th H G s1 σ1 :=
-    hL.of_sameDbg hSS1 hmem horig hdbg (fun q hq => J1.jcov.dead q (Or.inr hq))
+    hL.of_sameDbg hSS1 hmem horig (gk_idle (Vs.gk_finaliseCap _ _) hm1') hks1 hdbg (fun q hq => J1.jcov.dead q (Or.inr hq))
   have hN1 : NullOrig Z.th (L.mem s1) σ1 := hN.of_same (fun y hy => hSS1.capV hy) horig
   refine ⟨rfl, trivial, trivial, σ1, G, hm1', hDS1, hcv1,
     fun y hy _ => Or.inl (hSS1.capV hy), (MdbStep.refl hDS.1.2.2.1).same_right hDS.1.2.2.1 hSS1,

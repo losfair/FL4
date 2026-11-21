@@ -92,7 +92,8 @@ theorem JAtZ.workUnitsJD {s : S} {a : A} {σ : Fl4Spec.State Unit}
   have hSS : SlotsSame Z.th (L.mem s) (L.mem s') :=
     hX.slotsSame_of hw fun b hb => by obtain ⟨K, h1, h2, -, e⟩ := hb; exact Or.inr (Or.inl ⟨by omega, by omega⟩)
   obtain ⟨Ac', Lst', R⟩ := jowes_ksD arI s s' a a σ σ hw (KsStep.refl σ) Z H Cs Ac Lst D rfl J hX1
-  exact ⟨Ac', Lst', J.cs_frame hw.1 hX1 (KBack.of_kheap rfl) (IpcFrKeep.of_kheap rfl) (JCs.same J hSS (KSz.of_kheap rfl)) R (Vs.VsSlotsT.of_eq fun y hy => hSS.capV hy)⟩
+  exact ⟨Ac', Lst', J.cs_frameK hw.1 hX1 (KBack.of_kheap rfl) (IpcFrKeep.of_kheap rfl) (JCs.same J hSS (KSz.of_kheap rfl)) R (Vs.VsSlotsT.of_eq fun y hy => hSS.capV hy) (J.vkeep_of hw fun _ hb => J.ksW_nv hb)
+    hSS (dbgKeep_of_writes J.blk hw fun _ hb => J.ksW_notDbg hb) rfl⟩
 
 /-- `JAtZ.workUnitsJD` with the dead set existential. -/
 theorem JAtZ.workUnitsJ {s : S} {a : A} {σ : Fl4Spec.State Unit}
@@ -226,9 +227,17 @@ theorem JAtZ.timestampJD {s : S} {a : A} {σ : Fl4Spec.State Unit}
   have hK : ScTKw (fun _ => False) σ σ' :=
     ⟨fun p => OTK.refl _ _, hum2, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
   have hX' : XTopAt (L := L) AR Z s' a2 σ' := xtop_sc_step hX J.ip J.nk hwT (ct := σ.curThread) (hK.mono fun _ h => h.elim) hS2 hR2 fun _ => hAa2 hAR'
+  have hKd : P1.DbgKeep st (P1.Heap.tcbs H) Cs s s' :=
+    ⟨hw.1, fun b hb => hw.mem_eq (P1.dbgW_aligned J.blk hb) fun h' => by
+      rcases h' with rfl | rfl
+      · exact P1.dbgW_not_kw J.blk (Or.inr (Or.inl ⟨L.cpu s, J.kern.cpuCs, layout.node.CUR_TIME,
+          by simp [layout.node.CUR_TIME], by simp [layout.node.CUR_TIME], rfl⟩)) hb
+      · exact P1.dbgW_not_kw J.blk (Or.inr (Or.inl ⟨L.cpu s, J.kern.cpuCs, layout.node.CONSUMED,
+          by simp [layout.node.CONSUMED], by simp [layout.node.CONSUMED], rfl⟩)) hb⟩
   refine ⟨hX', fun hO' hOw' => ?_⟩
   obtain ⟨-, hY', hM', ⟨Lst', hCR', hRF'⟩, hRP', -⟩ :=
     ScAll.of_k hS J.rp J.yld J.mcp J.call J.rfree ⟨⟨hS2, hR2, hN2, hI2⟩, hwK,
+
       ⟨fun p => ORel.refl _ _, rfl, rfl, rfl, rfl, rfl⟩⟩
   have hF : FK σ σ' := ⟨rfl, rfl, rfl⟩
   have hL : LK (fun _ => False) σ σ' := fun p => Or.inr (OL.refl _)
@@ -254,7 +263,9 @@ theorem JAtZ.timestampJD {s : S} {a : A} {σ : Fl4Spec.State Unit}
     · have := congrArg UScalar.val hb; rw [hd, h2] at this; simp at this; omega
   exact ⟨Ac, Lst', J.sc_frame hwT hK hX' hCR' hRF' hY' hM' (J.sc_buf hwT hK) hRP' (J.sc_apart hwT hK)
     (J.sc_jpl hwT hK (J.idleW_keep hX'.fin.1.1.1 hF.2.1 hF.2.2).2) (J.sc_jcov hwT hDead (fun q hq hn => absurd hq hn) (J.idleW_keep hX'.fin.1.1.1 hF.2.1 hF.2.2)) (J.sc_kern hwT hK hF hX' hDbg fun _ h => h)
-    (J.sc_utc hwT hK hDbg) hN2 hI2 (J.cur.imp id hC2) hOw' hO' hAI' (J.bsa.tkw hK fun p y n h hy => ⟨y, h, hy, fun _ h => h, id⟩) J.curRun hBlk'⟩
+    (J.sc_utc hwT hK hDbg) hN2 hI2 (J.cur.imp id hC2) hOw' hO' hAI' (J.bsa.tkw hK fun p y n h hy => ⟨y, h, hy, fun _ h => h, id⟩) J.curRun hBlk'
+    hKd (J.idleW_keep hX'.fin.1.1.1 hF.2.1 hF.2.2).1 J.zD⟩
+
 
 
 set_option maxHeartbeats 4000000 in
@@ -467,9 +478,14 @@ theorem JAtZ.ppJD {s : S} {a : A} {σ : Fl4Spec.State Unit}
       · rw [← hk1, ← hcs1]; exact h
       · show u.bv ∉ σ1.releaseQueue; rw [hrq1]
         by_cases h0 : σ.consumedTime = 0
-        · exact (hRd h0).2 u.bv xt hk hxs
+        · exact (hRd.2 h0).2 u.bv xt hk hxs
         · exact hnr (bv_pos h0)
     · exact Or.inr ⟨⟨c', hc', hcv'.trans hcs1.symm⟩, fun x n h => h2 x n (by rw [← hk1, ← hcs1]; exact h)⟩
+  -- FL4's IRQ read (first, in C's and the spec's order)
+  refine WP.spec_bind (Pₘ := fun q => q = (b2, a2)) (by rw [hip, WP.spec_ok]) ?_
+  rintro ⟨b2', a2'⟩ he
+  cases he
+  try dsimp only
   -- FL4's reads
   step with sched.cur_sc.spec' as ⟨sc, hsc⟩
   step with sched.consumed.spec' as ⟨cv, hcv⟩
@@ -486,33 +502,32 @@ theorem JAtZ.ppJD {s : S} {a : A} {σ : Fl4Spec.State Unit}
   rw [hPP] at hy
   have hexp : Fl4Spec.isCurDomainExpired σ2 = false := by
     unfold Fl4Spec.isCurDomainExpired; simp [hnd]
+  rw [is_cur_domain_expired_eq]
   cases hact : Fl4Spec.scActive x
-  · simp only [Bool.false_eq_true, ↓reduceIte, bind_ok, WP.spec_ok]
-    refine ⟨σ2, Or.inr ⟨by simp, ?_⟩, hX2, fun h => by simp at h⟩
+  · simp only [Bool.false_eq_true, ↓reduceIte, bind_ok, ite_self, WP.spec_ok]
+    refine ⟨σ2, Or.inr ⟨by simp, ?_⟩, hX2', fun h => by simp at h⟩
     rw [if_pos (by simp [hact])] at hy
     exact hy
   simp only [↓reduceIte]
-  refine WP.spec_bind (sufficient_refines s3 a1 σ2 hS2 hscC hkx hact _ (hP.minBudget a1)) ?_
+  refine WP.spec_bind (sufficient_refines s3 a2 σ2 hS2 hscC hkx hact _ (hP.minBudget a2)) ?_
   intro ok1 hsuf
   have hrs : Fl4Spec.readScRefillSufficient (Z := Unit) σ2.curSc σ2.consumedTime σ2 = some ok1 := by
     rw [hs.curSc, hs.consumed]; unfold Fl4Spec.getScRefillSufficient at hsuf; exact getsThe_some hsuf
+  simp only [bind_ok, Bool.false_eq_true, ↓reduceIte]
+  cases b2
+  swap
+  · rw [if_pos rfl, WP.spec_ok]
+    rw [if_pos (Or.inl (hiff.1 rfl))] at hy
+    exact ⟨σ2, Or.inr ⟨by simp, hy⟩, hX2', fun h => by simp at h⟩
+  rw [if_neg (by simp)]
+  have hirq : irq = none := by
+    by_contra h; exact absurd (hiff.2 h) (by simp)
   cases hok : ok1
-  · simp only [Bool.false_eq_true, ↓reduceIte, WP.spec_ok]
-    refine ⟨σ2, Or.inr ⟨by simp, ?_⟩, hX2, fun h => by simp at h⟩
+  · rw [if_neg (by simp), WP.spec_ok]
+    refine ⟨σ2, Or.inr ⟨by simp, ?_⟩, hX2', fun h => by simp at h⟩
     rw [if_pos (by simp [hrs, hok])] at hy
     exact hy
-  simp only [↓reduceIte]
-  rw [is_cur_domain_expired_eq]
-  simp only [bind_ok, Bool.false_eq_true, ↓reduceIte]
-  refine WP.spec_bind (Pₘ := fun q => q = (b2, a2)) (by rw [hip, WP.spec_ok]) ?_
-  rintro ⟨b2', a2'⟩ he
-  cases he
-  cases b2
-  · change (if (false = true) then ok (core.result.Result.Err error.Exc.Preempted, s3, a2)
-      else ok (core.result.Result.Ok (), s3, a2)) ⦃ r => _ ⦄
-    rw [if_neg (by simp), WP.spec_ok]
-    have hirq : irq = none := by
-      by_contra h; exact absurd (hiff.2 h) (by simp)
+  · rw [if_pos rfl, WP.spec_ok]
     rw [if_neg (by simp [hirq, hexp, hact, hrs, hok])] at hy
     have hx' := hx.strong hact
     have hne : x.scRefills ≠ [] := by rw [hx'.refills]; exact refills_ne hx'.wf
@@ -523,7 +538,7 @@ theorem JAtZ.ppJD {s : S} {a : A} {σ : Fl4Spec.State Unit}
       rw [← hk1, ← hcs1]; exact hkx'
     have hrd : (Fl4Spec.refillHd x).rTime + σ.consumedTime ≤ σ.curTime ∧ (Fl4Spec.refillHd x).rTime ≤ σ.curTime := by
       by_cases h0 : σ.consumedTime = 0
-      · have h := (hRd h0).1 x n hkσ hact
+      · have h := (hRd.2 h0).1 x n hkσ hact
         simp only [Fl4Spec.refillReady, Fl4Spec.refillReady', decide_eq_true_eq, bv_add0] at h
         rw [h0, bv_add0]; exact ⟨h, h⟩
       · obtain ⟨-, h1, h2⟩ := J.off (bv_pos h0) x n hkσ (fun _ => hact)
@@ -539,7 +554,7 @@ theorem JAtZ.ppJD {s : S} {a : A} {σ : Fl4Spec.State Unit}
       · simp only [Fl4Spec.refillReady, Fl4Spec.refillReady', decide_eq_true_eq]; rw [e1, e2]; exact hs1
       · simp only [Fl4Spec.refillReady, Fl4Spec.refillReady', decide_eq_true_eq, bv_add0]; rw [e2]; exact hs2
     have hP2 : PPR0 σ2 := by
-      intro _
+      refine ⟨by rw [hσ2, hσ1]; exact hRd.1, fun _ => ?_⟩
       refine ⟨fun y m hy' _ => ?_, fun u xt hu hus hur => ?_⟩
       · rw [hkx'] at hy'; cases hy'
         simp only [Fl4Spec.refillReady, Fl4Spec.refillReady', decide_eq_true_eq, bv_add0]; rw [e2]; exact hs2
@@ -547,7 +562,7 @@ theorem JAtZ.ppJD {s : S} {a : A} {σ : Fl4Spec.State Unit}
         have hus' : xt.tcbSchedContext = some σ.curSc := by rw [← hcs1]; exact hus
         have hur' : u ∉ σ.releaseQueue → False := fun h => h (by rw [← hrq1]; exact hur)
         by_cases h0 : σ.consumedTime = 0
-        · exact hur' ((hRd h0).2 u xt hu' hus')
+        · exact hur' ((hRd.2 h0).2 u xt hu' hus')
         · obtain ⟨y', n', hy', hyt⟩ := J.inv.back u xt _ hu' hus'
           rcases J.own with ⟨u0, -, xt0, -, -, hb0, hnr0⟩ | ⟨-, hun⟩
           · have := hb0 y' n' hy'
@@ -555,11 +570,6 @@ theorem JAtZ.ppJD {s : S} {a : A} {σ : Fl4Spec.State Unit}
             exact hur' (hnr0 (bv_pos h0))
           · rw [hun y' n' hy'] at hyt; cases hyt
     refine ⟨σ2, Or.inl ⟨by simp, hy⟩, hX2', fun _ => ⟨hJ2' hO2 hOw2, hP2⟩⟩
-  · change (if (true = true) then ok (core.result.Result.Err error.Exc.Preempted, s3, a2)
-      else ok (core.result.Result.Ok (), s3, a2)) ⦃ r => _ ⦄
-    rw [if_pos rfl, WP.spec_ok]
-    rw [if_pos (Or.inl (hiff.1 rfl))] at hy
-    exact ⟨σ2, Or.inr ⟨by simp, hy⟩, hX2', fun h => by simp at h⟩
 
 set_option maxHeartbeats 4000000 in
 /-- `JAtZ.ppJD` with the dead set existential. -/
@@ -615,7 +625,7 @@ theorem jPreemptHyp_of (hAK : ARKeep arI AR) (hA : P0.ArchTotal arI) (hnd : Fl4S
   rcases hcase with ⟨rfl, hm0⟩ | ⟨rfl, hm⟩
   · obtain ⟨⟨Ac', Lst', D', J'⟩, hp'⟩ := hJ' rfl
     exact ⟨V, Ac', Lst', D', J', by rw [hks]; exact hkb, Vs.ake_preemptionPoint'.noSwitch hm0 hns, SpecGlob.pp hm0 hsg, hp'⟩
-  · exact ⟨s, a, σ, ⟨V, Ac, Lst, D, J, hkb, hns, hsg⟩, hr, hm, hX'.rel.2.2.2.1, hX'.rel.2.2.2.2.1⟩
+  · exact ⟨s, a, σ, ⟨V, Ac, Lst, D, J, hkb, hns, hsg, hp0⟩, hr, hm, hX'.rel.2.2.2.1, hX'.rel.2.2.2.2.1⟩
 
 
 end

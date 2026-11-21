@@ -342,6 +342,7 @@ theorem JAtZ.chargeBudgetJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) (hA
     ScAll.of_tr hS J.rp J.mcp J.call J.rfree ⟨hS', hR', hN', hI'⟩ hY (hW.mono fun _ h => Or.inl h) hsok rfl
   have hAI' := hAI J.act
   have hDbg := J.kw_dbg hfoot
+  have hKd := J.kw_dbgKeep hfoot
   have hidW := J.idleW_keep hS' hfk.2.1 hfk.2.2
   have hblk' : P1.BlkOK st (P1.Heap.tcbs H) Cs (P1.Heap.omega H) H (P1.Heap.frame H) (P1.Heap.replies H)
       (P1.Heap.scs H) (P1.Heap.ntfns H) (P1.Heap.scBits H) Ac s' :=
@@ -386,7 +387,7 @@ theorem JAtZ.chargeBudgetJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) (hA
   exact ⟨Lst', J.sc_frame hW hK hX' hCR' hRF' hY' hM' (J.sc_buf hW hK) hRP' (J.sc_apart hW hK)
     (J.sc_jpl hW hK hidW.2) (J.sc_jcov hW hdead (fun q hq hn => absurd hq hn) hidW)
     (J.sc_kern hW hK hfk hX' hDbg fun _ h => h) (J.sc_utc hW hK hDbg) hN' hI' hcur' hown' hoff hAI' hbsa hcr
-    hblk'⟩
+    hblk' hKd hidW.1 J.zD⟩
 
 end
 

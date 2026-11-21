@@ -2,7 +2,7 @@
 P3 (DESIGN.md §9): **the syscall dispatch above `handle_invocation` at `J`**
 (proofs/KENTRY-PLAN.md, items 1–3).
 
-* `JAtZ.frontEx`: at `JAtZ` (with JEntryGlob's `ipcBufOK`, `bufCover` at the
+* `JAtZ.frontEx`: at `JAtZ` (with BufJ's `JAtZ.xferH`: the IPC-buffer facts at the
   entry), FL4's front-end reads (`msg_info`, `lookup_ipc_buffer`,
   `lookup_extra_caps`) succeed and the spec's (`getMessageInfo`,
   `lookupIpcBuffer`, `lookupExtraCaps`, `getMrs`) have exactly one outcome
@@ -38,6 +38,7 @@ P3 (DESIGN.md §9): **the syscall dispatch above `handle_invocation` at `J`**
 import Fl4Proofs.P3.XTopJointEntry
 import Fl4Proofs.P3.IpcRecvTopH
 import Fl4Spec.Ext.Entry
+import Fl4Proofs.P3.BufJ
 open Aeneas Aeneas.Std Result
 
 namespace Fl4Proofs.P3
@@ -145,13 +146,13 @@ theorem handle_invocation_entryJ [Fl4Proofs.P1.PlainStore st] (s : S) (ar : A)
     (σ : Fl4Spec.State Unit) (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s ar σ)
     (ct : U64) (hct : sched.cur_thread st s = ok ct)
     (is_call blocking can_donate first_phase : Bool) (cptr : U64)
-    (hG : JEntryGlob (L := L) arI AR Z.th) (hE : JEntryAt (L := L) arI AR Z s ar σ)
+    (hG : JEntryGlob (L := L) arI AR Z.th) (hE : JEntryAt (L := L) arI AR Z H Cs s ar σ)
     (hP : JPathAt (L := L) arI AR Z H Cs D s ar σ ct is_call blocking can_donate first_phase cptr) :
     syscall.handle_invocation st arI s ar is_call blocking can_donate first_phase cptr ⦃ res =>
       HIPostMXP (L := L) (JAt (L := L) arI AR) (JAtPre (L := L) arI AR) true σ is_call blocking can_donate first_phase
         (Fl4Spec.toBl cptr.bv) res ⦄ := by
   obtain ⟨info, mi, buf, buffer, r2, er, argsU, hinfo, hmi, hbuf, hbuffer, hr2, her, hmrs⟩ :=
-    JAtZ.frontEx arI J (hG.ipcBufOK Z s ar σ rfl J.xtop) (hG.bufCover Z s ar σ rfl J.xtop) hct
+    JAtZ.frontEx arI J J.xferH.1 J.xferH.2.1 hct
   exact handle_invocation_refinesJ arI s ar σ J ct hct is_call blocking can_donate first_phase cptr info hinfo mi hmi
     buf hbuf buffer hbuffer r2 hr2 er her argsU hmrs
     ⟨hG, hE, hP info mi buf buffer r2 er argsU hinfo hmi hbuf hbuffer hr2 her hmrs⟩
@@ -179,7 +180,7 @@ every related `JAtPre` state to `Q` is the premise `hPre` (plan item 7). -/
 theorem invoke_afterJ [Fl4Proofs.P1.PlainStore st] (s : S) (ar : A)
     (σ : Fl4Spec.State Unit) (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s ar σ)
     (ct : U64) (hct : sched.cur_thread st s = ok ct) (call bl don : Bool)
-    (hG : JEntryGlob (L := L) arI AR Z.th) (hE : JEntryAt (L := L) arI AR Z s ar σ)
+    (hG : JEntryGlob (L := L) arI AR Z.th) (hE : JEntryAt (L := L) arI AR Z H Cs s ar σ)
     (hP : JPathAt (L := L) arI AR Z H Cs D s ar σ ct call bl don false (L.mem s (regA ct layout.reg.CAP)))
     (Q : Fl4Spec.State Unit → S × A → Prop)
     (hPre : ∀ (s1 : S) (a1 : A) (σ1 : Fl4Spec.State Unit), RelTopM (L := L) s1 σ1 →
@@ -258,7 +259,7 @@ the registers, the cap lookup, the caps' objects, the bound TCB and the cap
 faults (`JAtZ.faultHypJZ`, with the receive flag) proved from `JAtZ`; the
 two receive leaves named (`JRecvIpcHyp`, `JRecvSigHyp` [W]). `hni`, `hnq`,
 `hvfh`: JEntryAt's `ni`, `ctnq`, `vfh` at the receive's state. -/
-theorem handle_recvJ (hZ : XferHZ L AR Z) (hAT : P0.ArchTotal arI) (s : S) (a : A) (σ : Fl4Spec.State Unit)
+theorem handle_recvJ (hAT : P0.ArchTotal arI) (s : S) (a : A) (σ : Fl4Spec.State Unit)
     (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) (hni : Entered σ) {ct : U64}
     (hct : sched.cur_thread st s = ok ct) (hnq : ∀ d p, σ.curThread ∉ σ.readyQueues d p)
     (hvfh : ∀ x, σ.kheap σ.curThread = some (.tcb x) → Fl4Spec.validFaultHandler x.tcbFaultHandler)
@@ -278,7 +279,7 @@ theorem handle_recvJ (hZ : XferHZ L AR Z) (hAT : P0.ArchTotal arI) (s : S) (a : 
     (fun cptr => lookup_cap_refines Z.th s σ hR hV ct htcb cptr)
     (fun cptr => WP.spec_mono (lookup_cap_held Z.th s σ hR hV ct htcb cptr) fun r hr c hc => ⟨?_, hr c hc⟩)
     ⟨hIpc, hSig, recv_bound_leaf hI.1 J.obj, fun cptr lf lf' h =>
-      J.faultHypJZ hZ hAT hni hct hnq hvfh ⟨cptr, true, lf, lf', rfl, by rw [ofBl_toBl64], h⟩⟩
+      J.faultHypJZ hAT hni hct hnq hvfh ⟨cptr, true, lf, lf', rfl, by rw [ofBl_toBl64], h⟩⟩
   obtain ⟨y, hy, hcv⟩ := hr c hc
   obtain ⟨Tr, Cq, hJ⟩ := J.jpl
   cases c with
@@ -310,7 +311,7 @@ theorem dispatch_invokeJ [Fl4Proofs.P1.PlainStore st] (s : S) (ar : A)
     (σ : Fl4Spec.State Unit) (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s ar σ)
     (ct : U64) (hct : sched.cur_thread st s = ok ct) (number : I64) (call bl don : Bool)
     (hn : InvSys number call bl don)
-    (hG : JEntryGlob (L := L) arI AR Z.th) (hE : JEntryAt (L := L) arI AR Z s ar σ)
+    (hG : JEntryGlob (L := L) arI AR Z.th) (hE : JEntryAt (L := L) arI AR Z H Cs s ar σ)
     (hP : JPathAt (L := L) arI AR Z H Cs D s ar σ ct call bl don false (L.mem s (regA ct layout.reg.CAP)))
     (Q : Fl4Spec.State Unit → S × A → Prop)
     (hPre : ∀ (s1 : S) (a1 : A) (σ1 : Fl4Spec.State Unit), RelTopM (L := L) s1 σ1 →
@@ -347,7 +348,7 @@ def RecvSys (n : I64) (bl cr : Bool) : Prop :=
 set_option maxHeartbeats 4000000 in
 /-- **`dispatch_syscall` for the receiving syscalls at `J`** (`handle_recvJ`):
 against `handleRecv bl cr` (the spec's `withoutPreemption` of it). -/
-theorem dispatch_recvJ (hZ : XferHZ L AR Z) (hAT : P0.ArchTotal arI) (s : S) (a : A) (σ : Fl4Spec.State Unit)
+theorem dispatch_recvJ (hAT : P0.ArchTotal arI) (s : S) (a : A) (σ : Fl4Spec.State Unit)
     (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) (hni : Entered σ) {ct : U64}
     (hct : sched.cur_thread st s = ok ct) (hnq : ∀ d p, σ.curThread ∉ σ.readyQueues d p)
     (hvfh : ∀ x, σ.kheap σ.curThread = some (.tcb x) → Fl4Spec.validFaultHandler x.tcbFaultHandler)
@@ -355,7 +356,7 @@ theorem dispatch_recvJ (hZ : XferHZ L AR Z) (hAT : P0.ArchTotal arI) (s : S) (a 
     (hIpc : JRecvIpcHyp (L := L) arI AR Z.th ct bl s a σ) (hSig : JRecvSigHyp (L := L) arI AR Z.th ct bl s a σ) :
     syscall.dispatch_syscall st arI s a number ⦃ r =>
       ∃ z ∈ (Fl4Spec.handleRecv (Z := Unit) bl cr σ).1, RJ (L := L) arI AR r.1 r.2 z.2 ⦄ := by
-  have h := handle_recvJ arI hZ hAT s a σ J hni hct hnq hvfh bl cr hIpc hSig
+  have h := handle_recvJ arI hAT s a σ J hni hct hnq hvfh bl cr hIpc hSig
   unfold syscall.dispatch_syscall
   rw [hct]; simp only [bind_ok]
   refine WP.spec_bind (Endp.obj.Tcb.reg.spec s ct layout.reg.CAP) ?_
@@ -416,7 +417,7 @@ theorem dispatch_invokeJE [Fl4Proofs.P1.PlainStore st] (s : S) (ar : A)
     (σ : Fl4Spec.State Unit) (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s ar σ)
     (ct : U64) (hct : sched.cur_thread st s = ok ct) (number : I64) (call bl don : Bool)
     (hn : InvSys number call bl don)
-    (hG : JEntryGlob (L := L) arI AR Z.th) (hE : JEntryAt (L := L) arI AR Z s ar σ)
+    (hG : JEntryGlob (L := L) arI AR Z.th) (hE : JEntryAt (L := L) arI AR Z H Cs s ar σ)
     (hP : JPathAt (L := L) arI AR Z H Cs D s ar σ ct call bl don false (L.mem s (regA ct layout.reg.CAP)))
     (Q : Fl4Spec.State Unit → S × A → Prop)
     (hPre : ∀ (s1 : S) (a1 : A) (σ1 : Fl4Spec.State Unit), RelTopM (L := L) s1 σ1 →
@@ -430,7 +431,7 @@ theorem dispatch_invokeJE [Fl4Proofs.P1.PlainStore st] (s : S) (ar : A)
 set_option maxHeartbeats 4000000 in
 /-- **`dispatch_recvJ` against `fl4HandleEvent rep`'s branch** (the spec's
 outcome `.ok ()`). -/
-theorem dispatch_recvJE (rep : Bool) (hZ : XferHZ L AR Z) (hAT : P0.ArchTotal arI) (s : S) (a : A)
+theorem dispatch_recvJE (rep : Bool) (hAT : P0.ArchTotal arI) (s : S) (a : A)
     (σ : Fl4Spec.State Unit)
     (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) (hni : Entered σ) {ct : U64}
     (hct : sched.cur_thread st s = ok ct) (hnq : ∀ d p, σ.curThread ∉ σ.readyQueues d p)
@@ -440,7 +441,7 @@ theorem dispatch_recvJE (rep : Bool) (hZ : XferHZ L AR Z) (hAT : P0.ArchTotal ar
     syscall.dispatch_syscall st arI s a number ⦃ r =>
       ∃ y ∈ ((Fl4Spec.fl4HandleSyscall (Z := Unit) rep (recvSysOf bl cr)).run σ).1,
         y.1 = .ok () ∧ RJ (L := L) arI AR r.1 r.2 y.2 ⦄ := by
-  refine WP.spec_mono (dispatch_recvJ arI hZ hAT s a σ J hni hct hnq hvfh number bl cr hn hIpc hSig) ?_
+  refine WP.spec_mono (dispatch_recvJ arI hAT s a σ J hni hct hnq hvfh number bl cr hn hIpc hSig) ?_
   rintro r ⟨z, hz, hR⟩
   rw [fl4HandleSyscall_recv]
   exact ⟨_, mem_liftE (ε := Unit) hz, rfl, hR⟩

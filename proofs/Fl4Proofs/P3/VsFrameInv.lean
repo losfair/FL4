@@ -59,7 +59,7 @@ theorem MdbLike.large {c' c : capability.Cap} (h : MdbLike c' c) {p r a va : U64
   subst hc
   cases c <;> simp_all [shape, okey]
 
-theorem MdbLike.symm {c' c : capability.Cap} (h : MdbLike c' c) : MdbLike c c' := ⟨h.1.symm, h.2.1.symm, h.2.2.symm⟩
+theorem MdbLike.symm {c' c : capability.Cap} (h : MdbLike c' c) : MdbLike c c' := ⟨h.1.symm, h.2.1.symm, h.2.2.1.symm, h.2.2.2.symm⟩
 
 section
 variable {mem mem' : U64 → U64} {G : MdbGhost}

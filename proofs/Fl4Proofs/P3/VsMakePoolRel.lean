@@ -894,7 +894,7 @@ theorem mp_perform_relB {A : Type} {th : TypedHeap} {P L4 L3 L2 L1 : Set U64}
   -- `FinInv`
   have hnd0 := hM.tree.nodup
   have F1 : FinM (L.mem s) G := hFI.fm.of_caps hnd0 (fun z hz => hSS.capV ((hM.members z).1 hz).1)
-  have F2 : FinM (L.mem s2) G := F1.recap hnd0 x (by rw [RR2.cap, hcx1]; exact MdbLike.capSim ⟨rfl, rfl, rfl⟩)
+  have F2 : FinM (L.mem s2) G := F1.recap hnd0 x (by rw [RR2.cap, hcx1]; exact MdbLike.capSim ⟨rfl, rfl, rfl, rfl⟩)
     (fun z hz hne => hco2 z ((RR2.M.members z).1 hz).1 hne)
   have F3 : FinM (L.mem s3) G := F2.of_caps hnd0 (fun z hz => hSS3.capV ((RR2.M.members z).1 hz).1)
   have hfr4 : ∀ w ∈ G.chains.flatten,
@@ -916,7 +916,7 @@ theorem mp_perform_relB {A : Type} {th : TypedHeap} {P L4 L3 L2 L1 : Set U64}
   have F5 : FinM (L.mem s5) G' := F4.of_caps hM4.tree.nodup (fun z hz => hSS5.capV ((hM4.members z).1 hz).1)
   -- `FrameInv`
   have FR1 : Vs.FrameInv (L.mem s) G := hFR.of_caps (fun z hz => hSS.capV ((hM.members z).1 hz).1)
-  have FR2 : Vs.FrameInv (L.mem s2) G := FR1.recap x (by rw [RR2.cap, hcx1]; exact ⟨rfl, rfl, rfl⟩)
+  have FR2 : Vs.FrameInv (L.mem s2) G := FR1.recap x (by rw [RR2.cap, hcx1]; exact ⟨rfl, rfl, rfl, rfl⟩)
     (fun z hz hne => hco2 z ((RR2.M.members z).1 hz).1 hne)
   have FR3 : Vs.FrameInv (L.mem s3) G := FR2.of_caps (fun z hz => hSS3.capV ((RR2.M.members z).1 hz).1)
   have FR4 : Vs.FrameInv (L.mem s4) G' := FR3.insert_fresh hxm hvm true hctx.cd

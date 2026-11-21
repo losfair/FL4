@@ -33,8 +33,9 @@ theorem jPostDelHyp_of {AR : A → Fl4Spec.Cr3 → Prop} (hAM : ARMask arI AR) {
   have hfin : ∀ (s' : S) (a' : A) (σ' : Fl4Spec.State Unit), SlotsSame (Z.mv G V).th (L.mem s) (L.mem s') →
       P1.WritesIn st s s' (KsW (L.ksb s)) → KsStep σ σ' → XTopAt (L := L) AR (Z.mv G V) s' a' σ' →
       WJR (L := L) arI AR Z H Cs kb s' a' σ' G := fun s' a' σ' hSS hw hO hX' => by
-    obtain ⟨Ac', Lst', D', R⟩ := jowes_ks arI s s' a a' σ σ' hw hO _ H Cs Ac Lst D rfl J hX'
-    exact ⟨V, Ac', Lst', D', J.cs_frame hw.1 hX' (KBack.of_kheap hO.kh) (IpcFrKeep.of_kheap hO.kh) (JCs.same J hSS (KSz.of_kheap hO.kh)) R (Vs.VsSlotsT.of_eq fun y hy => hSS.capV hy),
+    obtain ⟨Ac', Lst', R⟩ := jowes_ksD arI s s' a a' σ σ' hw hO _ H Cs Ac Lst D rfl J hX'
+    exact ⟨V, Ac', Lst', D, J.cs_frameK hw.1 hX' (KBack.of_kheap hO.kh) (IpcFrKeep.of_kheap hO.kh) (JCs.same J hSS (KSz.of_kheap hO.kh)) R (Vs.VsSlotsT.of_eq fun y hy => hSS.capV hy) (J.vkeep_of hw fun _ hb => J.ksW_nv hb)
+      hSS (dbgKeep_of_writes J.blk hw fun _ hb => J.ksW_notDbg hb) hO.idle,
       by rw [hw.1]; exact hkb, fun u e => hns u (by rw [← hO.act]; exact e), hsg.of_eq hO.kh hO.inode hO.idle, hp0.of_ppk (PPK.of_ksStep hO)⟩
   cases cl <;> simp only [CleanCap] at hcl
   · exact absurd rfl hcln

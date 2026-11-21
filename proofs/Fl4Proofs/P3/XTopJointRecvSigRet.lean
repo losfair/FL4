@@ -782,11 +782,12 @@ theorem JAtZ.maybeReturnJQ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {t 
     J.deadP_sc_step hX' hW hK (fun _ _ h => h.elim) hL hF hact'.1 hY'
       ((((pres_maybeReturnSc (true, true) _ _).of_eq he).ykeep rfl).dk q.bv) (fun h => h) (J.jcov.dead q hq)
   have hDbg := J.kw_dbg hfoot
+  have hKd := J.kw_dbgKeep hfoot
   exact ⟨hW, σ2, he, Ac, Lst', J.sc_frame hW hK hX' hCR' hRF' hY' hM' (J.sc_buf hW hK) hRP' (J.sc_apart hW hK)
     (J.sc_jpl hW hK (J.idleW_keep hX'.fin.1.1.1 hF.2.1 hF.2.2).2)
     (J.sc_jcov hW hdead (fun q hq hn => absurd hq hn) (J.idleW_keep hX'.fin.1.1.1 hF.2.1 hF.2.2))
     (J.sc_kern hW hK hF hX' hDbg fun _ h => h)
-    (J.sc_utc hW hK hDbg) hN' hI' hcur' hown' hoff' hact' hB' hcr' hblk⟩
+    (J.sc_utc hW hK hDbg) hN' hI' hcur' hown' hoff' hact' hB' hcr' hblk hKd (J.idleW_keep hX'.fin.1.1.1 hF.2.1 hF.2.2).1 J.zD⟩
 
 /-- **`maybe_return_sched_context` at `J`** (module docstring): a thread
 `t`, not runnable, neither the idle thread nor the switch target, whose SC
@@ -958,8 +959,9 @@ theorem JAtZ.recvSigBlockPreJ (hAT : P0.ArchTotal arI) (J : JAtZ (L := L) arI AR
       hAI3, F.bsa J.bsa hscA, F.isorted J.isorted hsrt, hrun3, hblk⟩
   have hC0 := JCs.same J hF.1 F.ksz
   have hCs : JCs (L := L) (Z.mv Z.G V') s' σ' := ⟨hC0.del, hC0.ut, hC0.finM, hC0.sfree⟩
-  have J3 := J.cs_frameI hks hX3 hW (fun b hb => Ipc.CnW.oobj J.xtop.fin.1.1.1 hb) F.sk.arch
+  have J3 := J.cs_frameI hks hX3 hW (fun b hb => Ipc.CnW.oobj J.xtop.fin.1.1.1 hb) (fun b hb => J.cnW_nv hb) F.sk.arch
     (fun q ao h => F.othF h (fun _ e => by cases e) (fun _ e => by cases e)) F.szKeep hF.1 F.kback F.ipcFr hCs R
+    (J.rbw_dbgKeep hRB) F.sk.orig (XTopAt.idleW_eqS J.xtop hX3 F.sk.idle) (J.zD_diffN hn)
   exact ⟨σ', hspec, hbk.2.2.2.2.2.1, hkt3, hkn3, hcn', F.sk.ct, F.sk.idle, _, J3⟩
 
 
@@ -1035,7 +1037,7 @@ set_option maxHeartbeats 4000000 in
 /-- **`dispatch_recvJE` with `jRecvSigHyp_of`**: the receiving syscalls at
 `J` against `fl4HandleEvent rep`'s branches; the notification receive has no
 premise left. -/
-theorem dispatch_recvJS (rep : Bool) (hZ : XferHZ L AR Z) (hAT : P0.ArchTotal arI) (s : S) (a : A)
+theorem dispatch_recvJS (rep : Bool) (hAT : P0.ArchTotal arI) (s : S) (a : A)
     (σ : Fl4Spec.State Unit)
     (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) (hni : Entered σ) {ct : U64}
     (hct : sched.cur_thread st s = ok ct) (hnq : ∀ d p, σ.curThread ∉ σ.readyQueues d p)
@@ -1047,7 +1049,7 @@ theorem dispatch_recvJS (rep : Bool) (hZ : XferHZ L AR Z) (hAT : P0.ArchTotal ar
         y.1 = .ok () ∧ RJ (L := L) arI AR r.1 r.2 y.2 ⦄ := by
   obtain ⟨hcur, -⟩ := J.curEq hct
   have hctT : ct ∈ Z.T := TopSR.cur_mem J.xtop.fin.1 hcur.symm
-  exact dispatch_recvJE arI rep hZ hAT s a σ J hni hct hnq hvfh number bl cr hn hIpc
+  exact dispatch_recvJE arI rep hAT s a σ J hni hct hnq hvfh number bl cr hn hIpc
     (jRecvSigHyp_of hAT J hctT hcur hni hnq bl)
 
 end

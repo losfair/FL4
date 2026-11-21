@@ -35,8 +35,8 @@ against the spec's, from `JAtZ` at the invocation to `JAt` after.
   timeout handler's endpoint is idle or sending (`TmoIdle`, the blocking
   send, XTopJointSendBlockG's `JAtZ.runTmoJ`), the hypothesis `hRT` when
   receivers wait on it (proved downstream by XTopJointFaultTmo's
-  `runTmoP_recv`). `hZ`: JEntryGlob's `ipcBufOK`,
-  `bufCover`, `bufPlaced` [J].
+  `runTmoP_recv`). The IPC-buffer facts at each `JAtZ` state: BufJ's
+  `JAtZ.xferH`.
 * `sendLeafJ`: the restart, then `sendXferJ`: `send_ipc` at `J` where
   nothing happens (a non-blocking send to an endpoint without receivers),
   the blocking send (XTopJointSendBlock's `JAtZ.sendBlockJ`; the caller in
@@ -300,8 +300,6 @@ endpoint, badge 0) and `Running` (`JAtZ.runIJ`, `RelIfBound` with no SC);
 the spec's outcome by `mem_doReplyTransfer` (unblock test on no SC the
 identity, `specReplyTail_skip`). -/
 theorem replyRestNoScJ
-    (hZ : ∀ (Z' : XSets) (s' : S) (a' : A) σ', Z'.th = Z.th → XTopAt (L := L) AR Z' s' a' σ' →
-      Endp.IpcBufCapOK σ' ∧ Endp.BufCover Z'.T Z'.B σ' ∧ Vs.BufPlaced (L := L) Z'.N Z'.C Z'.B Z'.c s' σ')
     (hAT : P0.ArchTotal arI) (hmax : Fl4Spec.maxTicksToUs = core.num.U64.MAX.bv)
     (htu : ∀ (a : A) v, arI.ticks_to_us a v ⦃ r => r.bv = Fl4Spec.ticksToUs v.bv ⦄)
     {s2 : S} {ar : A} {σ1 σ0 σ2 : Fl4Spec.State Unit} (J2 : JAtZ (L := L) arI AR Z H Cs Ac Lst D s2 ar σ2)
@@ -341,7 +339,7 @@ theorem replyRestNoScJ
       σ3.kheap i.bv = some (.tcb x3) ∧ x3.tcbSchedContext = none ∧
       JAtZ (L := L) arI AR (Z.mv G V) H Cs Ac Lst' D res.1 ar
         (stsAct (updK σ3 i.bv (.tcb { x3 with tcbState := .running })) i.bv)) ?_ ?_
-  · refine WP.spec_bind (J2.xferAllJ hZ hAT hmax (htu ar) hcT hiT hne hks hki g none 0#u64 0#u64 (Or.inr ⟨rfl, rfl⟩)) ?_
+  · refine WP.spec_bind (J2.xferAllJ hAT hmax (htu ar) hcT hiT hne hks hki g none 0#u64 0#u64 (Or.inr ⟨rfl, rfl⟩)) ?_
     rintro s4 ⟨σ3, htr, -, ⟨x3, hk3, hx3⟩, G, V, J3⟩
     rw [e0] at htr
     have hs3 : x3.tcbState = .inactive := (congrArg Fl4Spec.Tcb.tcbState hx3).trans hin
@@ -393,8 +391,6 @@ released: `RelIfBound`), then the tail's tests true (`ready_refines`,
 `sufficient_refines`, MIN_BUDGET `hmb` [P]) and `possible_switch_to`
 (`JAtZ.switchJ`). -/
 theorem replyRestSwJ (hmb : ∀ a : A, sporadic.min_budget arI a ⦃ mb => mb.bv = Fl4Spec.MIN_BUDGET ⦄)
-    (hZ : ∀ (Z' : XSets) (s' : S) (a' : A) σ', Z'.th = Z.th → XTopAt (L := L) AR Z' s' a' σ' →
-      Endp.IpcBufCapOK σ' ∧ Endp.BufCover Z'.T Z'.B σ' ∧ Vs.BufPlaced (L := L) Z'.N Z'.C Z'.B Z'.c s' σ')
     (hAT : P0.ArchTotal arI) (hmax : Fl4Spec.maxTicksToUs = core.num.U64.MAX.bv)
     (htu : ∀ (a : A) v, arI.ticks_to_us a v ⦃ r => r.bv = Fl4Spec.ticksToUs v.bv ⦄)
     {s2 : S} {ar : A} {σ1 σ0 σ2 : Fl4Spec.State Unit} (J2 : JAtZ (L := L) arI AR Z H Cs Ac Lst D s2 ar σ2)
@@ -447,7 +443,7 @@ theorem replyRestSwJ (hmb : ∀ a : A, sporadic.min_budget arI a ⦃ mb => mb.bv
       σ3.kheap i2.bv = σ2.kheap i2.bv ∧
       JAtZ (L := L) arI AR (Z.mv G V) H Cs Ac Lst' D res.1 ar
         (stsAct (updK σ3 i.bv (.tcb { x3 with tcbState := .running })) i.bv)) ?_ ?_
-  · refine WP.spec_bind (J2.xferAllJ hZ hAT hmax (htu ar) hcT hiT hne hks hki g none 0#u64 0#u64 (Or.inr ⟨rfl, rfl⟩)) ?_
+  · refine WP.spec_bind (J2.xferAllJ hAT hmax (htu ar) hcT hiT hne hks hki g none 0#u64 0#u64 (Or.inr ⟨rfl, rfl⟩)) ?_
     rintro s4 ⟨σ3, htr, hkp3, ⟨x3, hk3, hx3⟩, G, V, J3⟩
     rw [e0] at htr
     have mem3 : ((), σ3) ∈ (Fl4Spec.doIpcTransfer (Z := Unit) ct.bv none 0 g i.bv σ2).1 := by
@@ -567,8 +563,6 @@ state between (its SC, runnable, the ready and sufficient tests not both
 true, no valid timeout handler: `valid_timeout_handler_rel`) on `XTopAt`
 there. -/
 theorem replyRestPostJ (hmb : ∀ a : A, sporadic.min_budget arI a ⦃ mb => mb.bv = Fl4Spec.MIN_BUDGET ⦄)
-    (hZ : ∀ (Z' : XSets) (s' : S) (a' : A) σ', Z'.th = Z.th → XTopAt (L := L) AR Z' s' a' σ' →
-      Endp.IpcBufCapOK σ' ∧ Endp.BufCover Z'.T Z'.B σ' ∧ Vs.BufPlaced (L := L) Z'.N Z'.C Z'.B Z'.c s' σ')
     (hAT : P0.ArchTotal arI) (hmax : Fl4Spec.maxTicksToUs = core.num.U64.MAX.bv)
     (htu : ∀ (a : A) v, arI.ticks_to_us a v ⦃ r => r.bv = Fl4Spec.ticksToUs v.bv ⦄)
     {s2 : S} {ar : A} {σ1 σ0 σ2 : Fl4Spec.State Unit} (J2 : JAtZ (L := L) arI AR Z H Cs Ac Lst D s2 ar σ2)
@@ -622,7 +616,7 @@ theorem replyRestPostJ (hmb : ∀ a : A, sporadic.min_budget arI a ⦃ mb => mb.
       sched.postpone st res.1 i2 ⦃ s7 => ∃ σ7, Fl4Spec.postpone (Z := Unit) i2.bv
           (stsAct (updK σ3 i.bv (.tcb { x3 with tcbState := .running })) i.bv) = ({((), σ7)}, False) ∧
         ∃ Lst' : U64 → List U64, JAtZ (L := L) arI AR (Z.mv G V) H Cs Ac Lst' D s7 ar σ7 ⦄) ?_ ?_
-  · refine WP.spec_bind (J2.xferAllJ hZ hAT hmax (htu ar) hcT hiT hne hks hki g none 0#u64 0#u64 (Or.inr ⟨rfl, rfl⟩)) ?_
+  · refine WP.spec_bind (J2.xferAllJ hAT hmax (htu ar) hcT hiT hne hks hki g none 0#u64 0#u64 (Or.inr ⟨rfl, rfl⟩)) ?_
     rintro s4 ⟨σ3, htr, hkp3, ⟨x3, hk3, hx3⟩, G, V, J3⟩
     rw [e0] at htr
     have mem3 : ((), σ3) ∈ (Fl4Spec.doIpcTransfer (Z := Unit) ct.bv none 0 g i.bv σ2).1 := by
@@ -748,8 +742,6 @@ then the receiver's new state by the given step `hQ` (for each outcome
 `rst` of the spec's `handle_fault_reply`). The spec's fault reply ends at
 `frSt`. -/
 theorem faultBranchJ
-    (hZ : ∀ (Z' : XSets) (s' : S) (a' : A) σ', Z'.th = Z.th → XTopAt (L := L) AR Z' s' a' σ' →
-      Endp.IpcBufCapOK σ' ∧ Endp.BufCover Z'.T Z'.B σ' ∧ Vs.BufPlaced (L := L) Z'.N Z'.C Z'.B Z'.c s' σ')
     {s2 : S} {ar : A} {σ2 : Fl4Spec.State Unit} (J2 : JAtZ (L := L) arI AR Z H Cs Ac Lst D s2 ar σ2)
     {ct i : U64} (hne : ct ≠ i) (hiT : i ∈ Z.T) (hcT : ct ∈ Z.T) {xs xi : Fl4Spec.Tcb} {f : Fl4Spec.Fault}
     (hks : σ2.kheap ct.bv = some (.tcb xs)) (hki : σ2.kheap i.bv = some (.tcb xi)) (hfi : xi.tcbFault = some f)
@@ -766,7 +758,7 @@ theorem faultBranchJ
         ({(rst, updK σ2 i.bv (.tcb x4))}, False) ∧
       ((), frSt σ2 i x4 rst) ∈ (specFaultReply ct.bv i.bv f σ2).1 ∧ Q rst res.1 (frSt σ2 i x4 rst) ⦄ := by
   unfold fl4FaultReply
-  refine WP.spec_bind (J2.hfrJ hZ hiT hcT hne hki hks hfi) ?_
+  refine WP.spec_bind (J2.hfrJ hiT hcT hne hki hks hfi) ?_
   rintro ⟨rst, s4, a3⟩ ⟨ha, x4, hhf, hpre, hx4, V4, J4⟩
   dsimp only at ha hhf hpre J4
   subst ha
@@ -825,8 +817,6 @@ released SC; for an SC not released, `Restart` and `postpone` as one step
 (`faultT`: FL4's fault word 5) by `ReplyRestFault`. The spec's outcome by
 `mem_doReplyTransfer` (the fault branch). -/
 theorem replyRestFaultJ (hmb : ∀ a : A, sporadic.min_budget arI a ⦃ mb => mb.bv = Fl4Spec.MIN_BUDGET ⦄)
-    (hZ : ∀ (Z' : XSets) (s' : S) (a' : A) σ', Z'.th = Z.th → XTopAt (L := L) AR Z' s' a' σ' →
-      Endp.IpcBufCapOK σ' ∧ Endp.BufCover Z'.T Z'.B σ' ∧ Vs.BufPlaced (L := L) Z'.N Z'.C Z'.B Z'.c s' σ')
     {s2 : S} {ar : A} {σ1 σ0 σ2 : Fl4Spec.State Unit} (J2 : JAtZ (L := L) arI AR Z H Cs Ac Lst D s2 ar σ2)
     {ct i p : U64} (g : Bool) (hne : ct ≠ i) (hiD : i ∉ D) (hct2 : σ2.curThread = ct.bv)
     {xr : Fl4Spec.Reply} (hkr : σ1.kheap p.bv = some (.reply xr)) (hrep : xr.replyTcb = some i.bv)
@@ -933,7 +923,7 @@ theorem replyRestFaultJ (hmb : ∀ a : A, sporadic.min_budget arI a ⦃ mb => mb
     Fl4Spec.refillReady σ2.curTime (Fl4Spec.refillHd y) = true ∧ Fl4Spec.refillSufficient 0 (Fl4Spec.refillHd y) = true
     with hrelC
   -- the step after the fault reply: `Inactive`, `J`; `Restart`, `J` when `relC`, otherwise with the tail's `postpone`
-  refine WP.spec_bind (faultBranchJ hZ J2 hne hiT hcT hks hki hfi (fun e d h => by rw [hin] at h; cases h)
+  refine WP.spec_bind (faultBranchJ J2 hne hiT hcT hks hki hfi (fun e d h => by rw [hin] at h; cases h)
     (fun rst s σ => (rst = false → ∃ (V' : XVs) (Lst' : U64 → List U64),
         JAtZ (L := L) arI AR (Z.mv Z.G V') H Cs Ac Lst' D s ar σ) ∧
       (rst = true → ∃ V' : XVs, XTopAt (L := L) AR (Z.mv Z.G V') s ar σ ∧
@@ -1215,8 +1205,6 @@ runnable, the ready and sufficient tests not both true, the valid timeout
 handler, the fault not a timeout, the SC's badge) at the state between, on
 `XTopAt` there. The spec's outcome by `mem_doReplyTransfer`. -/
 theorem replyRestTmoJ (hmb : ∀ a : A, sporadic.min_budget arI a ⦃ mb => mb.bv = Fl4Spec.MIN_BUDGET ⦄)
-    (hZ : ∀ (Z' : XSets) (s' : S) (a' : A) σ', Z'.th = Z.th → XTopAt (L := L) AR Z' s' a' σ' →
-      Endp.IpcBufCapOK σ' ∧ Endp.BufCover Z'.T Z'.B σ' ∧ Vs.BufPlaced (L := L) Z'.N Z'.C Z'.B Z'.c s' σ')
     (hAT : P0.ArchTotal arI) (hmax : Fl4Spec.maxTicksToUs = core.num.U64.MAX.bv)
     (htu : ∀ (a : A) v, arI.ticks_to_us a v ⦃ r => r.bv = Fl4Spec.ticksToUs v.bv ⦄)
     {s2 : S} {ar : A} {σ1 σ0 σ2 : Fl4Spec.State Unit} (J2 : JAtZ (L := L) arI AR Z H Cs Ac Lst D s2 ar σ2)
@@ -1279,7 +1267,7 @@ theorem replyRestTmoJ (hmb : ∀ a : A, sporadic.min_budget arI a ⦃ mb => mb.b
           (Fl4Spec.handleTimeout (Z := Unit) i.bv (.timeout b.bv)
             (stsAct (updK σ3 i.bv (.tcb { x3 with tcbState := .running })) i.bv)).1,
           JAt (L := L) arI AR res'.1 res'.2 z.2 ⦄) ?_ ?_
-    · refine WP.spec_bind (J2.xferAllJ hZ hAT hmax (htu ar) hcT hiT hne hks hki g none 0#u64 0#u64
+    · refine WP.spec_bind (J2.xferAllJ hAT hmax (htu ar) hcT hiT hne hks hki g none 0#u64 0#u64
         (Or.inr ⟨rfl, rfl⟩)) ?_
       rintro s4 ⟨σ3, htr, hkp3, ⟨x3, hk3, hx3⟩, G, V, J3⟩
       rw [e0] at htr
@@ -1419,7 +1407,7 @@ theorem replyRestTmoJ (hmb : ∀ a : A, sporadic.min_budget arI a ⦃ mb => mb.b
     have hto : ¬ ft = fl4_abi.consts.fault.Timeout := fun h => absurd (hftT.1 h) (by rw [htf]; decide)
     rw [if_neg hft0]
     -- after the fault reply: `Restart` and the tail's `handle_timeout` as one step
-    refine WP.spec_bind (faultBranchJ hZ J2 hne hiT hcT hks hki hfi (fun e d h => by rw [hin] at h; cases h)
+    refine WP.spec_bind (faultBranchJ J2 hne hiT hcT hks hki hfi (fun e d h => by rw [hin] at h; cases h)
       (fun rst s σ => rst = true → ∃ V' : XVs, XTopAt (L := L) AR (Z.mv Z.G V') s ar σ ∧
         ∀ b : U64, faults.handle_timeout st arI s ar i (error.Fault.Timeout b) ⦃ res' => ∃ z ∈
           (Fl4Spec.handleTimeout (Z := Unit) i.bv (.timeout b.bv) σ).1, JAt (L := L) arI AR res'.1 res'.2 z.2 ⦄)
@@ -1653,8 +1641,6 @@ split complete) `replyRestTmoJ` with `runTmoP_idle` (`TmoIdle`) or with
 theorem replyXferJ (hAT : P0.ArchTotal arI) (hmax : Fl4Spec.maxTicksToUs = core.num.U64.MAX.bv)
     (htu : ∀ (a : A) v, arI.ticks_to_us a v ⦃ r => r.bv = Fl4Spec.ticksToUs v.bv ⦄)
     (hmb : ∀ a : A, sporadic.min_budget arI a ⦃ mb => mb.bv = Fl4Spec.MIN_BUDGET ⦄)
-    (hZ : ∀ (Z' : XSets) (s' : S) (a' : A) σ', Z'.th = Z.th → XTopAt (L := L) AR Z' s' a' σ' →
-      Endp.IpcBufCapOK σ' ∧ Endp.BufCover Z'.T Z'.B σ' ∧ Vs.BufPlaced (L := L) Z'.N Z'.C Z'.B Z'.c s' σ')
     {s1 : S} {ar : A} {σ1 : Fl4Spec.State Unit}
     (J1 : JAtZ (L := L) arI AR Z H Cs Ac Lst D s1 ar σ1) {ct p : U64} (hp : p ∈ Z.R) (g : Bool)
     (hcs : σ1.curThread = ct.bv ∧ ∃ xc, σ1.kheap ct.bv = some (.tcb xc) ∧ xc.tcbState = .restart)
@@ -1732,13 +1718,13 @@ theorem replyXferJ (hAT : P0.ArchTotal arI) (hmax : Fl4Spec.maxTicksToUs = core.
   have hin3 : ∃ x', σ3.kheap i.bv = some (.tcb x') ∧ x'.tcbState = .inactive := ⟨xi0, htk _ _ hki0, hin0⟩
   have hct3' : σ3.curThread = ct.bv := hct3.trans hct2
   by_cases hC : ReplyRestNoSc σ3 ct i g
-  · exact replyRestNoScJ (Z := Z.mv Z.G V') hZ hAT hmax htu J3 g hne hiD hkr hrep hkx hst hrm hub hin3 hC
+  · exact replyRestNoScJ (Z := Z.mv Z.G V') hAT hmax htu J3 g hne hiD hkr hrep hkx hst hrm hub hin3 hC
   by_cases hC2 : ReplyRestSw σ3 ct i g
-  · exact replyRestSwJ (Z := Z.mv Z.G V') hmb hZ hAT hmax htu J3 g hne hiD hct3' hkr hrep hkx hst hrm hub hin3 hC2
+  · exact replyRestSwJ (Z := Z.mv Z.G V') hmb hAT hmax htu J3 g hne hiD hct3' hkr hrep hkx hst hrm hub hin3 hC2
   by_cases hC3 : ReplyRestPost σ3 ct i g
-  · exact replyRestPostJ (Z := Z.mv Z.G V') hmb hZ hAT hmax htu J3 g hne hiD hct3' hkr hrep hkx hst hrm hub hin3 hC3
+  · exact replyRestPostJ (Z := Z.mv Z.G V') hmb hAT hmax htu J3 g hne hiD hct3' hkr hrep hkx hst hrm hub hin3 hC3
   by_cases hC4 : ReplyRestFault σ3 ct i
-  · exact replyRestFaultJ (Z := Z.mv Z.G V') hmb hZ J3 g hne hiD hct3' hkr hrep hkx hst hrm hub hin3 hact3 hC4
+  · exact replyRestFaultJ (Z := Z.mv Z.G V') hmb J3 g hne hiD hct3' hkr hrep hkx hst hrm hub hin3 hact3 hC4
   -- the case left: the split is complete (`ReplyRestTmo`)
   have hcT : ct ∈ Z.T := by
     obtain ⟨xc, hkc, -⟩ := hcs.2
@@ -1782,7 +1768,7 @@ theorem replyXferJ (hAT : P0.ArchTotal arI) (hmax : Fl4Spec.maxTicksToUs = core.
     rw [hks3] at h3; cases h3
     rw [hst0, hcr]; rfl
   by_cases hid : TmoIdle σ3 i
-  · exact replyRestTmoJ (Z := Z.mv Z.G V') hmb hZ hAT hmax htu J3 g hne hiD hct3' hkr hrep hkx hst hrm hub hin3 hks3
+  · exact replyRestTmoJ (Z := Z.mv Z.G V') hmb hAT hmax htu J3 g hne hiD hct3' hkr hrep hkx hst hrm hub hin3 hks3
       hxsr (runTmoP_idle _) hTmo hid
   have hid' : TmoEp (fun xe => ¬ Endp.CanBlock false xe) σ3 i := by
     obtain ⟨xi, sp, y, n, hki, -, -, -, -, hvt, -⟩ := hTmo
@@ -1791,7 +1777,7 @@ theorem replyXferJ (hAT : P0.ArchTotal arI) (hmax : Fl4Spec.maxTicksToUs = core.
       exact ⟨_, _, _, rfl⟩
     obtain ⟨xe, hke⟩ := J3.tmoEpObj hiT hki hth
     exact ⟨xi, ep, bd, r, xe, hki, hth, hke, fun hcb => hid ⟨xi, ep, bd, r, xe, hki, hth, hke, hcb⟩⟩
-  exact replyRestTmoJ (Z := Z.mv Z.G V') hmb hZ hAT hmax htu J3 g hne hiD hct3' hkr hrep hkx hst hrm hub hin3 hks3
+  exact replyRestTmoJ (Z := Z.mv Z.G V') hmb hAT hmax htu J3 g hne hiD hct3' hkr hrep hkx hst hrm hub hin3 hks3
     hxsr hRT hTmo hid'
 
 set_option maxHeartbeats 4000000 in
@@ -1801,8 +1787,6 @@ after the caller's restart, `JAtZ.restartJ`; the cap's reply in `R`,
 theorem replyLeafJ (hAT : P0.ArchTotal arI) (hmax : Fl4Spec.maxTicksToUs = core.num.U64.MAX.bv)
     (htu : ∀ (a : A) v, arI.ticks_to_us a v ⦃ r => r.bv = Fl4Spec.ticksToUs v.bv ⦄)
     (hmb : ∀ a : A, sporadic.min_budget arI a ⦃ mb => mb.bv = Fl4Spec.MIN_BUDGET ⦄)
-    (hZ : ∀ (Z' : XSets) (s' : S) (a' : A) σ', Z'.th = Z.th → XTopAt (L := L) AR Z' s' a' σ' →
-      Endp.IpcBufCapOK σ' ∧ Endp.BufCover Z'.T Z'.B σ' ∧ Vs.BufPlaced (L := L) Z'.N Z'.C Z'.B Z'.c s' σ')
     {s : S} {ar : A} {σ σ1 : Fl4Spec.State Unit} (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s ar σ)
     (hni : Entered σ) {ct : U64} (hct : sched.cur_thread st s = ok ct)
     {sl : Fl4Spec.CslotPtr} (hA : AbsSlot Z.th sl) {p : U64} {g : Bool}
@@ -1824,7 +1808,7 @@ theorem replyLeafJ (hAT : P0.ArchTotal arI) (hmax : Fl4Spec.maxTicksToUs = core.
   rw [hs1]
   simp only [bind_ok]
   rw [hc1]
-  refine WP.spec_bind (replyXferJ hAT hmax htu hmb hZ J1 hpR g hcs hRT) ?_
+  refine WP.spec_bind (replyXferJ hAT hmax htu hmb J1 hpR g hcs hRT) ?_
   rintro ⟨s2, a2⟩ ⟨z, hz, Z', H', Cs', Ac', Lst', D', J'⟩
   apply (WP.spec_ok _).2
   exact ⟨rfl, z, hz, J'.xtop.relTop, Z', H', Cs', Ac', Lst', D', J'⟩

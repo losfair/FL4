@@ -1,0 +1,1 @@
+cd $(dirname $0); python3 mfgen.py . && { cat head.lean; cat body.lean; cat tail.lean; printf '\nend\n\nend Fl4Proofs.P3.MachF\n'; } > /Users/stillfail/.stillfail/sessions/claude-ember@d70ccd1321eaa3aa3390df77fb901ff2774a7cc3da926c3cf25ca287a3ba5f22/C0AQ0C0KVMH-1794890878-390829/workspace/FL4-tcbj/proofs/Fl4Proofs/P3/MachFieldFam.lean

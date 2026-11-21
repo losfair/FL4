@@ -1,0 +1,26 @@
+import Fl4Proofs.P3.SpecInvSlE3
+#print axioms Fl4Proofs.P3.SInvL.sd_recDel
+#print axioms Fl4Proofs.P3.SInvL.sdu_capDelete
+#print axioms Fl4Proofs.P3.SInvL.sdu_capRevoke
+#print axioms Fl4Proofs.P3.SInvL.sl_finaliseCap
+#print axioms Fl4Proofs.P3.SInvL.sl_capDeleteOne
+#print axioms Fl4Proofs.P3.SInvL.tunb_finThread
+#print axioms Fl4Proofs.P3.SInvL.scd_finSc
+#print axioms Fl4Proofs.P3.SInvL.other_scCap
+#print axioms Fl4Proofs.P3.SInvL.sl_invokeCnode
+#print axioms Fl4Proofs.P3.SInvL.okv_cnNF
+#print axioms Fl4Proofs.P3.SInvL.nb_bindNtfn
+#print axioms Fl4Proofs.P3.SInvL.dec_nBind
+#print axioms Fl4Proofs.P3.SInvL.so_facts
+#print axioms Fl4Proofs.P3.SInvL.sk_capInsert_so
+#print axioms Fl4Proofs.P3.SInvL.sdp_installTcbCap
+#print axioms Fl4Proofs.P3.SInvL.slk_capDelete_fh
+#print axioms Fl4Proofs.P3.SInvL.sl_invokeTcb
+#print axioms Fl4Proofs.P3.SInvL.sl_invokeSchedContext
+#print axioms Fl4Proofs.P3.SInvL.sl_fl4PerformInvocation
+#print axioms Fl4Proofs.P3.SInvL.decS_nBind
+#print axioms Fl4Proofs.P3.SInvL.sl_fl4HandleInvocationR
+#print axioms Fl4Proofs.P3.SInvL.sl_handleRecv
+#print axioms Fl4Proofs.P3.SInvL.nb_receiveIpc
+#print axioms Fl4Proofs.P3.SInvL.sl_fl4HandleSyscall
+#print axioms Fl4Proofs.P3.SInvL.sl_fl4HandleEvent_sys

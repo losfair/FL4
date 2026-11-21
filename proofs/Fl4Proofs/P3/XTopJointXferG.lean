@@ -21,6 +21,7 @@ of a send to a waiting receiver, with the insert as a trace (IpcGrantTr).
 import Fl4Proofs.P3.XTopJointXferB
 import Fl4Proofs.P3.XTopJointGrant
 import Fl4Proofs.P3.IpcGrantTr
+import Fl4Proofs.P3.BufJ
 open Aeneas Aeneas.Std Result
 
 namespace Fl4Proofs.P3.Ipc
@@ -89,8 +90,8 @@ theorem do_ipc_transfer_grantG (hH : IpcCore st N T E R B (SRT st th cr N T C E 
          SlotsSame th (L.mem s) (L.mem s1) ∧ L.ksb s1 = L.ksb s ∧
          InsRec (L := L) th caps slots s1 (Notif.updK (Endp.setUm σ um0) rcv.bv (.tcb x1)) sk' σc ∧
          σ' = Notif.updK (Endp.setUm σc um) rcv.bv (.tcb x') ∧ SlotsSame th (L.mem sk') (L.mem s') ∧
-         (∀ j (hj : j < caps.length), ∃ ps, (caps[j]).2.1 = ps.bv ∧ DestLive th (L.mem s) (L.ksb s) ps) ∧
-         (∀ d ∈ slots, ∃ pd, d.1 = pd.bv ∧ DestLive th (L.mem s) (L.ksb s) pd)) ⦄ := by
+         (∀ j (hj : j < caps.length), ∃ ps, (caps[j]).2.1 = ps.bv ∧ DestCap th (L.mem s) ps) ∧
+         (∀ d ∈ slots, ∃ pd, d.1 = pd.bv ∧ DestCap th (L.mem s) pd)) ⦄ := by
   have hra := hP.tcb rcv hr
   have hxs := hR.at_tcb hs hks
   have hwmi : (L.mem s (regA snd layout.reg.MSG_INFO)).bv = xs.tcbArch.tcbContext.userRegs Fl4Spec.msg_info_register := by
@@ -312,7 +313,7 @@ theorem do_ipc_transfer_grantG (hH : IpcCore st N T E R B (SRT st th cr N T C E 
         have e := cslotAddr_inj hB.1 hA (⟨ps', rfl, Or.inl hth'⟩ : AbsSlot th (ps'.bv, idx')) (hxa.symm.trans he')
         exact ⟨ps', by rw [hsl']; exact congrArg Prod.fst e, hD'⟩
       · obtain ⟨pd, h1, h2⟩ := hDL d hd
-        exact ⟨pd, h1, h2.same (SlotsSame.symm' hS1) hks1.symm⟩
+        exact ⟨pd, h1, h2.same (SlotsSame.symm' hS1)⟩
 
 end GrantG
 
@@ -383,7 +384,7 @@ P1's hole by `xfer_all`/`blkX_bufw` (an insert's slot words first by
 same slot words as the actual insert's by `insWords_cong`) and the spec's
 `cap_insert` at `σ` (the actual one's outcome patched, `capInsert_patch`),
 from which the writes are again `CnW`/`KW` and the receiver's buffer words. -/
-theorem JAtZ.xferStepGJ (hZ : XferHZ L AR Z) (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ)
+theorem JAtZ.xferStepGJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ)
     {e : U64} {ep0 : Fl4Spec.Endpoint} (hk : σ.kheap e.bv = some (.endpoint ep0)) (o : Fl4Spec.Endpoint)
     {s1 : S} (hR1 : EpStateRel Z.T Z.E Z.R Z.B (L.mem s1) (Notif.updK σ e.bv (.endpoint o)))
     (hS1 : SRN st Z.N Z.T (SRS st Z.T (SRT st Z.th σ.archState.x64CurrentCr3 Z.N Z.T Z.C Z.E Z.R Z.B Z.c
@@ -436,13 +437,13 @@ theorem JAtZ.xferStepGJ (hZ : XferHZ L AR Z) (J : JAtZ (L := L) arI AR Z H Cs Ac
   have hre : rcv.bv ≠ e.bv := kheap_ne hkr hk (fun _ h1 h2 => by subst h1; cases h2)
   have hks1 : (Notif.updK σ e.bv (.endpoint o)).kheap snd.bv = some (.tcb xs) := by simp [hse, hks]
   have hkr1 : (Notif.updK σ e.bv (.endpoint o)).kheap rcv.bv = some (.tcb xr) := by simp [hre, hkr]
-  obtain ⟨hOK, hBC, -⟩ := hZ Z s a σ rfl J.xtop
+  obtain ⟨hOK, hBC, -⟩ := J.xferH
   have hOK1 : Endp.IpcBufCapOK (Notif.updK σ e.bv (.endpoint o)) := ipcBufCapOK_epStep hOK (EpStep.ep hk)
   have hBC1 : Endp.BufCover Z.T Z.B (Notif.updK σ e.bv (.endpoint o)) := bufCover_epStep hBC (EpStep.ep hk)
   have hdth : Z.th rcv = some .tcb := by
     obtain ⟨⟨⟨G0, hB0'⟩, -⟩, -⟩ := (IpcRel.toSRN hI.1 hI.2).1.1
     exact Ipc.RelTopB.tcbT hB0' hkr
-  have hUd := J.rbufU hZ hr hdth hkr
+  have hUd := J.rbufU hr hdth hkr
   have hIF : IFrame (L := L) Z.th s s1 := IRel.iframe_of hI hW1 fun b hb => CnW.oobj hI.2.2.1 hb
   have cXr : ∀ {s' : S} {σ' : Fl4Spec.State Unit} {b : U64}, XferRegW (P1.Heap.tcbs H) ∅ b →
       CnW (st := st) Z.T Z.N Z.C Z.E Z.R Z.c s' σ' b := by
@@ -494,7 +495,7 @@ theorem JAtZ.xferStepGJ (hZ : XferHZ L AR Z) (J : JAtZ (L := L) arI AR Z H Cs Ac
         hSg2, f2, rfl, KeepCV.refl σ, CnK.refl σ, fun q _ => rfl⟩
     · -- one insert: the base `(y, σy)`
       obtain ⟨cv, c', a', ps, pd, rs, rd, idx, idxd, sk, σk, hps, hpd, hls, hld, ⟨j, hj, hsl⟩, hslots, hsrcC1, hsnn,
-        hdst1, hca, hcv, he', hcnn, hsh, hbd, hnu, hzb, hkey, hv, htu, huc, hSk, hiw, -, ⟨um1, hσk⟩, hci⟩ := hrec
+        hdst1, hca, hcv, he', hcnn, hsh, hbd, hnu, hzb, hkey, hv, htu, huc, hnat, hSk, hiw, -, ⟨um1, hσk⟩, hci⟩ := hrec
       have hX0 := J.xtop
       obtain ⟨hPl, ⟨hSt, hV, hM, hC, hI'⟩, -, -, -, -, -⟩ := hX0.rel
       have hAs : AbsSlot Z.th (ps.bv, idx) := ⟨ps, rfl, Or.inl (by simpa [hls] using hps)⟩
@@ -532,7 +533,7 @@ theorem JAtZ.xferStepGJ (hZ : XferHZ L AR Z) (J : JAtZ (L := L) arI AR Z H Cs Ac
       rw [epd] at hDd
       obtain ⟨y, -, ⟨⟨σy, hci', hKCV, hCnK, hksy, -, -, -, G', Jy⟩, hiwy⟩, hwy⟩ := spec_exists
         (WP.spec_and (WP.spec_and (J.insDJ hps hpd hls hld hsrcC hsnn hdst c' a' hca hcv he' hcnn hsh (Or.inl hbd) hut
-          hzb hkey hv htu huc (hDs.same (SlotsSame.symm' hIF.1) hIF.2.symm) (hDd.same (SlotsSame.symm' hIF.1) hIF.2.symm)) (insert_mem hPl s c' _ _ hAs.isSlot hAd.isSlot hsd cv hsrcC hnxS))
+          hzb hkey hv htu huc hnat (hDs.same (SlotsSame.symm' hIF.1)) (hDd.same (SlotsSame.symm' hIF.1))) (insert_mem hPl s c' _ _ hAs.isSlot hAd.isSlot hsd cv hsrcC hnxS))
           (insert_ws hPl s c' _ _ hAs.isSlot hAd.isSlot cv hsrcC hnxW))
       have hSy2 : SlotsSame Z.th (L.mem y) (L.mem s2) :=
         SlotsSame.trans' (insWords_cong hSsk hAs.isSlot hAd.isSlot hiwy hiw) hSSk

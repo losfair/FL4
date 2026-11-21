@@ -18,9 +18,11 @@ def SlotSpan (th : TypedHeap) (w : U64) : Prop := ∃ a, IsSlot th a ∧ a.val �
 /-- The words of a TCB that creating it writes: past its cap slots, the
 context (below `F`), the domain (`F + 104`), the debug links (`F + 248`,
 `F + 256`) and the name (from `F + 272`); not its affinity word (offset
-3520, which `debug_append` reads) nor its other scheduler fields. -/
+3520, which `debug_append` reads) nor its other scheduler fields, nor its
+VCPU word (offset 3664, just past the name; KENTRY-PLAN g2b). -/
 def InT (t w : U64) : Prop := t.val + 256 ≤ w.val ∧ w.val < t.val + 4096 ∧ w.val ≠ t.val + 3520 ∧
-  (w.val < t.val + 3328 ∨ w.val = t.val + 3432 ∨ w.val = t.val + 3576 ∨ w.val = t.val + 3584 ∨ t.val + 3600 ≤ w.val)
+  (w.val < t.val + 3328 ∨ w.val = t.val + 3432 ∨ w.val = t.val + 3576 ∨ w.val = t.val + 3584 ∨
+    (t.val + 3600 ≤ w.val ∧ w.val ≠ t.val + 3664))
 
 /-- The words the TCB loop may write: slot words, the new TCBs' creation
 words (`InT`), the debug-list head word `DW`, and the old head's

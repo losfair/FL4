@@ -731,10 +731,15 @@ pub fn preemption_point<S: Store, A: Arch>(s: &mut S, a: &mut A) -> KResult<()> 
     if w >= MAX_WORK_UNITS_PER_PREEMPTION {
         ks_set(s, ks::WORK_UNITS, 0);
         update_timestamp(s, a);
+        // C seL4 (src/model/preemption.c, MCS) tests `isIRQPending()`
+        // first, so the pending line is read on every expired work count,
+        // whatever the budget and the domain say (as the abstract spec's
+        // preemptionPoint, which always calls getActiveIRQ).
+        let irq = a.irq_pending();
         let sc = cur_sc(s);
         let c = consumed(s);
         let ok = sporadic::sc_active(s, sc) && sporadic::sufficient(s, a, sc, c);
-        if !ok || is_cur_domain_expired(s) || a.irq_pending() {
+        if irq || is_cur_domain_expired(s) || !ok {
             return Err(Exc::Preempted);
         }
     }

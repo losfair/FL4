@@ -25,6 +25,7 @@ word is written).
 import Fl4Proofs.P3.XTopJointFaultRecv
 import Fl4Proofs.P3.XTopJointSendBlockG
 import Fl4Proofs.P3.IpcTmo
+import Fl4Proofs.P3.BufJ
 open Aeneas Aeneas.Std Result
 
 namespace Fl4Proofs.P3
@@ -590,7 +591,7 @@ theorem JAtZ.tmoBaseJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) (hAT : P
       (writesIn_wr (v := b) (a_fw0 hta).1)).trans (writesIn_wr (v := 0#u64) (a_fw1 hta).1)).trans
       (writesIn_wr (v := 0#u64) (a_fw2 hta).1)
     refine w.mono fun w0 hw0 => ?_
-    have k : ∃ K : Nat, 256 ≤ K ∧ K < 4096 ∧ K ≠ 3440 ∧ K ≠ 3472 ∧ K ≠ 3512 ∧ w0.val = t.val + K := by
+    have k : ∃ K : Nat, 256 ≤ K ∧ K < 4096 ∧ K ≠ 3440 ∧ K ≠ 3472 ∧ (K ≠ 3512 ∧ K ≠ 3664) ∧ w0.val = t.val + K := by
       rcases hw0 with ((h | h) | h) | h <;> subst h
       · exact ⟨3376, by omega, by omega, by omega, by omega, by omega, val_fault hta⟩
       · exact ⟨3384, by omega, by omega, by omega, by omega, by omega, val_fw0 hta⟩
@@ -649,7 +650,7 @@ from its `CanBlock` at the send); `JAtZ` by `JAtZ.wake_postD` from the base
 `JAtZ.tmoBaseJ` (`t` `Inactive` with the fault, its SC's consumed time
 cleared), whose frame to the end is the receiver's wake (`CFr`, read on the
 shadows `rhoT` of the states between: `t` and its SC as at the base). -/
-theorem JAtZ.sendTmoRecvIJ (hZ : XferHZ L AR Z) (hAT : P0.ArchTotal arI)
+theorem JAtZ.sendTmoRecvIJ (hAT : P0.ArchTotal arI)
     (hmax : Fl4Spec.maxTicksToUs = core.num.U64.MAX.bv)
     (htu : ∀ v, arI.ticks_to_us a v ⦃ r => r.bv = Fl4Spec.ticksToUs v.bv ⦄)
     (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ)
@@ -811,8 +812,8 @@ theorem JAtZ.sendTmoRecvIJ (hZ : XferHZ L AR Z) (hAT : P0.ArchTotal arI)
     rw [eρ1]
     exact SKeep.updK (p := e.bv) (o := .endpoint (epDeq (.recvEP (d'.bv :: q)) d'.bv)) (fun y h => by cases h)
       (fun _ _ h => by cases h)
-  have hOKσ := (hZ Z s a σ rfl J.xtop).1
-  have hBCσ := (hZ Z s a σ rfl J.xtop).2.1
+  have hOKσ := (J.xferH).1
+  have hBCσ := (J.xferH).2.1
   have hOK1 : Endp.IpcBufCapOK σ1 := ipcBufCapOK_epStep (ipcBufCapOK_updT (y := xt) hOKσ hkx rfl rfl) (EpStep.ep hk)
   have hBC1 : Endp.BufCover Z.T Z.B σ1 := bufCover_epStep (bufCover_updT (y := xt) hBCσ hkx rfl rfl) (EpStep.ep hk)
   have hsc1 : sc ∈ P1.Heap.scs H := by
@@ -1266,7 +1267,7 @@ send, the action not the sender nor the receiver by `actionW_ne_of`);
 `JAtZ` by `JAtZ.wake_postGR` from the base `JAtZ.tmoBaseJ` at the push from
 the receiver's woken shadow (`pushSt`, the scheduler action kept: the sender
 is not the current thread). -/
-theorem JAtZ.sendTmoRecvPJ (hZ : XferHZ L AR Z) (hAT : P0.ArchTotal arI)
+theorem JAtZ.sendTmoRecvPJ (hAT : P0.ArchTotal arI)
     (hmax : Fl4Spec.maxTicksToUs = core.num.U64.MAX.bv)
     (htu : ∀ v, arI.ticks_to_us a v ⦃ r => r.bv = Fl4Spec.ticksToUs v.bv ⦄)
     (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ)
@@ -1428,8 +1429,8 @@ theorem JAtZ.sendTmoRecvPJ (hZ : XferHZ L AR Z) (hAT : P0.ArchTotal arI)
     rw [eρ1]
     exact SKeep.updK (p := e.bv) (o := .endpoint (epDeq (.recvEP (d'.bv :: q)) d'.bv)) (fun y h => by cases h)
       (fun _ _ h => by cases h)
-  have hOKσ := (hZ Z s a σ rfl J.xtop).1
-  have hBCσ := (hZ Z s a σ rfl J.xtop).2.1
+  have hOKσ := (J.xferH).1
+  have hBCσ := (J.xferH).2.1
   have hOK1 : Endp.IpcBufCapOK σ1 := ipcBufCapOK_epStep (ipcBufCapOK_updT (y := xt) hOKσ hkx rfl rfl) (EpStep.ep hk)
   have hBC1 : Endp.BufCover Z.T Z.B σ1 := bufCover_epStep (bufCover_updT (y := xt) hBCσ hkx rfl rfl) (EpStep.ep hk)
   have hsc1 : sc ∈ P1.Heap.scs H := by
@@ -2016,7 +2017,7 @@ its timeout handler's endpoint, at `J`** (XTopJointSendBlockG's
 handler cap, `set_fault`, then `JAtZ.sendTmoRecvIJ` (the sender left
 `Inactive`) or `JAtZ.sendTmoRecvPJ` (the reply pushed); `hcr`: the current
 thread runnable, so not the receiver). -/
-theorem JAtZ.runTmoRecvJ (hZ : XferHZ L AR Z) (hAT : P0.ArchTotal arI)
+theorem JAtZ.runTmoRecvJ (hAT : P0.ArchTotal arI)
     (hmax : Fl4Spec.maxTicksToUs = core.num.U64.MAX.bv)
     (htu : ∀ v, arI.ticks_to_us a v ⦃ r => r.bv = Fl4Spec.ticksToUs v.bv ⦄)
     (hcr : ∃ xc, σ.kheap σ.curThread = some (.tcb xc) ∧ Fl4Spec.runnable xc.tcbState = true)
@@ -2227,7 +2228,7 @@ theorem JAtZ.runTmoRecvJ (hZ : XferHZ L AR Z) (hAT : P0.ArchTotal arI)
         (writesIn_wr (v := b) (a_fw0 hta).1)).trans (writesIn_wr (v := 0#u64) (a_fw1 hta).1)).trans
         (writesIn_wr (v := 0#u64) (a_fw2 hta).1)
       refine w.mono fun w0 hw0 => ?_
-      have k : ∃ K : Nat, 256 ≤ K ∧ K < 4096 ∧ K ≠ 3440 ∧ K ≠ 3472 ∧ K ≠ 3512 ∧ w0.val = t.val + K := by
+      have k : ∃ K : Nat, 256 ≤ K ∧ K < 4096 ∧ K ≠ 3440 ∧ K ≠ 3472 ∧ (K ≠ 3512 ∧ K ≠ 3664) ∧ w0.val = t.val + K := by
         rcases hw0 with ((h | h) | h) | h <;> subst h
         · exact ⟨3376, by omega, by omega, by omega, by omega, by omega, val_fault hta⟩
         · exact ⟨3384, by omega, by omega, by omega, by omega, by omega, val_fw0 hta⟩
@@ -2269,7 +2270,7 @@ theorem JAtZ.runTmoRecvJ (hZ : XferHZ L AR Z) (hAT : P0.ArchTotal arI)
         rw [eσf]; exact hz
       by_cases hpush : (g = true ∨ gr = true) ∧ ∀ xd, σ.kheap d'.bv = some (.tcb xd) →
           ∀ e' rep dd, xd.tcbState = .blockedOnReceive e' rep dd → rep ≠ none
-      · refine WP.spec_bind (J.sendTmoRecvPJ hZ hAT hmax htu hcr ht hk hrs htc hsc hxsc hky b hrun hI7' hblk7 hW7
+      · refine WP.spec_bind (J.sendTmoRecvPJ hAT hmax htu hcr ht hk hrs htc hsc hxsc hky b hrun hI7' hblk7 hW7
           hfoot7' hcb7 hpE hke bdg g gr hpush.1 htD hya hpush.2) ?_
         rintro ⟨s', a'⟩ ⟨z, hz, hJ⟩
         exact (WP.spec_ok _).2 ⟨((), z.2), handleTimeout_mem hk6 hth6 _ (fin z hz), hJ⟩
@@ -2287,7 +2288,7 @@ theorem JAtZ.runTmoRecvJ (hZ : XferHZ L AR Z) (hAT : P0.ArchTotal arI)
             have h1 : g ≠ true := fun h => hgg (Or.inl h)
             have h2 : gr ≠ true := fun h => hgg (Or.inr h)
             exact ⟨by simpa using h1, by simpa using h2⟩
-        refine WP.spec_bind (J.sendTmoRecvIJ hZ hAT hmax htu hcr ht hk hrs htc hsc hxsc hky b hrun hI7' hblk7 hW7
+        refine WP.spec_bind (J.sendTmoRecvIJ hAT hmax htu hcr ht hk hrs htc hsc hxsc hky b hrun hI7' hblk7 hW7
           hfoot7' hcb7 hpE hke bdg g gr hno) ?_
         rintro ⟨s', a'⟩ ⟨z, hz, hJ⟩
         exact (WP.spec_ok _).2 ⟨((), z.2), handleTimeout_mem hk6 hth6 _ (fin z hz), hJ⟩
@@ -2297,12 +2298,12 @@ theorem JAtZ.runTmoRecvJ (hZ : XferHZ L AR Z) (hAT : P0.ArchTotal arI)
 /-- **`RunTmoP` for a timeout handler endpoint with receivers waiting**
 (`JAtZ.runTmoRecvJ`): what XTopJointIpcJ's `replyXferJ` / `replyLeafJ` take
 for that case (formerly the named premise `JReplyRestHyp`). -/
-theorem runTmoP_recv (Z0 : XSets) (hZ : XferHZ L AR Z0) (hAT : P0.ArchTotal arI)
+theorem runTmoP_recv (Z0 : XSets) (hAT : P0.ArchTotal arI)
     (hmax : Fl4Spec.maxTicksToUs = core.num.U64.MAX.bv)
     (htu : ∀ (a : A) v, arI.ticks_to_us a v ⦃ r => r.bv = Fl4Spec.ticksToUs v.bv ⦄) :
     RunTmoP (L := L) arI AR Z0 (fun xe => ¬ Endp.CanBlock false xe) :=
   fun _ _ _ _ _ _ _ a _ hth J hcr _ ht htD _ hk hrs htc _ hsc hxsc _ _ hky hya _ _ _ hthd hcb ts hrun hts v hv hB =>
-    JAtZ.runTmoRecvJ (fun Z' s' a' σ' e hX => hZ Z' s' a' σ' (e.trans hth) hX) hAT hmax (htu a) hcr J ht htD hk hrs htc
+    JAtZ.runTmoRecvJ hAT hmax (htu a) hcr J ht htD hk hrs htc
       hsc hxsc hky hya hthd hcb ts hrun hts v hv hB
 end
 

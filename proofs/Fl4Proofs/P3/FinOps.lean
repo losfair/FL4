@@ -24,6 +24,11 @@ theorem okey_fullF (a c : capability.Cap) : okey ((fullF a c).getD a) = okey a :
   cases a <;> cases c <;> simp only [fullF, Option.getD_none] <;> try rfl
   split_ifs <;> rfl
 
+/-- `fullF` keeps the VT-x flag (it only changes an untyped cap's index). -/
+theorem vtF_fullF (a c : capability.Cap) : Vs.vtF ((fullF a c).getD a) = Vs.vtF a := by
+  cases a <;> cases c <;> simp only [fullF, Option.getD_none] <;> try rfl
+  split_ifs <;> rfl
+
 /-! ## FL4's word-level effects -/
 
 section

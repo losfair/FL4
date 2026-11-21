@@ -175,9 +175,24 @@ theorem JAtZ.dropAD (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ)
       simpa using this
     exact Nat.mod_eq_zero_of_dvd (Nat.dvd_trans h1 (Nat.dvd_of_mod_eq_zero hpal))
   have hbf := J.dropBuf hsb hfit hx hcx hSO hIn hnd hp8 hD
+  -- `LiveDN` after (KENTRY-PLAN g2j): the same memory and ghost tree, the typed
+  -- heap and `H` restricted; the debug lists' members kept (P1's `DbgTz` after)
+  have hLvD : LiveDN (L := L) (restrictTh Z.th p.val (p.val + 2 ^ sb.val))
+      (H.drop (P1.RegionD H p.val (p.val + 2 ^ sb.val))) Cs Z.G s σ' := by
+    obtain ⟨hL, ⟨lst, hDW⟩, hN⟩ := J.live
+    have hIU : ∀ y, InUse (L.mem s) σ' y → InUse (L.mem s) σ y := fun y hu => by
+      unfold InUse at hu ⊢; rw [horig] at hu; exact hu
+    refine ⟨⟨fun q i hqi hu => hL.slots q i hqi.of_restrict (hIU _ hu),
+      fun n hn hni => hL.dbg n hn (by rw [← hD.idle]; exact hni),
+      fun y hy p' zt n hz i hpi hni hu => hL.zslots y (IsSlot.of_restrict hy) p' zt n hz i hpi.of_restrict hni
+        (hIU _ hu),
+      fun y hy p' zt n hz hzt => DeadP.drop (hL.zdead y (IsSlot.of_restrict hy) p' zt n hz hzt)⟩,
+      ⟨lst, hDW.restrictT (fun y hy => (P1.Heap.mem_tcbs_drop.1 hy).1) hblk.2.2.1.2.2.tm.dn hblk.2.2.1.2.2.tm.dh⟩,
+      fun sl hA h => by rw [horig]; exact hN sl hA.of_restrict h⟩
   exact ⟨hX, hcall, hrf', hrr, hyl, hmcp, hbuf, hks, hthT, hthk, hip, hrp, hap, hnk, hnB, hjpl, hcov, hobj, hzH, hsf,
     hhs, hscC, hjc, hkn, hdel, J.ut, hbd, hfin, hutc, hnsc, hinv, hcu, hown, hoff, hact, hc0, hbsa, hsv, hiso, hsl',
-    hcr, hblk, hiL, hvc, hbf.1, hbf.2.1, hbf.2.2⟩
+    hcr, hblk, hiL, hvc, hbf.1, hbf.2.1, hbf.2.2, ⟨fun y hy => J.ext.nat y (IsSlot.of_restrict hy), fun t ht => J.ext.vw t (restrictTh_some ht).1⟩,
+    hLvD, fun q hq => J.zD q (by obtain ⟨y, hy, zt, n, hz, h65⟩ := hq; exact ⟨y, IsSlot.of_restrict hy, zt, n, hz, h65⟩)⟩
 
 end
 

@@ -181,6 +181,29 @@ theorem KFoot.ne_tcbw {N T C : Set U64} {c : U64} {s : S} {σ : Fl4Spec.State Un
   · have := hS.placed.disj n hn t ht; rw [hv] at g1 g2; omega
   · have := (hS.scOut sc hsc x n hk _ ho).2.2.1 t ht; rw [hv] at this; omega
 
+/-- A `KFoot` word is no TCB's VCPU word (`tVcpuA`, KENTRY-PLAN g2b). -/
+theorem KFoot.ne_vcpu {N T C : Set U64} {c : U64} {s : S} {σ : Fl4Spec.State Unit} (hS : SchedRel st N T C c s σ)
+    {b : U64} (hb : KFoot st T N C c s σ b) {t : U64} (ht : t ∈ T) : b ≠ tVcpuA t :=
+  hb.ne_tcbw hS ht (K := 3664#u64) (by simp) not_sOff_vcpu
+
+theorem tVcpuA_val {T : Set U64} (hT : TcbPlaced T) {t : U64} (ht : t ∈ T) : (tVcpuA t).val = t.val + 3664 :=
+  tfield_val (hT t ht) (K := 3664#u64) (by simp)
+
+theorem tVcpuA_aligned {T : Set U64} (hT : TcbPlaced T) {t : U64} (ht : t ∈ T) : Aligned (tVcpuA t) :=
+  field_aligned (hT t ht) (K := 3664#u64) (by simp) (by simp)
+
+/-- A TCB word at an offset other than 3664 is no TCB's VCPU word. -/
+theorem tVcpuA_ne {T : Set U64} (hT : TcbPlaced T) {t u b : U64} (ht : t ∈ T) (hu : u ∈ T) {K : Nat}
+    (hb : b.val = t.val + K) (hK : K < 4096) (hne : K ≠ 3664) : b ≠ tVcpuA u := by
+  intro e
+  have h2 := tVcpuA_val hT hu
+  rw [← e] at h2
+  have a1 := (hT t ht).align; have a2 := (hT u hu).align
+  by_cases eu : u = t
+  · subst eu; omega
+  · have : u.val ≠ t.val := fun h => eu (UScalar.eq_of_val_eq h)
+    omega
+
 /-- A `KFoot` word is no `MCP` word. -/
 theorem KFoot.ne_mcp {N T C : Set U64} {c : U64} {s : S} {σ : Fl4Spec.State Unit} (hS : SchedRel st N T C c s σ)
     {b : U64} (hb : KFoot st T N C c s σ b) {t : U64} (ht : t ∈ T) : b ≠ mcpA t :=

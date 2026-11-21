@@ -89,14 +89,16 @@ variable {S : Type} {st : machine.Store S} [L : P1.LawfulStore st] {A : Type} (a
 /-- **The VT-x placement facts at `J`** [J] (module docstring), at every
 `JAtZ` state of the typed heap. -/
 structure JVtHyps (AR : A → Fl4Spec.Cr3 → Prop) (th : TypedHeap) : Prop where
-  /-- The VCPU list's placement (as P1's `IoPortPlaceAt`). -/
+  /-- The VCPU list's placement (as P1's `IoPortPlaceAt`), at a state with a
+  VT-x cap in a slot (g2a: an owned IO-port cap's finalisation). -/
   io : ∀ (Z : XSets) (H : P1.Heap) (Cs Ac : Set U64) (Lst : U64 → List U64) (D : Set U64) (s : S) (a : A)
     (σ : Fl4Spec.State Unit), Z.th = th → JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ →
-    VtIoPlace (L := L) Z H Cs s σ
-  /-- The EPT walks' placement (as P1's `EptPlace.find`). -/
+    ∀ x, IsSlot Z.th x → ¬ Vs.NativeCap (capV (L.mem s) x) → VtIoPlace (L := L) Z H Cs s σ
+  /-- The EPT walks' placement (as P1's `EptPlace.find`), at a state with a
+  VT-x cap in a slot (g2a: an EPT or EPT-mapped frame cap's finalisation). -/
   ept : ∀ (Z : XSets) (H : P1.Heap) (Cs Ac : Set U64) (Lst : U64 → List U64) (D : Set U64) (s : S) (a : A)
     (σ : Fl4Spec.State Unit), Z.th = th → JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ →
-    VtEptPlace (L := L) Z H Cs s σ
+    ∀ x, IsSlot Z.th x → ¬ Vs.NativeCap (capV (L.mem s) x) → VtEptPlace (L := L) Z H Cs s σ
   /-- An EPT-mapped frame cap's ASID names no native PML4 in the spec. -/
   eptFr : ∀ (Z : XSets) (H : P1.Heap) (Cs Ac : Set U64) (Lst : U64 → List U64) (D : Set U64) (s : S) (a : A)
     (σ : Fl4Spec.State Unit), Z.th = th → JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ →
@@ -106,6 +108,17 @@ structure JVtHyps (AR : A → Fl4Spec.Cr3 → Prop) (th : TypedHeap) : Prop wher
   vcpu : ∀ (Z : XSets) (H : P1.Heap) (Cs Ac : Set U64) (Lst : U64 → List U64) (D : Set U64) (s : S) (a : A)
     (σ : Fl4Spec.State Unit), Z.th = th → JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ →
     ∀ x v, IsSlot Z.th x → capV (L.mem s) x = .Vcpu v → VtVcpuPlace (L := L) Z H Cs s σ v
+
+/-- **`JVtHyps` is a theorem** (g2a): every field's hypotheses name a VT-x cap
+in a slot of a `JAtZ` state, which `JAtZ.ext.nat` (`JExt`, every slot's cap
+`Vs.NativeCap`) rules out. So `JDelParts.vt` needs no premise. -/
+theorem JVtHyps.ofExt (AR : A → Fl4Spec.Cr3 → Prop) (th : TypedHeap) : JVtHyps (L := L) arI AR th where
+  io := fun _ _ _ _ _ _ _ _ _ _ J x hx hn => absurd (J.ext.nat x hx) hn
+  ept := fun _ _ _ _ _ _ _ _ _ _ J x hx hn => absurd (J.ext.nat x hx) hn
+  eptFr := fun _ _ _ _ _ _ _ _ _ _ J x _ _ _ _ _ _ hx hc => by
+    have h := J.ext.nat x hx; rw [hc] at h; exact ((h : ¬ (true = true ∧ true = true)) ⟨rfl, rfl⟩).elim
+  vcpu := fun _ _ _ _ _ _ _ _ _ _ J x _ hx hc => by
+    have h := J.ext.nat x hx; rw [hc] at h; exact (h : False).elim
 
 /-- **The post of a VT-x finalisation step at `J`**: the caps returned, the
 spec's `finalise_cap` at the same state, `JAtZ` after at the same sets, the
@@ -164,7 +177,7 @@ theorem JAtZ.frVtJ [Fl4Proofs.P1.PlainStore st] (hA : ArchRefines arI AR) (hK : 
     objects.finalise_cap st arI s a c b false ⦃ VtPost (L := L) arI AR Z H Cs s σ c b ⦄ := by
   have hcv := capV_of_capAt hc
   have har := J.xtop.fin.1.1.2.2.2.2.2.2
-  rcases hk with ⟨p, sz, r, d, asid, va, rfl⟩ | ⟨f, l, o, rfl, -⟩
+  rcases hk with ⟨p, sz, r, d, asid, va, rfl⟩ | ⟨f, l, o, rfl, ho⟩
   · -- an EPT-mapped frame: `ept::unmap`, the spec's `unmap_page` doing nothing
     obtain ⟨e, hfv⟩ := hV.eptFr Z H Cs Ac Lst D s a σ rfl J _ p sz r d asid va hA'.isSlot hcv
     have hun : ((), σ) ∈ (Fl4Spec.unmapPage (Z := Unit) (frameSizeOf sz) asid.bv va.bv p.bv σ).1 := by
@@ -177,7 +190,7 @@ theorem JAtZ.frVtJ [Fl4Proofs.P1.PlainStore st] (hA : ArchRefines arI AR) (hK : 
       ite_self]
     split
     · refine WP.spec_bind (ept_unmap_vt hA a har asid va p i false (X := VtOut (L := L) Z H Cs s σ)
-        (fun x hx => hx.al) (hV.ept Z H Cs Ac Lst D s a σ rfl J asid)) ?_
+        (fun x hx => hx.al) (hV.ept Z H Cs Ac Lst D s a σ rfl J _ hA'.isSlot (by rw [hcv]; simp [Vs.NativeCap]) asid)) ?_
       rintro ⟨s1, a1⟩ ⟨hw, har1⟩
       obtain ⟨J1, hSS, hks⟩ := J.vtJ hw har1
       try simp only [uncurry_apply_pair]
@@ -186,7 +199,7 @@ theorem JAtZ.frVtJ [Fl4Proofs.P1.PlainStore st] (hA : ArchRefines arI AR) (hK : 
       try simp only [P1.plain_retire, ite_self, bind_ok, uncurry_apply_pair]
       exact (WP.spec_ok _).2 ⟨rfl, trivial, trivial, hm, ⟨Ac, Lst, D, J1⟩, hSS, hks⟩
   · -- an owned IO port cap: `revoke_ports`
-    have P := hV.io Z H Cs Ac Lst D s a σ rfl J
+    have P := hV.io Z H Cs Ac Lst D s a σ rfl J _ hA'.isSlot (by rw [hcv]; exact ho)
     obtain ⟨c', ac, hc', hca, -⟩ := hDS.1.1.abs_cap hA'
     have hcw : CapWf (.IoPort f l o) := by rw [hc] at hc'; rw [eq_of_ok_eq hc']; exact hca.1
     simp only [objects.finalise_cap, objects.finalise_cap_object, bind_ok]
@@ -231,7 +244,7 @@ theorem JAtZ.finEptJ (hA : ArchRefines arI AR) {s : S} {a : A} {σ : Fl4Spec.Sta
   · have hl0 : lv ≠ 0#u64 := fun e => hnr ⟨rfl, e⟩
     simp only [objects.finalise_cap, objects.finalise_cap_object, ept.finalise, bind_ok, ↓reduceIte, hl0]
     refine WP.spec_bind (ept_unmap_vt hA a har asid va p lv true (X := VtOut (L := L) Z H Cs s σ)
-      (fun x hx => hx.al) (hV.ept Z H Cs Ac Lst D s a σ rfl J asid)) ?_
+      (fun x hx => hx.al) (hV.ept Z H Cs Ac Lst D s a σ rfl J _ hA'.isSlot (by rw [hcv]; simp [Vs.NativeCap]) asid)) ?_
     rintro ⟨s1, a1⟩ ⟨hw, har1⟩
     obtain ⟨J1, hSS, hks⟩ := J.vtJ hw har1
     try simp only [uncurry_apply_pair]

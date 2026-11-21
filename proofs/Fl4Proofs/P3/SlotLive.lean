@@ -38,6 +38,30 @@ theorem DestLive.of_cnRef {th : TypedHeap} {mem : U64 → U64} {c0 : capability.
   · obtain ⟨y, hy, hyc⟩ := hroot
     exact Or.inl ⟨y, r, gs, g, hy, by rw [hyc, e]⟩
 
+/-- **The CNode `pd` named by a CNode cap of a slot** (`DestLive`'s left
+disjunct). -/
+def DestCap (th : TypedHeap) (mem : U64 → U64) (pd : U64) : Prop :=
+  ∃ y r gs g, IsSlot th y ∧ capV mem y = .CNode pd r gs g
+
+theorem DestCap.live {th : TypedHeap} {mem : U64 → U64} {pd : U64} (h : DestCap th mem pd) (kb : U64) :
+    DestLive th mem kb pd := Or.inl h
+
+theorem DestCap.same {th : TypedHeap} {m m' : U64 → U64} {pd : U64} (h : DestCap th m pd)
+    (hS : SlotsSame th m m') : DestCap th m' pd := by
+  obtain ⟨y, r, gs, g, hy, hc⟩ := h
+  exact ⟨y, r, gs, g, hy, by rw [hS.capV hy]; exact hc⟩
+
+/-- A CNode reached by a lookup from a root held in a slot is named by a
+CNode cap of a slot (`DestLive.of_cnRef`'s left disjunct). -/
+theorem DestCap.of_cnRef {th : TypedHeap} {mem : U64 → U64} {c0 : capability.Cap} {pd : U64}
+    (h : CnRef th mem c0 pd) (hroot : ∃ y, IsSlot th y ∧ capV mem y = c0) : DestCap th mem pd := by
+  obtain ⟨r, gs, g, hr⟩ := h
+  rcases hr with ⟨p, r', idx, hp, hl, hc⟩ | e
+  · exact ⟨cslotAddr (p.bv, idx), r, gs, g, AbsSlot.isSlot ⟨p, rfl, Or.inl (by rw [hl]; exact hp)⟩,
+      capV_of_capAt hc⟩
+  · obtain ⟨y, hy, hyc⟩ := hroot
+    exact ⟨y, r, gs, g, hy, by rw [hyc, e]⟩
+
 /-- **Where a CNode-only step's untyped caps come from**: each untyped cap of
 a slot after was one of a slot before over the same region, with the same
 free index and device flag and a child then if it has none now, or is now full and has a

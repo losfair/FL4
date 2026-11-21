@@ -18,6 +18,7 @@ at `JAtZ` in place of VSpace's `RInv`; the label itself is XTopJointTcb's
 -/
 import Fl4Proofs.P3.XTopJointData
 import Fl4Proofs.P3.IpcReadRegs
+import Fl4Proofs.P3.BufJ
 open Aeneas Aeneas.Std Result
 
 namespace Fl4Proofs.P3
@@ -349,10 +350,6 @@ set_option maxHeartbeats 64000000 in
 called, `Running` (`JAtZ.runJ`, `XTop`'s facts by `nodata_tail_core`). -/
 theorem JAtZ.readRegsJ {s1 : S} {σ1 : Fl4Spec.State Unit} {ct p : U64} {blk call don : Bool}
     (J1 : JAtZ (L := L) arI AR Z H Cs Ac Lst D s1 a σ1)
-    (hOK : ∀ (Z' : XSets) s' a' σ', Z'.th = Z.th → XTopAt (L := L) AR Z' s' a' σ' → Endp.IpcBufCapOK σ')
-    (hBC : ∀ (Z' : XSets) s' a' σ', Z'.th = Z.th → XTopAt (L := L) AR Z' s' a' σ' → Endp.BufCover Z'.T Z'.B σ')
-    (hBPl : ∀ (Z' : XSets) s' a' σ', Z'.th = Z.th → XTopAt (L := L) AR Z' s' a' σ' →
-      Vs.BufPlaced (L := L) Z'.N Z'.C Z'.B Z'.c s' σ')
     (hns : ∀ u, σ1.schedulerAction = .switchThread u → False) (hidp : p.bv ≠ σ1.idleThread)
     (hcur1 : σ1.curThread = ct.bv) {x1 : Fl4Spec.Tcb} (hkc1 : σ1.kheap ct.bv = some (.tcb x1))
     (hrs1 : x1.tcbState = .restart) (hpne : p ≠ ct) (hpT : p ∈ Z.T) (flags n : U64) :
@@ -397,9 +394,9 @@ theorem JAtZ.readRegsJ {s1 : S} {σ1 : Fl4Spec.State Unit} {ct p : U64} {blk cal
   have hcury : ct.bv = σy.curThread := (hosk.2.trans hcur1).symm
   obtain ⟨xs, hks, -⟩ := hXy.1.tcb p hpT
   have hXZ := J2.xtop
-  have hOKb := hOK (Z.mv Z.G V2) s2 a σy rfl hXZ
-  have hBCy := hBC (Z.mv Z.G V2) s2 a σy rfl hXZ
-  have hBPy := hBPl (Z.mv Z.G V2) s2 a σy rfl hXZ
+  have hOKb := J2.xferH.1
+  have hBCy := J2.xferH.2.1
+  have hBPy := J2.xferH.2.2
   have hact := J2.kern.act
   have htcb : (Z.mv Z.G V2).th ct = some .tcb := (hXZ.curTcb hcury.symm).1
   -- the spec's ReadRegisters
@@ -448,7 +445,7 @@ theorem JAtZ.readRegsJ {s1 : S} {σ1 : Fl4Spec.State Unit} {ct p : U64} {blk cal
   have J0 : JAtZ (L := L) arI AR (Z.mv Z.G V3) H Cs Ac2 Lst2 D2
       (L.wr s2 (regA ct (regIdx Fl4Spec.badge_register)) 0#u64) a (MrS σb ct.bv xb (Endp.ipcBufOf true xy) []) := by
     rw [MrS_nil hkb]; exact J3
-  have hOK3 := hOK ((Z.mv Z.G V2).mv (Z.mv Z.G V2).G V3) _ _ σb rfl J3.xtop
+  have hOK3 := J3.xferH.1
   have hWOK : ∀ q, Endp.ipcBufOf true xy = some q → ∀ i : U64, i.val < 128 →
       BufWordOK H σb (fl4BufA bf i) := fun q hq i hi =>
     J3.bufWord hOK3 htcb hkb hq i.val hi (by rw [fl4BufA_bv, hwp hwx q hq])

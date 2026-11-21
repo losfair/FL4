@@ -46,13 +46,8 @@ theorem jat_restart {AR : A → Fl4Spec.Cr3 → Prop} {Z : XSets} {H : P1.Heap} 
     rw [Notif.setThreadState_eq .restart hk] at hst
     exact ((Prod.mk.inj (Set.singleton_eq_singleton_iff.1 (congrArg Prod.fst hst))).2).symm
   subst hσ1
-  have h := XTopAt.restart hX hcur hk hrun
-  rw [hs1, WP.spec_ok] at h
-  obtain ⟨hX1, hSS, hk1⟩ := h
-  obtain ⟨hkb, hkz⟩ := kback_ksz_upd (σ' := Notif.stsAct (Notif.updK σ ct.bv
-    (.tcb { x with tcbState := .restart })) ct.bv) hk (by rw [stsAct_kheap]; rfl)
-  obtain ⟨Ac', Lst', D', R⟩ := hJS.restart s a σ ct x s1 hcur hk htcb hrun hs1 Z H Cs Ac Lst D rfl J hX1
-  exact ⟨Ac', Lst', D', J.cs_frame hk1 hX1 hkb ((IpcFrKeep.of_updTcb (y := { x with tcbState := .restart }) hk rfl rfl).trans (IpcFrKeep.of_kheap (by rw [stsAct_kheap]))) (JCs.same J hSS hkz) R (Vs.VsSlotsT.of_eq fun y hy => hSS.capV hy)⟩
+  obtain ⟨Ac', Lst', J1⟩ := J.restartSJ hJS hcur hk htcb hrun hs1
+  exact ⟨Ac', Lst', D, J1⟩
 
 set_option maxHeartbeats 4000000 in
 /-- **A TCB leaf from `JAtZ`** (module docstring): the leaf's `XTop` is not

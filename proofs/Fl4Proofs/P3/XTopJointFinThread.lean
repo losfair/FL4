@@ -73,6 +73,7 @@ import Fl4Proofs.P3.XTopJointFpu
 import Fl4Proofs.P3.SpecNoSwitch
 import Fl4Proofs.P3.BufFr
 import Fl4Proofs.P3.BufFrA
+import Fl4Proofs.P3.DbgWF
 open Aeneas Aeneas.Std Result
 
 namespace Fl4Proofs.P3
@@ -228,6 +229,7 @@ theorem JAtZ.nfrStep (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {s' : S} 
   have hRF' := RFree.carry J.rfree J.call k4 ck
   have hRR' := J.rrecv.frame k4 F.khrb
   have hDbg := J.kw_dbg (hfoot.mono fun b hb => kw_empty_mono hb _)
+  have hKd := J.kw_dbgKeep (hfoot.mono fun b hb => kw_empty_mono hb _)
   have hS3 : SchedRel st Z.N Z.T Z.C Z.c s' σ' := hI3.2.2.1
   have hAI3 : ActIdle σ' := F.actIdle J.act
   have hcur3 : σ'.schedulerAction = .chooseNewThread ∨ CurInv σ' :=
@@ -249,7 +251,7 @@ theorem JAtZ.nfrStep (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {s' : S} 
       hAI3, F.bsa J.bsa, F.isorted J.isorted, hrun3, hblk⟩
   have hC0 := JCs.same J hF.1 F.ksz
   have hC : JCs (L := L) (Z.mv Z.G V') s' σ' := ⟨hC0.del, hC0.ut, hC0.finM, hC0.sfree⟩
-  exact ⟨Z.vs, J.cs_frameI hks hX3 hw (fun b hb => Ipc.FinW.oobj J.xtop.fin.1.1.1 hb) F.sk.arch (fun q ao h => F.othF h (fun _ e => by cases e) (fun _ _ e => by cases e) (fun _ e => by cases e)) F.szKeep hF.1 F.kback F.ipcFr hC R⟩
+  exact ⟨Z.vs, J.cs_frameI hks hX3 hw (fun b hb => Ipc.FinW.oobj J.xtop.fin.1.1.1 hb) (fun b hb => Ipc.FinW.nv J.xtop.fin.1.1.1 hb) F.sk.arch (fun q ao h => F.othF h (fun _ e => by cases e) (fun _ _ e => by cases e) (fun _ e => by cases e)) F.szKeep hF.1 F.kback F.ipcFr hC R hKd F.sk.orig (J.idleW_keep hS3 F.sk.idle F.sk.isc).1 J.zD⟩
 
 set_option maxHeartbeats 8000000 in
 /-- **`unbind_notification` of a bound thread at `J`**: FL4's two writes
@@ -359,6 +361,16 @@ theorem JAtZ.dbgw_ne_tcb (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {b : 
     (hwv : w.val = t.val + K) (hK : K < 3576 ∨ (3592 ≤ K ∧ K < 4096)) : b ≠ w := fun e => by
   subst e
   have := J.dbgw_obj hb (J.zH.1 t ht) (by simp only [P1.HKind.bits]; omega)
+  omega
+
+/-- A debug-list word (`DbgWc`) is no TCB's VCPU word (KENTRY-PLAN g2b). -/
+theorem JAtZ.dbgWc_nv (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {b : U64}
+    (hb : DbgWc (L := L) Z.T Z.c s b) : ∀ t ∈ Z.T, b ≠ tVcpuA t := by
+  intro t ht e
+  have hv := Sched.tVcpuA_val J.ip.e.tcb ht
+  have e12 : (2 : Nat) ^ P1.HKind.bits .tcb = 4096 := rfl
+  have g := J.dbgw_obj hb (J.zH.1 t ht) ⟨by rw [e, hv]; omega, by rw [e, hv, e12]; omega⟩
+  rw [e, hv] at g
   omega
 
 /-- `SlotsSame` across debug-list writes (as `tmw_slots`). -/
@@ -493,7 +505,11 @@ theorem JAtZ.dbgw_step (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ)
     (hhd : ∀ sl p sb fi dev, AbsSlot Z.th sl → capAt (L.mem s) (cslotAddr sl) = ok (.Untyped p sb fi dev) →
       NotDev (L.mem s) (cslotAddr sl) p sb fi → (¬ ∃ x, σ.cdt x = some sl) → fi.val ≠ 0 →
       ¬ (p.val ≤ (L.mem s' (L.nodeAt s 0#u64 layout.node.DEBUG_TCBS)).val ∧
-        (L.mem s' (L.nodeAt s 0#u64 layout.node.DEBUG_TCBS)).val < p.val + 2 ^ sb.val)) :
+        (L.mem s' (L.nodeAt s 0#u64 layout.node.DEBUG_TCBS)).val < p.val + 2 ^ sb.val))
+    (hdbg : ∀ n, dbgNth (L.mem s') n (dbgHead (L := L) s') ≠ 0#u64 → ∃ k,
+      dbgNth (L.mem s') n (dbgHead (L := L) s') = dbgNth (L.mem s) k (dbgHead (L := L) s) ∧
+      dbgNth (L.mem s) k (dbgHead (L := L) s) ≠ 0#u64)
+    (hDW' : DbgWF (P1.Heap.tcbs H) Cs (L.mem s') (dbgHd (L := L) s')) :
     JAtZ (L := L) arI AR Z H Cs Ac Lst D s' a σ := by
   have hX' := J.xtop.dbgStep hw
   have F : Sched.NFr true σ.curThread σ σ := Sched.NFr.rt _ σ σ.reprogramTimer
@@ -560,7 +576,10 @@ theorem JAtZ.dbgw_step (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ)
     ⟨hCR', hRF', hRR', J.yld.frame k2 F.ykeep, J.mcp.frame k1 F.mcpKeep, J.buf.frame kb F.bufKeep, hRP',
       J.apart.sc_frame hks F.szKeep, hjpl, J.jcov_keep hks hSS hdead (J.idleW_keep hS' rfl rfl), hkern,
       J.dbgw_utc hw hSS hhd, J.nsc, J.inv, J.cur, J.own, J.off, J.act, J.bsa, J.isorted, J.curRun, hblk⟩
-  exact J.cs_frame (G' := Z.G) hks hX' F.kback F.ipcFr (JCs.same J hSS F.ksz) R (Vs.VsSlotsT.of_eq fun y hy => hSS.capV hy)
+  have hmem : ∀ y ∈ Z.G.chains.flatten, IsSlot Z.th y := fun y hy => ((J.xtop.rel.2.1.2.2.1.members y).1 hy).1
+  exact J.cs_frame (G' := Z.G) hks hX' F.kback F.ipcFr (JCs.same J hSS F.ksz) R (Vs.VsSlotsT.of_eq fun y hy => hSS.capV hy) (J.vkeep_of hw fun _ hb => J.dbgWc_nv hb)
+    ⟨LiveJ.of_sameDbg J.live.1 hSS hmem rfl rfl hks hdbg (fun p hp => hdead p (J.zD p hp)), hDW',
+      J.live.2.2.of_same (fun y hy => hSS.capV hy) rfl⟩ (J.zDX hSS J.zD)
 
 /-- **A debug-list head after `debug_remove t`**: unchanged, or it was `t`
 and is now `t`'s old successor (the other writes are TCB debug links). -/
@@ -628,6 +647,38 @@ theorem dbgRemove_head {T Cs : Set U64} (s : S) (t : U64) (hT : P1.TcbPlaced T)
   exact h2
 
 set_option maxHeartbeats 4000000 in
+/-- **`debug_remove t` at `J`, the liveness words** (KENTRY-PLAN g2i): the
+lists after are the lists before with `t` erased (DbgWF's
+`debug_remove_wf`), so every walk of core 0's list after is one before. -/
+theorem JAtZ.dbgRemove_live (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {t : U64} (ht : t ∈ Z.T) :
+    objects.debug_remove st s t ⦃ s' => (∀ n, dbgNth (L.mem s') n (dbgHead (L := L) s') ≠ 0#u64 → ∃ k,
+      dbgNth (L.mem s') n (dbgHead (L := L) s') = dbgNth (L.mem s) k (dbgHead (L := L) s) ∧
+      dbgNth (L.mem s) k (dbgHead (L := L) s) ≠ 0#u64) ∧
+      DbgWF (P1.Heap.tcbs H) Cs (L.mem s') (dbgHd (L := L) s') ⦄ := by
+  obtain ⟨Q, R0, hc, -⟩ := J.xtop.fin.1.1.1.lists
+  have hTe : Z.T = P1.Heap.tcbs H := J.tcbs_eq.1
+  have htT : t ∈ P1.Heap.tcbs H := by rw [← hTe]; exact ht
+  have hcC : Z.c ∈ Cs := hc.cur ▸ J.kern.cpuCs
+  obtain ⟨⟨Q1, R1, h1q⟩, -, hX1, -, -⟩ := id J.blk
+  have hTm := hX1.2.2.tm
+  have hT : P1.TcbPlaced (P1.Heap.tcbs H) := by rw [← hTe]; exact hc.tcbs
+  have hNa : ∀ c ∈ Cs, P1.NodePlaced st (P1.Heap.tcbs H) s c := fun c hc' => P1.TInv.nodes J.blk c hc'
+  have hDa : P1.DbgTz st (P1.Heap.tcbs H) Cs s := ⟨hTm.dn, hTm.dp, hTm.dh⟩
+  have hafa : L.mem s (P1.affA t) ∈ Cs := by rw [hc.aff t ht]; exact hcC
+  obtain ⟨lst, hW⟩ := J.live.2.1
+  have c0 : 0#u64 ∈ Cs := J.kern.cs0
+  refine WP.spec_mono (debug_remove_wf s t hT hNa hDa hafa htT hW) fun s' hs' => ⟨fun n hn => ?_, ⟨_, hs'.2⟩⟩
+  rcases dbgNth_mem_wf hs'.2 c0 n with h0 | hm
+  · exact absurd h0 hn
+  · obtain ⟨k, hk', e⟩ := List.getElem_of_mem (List.mem_of_mem_erase hm)
+    refine ⟨k, ?_, ?_⟩
+    · show dbgNth (L.mem s') n (L.mem s' (dbgHd (L := L) s' 0#u64)) =
+        dbgNth (L.mem s) k (L.mem s (dbgHd (L := L) s 0#u64))
+      rw [dbgNth_getElem_wf hW c0 k hk', e]
+    · show dbgNth (L.mem s) k (L.mem s (dbgHd (L := L) s 0#u64)) ≠ 0#u64
+      rw [dbgNth_getElem_wf hW c0 k hk', e]; exact hn
+
+set_option maxHeartbeats 4000000 in
 /-- **`debug_remove` at `J`**: P1's `debug_remove.frame` at the current
 core alone (the thread's affinity, `SchedRel`), so the words written are
 `DbgWc`; `BlkOK` after (`debug_remove.blk`), core 0's new list head null or
@@ -656,9 +707,10 @@ theorem JAtZ.dbgRemoveJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ)
   have hNa : ∀ c ∈ Cs, P1.NodePlaced st (P1.Heap.tcbs H) s c := fun c hc' => P1.TInv.nodes J.blk c hc'
   have hDa : P1.DbgTz st (P1.Heap.tcbs H) Cs s := ⟨hTm.dn, hTm.dp, hTm.dh⟩
   have hafa : L.mem s (P1.affA t) ∈ Cs := by rw [hc.aff t ht]; exact hcC
-  refine WP.spec_mono (WP.spec_and (WP.spec_and (P1.objects.debug_remove.frame s t hT hN hD haf htT)
-    (P1.objects.debug_remove.blk s t J.blk htT)) (dbgRemove_head s t hT hNa hDa hafa htT J.kern.cs0)) ?_
-  rintro s' ⟨⟨⟨hw0, -⟩, hblk, -⟩, hhd0⟩
+  refine WP.spec_mono (WP.spec_and (WP.spec_and (WP.spec_and (P1.objects.debug_remove.frame s t hT hN hD haf htT)
+    (P1.objects.debug_remove.blk s t J.blk htT)) (dbgRemove_head s t hT hNa hDa hafa htT J.kern.cs0))
+    (J.dbgRemove_live ht)) ?_
+  rintro s' ⟨⟨⟨⟨hw0, -⟩, hblk, -⟩, hhd0⟩, hdbgL, hDWL⟩
   have hw : P1.WritesIn st s s' (DbgWc (L := L) Z.T Z.c s) := hw0.mono fun b hb => by
     rcases hb with h | ⟨c, hc', e⟩
     · left; rw [hTe]; exact h
@@ -669,7 +721,7 @@ theorem JAtZ.dbgRemoveJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ)
   rw [P1.nodeAt_of_ksb hks] at hdh
   obtain ⟨Tr, Cq, hJ⟩ := J.jpl
   have hH := J.kern.heap
-  refine J.dbgw_step hw hblk ?_ ?_
+  refine J.dbgw_step hw hblk ?_ ?_ hdbgL hDWL
   · rcases hdh with h0 | hv
     · exact Or.inl h0
     · right

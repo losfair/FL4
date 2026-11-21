@@ -111,6 +111,12 @@ theorem reset_frame {A' : Type} (arI : machine.Arch A') (s : S) (a : A') (x : U6
       · rw [if_pos ho0]; exact (WP.spec_ok _).2 ⟨hW2, hQ2⟩
       rw [if_neg ho0]
       have ho0' : o.val ≠ 0 := fun e => ho0 (UScalar.eq_of_val_eq e)
+      -- #52: the cap read back; `none` (a doomed transaction) ends the loop.
+      rw [slot_cap_eq, capAt_capV]; simp only [bind_ok]
+      have hU : ∀ c, untyped.as_untyped c ⦃ _ => True ⦄ := fun c => by
+        cases c <;> exact (WP.spec_ok _).2 trivial
+      refine WP.spec_bind (hU _) fun o' _ => ?_
+      refine p0_if _ _ _ _ (fun _ => (WP.spec_ok _).2 ⟨hW2, hQ2⟩) (fun _ => ?_)
       refine WP.spec_bind (hPPF s2 a1 hQ2) ?_
       rintro ⟨r, s3, a2⟩ ⟨hW3, hQ3⟩
       simp only at hW3 hQ3

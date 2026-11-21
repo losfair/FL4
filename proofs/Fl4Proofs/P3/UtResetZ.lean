@@ -315,7 +315,19 @@ theorem JAtZ.zeroJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {q n : U64}
       J.apart.sc_frame hkb F.szKeep, hjpl, J.jcov_keep hkb hSS hdead (J.idleW_keep hX1.fin.1.1.1 F.idle F.isc), hkern,
       hutc, J.nsc.ar F, J.inv.ar F, CurInvW.ar J.cur F, J.own.ar F,
       J.off.ar F, hAI, J.bsa.ar F, J.isorted.ar F, J.curRun.ar F, hblk⟩
-  exact J.cs_frame (G' := Z.G) hkb hX1 F.kback F.ipcFr (JCs.same J hSS F.ksz) R (Vs.VsSlotsT.of_eq fun y hy => hSS.capV hy)
+  have hKd : P1.DbgKeep st (P1.Heap.tcbs H) Cs s s1 := dbgKeep_of_writes J.blk hW fun b hb => by
+    obtain ⟨-, h1, h2⟩ := hb
+    refine J.notDbg' (fun p hp => ?_) (fun c hc => ?_)
+    · rcases hAp p .tcb hp (fun z h => by cases h) with e | e <;> simp only [P1.HKind.bits] at e ⊢ <;> omega
+    · rcases hnd c hc with e | e <;> omega
+  exact J.cs_frameK hkb hX1 F.kback F.ipcFr (JCs.same J hSS F.ksz) R (Vs.VsSlotsT.of_eq fun y hy => hSS.capV hy) (J.vkeep_of hW fun b hb u hu' e => by
+    obtain ⟨-, h1, h2⟩ := hb
+    have hv := Sched.tVcpuA_val J.ip.e.tcb hu'
+    have := hAp u .tcb (J.zH.1 u hu') (fun z h => by cases h)
+    rw [e] at h1 h2
+    simp only [P1.HKind.bits] at this
+    omega)
+    hSS hKd F.idle
 
 end
 
@@ -356,12 +368,12 @@ theorem JAtZ.restart_keeps_resume (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a 
   exact hni.2
 
 /-- **The preempted outcome of a preemption point at `JAtZ`** is `JAtPre`
-(its second disjunct; XTopJointCnDel). -/
+(XTopJointCnDel; `PPR0` gives the base its no-switch and non-idle facts). -/
 theorem JAtZ.jAtPre_pp (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {s' : S} {a' : A}
     {σ' : Fl4Spec.State Unit} (hpp : sched.preemption_point st arI s a = ok (.Err .Preempted, s', a'))
-    (hsp : (.error (), σ') ∈ ((Fl4Spec.preemptionPoint (Z := Unit)).run σ).1) :
+    (hsp : (.error (), σ') ∈ ((Fl4Spec.preemptionPoint (Z := Unit)).run σ).1) (hR0 : PPR0 σ) :
     JAtPre (L := L) arI AR s' a' σ' :=
-  Or.inr ⟨s, a, σ, ⟨Z, H, Cs, Ac, Lst, D, J⟩, hpp, hsp⟩
+  ⟨s, a, σ, ⟨⟨Z, H, Cs, Ac, Lst, D, J⟩, hR0.1.2.1, hR0⟩, hpp, hsp⟩
 
 end
 

@@ -151,6 +151,53 @@ theorem invoke_orig {inv : CnodeInvocation} (hne : invSlots inv ≠ []) {σ σ' 
   | deleteCall _ => exact absurd rfl hne
   | cancelBadgedSendsCall _ => exact absurd rfl hne
 
+/-- **`cap_move` clears its source's original bit** (its last step). -/
+theorem capMove_orig_src (c : Cap) (src dest : CslotPtr) {σ : State Unit} {x : Unit × State Unit}
+    (hx : x ∈ (capMove (Z := Unit) c src dest σ).1) : x.2.isOriginalCap src = false := by
+  unfold capMove at hx
+  obtain ⟨_, _, hx⟩ := hx
+  obtain ⟨_, _, hx⟩ := hx
+  obtain ⟨_, _, hx⟩ := hx
+  obtain ⟨_, _, hx⟩ := hx
+  obtain ⟨_, _, hx⟩ := hx
+  obtain ⟨_, _, hx⟩ := hx
+  obtain ⟨_, _, hx⟩ := hx
+  obtain ⟨_, _, hx⟩ := hx
+  obtain ⟨_, _, hx⟩ := hx
+  obtain ⟨_, _, hx⟩ := hx
+  obtain ⟨_, _, hx⟩ := hx
+  unfold setOriginal at hx
+  obtain ⟨y, hy, hx⟩ := hx
+  rw [Set.mem_singleton_iff.1 hy] at hx
+  rw [Set.mem_singleton_iff.1 hx]
+  simp
+
+/-- **A slot a CNode move or rotate may leave null has no original bit**
+(`NullSrc`, `capMove_orig_src`). -/
+theorem invoke_nullOrig {inv : CnodeInvocation} {σ σ' : State Unit}
+    (h : ((.ok (), σ') : Except Unit Unit × State Unit) ∈ ((invokeCnode (Z := Unit) inv).run σ).1)
+    {sl : CslotPtr} (hn : NullSrc inv sl) : σ'.isOriginalCap sl = false := by
+  cases inv with
+  | moveCall c a b =>
+    obtain ⟨x, hx, e⟩ := Sched.liftE_mem_inv h
+    simp only at e; subst e
+    simp only [NullSrc] at hn
+    rw [hn]
+    exact capMove_orig_src c a b hx
+  | rotateCall c1 c2 a b d =>
+    obtain ⟨x, hx, e⟩ := Sched.liftE_mem_inv h
+    simp only at e; subst e
+    obtain ⟨hsa, had⟩ := hn
+    rw [hsa]
+    split_ifs at hx with hs
+    · exact absurd hs had
+    · obtain ⟨_, _, hx⟩ := hx
+      exact capMove_orig_src c1 a b hx
+  | insertCall _ _ _ => exact hn.elim
+  | revokeCall _ => exact hn.elim
+  | deleteCall _ => exact hn.elim
+  | cancelBadgedSendsCall _ => exact hn.elim
+
 end Spec
 
 section
@@ -174,7 +221,9 @@ theorem Steps.cnTrace {th : TypedHeap} (hP : Placed th) {s s2 s' : S} {a : A}
     (hCR : CRel th (L.mem s') σ' G') (hFI : FinInv th (L.mem s') σ' G') (hMO : MdbOKV (L.ksb s) (L.mem s') G')
     (hTK : TypedKept th (L.mem s2) (L.mem s')) (hDl : DelInv th (L.mem s2) → DelInv th (L.mem s'))
     (hDLs : ∀ sl ∈ invSlots inv, ∃ p, sl.1 = p.bv ∧ DestLive th (L.mem s2) (L.ksb s) p)
-    (hUS : UtSrc th (L.mem s2) (L.mem s') σ1 σ') (hVT : Vs.VsSlotsT th (L.mem s2) (L.mem s')) :
+    (hUS : UtSrc th (L.mem s2) (L.mem s') σ1 σ') (hVT : Vs.VsSlotsT th (L.mem s2) (L.mem s'))
+    (hLW : CnLive (L.mem s2) (L.mem s') (invSlots inv))
+    (hNS : ∀ sl ∈ invSlots inv, capV (L.mem s') (cslotAddr sl) = .Null → NullSrc inv sl) :
     Steps (L := L) arI th s a σ s' a σ' := by
   refine (Steps.restart arI hcur hk htcb hs2 hst hC).trans arI fun Q hQ => ?_
   have hmem : ((.ok (), σ') : Except Unit Unit × Fl4Spec.State Unit) ∈
@@ -204,7 +253,7 @@ theorem Steps.cnTrace {th : TypedHeap} (hP : Placed th) {s s2 s' : S} {a : A}
   refine hQ.cslot s2 s' a σ1 σ' G' hcn hkc hCK hUK horig
     ⟨hF.1, hF.2.1, fun b hb hn => hF.2.2 b hb fun ⟨y, k, hy, hk', e⟩ => hn ⟨y, hy, ?_⟩⟩ hCR hFI
     (by rw [hks]; exact hMO) (fun t ht => ?_) hTK (fun t ht => ?_) (invoke_ksz hne hmem) hDl (invSlots inv) hW
-    hcap hoW hUS hVT
+    hcap hoW hUS hVT hLW fun sl hsl h => invoke_nullOrig hmem (hNS sl hsl h)
   · have hf := hy.fit hP
     have := hk'.lt
     have hv := wordOf_val (a := y) (k := k) (by omega)
@@ -254,13 +303,13 @@ theorem cn_topXS {AR : A → Fl4Spec.Cr3 → Prop} {Z : XSets} {s : S} {ar : A}
     exact Or.inl ⟨e, rfl, rfl, ⟨e', run_liftME_err h1, Or.inl h2⟩, hX0⟩
   | Ok u =>
     obtain ⟨inv, hrun, σ1, hst, σ', G', hrunI, hR', hV', hM', hC', hI', hFI', hSt, s2, hne, hs2, hF, hsl, hcap, hDI,
-      hTK, hDLs, hUS, hVT, hCK, hUK⟩ := hq
+      hTK, hDLs, hUS, hVT, ⟨hCK, hUK⟩, hLW, hNSr⟩ := hq
     obtain ⟨htcb, x, hk⟩ := hX.curTcb hcur
     have hst' : Fl4Spec.setThreadState (Z := Unit) ct.bv .restart σ = ({((), σ1)}, False) := by rw [← hcur]; exact hst
     obtain ⟨hX1, hks, -⟩ := hX.restart' hC hcur hs2 hst'
     have hstp : Steps (L := L) arI Z.th s a' σ s' a' σ' :=
       Steps.cnTrace arI hX.rel.1 hcur hk htcb hs2 hst hC hX1.rel.2.1.1 hks hne hrunI hF hsl hcap hCK hUK
-        ⟨hR', hV', hM', hC', hI'⟩ hFI' (hSt.okv hX.rel.2.2.2.2.1) hTK hDI (hDLs hroot) (hUS σ1 σ' hst hrunI) hVT
+        ⟨hR', hV', hM', hC', hI'⟩ hFI' (hSt.okv hX.rel.2.2.2.2.1) hTK hDI (hDLs hroot) (hUS σ1 σ' hst hrunI) hVT hLW hNSr
     have hXa := hstep _ _ _ hstp
     obtain ⟨Z', hZ'⟩ := hXX _ _ _ hXa
     have hx : ((.ok (), σ') : Except Unit Unit × Fl4Spec.State Unit) ∈
@@ -289,13 +338,13 @@ theorem cn_topX {AR : A → Fl4Spec.Cr3 → Prop} (hAM : ARMask arI AR) {Z : XSe
     exact Or.inl ⟨e, rfl, rfl, ⟨e', run_liftME_err h1, Or.inl h2⟩, ⟨Z, hX⟩⟩
   | Ok u =>
     obtain ⟨inv, hrun, σ1, hst, σ', G', hrunI, hR', hV', hM', hC', hI', hFI', hSt, s2, hne, hs2, hF, hsl, hcap, hDI,
-      hTK, hDLs, hUS, hVT, hCK, hUK⟩ := hq
+      hTK, hDLs, hUS, hVT, ⟨hCK, hUK⟩, hLW, hNSr⟩ := hq
     obtain ⟨htcb, x, hk⟩ := hX.curTcb hcur
     have hst' : Fl4Spec.setThreadState (Z := Unit) ct.bv .restart σ = ({((), σ1)}, False) := by rw [← hcur]; exact hst
     obtain ⟨hX1, hks, -⟩ := hX.restart' hC hcur hs2 hst'
     have hstp : Steps (L := L) arI Z.th s a' σ s' a' σ' :=
       Steps.cnTrace arI hX.rel.1 hcur hk htcb hs2 hst hC hX1.rel.2.1.1 hks hne hrunI hF hsl hcap hCK hUK
-        ⟨hR', hV', hM', hC', hI'⟩ hFI' (hSt.okv hX.rel.2.2.2.2.1) hTK hDI (hDLs hroot) (hUS σ1 σ' hst hrunI) hVT
+        ⟨hR', hV', hM', hC', hI'⟩ hFI' (hSt.okv hX.rel.2.2.2.2.1) hTK hDI (hDLs hroot) (hUS σ1 σ' hst hrunI) hVT hLW hNSr
     obtain ⟨Z', hZ'⟩ := hstp.xtop arI hAM hDel rfl hX hKA hTh
     have hx : ((.ok (), σ') : Except Unit Unit × Fl4Spec.State Unit) ∈
         ((Fl4Spec.invokeCnode (Z := Unit) inv).run σ1).1 := by rw [hrunI]; rfl

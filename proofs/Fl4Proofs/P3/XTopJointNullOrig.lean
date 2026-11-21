@@ -24,10 +24,6 @@ open fl4_core Classical
 
 noncomputable section
 
-/-- **A null abstract slot is not original** [J] (module docstring). -/
-def NullOrig (th : TypedHeap) (m : U64 → U64) (σ : Fl4Spec.State Unit) : Prop :=
-  ∀ sl, AbsSlot th sl → capV m (cslotAddr sl) = .Null → σ.isOriginalCap sl = false
-
 section Spec
 open Fl4Spec
 
@@ -98,35 +94,6 @@ end Spec
 
 section
 variable {S : Type} {st : machine.Store S} [L : P1.LawfulStore st]
-
-/-- **A null slot is not in use.** -/
-theorem NullOrig.notInUse {th : TypedHeap} {m : U64 → U64} {σ : Fl4Spec.State Unit} (hN : NullOrig th m σ)
-    (horig : ∀ sl, σ.isOriginalCap sl = true → AbsSlot th sl) {y : U64} (hy : capV m y = .Null) :
-    ¬ InUse m σ y := by
-  rintro (h | ⟨x, rfl, hx⟩)
-  · exact h hy
-  · rw [hN x (horig x hx) hy] at hx; cases hx
-
-/-- **`NullOrig` across a step keeping the slots' caps and the original bits.** -/
-theorem NullOrig.of_same {th : TypedHeap} {m m' : U64 → U64} {σ σ' : Fl4Spec.State Unit} (hN : NullOrig th m σ)
-    (hcv : ∀ y, IsSlot th y → capV m' y = capV m y) (ho : σ'.isOriginalCap = σ.isOriginalCap) :
-    NullOrig th m' σ' := fun sl hA h => by
-  rw [ho]; exact hN sl hA (by rw [← hcv _ hA.isSlot]; exact h)
-
-/-- **The original bits kept by a step keeping the slots' words** (`CdtRel`
-before and after, the bits only on abstract slots). -/
-theorem orig_eq_of_slots {th : TypedHeap} {m m' : U64 → U64} {σ σ' : Fl4Spec.State Unit} {G G' : MdbGhost}
-    (hC : CdtRel th m σ G) (hC' : CdtRel th m' σ' G') (ho : ∀ sl, σ.isOriginalCap sl = true → AbsSlot th sl)
-    (ho' : ∀ sl, σ'.isOriginalCap sl = true → AbsSlot th sl) (hS : SlotsSame th m m') :
-    σ'.isOriginalCap = σ.isOriginalCap := by
-  funext sl
-  by_cases hA : AbsSlot th sl
-  · rw [hC'.orig sl hA, hC.orig sl hA, hS.revOf hA.isSlot]
-  · cases h1 : σ'.isOriginalCap sl
-    · cases h2 : σ.isOriginalCap sl
-      · rfl
-      · exact absurd (ho sl h2) hA
-    · exact absurd (ho' sl h1) hA
 
 /-- **`empty_slot` keeps `NullOrig`**: the emptied slot's bit cleared, the
 other slots' caps and bits kept. -/

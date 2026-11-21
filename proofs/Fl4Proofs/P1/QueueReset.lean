@@ -487,6 +487,11 @@ theorem untyped.reset_untyped_loop.rinv {A : Type _} {ar : machine.Arch A} (hA :
     split
     · exact (WP.spec_ok _).2 I4
     rename_i hne
+    -- #52: the cap just written is read back; a doomed transaction's
+    -- `none` ends the loop with `Preempted` (state as written).
+    refine WP.spec_bind (P0.obj.Slot.cap.p0 st x s4 LawfulStore.total) fun c _ => ?_
+    refine WP.spec_bind (P0.untyped.as_untyped.p0 c) fun o _ => ?_
+    refine p0_if _ _ _ _ (fun _ => (WP.spec_ok _).2 I4) (fun _ => ?_)
     refine WP.spec_bind (I4.pp hA P.heap a2) ?_
     rintro ⟨r, s5, a5⟩ I5
     simp only at I5

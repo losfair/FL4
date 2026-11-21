@@ -725,6 +725,29 @@ theorem JAtZ.rbw_dbg (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {s' : S}
     · have := J.nodeB wp hwp 0#u64 (by simp); omega
   · exact J.kern.dwNe.2 (congrArg UScalar.val hb)
 
+/-- **`RBW` keeps every debug word** (KENTRY-PLAN g2i; `rbw_dbg`'s `DbgKeep`):
+a notification step's word (`nwrite_notDbg`) or the current node's action
+word (apart from the TCBs, `JKern.hnd`; another offset than the debug head). -/
+theorem JAtZ.rbw_dbgKeep (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {s' : S}
+    (hW : P1.WritesIn st s s' (RBW st Z.N Z.T s)) : P1.DbgKeep st (P1.Heap.tcbs H) Cs s s' :=
+  dbgKeep_of_writes J.blk hW fun b hb => by
+    rcases hb with hb | rfl
+    · exact J.nwrite_notDbg hb
+    · have hcC : L.cpu s ∈ Cs := J.kern.cpuCs
+      have hN : P1.NodePlaced st (P1.Heap.tcbs H) s (L.cpu s) := P1.TInv.nodes J.blk _ hcC
+      have hsa : (layout.node.SCHED_ACTION).val < 4288 ∧ (layout.node.SCHED_ACTION).val ≠ 88 := by
+        simp [layout.node.SCHED_ACTION]
+      have hv := P1.nodeAt_val hN (off := layout.node.SCHED_ACTION) hsa.1
+      have hnb : ∀ c, L.nodeBase s c = (L.ksb s).val + 13568 + c.val * 4288 := fun _ => rfl
+      refine J.notDbg' (fun p hp => ?_) (fun c hc => ?_)
+      · have := J.kern.hnd p _ hp _ hcC
+        simp only [P1.HKind.bits] at this ⊢
+        omega
+      · have h1 := J.kern.csLt c hc
+        have h2 := J.kern.csLt _ hcC
+        rw [hv, hnb, hnb]
+        omega
+
 set_option maxHeartbeats 16000000 in
 /-- **The blocking receive at `J`** (module docstring): the current thread
 `t`, resumed and in no ready queue, blocks receiving on the idle or waiting
@@ -871,8 +894,9 @@ theorem JAtZ.recvSigBlockJ (hAT : P0.ArchTotal arI) (J : JAtZ (L := L) arI AR Z 
       hAI3, F.bsa J.bsa hscA, F.isorted J.isorted hsrt, hrun3, hblk⟩
   have hC0 := JCs.same J hF.1 F.ksz
   have hCs : JCs (L := L) (Z.mv Z.G V') s' σ' := ⟨hC0.del, hC0.ut, hC0.finM, hC0.sfree⟩
-  have J3 := J.cs_frameI hks hX3 hW (fun b hb => Ipc.CnW.oobj J.xtop.fin.1.1.1 hb) F.sk.arch
+  have J3 := J.cs_frameI hks hX3 hW (fun b hb => Ipc.CnW.oobj J.xtop.fin.1.1.1 hb) (fun b hb => J.cnW_nv hb) F.sk.arch
     (fun q ao h => F.othF h (fun _ e => by cases e) (fun _ e => by cases e)) F.szKeep hF.1 F.kback F.ipcFr hCs R
+    (J.rbw_dbgKeep hRB) F.sk.orig (XTopAt.idleW_eqS J.xtop hX3 F.sk.idle) (J.zD_diffN hn)
   rw [heq]
   exact ⟨_, Set.mem_singleton _, J3.xtop.relTop, _, _, _, _, _, _, J3⟩
 

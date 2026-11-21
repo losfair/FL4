@@ -439,7 +439,7 @@ set_option maxHeartbeats 64000000 in
 /-- **`receive_ipc` from the head sender at `J`**, for any FL4 program `m`
 reducing to the endpoint-state switch (`hm`; `JAtZ.recvSendJ0`, and after
 `maybe_return_sched_context` XTopJointRecvSendRet's `JAtZ.recvSendRetJ`). -/
-theorem JAtZ.recvSendJG (hZ : XferHZ L AR Z) (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ)
+theorem JAtZ.recvSendJG (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ)
     {t : U64} (ht : t ∈ Z.T) {xt : Fl4Spec.Tcb} (hkt : σ.kheap t.bv = some (.tcb xt))
     (hrun : Fl4Spec.runnable xt.tcbState = true) {blk : Bool}
     (hbN : xt.tcbBoundNotification = none ∨ ∃ n xn, xt.tcbBoundNotification = some n ∧
@@ -568,7 +568,7 @@ theorem JAtZ.recvSendJG (hZ : XferHZ L AR Z) (J : JAtZ (L := L) arI AR Z H Cs Ac
     exact UScalar.eq_of_val_eq hi2
   have hbb : bdg.bv = dd.senderBadge := by rw [hbdg, hbw]; exact hbadge
   -- the transfer
-  refine WP.spec_bind (J.xferStepGJ hZ hk (epDeq (.sendEP (sd'.bv :: q)) sd'.bv) hR1 hS1 hW1 F1 hsT ht (Ne.symm hts)
+  refine WP.spec_bind (J.xferStepGJ hk (epDeq (.sendEP (sd'.bv :: q)) sd'.bv) hR1 hS1 hW1 F1 hsT ht (Ne.symm hts)
     hks hkt hfs bdg (i != 0#u64) h1 hB1 hX1 hS1' hSg1) ?_
   rintro s2 ⟨x2, um2, y, σy, Gy, Jy, e2, hx2, hR2, hS2', hA2, hW2, F2, h2, hB2, hX2, hS2'', hSg2, f2, hksb, hKy, -, hyk⟩
   have hncn : ∀ {q' : Fl4Spec.ObjRef} {o' : Fl4Spec.KernelObject}, σ.kheap q' = some o' →
@@ -722,7 +722,7 @@ theorem JAtZ.recvSendJG (hZ : XferHZ L AR Z) (J : JAtZ (L := L) arI AR Z H Cs Ac
         obtain ⟨⟨⟨G0, hB0'⟩, -⟩, -⟩ := hS0.1.1
         exact Ipc.RelTopB.tcbT hB0' hkt
       obtain ⟨su, umu, Ju, hWu, hFu, -, -⟩ := JAtZ.bufRebaseX (Z := Z.mv Gy Z.vs)
-        (fun Z' s' a' σ' h => hZ Z' s' a' σ' h) Jy ht hth hkty hW5' hfoot
+        Jy ht hth hkty hW5' hfoot
       have hIu := Ju.xtop.irelK Ju.ks Ju.buf
       have htD := Ju.not_dead_of_st hsT hksy (by rw [hstd]; simp [tsCode])
       have hF : IFrame (L := L) Z.th su s5 := IRel.iframe_of hIu hWu fun b hb => CnW.oobj hIu.2.2.1 hb
@@ -867,7 +867,7 @@ theorem JAtZ.recvSendJG (hZ : XferHZ L AR Z) (J : JAtZ (L := L) arI AR Z H Cs Ac
         obtain ⟨⟨⟨G0, hB0'⟩, -⟩, -⟩ := hS0.1.1
         exact Ipc.RelTopB.tcbT hB0' hkt
       obtain ⟨su, umu, Ju, hWu, hFu, -, -⟩ := JAtZ.bufRebaseX (Z := Z.mv Gy Z.vs)
-        (fun Z' s' a' σ' h => hZ Z' s' a' σ' h) Jy ht hth hkty hW5' hfoot
+        Jy ht hth hkty hW5' hfoot
       have hIu := Ju.xtop.irelK Ju.ks Ju.buf
       have htD := Ju.not_dead_of_st hsT hksy (by rw [hstd]; simp [tsCode])
       have hF : IFrame (L := L) Z.th su s5 := IRel.iframe_of hIu hWu fun b hb => CnW.oobj hIu.2.2.1 hb
@@ -951,7 +951,7 @@ set_option maxHeartbeats 4000000 in
 /-- **`receive_ipc` from the head sender at `J`**, the sender neither calling
 nor faulted, the receiver (the current thread) without a bound notification
 (module docstring). -/
-theorem JAtZ.recvSendJ0 (hZ : XferHZ L AR Z) (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ)
+theorem JAtZ.recvSendJ0 (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ)
     {t : U64} (ht : t ∈ Z.T) {xt : Fl4Spec.Tcb} (hkt : σ.kheap t.bv = some (.tcb xt))
     (hrun : Fl4Spec.runnable xt.tcbState = true) {blk : Bool}
     (hbN : xt.tcbBoundNotification = none ∨ ∃ n xn, xt.tcbBoundNotification = some n ∧
@@ -968,7 +968,7 @@ theorem JAtZ.recvSendJ0 (hZ : XferHZ L AR Z) (J : JAtZ (L := L) arI AR Z H Cs Ac
     endpoint.receive_ipc st arI s a t (.Endpoint e cb c1 c2 c3 c4) blk rc ⦃ r =>
       ∃ z ∈ (Fl4Spec.receiveIpc (Z := Unit) t.bv (.endpointCap e.bv b rights) blk rc' σ).1,
         RJ (L := L) arI AR r.1 r.2 z.2 ⦄ := by
-  exact J.recvSendJG hZ ht hkt hrun hbN hct he hk hks hfs cb c1 c2 c3 c4 hrc hcall b rights
+  exact J.recvSendJG ht hkt hrun hbN hct he hk hks hfs cb c1 c2 c3 c4 hrc hcall b rights
     (J.recvPreN ht hkt hbN e cb c1 c2 c3 c4 hrc)
 
 end

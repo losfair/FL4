@@ -9,7 +9,7 @@ register, else the IPC buffer word `i + 1`, else 0); `fl4GetMr` is that
 read on the spec's state. The effects on state the abstract model does not
 keep (debug registers, the FPU image, the l4h timer queue) are not
 modelled: those invocations change no state but the frame contents of
-ReadFPU, for SetTimer, possibly `reprogram_timer` (FL4 sets its
+ReadFPU (the 2696 bytes at the frame offset, `fl4FpuToFrame`), for SetTimer, possibly `reprogram_timer` (FL4 sets its
 reprogram flag when the new deadline is the core's earliest; the spec sets
 it nondeterministically, never clearing it), and for ConfigureSingleStepping
 with no instruction count the trap flag (bit 8 of the target's `FLAGS`
@@ -77,6 +77,26 @@ def fl4BreakOnReadWrite : Data := 2
 def fl4NDebugRegs : Data := 4
 /-- `fl4_abi::consts::FPU_STATE_SIZE`, in bytes. -/
 def fl4FpuStateSize : Nat := 2696
+
+/-- **FL4's ReadFPU write of the FPU image into the user frame** (FL4
+extension, no l4v counterpart; the TCB's FPU image itself is not in the
+model). FL4 (crates/fl4-core tcb.rs `fpu_transfer` with `to_frame`) calls
+`restart_caller` (the spec's `setThreadState Restart` before the perform),
+`Arch::fpu_flush` (saves the live registers of the target into its TCB's
+FPU image; the registers, the FPU owner and the enable state are left as
+they were: fl4-arch-x86_64 `fpu::flush`/`flush_local` restore CR0.TS), then
+`copy_words` of `(FPU_STATE_SIZE + 7) / 8` = 337 words from the TCB's FPU
+image to `frame`, `frame + 8`, ... (`wrapping_add`): exactly the bytes at
+`frame + k` for `k < fl4FpuStateSize` = 2696. So only `underlyingMemory`
+changes, and only at addresses whose offset from `frame` (modulo `2^64`) is
+below `fl4FpuStateSize`; the IRQ masks, IRQ/time oracle positions,
+lastMachineTime, device state, `fpuEnabled` and `machineStateRest` are
+kept. The written values are left open (the FPU image is not modelled). -/
+def fl4FpuToFrame (frame : Word) : MachineMonad Unit := do
+  let um ← NonDet.gets MachineState.underlyingMemory
+  let um' ← NonDet.select
+    {um' : Word64 → Word8 | ∀ a : Word64, fl4FpuStateSize ≤ (a - frame).toNat → um' a = um a}
+  NonDet.modify fun ms => { ms with underlyingMemory := um' }
 
 section
 variable {Z : Type} [StateExt Z]
@@ -181,7 +201,7 @@ def decodeFl4TcbExt (l : Fl4TcbExtLabel) (args : List Data) (t : ObjRef) (excaps
 
 /-- The invocations. The debug registers, the FPU image and the l4h timer
 queue are not in the model: those invocations change no state (ReadFPU:
-the machine state, the frame it writes; SetTimer: possibly
+the frame's bytes it writes, `fl4FpuToFrame`; SetTimer: possibly
 `reprogram_timer`, set, never cleared, as FL4's reprogram flag after an
 insert at the head of the core's timer queue; ConfigureSingleStepping with
 no instruction count: the target's trap flag, cleared), and their replies
@@ -197,9 +217,9 @@ def invokeFl4Tcb : Fl4TcbInvocation → PMonad Z (List Data)
       let f ← getRegister .flags
       setRegister .flags (f &&& ~~~((1 : Word) <<< 8))
     NonDet.select {[0], [1]}
-  | .fpuTransfer _ toFrame _ =>
+  | .fpuTransfer _ toFrame frame =>
     if toFrame then NonDetE.liftE <| do
-      doMachineOp (NonDet.select (Set.univ : Set MachineState) >>= fun ms => NonDet.modify fun _ => ms)
+      doMachineOp (fl4FpuToFrame frame)
       return []
     else NonDetE.returnOk []
   | .setTimer .. => NonDetE.liftE <| do

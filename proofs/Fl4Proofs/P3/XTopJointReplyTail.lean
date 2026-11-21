@@ -15,12 +15,13 @@ XTopJointEntry's `handle_invocation_refinesJ`, replacing HandleTopX's
   `error_mrs_gen` with `JAtZ.setmrJ`, the debug word of
   `KERNEL_INVOCATION_REPORT_ERROR_IPC` by `JAtZ.userWrJ`, the message info)
   against the spec's `fl4ReplyFromKernelError true` (`fl4ReplyErr_eq`), from
-  `JAtZ` with the thread current to `JAt`; the buffer facts are the Thread
-  decode's [J] `hOK`/`hBC`/`hBPl` (XTopJointEntry's `JEntryGlob`).
+  `JAtZ` with the thread current to `JAt`; the buffer facts from the `JAtZ` state
+  itself (BufJ's `JAtZ.xferH`).
 * `JAtZ.replyFailJ`: the error reply when called (`ReplyHypMX.fail`'s
   program), at `JAt`.
 -/
 import Fl4Proofs.P3.XTopJointData
+import Fl4Proofs.P3.BufJ
 open Aeneas Aeneas.Std Result
 
 namespace Fl4Proofs.P3
@@ -268,10 +269,6 @@ theorem JAtZ.flTailJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {ct : U64
 set_option maxHeartbeats 64000000 in
 /-- **FL4's `reply_error` at `J`** (module docstring). -/
 theorem JAtZ.replyErrJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ)
-    (hOK : ∀ (Z' : XSets) s' a' σ', Z'.th = Z.th → XTopAt (L := L) AR Z' s' a' σ' → Endp.IpcBufCapOK σ')
-    (hBC : ∀ (Z' : XSets) s' a' σ', Z'.th = Z.th → XTopAt (L := L) AR Z' s' a' σ' → Endp.BufCover Z'.T Z'.B σ')
-    (hBPl : ∀ (Z' : XSets) s' a' σ', Z'.th = Z.th → XTopAt (L := L) AR Z' s' a' σ' →
-      Vs.BufPlaced (L := L) Z'.N Z'.C Z'.B Z'.c s' σ')
     {ct : U64} (hcur : σ.curThread = ct.bv) (e : error.SysError) (e' : Fl4Spec.SyscallError)
     (he : ErrRel (.Sys e) e') :
     syscall.reply_error st s ct e ⦃ s2 =>
@@ -281,8 +278,8 @@ theorem JAtZ.replyErrJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ)
   obtain ⟨htcb, x, hk⟩ := J.xtop.curTcb hcur
   obtain ⟨x', hk', hwx⟩ := J.buf ct hct
   rw [hk] at hk'; cases hk'
-  have hOK0 := hOK Z s a σ rfl J.xtop
-  have hBP0 := hBPl Z s a σ rfl J.xtop
+  have hOK0 := J.xferH.1
+  have hBP0 := J.xferH.2.2
   have hmsl : (Fl4Spec.msgFromSyscallError e').2.length ≤ 5 := msgErr_len e'
   have hflag : fl4_abi.config.KERNEL_INVOCATION_REPORT_ERROR_IPC = true := by
     unfold fl4_abi.config.KERNEL_INVOCATION_REPORT_ERROR_IPC; rfl
@@ -292,7 +289,7 @@ theorem JAtZ.replyErrJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ)
   refine WP.spec_bind (lookup_buf_full s σ J.xtop.rel.2.1.1 J.xtop.rel.2.1.2.1 htcb hk hOK0 true) ?_
   rintro w ⟨hw0, hwp⟩
   have hbm : ∀ q, Endp.ipcBufOf true x = some q → Endp.BufMap Z.B w q := fun q hq =>
-    hBC Z s a σ rfl J.xtop ct hct x true q hk hq w (hwp hwx q hq)
+    J.xferH.2.1 ct hct x true q hk hq w (hwp hwx q hq)
   have hfr : ∀ p, Endp.ipcBufOf true x = some p →
       ∀ k, k < 128 → (Endp.bufAddr p k).toNat % 8 = 0 ∧ Fl4Spec.inUserFrame (Endp.bufAddr p k) σ :=
     fun p hp k hk128 => ⟨Endp.bufAddr_aligned J.xtop.fin.1.2.ep (hbm p hp) k, buf_frame_of_ok hOK0 hk hp k hk128⟩
@@ -345,7 +342,7 @@ theorem JAtZ.replyErrJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ)
       by_cases e : q = ct.bv
       · subst e; rw [hkA] at hq; cases hq
       · simpa [σA, Notif.updK, e] using hq)
-  have hOK1 := hOK (Z.mv Z.G V1) s1 a σA rfl J1.xtop
+  have hOK1 := J1.xferH.1
   have hWOK : ∀ q, Endp.ipcBufOf true x = some q → ∀ i : U64, i.val < 128 →
       BufWordOK H σA (fl4BufA w i) := fun q hq i hi =>
     J1.bufWord hOK1 htcb hkA hq i.val hi (by rw [fl4BufA_bv, hwp hwx q hq])
@@ -455,10 +452,6 @@ set_option maxHeartbeats 4000000 in
 /-- **The error reply at `J`** (`ReplyHypMX.fail`'s program, module
 docstring). -/
 theorem JAtZ.replyFailJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ)
-    (hOK : ∀ (Z' : XSets) s' a' σ', Z'.th = Z.th → XTopAt (L := L) AR Z' s' a' σ' → Endp.IpcBufCapOK σ')
-    (hBC : ∀ (Z' : XSets) s' a' σ', Z'.th = Z.th → XTopAt (L := L) AR Z' s' a' σ' → Endp.BufCover Z'.T Z'.B σ')
-    (hBPl : ∀ (Z' : XSets) s' a' σ', Z'.th = Z.th → XTopAt (L := L) AR Z' s' a' σ' →
-      Vs.BufPlaced (L := L) Z'.N Z'.C Z'.B Z'.c s' σ')
     {ct : U64} (hcur : σ.curThread = ct.bv) (is_call : Bool) (e : error.SysError) (e' : Fl4Spec.SyscallError)
     (he : ErrRel (.Sys e) e') :
     ((if is_call then do
@@ -474,7 +467,7 @@ theorem JAtZ.replyFailJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ)
     refine ⟨trivial, ((), σ), ?_, J.xtop.relTop, Z, H, Cs, Ac, Lst, D, J⟩
     rw [Endp.nd_when_false (by simp)]; exact Set.mem_singleton _
   simp only [↓reduceIte]
-  refine WP.spec_bind (J.replyErrJ hOK hBC hBPl hcur e e' he) ?_
+  refine WP.spec_bind (J.replyErrJ hcur e e' he) ?_
   rintro s2 ⟨z, hz, hRT, hJ⟩
   refine (WP.spec_ok _).2 ⟨rfl, z, ?_, hRT, hJ⟩
   unfold Fl4Spec.NonDet.when

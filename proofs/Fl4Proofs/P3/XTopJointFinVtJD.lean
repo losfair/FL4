@@ -63,7 +63,7 @@ theorem JAtZ.finEptJD (hA : ArchRefines arI AR) {s : S} {a : A} {σ : Fl4Spec.St
   · have hl0 : lv ≠ 0#u64 := fun e => hnr ⟨rfl, e⟩
     simp only [objects.finalise_cap, objects.finalise_cap_object, ept.finalise, bind_ok, ↓reduceIte, hl0]
     refine WP.spec_bind (ept_unmap_vt hA a har asid va p lv true (X := VtOut (L := L) Z H Cs s σ)
-      (fun x hx => hx.al) (hV.ept Z H Cs Ac Lst D s a σ rfl J asid)) ?_
+      (fun x hx => hx.al) (hV.ept Z H Cs Ac Lst D s a σ rfl J _ hA'.isSlot (by rw [hcv]; simp [Vs.NativeCap]) asid)) ?_
     rintro ⟨s1, a1⟩ ⟨hw, har1⟩
     obtain ⟨J1, hSS, hks⟩ := J.vtJ hw har1
     try simp only [uncurry_apply_pair]
@@ -111,7 +111,7 @@ theorem JAtZ.frVtJD [Fl4Proofs.P1.PlainStore st] (hA : ArchRefines arI AR) (hK :
     objects.finalise_cap st arI s a c b false ⦃ VtPostD (L := L) arI AR Z H Cs D s σ c b ⦄ := by
   have hcv := capV_of_capAt hc
   have har := J.xtop.fin.1.1.2.2.2.2.2.2
-  rcases hk with ⟨p, sz, r, d, asid, va, rfl⟩ | ⟨f, l, o, rfl, -⟩
+  rcases hk with ⟨p, sz, r, d, asid, va, rfl⟩ | ⟨f, l, o, rfl, ho⟩
   · -- an EPT-mapped frame: `ept::unmap`, the spec's `unmap_page` doing nothing
     obtain ⟨e, hfv⟩ := hV.eptFr Z H Cs Ac Lst D s a σ rfl J _ p sz r d asid va hA'.isSlot hcv
     have hun : ((), σ) ∈ (Fl4Spec.unmapPage (Z := Unit) (frameSizeOf sz) asid.bv va.bv p.bv σ).1 := by
@@ -124,7 +124,7 @@ theorem JAtZ.frVtJD [Fl4Proofs.P1.PlainStore st] (hA : ArchRefines arI AR) (hK :
       ite_self]
     split
     · refine WP.spec_bind (ept_unmap_vt hA a har asid va p i false (X := VtOut (L := L) Z H Cs s σ)
-        (fun x hx => hx.al) (hV.ept Z H Cs Ac Lst D s a σ rfl J asid)) ?_
+        (fun x hx => hx.al) (hV.ept Z H Cs Ac Lst D s a σ rfl J _ hA'.isSlot (by rw [hcv]; simp [Vs.NativeCap]) asid)) ?_
       rintro ⟨s1, a1⟩ ⟨hw, har1⟩
       obtain ⟨J1, hSS, hks⟩ := J.vtJ hw har1
       try simp only [uncurry_apply_pair]
@@ -133,7 +133,7 @@ theorem JAtZ.frVtJD [Fl4Proofs.P1.PlainStore st] (hA : ArchRefines arI AR) (hK :
       try simp only [P1.plain_retire, ite_self, bind_ok, uncurry_apply_pair]
       exact (WP.spec_ok _).2 ⟨rfl, trivial, trivial, hm, ⟨Ac, Lst, J1⟩, hSS, hks⟩
   · -- an owned IO port cap: `revoke_ports`
-    have P := hV.io Z H Cs Ac Lst D s a σ rfl J
+    have P := hV.io Z H Cs Ac Lst D s a σ rfl J _ hA'.isSlot (by rw [hcv]; exact ho)
     obtain ⟨c', ac, hc', hca, -⟩ := hDS.1.1.abs_cap hA'
     have hcw : CapWf (.IoPort f l o) := by rw [hc] at hc'; rw [eq_of_ok_eq hc']; exact hca.1
     simp only [objects.finalise_cap, objects.finalise_cap_object, bind_ok]

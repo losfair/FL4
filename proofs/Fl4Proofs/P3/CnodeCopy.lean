@@ -252,6 +252,146 @@ def invSlots : Fl4Spec.CnodeInvocation → List Fl4Spec.CslotPtr
   | .rotateCall _ _ a b c => [a, b, c]
   | _ => []
 
+/-- **What a CNode-only step's written slots owe to the liveness invariant**
+(KENTRY-PLAN g2g (a')): every non-null cap written into the invocation's slots
+`W` has the shape of a non-null cap that was in `W` before, and every non-null
+cap that was in `W` before is still there up to its shape (a copy keeps the
+source, a move or rotate moves it). `shape` keeps a thread or zombie cap and
+a CNode cap's object, so `LiveJ` is kept (XTopJointLiveStep). -/
+def CnLive (m m' : U64 → U64) (W : List Fl4Spec.CslotPtr) : Prop :=
+  (∀ sl ∈ W, capV m' (cslotAddr sl) ≠ .Null → ∃ sl0 ∈ W, capV m (cslotAddr sl0) ≠ .Null ∧
+      shape (capV m' (cslotAddr sl)) = shape (capV m (cslotAddr sl0))) ∧
+  (∀ sl0 ∈ W, capV m (cslotAddr sl0) ≠ .Null → ∃ sl ∈ W, capV m' (cslotAddr sl) ≠ .Null ∧
+      shape (capV m' (cslotAddr sl)) = shape (capV m (cslotAddr sl0)))
+
+/-- The invocation's slot a CNode-only step may leave null: a move's source,
+a rotate's first slot when it is not the third (the second `cap_move`'s
+source). The spec clears their original bits (`capMove`). -/
+def NullSrc : Fl4Spec.CnodeInvocation → Fl4Spec.CslotPtr → Prop
+  | .moveCall _ a _, sl => sl = a
+  | .rotateCall _ _ a _ d, sl => sl = a ∧ a ≠ d
+  | _, _ => False
+
+theorem shape_fullF (c d : capability.Cap) : shape ((fullF c d).getD c) = shape c := by
+  unfold fullF; split
+  · split <;> simp [shape]
+  · rfl
+
+theorem fullF_ne_null {c : capability.Cap} (d : capability.Cap) (h : c ≠ .Null) : (fullF c d).getD c ≠ .Null := by
+  unfold fullF; split
+  · split
+    · simp
+    · exact h
+  · exact h
+
+theorem cnLive_ins {m m' : U64 → U64} {a b : Fl4Spec.CslotPtr} {srcC nc : capability.Cap}
+    (hs : capV m (cslotAddr a) = srcC) (hsn : srcC ≠ .Null) (hd : capV m (cslotAddr b) = .Null)
+    (hd' : capV m' (cslotAddr b) = nc) (hs' : capV m' (cslotAddr a) = (fullF srcC nc).getD srcC)
+    (hsh : shape nc = shape srcC) : CnLive m m' [a, b] := by
+  refine ⟨fun sl hsl hn => ?_, fun sl hsl hn => ?_⟩
+  · simp only [List.mem_cons, List.not_mem_nil, or_false] at hsl
+    rcases hsl with e | e <;> subst sl
+    · exact ⟨a, by simp, by rw [hs]; exact hsn, by rw [hs', hs, shape_fullF]⟩
+    · exact ⟨a, by simp, by rw [hs]; exact hsn, by rw [hd', hs, hsh]⟩
+  · simp only [List.mem_cons, List.not_mem_nil, or_false] at hsl
+    rcases hsl with e | e <;> subst sl
+    · exact ⟨a, by simp, by rw [hs']; exact fullF_ne_null nc hsn, by rw [hs', hs, shape_fullF]⟩
+    · exact absurd hd hn
+
+theorem nullSrc_ins {m' : U64 → U64} {c : Fl4Spec.Cap} {a b : Fl4Spec.CslotPtr} {srcC nc : capability.Cap}
+    (hsn : srcC ≠ .Null) (hnn : nc ≠ .Null)
+    (hd' : capV m' (cslotAddr b) = nc) (hs' : capV m' (cslotAddr a) = (fullF srcC nc).getD srcC) :
+    ∀ sl ∈ invSlots (.insertCall c a b), capV m' (cslotAddr sl) = .Null → NullSrc (.insertCall c a b) sl := by
+  intro sl hsl h
+  simp only [invSlots, List.mem_cons, List.not_mem_nil, or_false] at hsl
+  rcases hsl with e | e <;> subst sl
+  · rw [hs'] at h; exact absurd h (fullF_ne_null nc hsn)
+  · rw [hd'] at h; exact absurd h hnn
+
+theorem cnLive_mov {m m' : U64 → U64} {a b : Fl4Spec.CslotPtr} {srcC nc : capability.Cap}
+    (hs : capV m (cslotAddr a) = srcC) (hsn : srcC ≠ .Null) (hd : capV m (cslotAddr b) = .Null)
+    (hd' : capV m' (cslotAddr b) = nc) (hnn : nc ≠ .Null) (hs' : capV m' (cslotAddr a) = .Null)
+    (hsh : shape nc = shape srcC) : CnLive m m' [a, b] := by
+  refine ⟨fun sl hsl hn => ?_, fun sl hsl hn => ?_⟩
+  · simp only [List.mem_cons, List.not_mem_nil, or_false] at hsl
+    rcases hsl with e | e <;> subst sl
+    · exact absurd hs' hn
+    · exact ⟨a, by simp, by rw [hs]; exact hsn, by rw [hd', hs, hsh]⟩
+  · simp only [List.mem_cons, List.not_mem_nil, or_false] at hsl
+    rcases hsl with e | e <;> subst sl
+    · exact ⟨b, by simp, by rw [hd']; exact hnn, by rw [hd', hs, hsh]⟩
+    · exact absurd hd hn
+
+theorem nullSrc_mov {m' : U64 → U64} {c : Fl4Spec.Cap} {a b : Fl4Spec.CslotPtr} {nc : capability.Cap}
+    (hnn : nc ≠ .Null) (hd' : capV m' (cslotAddr b) = nc) :
+    ∀ sl ∈ invSlots (.moveCall c a b), capV m' (cslotAddr sl) = .Null → NullSrc (.moveCall c a b) sl := by
+  intro sl hsl h
+  simp only [invSlots, List.mem_cons, List.not_mem_nil, or_false] at hsl
+  rcases hsl with e | e <;> subst sl
+  · rfl
+  · rw [hd'] at h; exact absurd h hnn
+
+/-- A rotate whose source is its destination (`cap_swap`). -/
+theorem cnLive_swap {m m' : U64 → U64} {a b d : Fl4Spec.CslotPtr} {srcC pivC ns np : capability.Cap}
+    (had : cslotAddr d = cslotAddr a)
+    (hs : capV m (cslotAddr a) = srcC) (hsn : srcC ≠ .Null) (hp : capV m (cslotAddr b) = pivC) (hpn : pivC ≠ .Null)
+    (ha' : capV m' (cslotAddr a) = np) (hb' : capV m' (cslotAddr b) = ns) (hnsn : ns ≠ .Null) (hnpn : np ≠ .Null)
+    (hshs : shape ns = shape srcC) (hshp : shape np = shape pivC) : CnLive m m' [a, b, d] := by
+  refine ⟨fun sl hsl hn => ?_, fun sl hsl hn => ?_⟩
+  · simp only [List.mem_cons, List.not_mem_nil, or_false] at hsl
+    rcases hsl with e | e | e <;> subst sl
+    · exact ⟨b, by simp, by rw [hp]; exact hpn, by rw [ha', hp, hshp]⟩
+    · exact ⟨a, by simp, by rw [hs]; exact hsn, by rw [hb', hs, hshs]⟩
+    · exact ⟨b, by simp, by rw [hp]; exact hpn, by rw [had, ha', hp, hshp]⟩
+  · simp only [List.mem_cons, List.not_mem_nil, or_false] at hsl
+    rcases hsl with e | e | e <;> subst sl
+    · exact ⟨b, by simp, by rw [hb']; exact hnsn, by rw [hb', hs, hshs]⟩
+    · exact ⟨a, by simp, by rw [ha']; exact hnpn, by rw [ha', hp, hshp]⟩
+    · exact ⟨b, by simp, by rw [hb']; exact hnsn, by rw [hb', had, hs, hshs]⟩
+
+theorem nullSrc_swap {m' : U64 → U64} {c1 c2 : Fl4Spec.Cap} {a b d : Fl4Spec.CslotPtr} {ns np : capability.Cap}
+    (had : cslotAddr d = cslotAddr a) (ha' : capV m' (cslotAddr a) = np) (hb' : capV m' (cslotAddr b) = ns)
+    (hnsn : ns ≠ .Null) (hnpn : np ≠ .Null) :
+    ∀ sl ∈ invSlots (.rotateCall c1 c2 a b d), capV m' (cslotAddr sl) = .Null →
+      NullSrc (.rotateCall c1 c2 a b d) sl := by
+  intro sl hsl h
+  simp only [invSlots, List.mem_cons, List.not_mem_nil, or_false] at hsl
+  rcases hsl with e | e | e <;> subst sl
+  · rw [ha'] at h; exact absurd h hnpn
+  · rw [hb'] at h; exact absurd h hnsn
+  · rw [had, ha'] at h; exact absurd h hnpn
+
+/-- A rotate through two moves (pivot to destination, source to pivot). -/
+theorem cnLive_rot {m m' : U64 → U64} {a b d : Fl4Spec.CslotPtr} {srcC pivC ns np : capability.Cap}
+    (hs : capV m (cslotAddr a) = srcC) (hsn : srcC ≠ .Null) (hp : capV m (cslotAddr b) = pivC) (hpn : pivC ≠ .Null)
+    (hd : capV m (cslotAddr d) = .Null)
+    (ha' : capV m' (cslotAddr a) = .Null) (hb' : capV m' (cslotAddr b) = ns) (hd' : capV m' (cslotAddr d) = np)
+    (hnsn : ns ≠ .Null) (hnpn : np ≠ .Null)
+    (hshs : shape ns = shape srcC) (hshp : shape np = shape pivC) : CnLive m m' [a, b, d] := by
+  refine ⟨fun sl hsl hn => ?_, fun sl hsl hn => ?_⟩
+  · simp only [List.mem_cons, List.not_mem_nil, or_false] at hsl
+    rcases hsl with e | e | e <;> subst sl
+    · exact absurd ha' hn
+    · exact ⟨a, by simp, by rw [hs]; exact hsn, by rw [hb', hs, hshs]⟩
+    · exact ⟨b, by simp, by rw [hp]; exact hpn, by rw [hd', hp, hshp]⟩
+  · simp only [List.mem_cons, List.not_mem_nil, or_false] at hsl
+    rcases hsl with e | e | e <;> subst sl
+    · exact ⟨b, by simp, by rw [hb']; exact hnsn, by rw [hb', hs, hshs]⟩
+    · exact ⟨d, by simp, by rw [hd']; exact hnpn, by rw [hd', hp, hshp]⟩
+    · exact absurd hd hn
+
+theorem nullSrc_rot {m' : U64 → U64} {c1 c2 : Fl4Spec.Cap} {a b d : Fl4Spec.CslotPtr} {ns np : capability.Cap}
+    (had : a ≠ d) (hb' : capV m' (cslotAddr b) = ns) (hd' : capV m' (cslotAddr d) = np)
+    (hnsn : ns ≠ .Null) (hnpn : np ≠ .Null) :
+    ∀ sl ∈ invSlots (.rotateCall c1 c2 a b d), capV m' (cslotAddr sl) = .Null →
+      NullSrc (.rotateCall c1 c2 a b d) sl := by
+  intro sl hsl h
+  simp only [invSlots, List.mem_cons, List.not_mem_nil, or_false] at hsl
+  rcases hsl with e | e | e <;> subst sl
+  · exact ⟨rfl, had⟩
+  · rw [hb'] at h; exact absurd h hnsn
+  · rw [hd'] at h; exact absurd h hnpn
+
 /-- **FL4's run of a CNode copy, move or rotate**, for the primitive-step
 trace (built downstream, StepSem's `cslot`): the caller's restart, then
 writes in slot words only, every slot's cap kept but at the invocation's
@@ -267,7 +407,9 @@ def CnTrace (th : TypedHeap) (ct : U64) (σ : Fl4Spec.State Unit) (root : capabi
       ∀ sl ∈ invSlots inv, ∃ p, sl.1 = p.bv ∧ DestLive th (L.mem s2) (L.ksb s) p) ∧
     (∀ σ1 σ', Fl4Spec.setThreadState (Z := Unit) σ.curThread .restart σ = ({((), σ1)}, False) →
       (Fl4Spec.invokeCnode (Z := Unit) inv).run σ1 = ({(.ok (), σ')}, False) → UtSrc th (L.mem s2) (L.mem s') σ1 σ') ∧
-    Vs.VsSlotsT th (L.mem s2) (L.mem s') ∧ CoverKept th (L.mem s2) (L.mem s') ∧ UtKept th (L.mem s2) (L.mem s')
+    Vs.VsSlotsT th (L.mem s2) (L.mem s') ∧ (CoverKept th (L.mem s2) (L.mem s') ∧ UtKept th (L.mem s2) (L.mem s')) ∧
+    CnLive (L.mem s2) (L.mem s') (invSlots inv) ∧
+    (∀ sl ∈ invSlots inv, capV (L.mem s') (cslotAddr sl) = .Null → NullSrc inv sl)
 
 theorem InvPost.of_run {th : TypedHeap} {σ : Fl4Spec.State Unit} {G : MdbGhost}
     {m m' : Fl4Spec.SEMonad Unit Fl4Spec.CnodeInvocation} (h : m.run σ = m'.run σ) {s : S}
@@ -519,10 +661,12 @@ theorem decode_copy_rel (th : TypedHeap) (s : S) (σ : Fl4Spec.State Unit) (G : 
                   exact isPF_ut hI1 ((hM1.members _).2 ⟨hAs.isSlot, srcC, hsc2, hsn⟩) (capV_of_capAt hsc2) hu _),
             vsSlotsT_insert hAs.isSlot htr.2.1 htr.2.2.1 (by rw [capV_of_capAt hsc2]; exact htr.2.2.2)
               (by rw [capV_of_capAt hsc2]; exact copied_vcap hr2) (by rw [capV_of_capAt hsc2]; exact copied_tabun hr2)
-              (by rw [capV_of_capAt hsc2]; exact hkey),
+              (by rw [capV_of_capAt hsc2]; exact hkey) (by rw [capV_of_capAt hsc2]; exact copied_nat hr2),
             coverUt_ins hAs.isSlot hsd (capV_of_capAt hsc2) (capV_of_capAt hdc2) htr.2.2.1 htr.2.2.2 htr.2.1 hsh
               (copied_ut hr2) (fun _ _ _ _ e => by
-                have h := hsc2; rw [capAt_words, e] at h; exact (decode_encWf h).2)⟩
+                have h := hsc2; rw [capAt_words, e] at h; exact (decode_encWf h).2),
+            cnLive_ins (capV_of_capAt hsc2) hsn (capV_of_capAt hdc2) htr.2.2.1 htr.2.2.2 hsh,
+            nullSrc_ins hsn hnn htr.2.2.1 htr.2.2.2⟩
           rw [run_ofExcept]; simp [finishRes, hann]
         · -- move
           simp only [↓reduceIte]
@@ -563,11 +707,13 @@ theorem decode_copy_rel (th : TypedHeap) (s : S) (σ : Fl4Spec.State Unit) (G : 
                   rw [capV_of_capAt hsc2, ← copied_ut hr2 hu, h]) htr.2.1,
             vsSlotsT_move hAs.isSlot htr.2.1 htr.2.2.1 htr.2.2.2
               (by rw [capV_of_capAt hsc2]; exact copied_vcap hr2) (by rw [capV_of_capAt hsc2]; exact copied_tabun hr2)
-              (by rw [capV_of_capAt hsc2]; exact hkey),
+              (by rw [capV_of_capAt hsc2]; exact hkey) (by rw [capV_of_capAt hsc2]; exact copied_nat hr2),
             coverUt_mov hAd.isSlot hsd (capV_of_capAt hsc2) (capV_of_capAt hdc2) htr.2.2.1 htr.2.2.2 htr.2.1 hsh
               hAs.isSlot (fun _ _ _ _ hc _ _ hs => by
                 have hu : isUt srcC = true := by rw [hs]; rfl
-                rw [copied_ut hr2 hu, hs] at hc; cases hc; exact ⟨rfl, Or.inl le_rfl⟩)⟩
+                rw [copied_ut hr2 hu, hs] at hc; cases hc; exact ⟨rfl, Or.inl le_rfl⟩),
+            cnLive_mov (capV_of_capAt hsc2) hsn (capV_of_capAt hdc2) htr.2.2.1 hnn htr.2.2.2 hsh,
+            nullSrc_mov hnn htr.2.2.1⟩
           rw [run_ofExcept]; simp [finishRes, hann]
 
 /-- **FL4's CNode Copy, Mint, Move and Mutate refine l4v's**: for labels

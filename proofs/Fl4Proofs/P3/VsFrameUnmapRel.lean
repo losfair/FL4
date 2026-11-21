@@ -562,7 +562,7 @@ theorem frame_unmap_rel [Fl4Proofs.P1.PlainStore st] {A : Type} {ar : machine.Ar
     rintro s5 ⟨hU5, hF5, hcv5⟩
     rw [setCnodeSlot_self hkc1 hcs] at hU5
     refine (WP.spec_ok _).2 ⟨rfl, _, σ1, rfl, ?_, hU5, (SlotFoot.of_same hSS1 _).trans hF5,
-      by rw [hcv5]; exact ⟨⟨rfl, rfl, rfl⟩, fun _ _ _ _ _ h => by simp only [VCapOK, frameCapOf] at h ⊢; first | exact h | exact h.2.1 | exact ⟨fun e => absurd e (by decide), h.2.1, fun e => absurd e (by decide)⟩ | exact ⟨fun e => absurd e (by decide), h.2.1, trivial⟩ | exact h.2 | exact ⟨fun e => absurd e (by decide), h.2⟩⟩, KFoot.sts hkt' _⟩
+      by rw [hcv5]; exact ⟨⟨rfl, rfl, rfl, rfl⟩, fun _ _ _ _ _ h => by simp only [VCapOK, frameCapOf] at h ⊢; first | exact h | exact h.2.1 | exact ⟨fun e => absurd e (by decide), h.2.1, fun e => absurd e (by decide)⟩ | exact ⟨fun e => absurd e (by decide), h.2.1, trivial⟩ | exact h.2 | exact ⟨fun e => absurd e (by decide), h.2⟩⟩, KFoot.sts hkt' _⟩
     unfold MapSpec
     dsimp only
     rw [← hcur, nd_bind_one (Notif.setThreadState_eq .restart hkt'), performUnmap_none]
@@ -604,7 +604,7 @@ theorem frame_unmap_rel [Fl4Proofs.P1.PlainStore st] {A : Type} {ar : machine.Ar
     refine WP.spec_bind (fin_cap s3 a3 σu hU3 ((hall' _ _ hu).trans hkc1) (hk3.trans hk1)) ?_
     rintro s5 ⟨hU5, hF5, hcv5⟩
     refine (WP.spec_ok _).2 ⟨rfl, _, _, rfl, ?_, hU5, (SlotFoot.of_same hSS1 _).trans (hF3.trans hF5),
-      by rw [hcv5]; exact ⟨⟨rfl, rfl, rfl⟩, fun _ _ _ _ _ h => by simp only [VCapOK, frameCapOf] at h ⊢; first | exact h | exact h.2.1 | exact ⟨fun e => absurd e (by decide), h.2.1, fun e => absurd e (by decide)⟩ | exact ⟨fun e => absurd e (by decide), h.2.1, trivial⟩ | exact h.2 | exact ⟨fun e => absurd e (by decide), h.2⟩⟩,
+      by rw [hcv5]; exact ⟨⟨rfl, rfl, rfl, rfl⟩, fun _ _ _ _ _ h => by simp only [VCapOK, frameCapOf] at h ⊢; first | exact h | exact h.2.1 | exact ⟨fun e => absurd e (by decide), h.2.1, fun e => absurd e (by decide)⟩ | exact ⟨fun e => absurd e (by decide), h.2.1, trivial⟩ | exact h.2 | exact ⟨fun e => absurd e (by decide), h.2⟩⟩,
       (KFoot.sts hkt' _).trans (hK3.trans (KFoot.cnode ((hall' _ _ hu).trans hkc1) hwf idx nc))⟩
     unfold MapSpec
     dsimp only

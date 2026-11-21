@@ -28,9 +28,22 @@ def SlotFoot (th : TypedHeap) (m m' : U64 → U64) (x : U64) : Prop :=
   ∀ y, IsSlot th y → m' (wordOf y 16#u64) = m (wordOf y 16#u64) ∧ m' (wordOf y 24#u64) = m (wordOf y 24#u64) ∧
     (y ≠ x → m' y = m y ∧ m' (wordOf y 8#u64) = m (wordOf y 8#u64))
 
+/-- **The VT-x flag of a cap** (g2a, `NativeCap c ↔ vtF c = false`): a VCPU
+or EPT cap, a frame cap mapped into an EPT (`e && m`, the EPT flag first so a
+frame cap with the flag clear computes to `false` whatever its mapping), an
+IO-port cap owned by a VCPU. -/
+def vtF : capability.Cap → Bool
+  | .Vcpu _ => true
+  | .Ept .. => true
+  | .Frame _ _ _ _ m e _ _ => e && m
+  | .IoPort _ _ o => decide (o ≠ 0#u64)
+  | _ => false
+
 /-- Two caps alike for the MDB tests and finality: the same shape, object
-key and badge (a remapped frame or table cap). -/
-def MdbLike (c' c : capability.Cap) : Prop := shape c' = shape c ∧ okey c' = okey c ∧ badgeF c' = badgeF c
+key and badge (a remapped frame or table cap), and the same VT-x flag
+(`vtF`, g2a: a remap keeps a native cap native). -/
+def MdbLike (c' c : capability.Cap) : Prop :=
+  shape c' = shape c ∧ okey c' = okey c ∧ badgeF c' = badgeF c ∧ vtF c' = vtF c
 
 /-- The physical address of `p` in mask `m` (`paddr p & m = paddr p`). -/
 def PaM (p m : U64) : Prop :=
@@ -60,6 +73,31 @@ def VCapOK (P L4 L3 L2 L1 : Set U64) : capability.Cap → Prop
   | .Frame p sz _ _ m _ a v => (m = true → a ≠ 0#u64) ∧ PaM p (frameMaskOf sz) ∧ (m = true → UserV v)
   | .AsidPool p b => (p ∈ P ∧ p ≠ 0#u64) ∧ b.val % 512 = 0 ∧ b.val < 2 ^ 20
   | _ => True
+
+/-- **A cap of the native scope** (G2 `nativeScopeX`, [S] VT-x out of scope):
+no VCPU or EPT cap, no frame cap mapped into an EPT, no IO-port cap owned by
+a VCPU. Every native step makes only such caps (a retype of a native type, an
+IO-port control issue with no owner, a frame map into a native VSpace, the
+copies, mints, moves and derivations of a native cap); only the VT-x
+invocations (`JVtxScope`) make the others. -/
+def NativeCap : capability.Cap → Prop
+  | .Vcpu _ => False
+  | .Ept .. => False
+  | .Frame _ _ _ _ m e _ _ => ¬ (m = true ∧ e = true)
+  | .IoPort _ _ o => o = 0#u64
+  | _ => True
+
+theorem NativeCap.null : NativeCap .Null := trivial
+
+theorem nativeCap_iff (c : capability.Cap) : NativeCap c ↔ vtF c = false := by
+  cases c with
+  | Frame p sz r d m e a v => cases m <;> cases e <;> simp [NativeCap, vtF]
+  | IoPort f l o => simp only [NativeCap, vtF, decide_eq_false_iff_not, not_not]
+  | _ => simp [NativeCap, vtF]
+
+/-- Nativeness is read off the VT-x flag (`MdbLike`'s last part). -/
+theorem NativeCap.of_vtF {c c' : capability.Cap} (h : NativeCap c) (e : vtF c' = vtF c) : NativeCap c' :=
+  (nativeCap_iff c').2 (e.trans ((nativeCap_iff c).1 h))
 
 /-- **A remapped cap**: alike for the MDB, and well placed when the old one
 was (the remaps' posts; `VsCapsIn.recap`). -/

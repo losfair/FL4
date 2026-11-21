@@ -378,6 +378,7 @@ theorem JAtZ.runPostJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {t : U64
     · rw [hkp7 p hp]; exact OL.refl _)
   have hfk : FK σ σ7 := ⟨e7_csc, e7_idle, e7_isc⟩
   have hDbg := J.kw_dbg (P1.Foot.trans hfoot6 hfoot7)
+  have hKd := J.kw_dbgKeep (P1.Foot.trans hfoot6 hfoot7)
   have hdead : ∀ q ∈ D, DeadP (L := L) H s7 q := fun q hq =>
     J.deadP_sc_stepQ hX7 hW7 hK7 (fun _ hp => absurd (show q = t from P1.eq_of_bv hp) (fun e => htD (e ▸ hq)))
       hlk hfk hAI.1 hY' ((hYK6.trans (YKeep.of_kheap hke)).dk q.bv) (fun h => h) (J.jcov.dead q hq)
@@ -387,7 +388,7 @@ theorem JAtZ.runPostJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {t : U64
     (J.sc_utc hW7 hK7 hDbg) hNSC hI7 hcur7 hown7 hoff hAI (BlockedScActive.tkw J.bsa hK7 fun p y1 n1 hp ha => by
       by_cases e : p = t.bv
       · rw [e, hk7] at hp; cases hp
-      · rw [hkp7 _ e] at hp; exact ⟨y1, hp, ha, fun _ h => h, id⟩) hcr7 hblk⟩
+      · rw [hkp7 _ e] at hp; exact ⟨y1, hp, ha, fun _ h => h, id⟩) hcr7 hblk hKd (J.idleW_keep hX7.fin.1.1.1 hfk.2.1 hfk.2.2).1 J.zD⟩
 
 end
 

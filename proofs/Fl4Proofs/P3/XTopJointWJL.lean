@@ -30,6 +30,12 @@ open fl4_core Classical Fl4Proofs.P3.Vs Fl4Proofs.P3.Notif Fl4Proofs.P3.Endp Fl4
 
 noncomputable section
 
+/-- The spec's idle thread kept by an outcome of a `GK` step (SpecGlobFK:
+every deletion step, `suspend`, `capInsert`, …). -/
+theorem gk_idle {α : Type} {m : Fl4Spec.NonDet (Fl4Spec.State Unit) α} (h : Vs.GK m)
+    {σ : Fl4Spec.State Unit} {x : α × Fl4Spec.State Unit} (hx : x ∈ (m σ).1) : x.2.idleThread = σ.idleThread :=
+  congrArg Prod.snd (h σ x hx)
+
 /-- A zombie alike a cap names the containers the cap names. -/
 theorem refsObj_of_alike {p zt n q : U64} {c : capability.Cap} (hal : CapAlike (.Zombie p zt n) c)
     (hr : RefsObj q c) : RefsObj q (.Zombie p zt n) := by
@@ -57,8 +63,9 @@ abbrev RzJ (H : P1.Heap) : S → A → Fl4Spec.State Unit → MdbGhost → U64 �
 docstring). -/
 def LiveOther (th : TypedHeap) (s : S) (σ : Fl4Spec.State Unit) (G : MdbGhost) (x : U64) : Prop :=
   (∀ q i, IsSlotAt th q i → slotOf q i ≠ x → InUse (L.mem s) σ (slotOf q i) →
-    ∃ y ∈ G.chains.flatten, y ≠ x ∧ RefsObj q (capV (L.mem s) y)) ∧
+    (∃ y ∈ G.chains.flatten, y ≠ x ∧ RefsObj q (capV (L.mem s) y)) ∨ KsSlot (L.ksb s) (slotOf q i)) ∧
   (∀ n, dbgNth (L.mem s) n (dbgHead (L := L) s) ≠ 0#u64 →
+    (dbgNth (L.mem s) n (dbgHead (L := L) s)).bv ≠ σ.idleThread →
     ∃ y ∈ G.chains.flatten, y ≠ x ∧ capV (L.mem s) y = .Thread (dbgNth (L.mem s) n (dbgHead (L := L) s)))
 
 variable {AR : A → Fl4Spec.Cr3 → Prop} {th : TypedHeap}
@@ -76,7 +83,10 @@ theorem JAtZ.zombieWD {Z : XSets} {H : P1.Heap} {Cs Ac : Set U64} {Lst : U64 →
     (hal : CapAlike (.Zombie p zt n) (capV (L.mem s) (cslotAddr sl)))
     (hoth : ∀ y, IsSlot Z.th y → y ≠ cslotAddr sl → capV (L.mem s') y = capV (L.mem s) y)
     (hmS : MdbStep (L.mem s) G (L.mem s') G) :
-    ∃ V2 Ac' Lst', JAtZ (L := L) arI AR (Z.mv G V2) H Cs Ac' Lst' D s' a σ' ∧ L.ksb s' = L.ksb s ∧
+    ∃ V2 Ac' Lst', XTopAt (L := L) AR ((Z.mv G V).mv G (Z.mv G V).vs) s' a σ' ∧
+      (∀ q ∈ D, DeadP (L := L) H s' q) ∧
+      (LiveDN (L := L) Z.th H Cs G s' σ' → (∀ p ∈ ZTcb (L := L) Z.th s', p ∈ D) →
+        JAtZ (L := L) arI AR (Z.mv G V2) H Cs Ac' Lst' D s' a σ') ∧ L.ksb s' = L.ksb s ∧
       Vs.NoSwitch σ' ∧ SpecGlob σ' := by
   have hnk := Ipc.nkn_setCap _ _ σ ((), σ') (mem_of_single hsc)
   obtain ⟨⟨V2, hX2⟩, -, -, -⟩ := slotHypW_XZ AR (Z.mv G V) (L.ksb s) s s' a σ σ' G G
@@ -111,9 +121,11 @@ theorem JAtZ.zombieWD {Z : XSets} {H : P1.Heap} {Cs Ac : Set U64} {Lst : U64 →
       · have := hJ.cnode p _ hc; rw [hHp] at this; cases this
   have hvT : Vs.VsSlotsT Z.th (L.mem s) (L.mem s') :=
     Vs.VsSlotsT.of_some (· = cslotAddr sl) (fun y hy hn => hoth y hy hn)
-      (fun y _ e _ _ _ _ _ _ => by rw [e, hz]; trivial) fun y _ e _ _ => by rw [e, hz]; trivial
-  exact ⟨V, Ac', Lst', J.cs_frameB hks (J.xtop.vs_backC hX2 (SlotFrame2.writesIn hF) hnk) hkb2 (J.bfK hfk2 hvT) hC R
-    (J.vsc.step hvT), hks, (ak_setCap' _ _).noSwitch (mem_of_single hsc) hns, hsg2⟩
+      (fun y _ e _ _ _ _ _ _ => by rw [e, hz]; trivial) (fun y _ e _ _ => by rw [e, hz]; trivial) fun y _ e _ => by rw [e, hz]; trivial
+  exact ⟨V, Ac', Lst', J.xtop.vs_backC hX2 (SlotFrame2.writesIn hF) hnk, fun q hq => R.jcov.dead q hq,
+    fun hlv hzD => J.cs_frameB hks (J.xtop.vs_backC hX2 (SlotFrame2.writesIn hF) hnk) hkb2 (J.bfK hfk2 hvT) hC R
+    (J.vsc.step hvT) (J.ext.step hvT (J.vkeep_slot ((SlotFrame2.writesIn hF).mono fun b hb => slotWd_range J.xtop.rel.1 hb)))
+    hlv hzD, hks, (ak_setCap' _ _).noSwitch (mem_of_single hsc) hns, hsg2⟩
 
 set_option maxHeartbeats 4000000 in
 /-- **A zombie written over a cap alike it keeps `WJL`** (module docstring). -/
@@ -129,8 +141,9 @@ theorem jZombieHypL (Z : XSets) (H : P1.Heap) (Cs : Set U64) (kb : U64) (hth : Z
   -- the dead set: the TCB zombies' TCBs and the thread's
   set E : Set U64 := ZTcb (L := L) Z.th s ∪ {q | capV (L.mem s) (cslotAddr sl) = .Thread q} with hE
   have J0 := J.addDeadSet (E := E) (fun q hq => hq.elim (hL.ztcb q) (fun h => (hRz q h).1))
-  obtain ⟨V2, Ac', Lst', J', hks, hns', hsg'⟩ := J0.zombieWD arI hns hsg hD1 hD2 hF hsc hA hxn hz hal hoth hmS
-  have hdead : ∀ q ∈ E, DeadP (L := L) H s' q := fun q hq => J'.jcov.dead q (Or.inr hq)
+  obtain ⟨V2, Ac', Lst', hXb, hdead0, mk, hks, hns', hsg'⟩ :=
+    J0.zombieWD arI hns hsg hD1 hD2 hF hsc hA hxn hz hal hoth hmS
+  have hdead : ∀ q ∈ E, DeadP (L := L) H s' q := fun q hq => hdead0 q (Or.inr hq)
   have hpp : PPR0 σ' := hp0.of_ppk (PPK.of_cnK (Ipc.nkn_setCap _ _ σ ((), σ') (mem_of_single hsc)))
   have hdk := J.slotFrame_dbgKeep hF
   have hTz : P1.DbgTz st (P1.Heap.tcbs H) Cs s := ⟨J.blk.2.2.1.2.2.tm.dn, J.blk.2.2.1.2.2.tm.dp, J.blk.2.2.1.2.2.tm.dh⟩
@@ -154,16 +167,44 @@ theorem jZombieHypL (Z : XSets) (H : P1.Heap) (Cs : Set U64) (kb : U64) (hth : Z
       rw [hhd]
       exact dbgNth_keep (fun y hy => hdk.2 _ (Or.inl ⟨y, hy, Or.inl rfl⟩)) (fun y hy => hTz.dn y hy) k _
         (hTz.dh _ hc0)
+  have hzE : ∀ p' ∈ ZTcb (L := L) Z.th s', p' ∈ E := by
+    rintro p' ⟨y, hy, zt', n', hz', hzt⟩
+    by_cases e : y = cslotAddr sl
+    · subst e
+      rw [hz] at hz'; injection hz' with e1 e2 e3; subst p' zt' n'
+      cases hzb : isZb (capV (L.mem s) (cslotAddr sl))
+      · rcases (hZF hzb).2 with ⟨q, hq⟩ | ⟨q, r, gs, g, hq⟩
+        · have e1 : p = q := refsObj_of_alike hal (q := q) (by rw [hq]; rfl)
+          subst e1
+          exact Or.inr hq
+        · have e1 : p = q := refsObj_of_alike hal (q := q) (by rw [hq]; rfl)
+          subst e1
+          exfalso
+          have hcv : CapValid Z.th (capV (L.mem s) (cslotAddr sl)) :=
+            J.xtop.rel.2.1.2.1.abs hA (capAt_capV _ _)
+          rw [hq] at hcv
+          rcases hD2.2.1.zwf _ hxs _ _ _ hz with ⟨-, ht, -⟩ | ⟨h65, -, -⟩
+          · have h1 := hcv.1; rw [ht] at h1; cases h1
+          · exact h65 hzt
+      · obtain ⟨p1, zt1, n1, hc1⟩ : ∃ p1 zt1 n1, capV (L.mem s) (cslotAddr sl) = .Zombie p1 zt1 n1 := by
+          generalize capV (L.mem s) (cslotAddr sl) = c at hzb ⊢
+          cases c <;> simp [isZb] at hzb
+          exact ⟨_, _, _, rfl⟩
+        obtain ⟨e1, e2, -⟩ := hcd p1 zt1 n1 hc1; subst p1 zt1
+        exact Or.inl ⟨_, hxs, _, _, hc1, hzt⟩
+    · exact Or.inl ⟨y, hy, zt', n', by rw [← hoth y hy e]; exact hz', hzt⟩
   have hL' : LiveJ (L := L) Z.th H G s' σ' := by
-    refine ⟨fun q i hqi hu => ?_, fun k hk => ?_, fun y hy p' zt' n' hz' i hpi hni hu => ?_,
+    refine ⟨fun q i hqi hu => ?_, fun k hk hki => ?_, fun y hy p' zt' n' hz' i hpi hni hu => ?_,
       fun y hy p' zt' n' hz' hzt => ?_⟩
-    · obtain ⟨y, hy, hr⟩ := hL.slots q i hqi (hU _ ⟨q, i, hqi, rfl⟩ hu)
-      refine ⟨y, hy, ?_⟩
+    · rcases hL.slots q i hqi (hU _ ⟨q, i, hqi, rfl⟩ hu) with ⟨y, hy, hr⟩ | hb
+      rotate_left
+      · exact Or.inr (by rw [hdk.1]; exact hb)
+      refine Or.inl ⟨y, hy, ?_⟩
       by_cases e : y = cslotAddr sl
       · subst e; rw [hz]; exact refsObj_of_alike hal hr
       · rw [hoth y (hmem y hy) e]; exact hr
-    · rw [hNt] at hk ⊢
-      obtain ⟨y, hy, hr⟩ := hL.dbg k hk
+    · rw [hNt] at hk hki ⊢
+      obtain ⟨y, hy, hr⟩ := hL.dbg k hk (by rw [← gk_idle (Vs.gk_setCap _ _) (mem_of_single hsc)]; exact hki)
       refine ⟨y, hy, ?_⟩
       by_cases e : y = cslotAddr sl
       · subst e; exact absurd rfl ((hRz _ hr).2 k)
@@ -194,33 +235,11 @@ theorem jZombieHypL (Z : XSets) (H : P1.Heap) (Cs : Set U64) (kb : U64) (hth : Z
               rw [hoth _ ⟨p, n.val, hpi, rfl⟩ hne, ho] at hu
               exact hu
       · exact hL.zslots y hy p' zt' n' (by rw [← hoth y hy e]; exact hz') i hpi hni (hU _ ⟨p', i, hpi, rfl⟩ hu)
-    · by_cases e : y = cslotAddr sl
-      · subst e
-        rw [hz] at hz'; injection hz' with e1 e2 e3; subst p' zt' n'
-        cases hzb : isZb (capV (L.mem s) (cslotAddr sl))
-        · rcases (hZF hzb).2 with ⟨q, hq⟩ | ⟨q, r, gs, g, hq⟩
-          · have e1 : p = q := refsObj_of_alike hal (q := q) (by rw [hq]; rfl)
-            subst e1
-            exact hdead p (Or.inr hq)
-          · have e1 : p = q := refsObj_of_alike hal (q := q) (by rw [hq]; rfl)
-            subst e1
-            exfalso
-            have hcv : CapValid Z.th (capV (L.mem s) (cslotAddr sl)) :=
-              J.xtop.rel.2.1.2.1.abs hA (capAt_capV _ _)
-            rw [hq] at hcv
-            rcases hD2.2.1.zwf _ hxs _ _ _ hz with ⟨-, ht, -⟩ | ⟨h65, -, -⟩
-            · have h1 := hcv.1; rw [ht] at h1; cases h1
-            · exact h65 hzt
-        · obtain ⟨p1, zt1, n1, hc1⟩ : ∃ p1 zt1 n1, capV (L.mem s) (cslotAddr sl) = .Zombie p1 zt1 n1 := by
-            generalize capV (L.mem s) (cslotAddr sl) = c at hzb ⊢
-            cases c <;> simp [isZb] at hzb
-            exact ⟨_, _, _, rfl⟩
-          obtain ⟨e1, e2, -⟩ := hcd p1 zt1 n1 hc1; subst p1 zt1
-          exact hdead p (Or.inl ⟨_, hxs, _, _, hc1, hzt⟩)
-      · exact hdead p' (Or.inl ⟨y, hy, zt', n', by rw [← hoth y hy e]; exact hz', hzt⟩)
-  refine ⟨⟨V2, Ac', Lst', D ∪ E, J', hks.trans hkb, hns', hsg', hpp⟩, hL', ⟨lst, ?_⟩,
-    hN.setCap hP hA hsc hzn hoth⟩
-  exact J.dbgWF_keep J' rfl rfl hDW hdk
+    · exact hdead p' (hzE p' ⟨y, hy, zt', n', hz', hzt⟩)
+  have hDW' := dbgWFL_step J.xtop hXb rfl rfl J.tcbs_eq.1 hDW hdk
+  have hN' := hN.setCap hP hA hsc hzn hoth
+  have J' := mk ⟨hL', ⟨lst, hDW'⟩, hN'⟩ (fun p' hp' => Or.inr (hzE p' hp'))
+  exact ⟨⟨V2, Ac', Lst', D ∪ E, J', hks.trans hkb, hns', hsg', hpp⟩, hL', ⟨lst, hDW'⟩, hN'⟩
 
 end
 

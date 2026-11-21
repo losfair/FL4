@@ -271,6 +271,7 @@ def UtBodyHyp (AR : A → Fl4Spec.Cr3 → Prop) (pp : U64) (idx : List Bool) (p 
     BufObjHyp Z.B σ → ArchFitHyp H σ →
     (∀ lo hi : Nat, p.val + fi.val ≤ lo → hi ≤ p.val + 2 ^ sb.val →
       KeptRefsP3 (L := L) H (RegionD H lo hi) s ∧ DbgTimerKept (L := L) H (RegionD H lo hi) Cs s) →
+    UtFreeZ σ (p.val + fi.val) (p.val + 2 ^ sb.val) → UtNodesAt (L.ksb s) p sb →
     untyped.retype st arI s ar (cslotAddr (pp.bv, idx)) false
         ⟨Fl4Spec.alignUp (p.bv + fiv.bv) (zOf nt.val us.val)⟩ nt us dest off win false ⦃ res =>
       UtBodyPost (L := L) arI AR σ (.retype (pp.bv, idx) false p.bv
@@ -280,45 +281,44 @@ def UtBodyHyp (AR : A → Fl4Spec.Cr3 → Prop) (pp : U64) (idx : List Bool) (p 
 tables, frames). -/
 theorem utEp_bodyHyp {pp : U64} {idx : List Bool} {p sb nt us dest off win : U64} {t : Fl4Spec.ApiObjectType}
     {r : Nat} {fiv : U64}
-    (hnt : nt.val = 2 ∨ nt.val = 3 ∨ nt.val = 6 ∨ (nt.val = 7 ∨ nt.val = 12 ∨ nt.val = 13 ∨ nt.val = 9 ∨ nt.val = 10 ∨ nt.val = 11))
-    (hnf : nt.val ≠ 9 ∧ nt.val ≠ 10 ∧ nt.val ≠ 11) :
+    (hnt : nt.val = 2 ∨ nt.val = 3 ∨ nt.val = 6 ∨ (nt.val = 7 ∨ nt.val = 12 ∨ nt.val = 13 ∨ nt.val = 9 ∨ nt.val = 10 ∨ nt.val = 11)) :
     UtBodyHyp (L := L) arI AR pp idx p sb nt us dest off win t r fiv :=
-  fun _ _ _ _ _ _ _ _ _ J hni _ hpp hidx _ hcap hc0 _ hctx hfiv hBO hAF hRU =>
-    J.utEpBodyJ hni hpp hidx hcap hnt hnf hc0 hctx hfiv hBO hAF hRU
+  fun _ _ _ _ _ _ _ _ _ J hni _ hpp hidx _ hcap hc0 _ hctx hfiv hBO hAF hRU hZ0 hKN =>
+    J.utEpBodyJ hni hpp hidx hcap hnt hc0 hctx hfiv hBO hAF hRU hZ0 hKN
 
 /-- UtScRet's `JAtZ.utScBodyJ` as `UtBodyHyp` (SCs). -/
 theorem utSc_bodyHyp {pp : U64} {idx : List Bool} {p sb nt us dest off win : U64} {t : Fl4Spec.ApiObjectType}
     {r : Nat} {fiv : U64} (hnt : nt.val = 5) :
     UtBodyHyp (L := L) arI AR pp idx p sb nt us dest off win t r fiv :=
-  fun _ _ _ _ _ _ _ _ _ J hni _ hpp hidx _ hcap hc0 _ hctx hfiv hBO hAF hRU =>
+  fun _ _ _ _ _ _ _ _ _ J hni _ hpp hidx _ hcap hc0 _ hctx hfiv hBO hAF hRU _ _ =>
     J.utScBodyJ hni hpp hidx hcap hnt hc0 hctx hfiv hBO hAF hRU
 
 /-- UtUtRet's `JAtZ.utUtBodyJ` as `UtBodyHyp` (untypeds). -/
 theorem utUt_bodyHyp {pp : U64} {idx : List Bool} {p sb nt us dest off win : U64} {t : Fl4Spec.ApiObjectType}
     {r : Nat} {fiv : U64} (hnt : nt.val = 0) :
     UtBodyHyp (L := L) arI AR pp idx p sb nt us dest off win t r fiv :=
-  fun _ _ _ _ _ _ _ _ _ J hni _ hpp hidx _ hcap hc0 _ hctx hfiv hBO hAF hRU =>
+  fun _ _ _ _ _ _ _ _ _ J hni _ hpp hidx _ hcap hc0 _ hctx hfiv hBO hAF hRU _ _ =>
     J.utUtBodyJ hni hpp hidx hcap hnt hc0 hctx hfiv hBO hAF hRU
 
 /-- UtPmRet's `JAtZ.utPmBodyJ` as `UtBodyHyp` (PML4s). -/
 theorem utPm_bodyHyp {pp : U64} {idx : List Bool} {p sb nt us dest off win : U64} {t : Fl4Spec.ApiObjectType}
     {r : Nat} {fiv : U64} (hnt : nt.val = 8) :
     UtBodyHyp (L := L) arI AR pp idx p sb nt us dest off win t r fiv :=
-  fun _ _ _ _ _ _ _ _ _ J hni _ hpp hidx _ hcap hc0 _ hctx hfiv hBO hAF hRU =>
+  fun _ _ _ _ _ _ _ _ _ J hni _ hpp hidx _ hcap hc0 _ hctx hfiv hBO hAF hRU _ _ =>
     J.utPmBodyJ hni hpp hidx hcap hnt hc0 hctx hfiv hBO hAF hRU
 
 /-- UtTcbRet's `JAtZ.utTcbBodyJ` as `UtBodyHyp` (TCBs). -/
 theorem utTcb_bodyHyp {pp : U64} {idx : List Bool} {p sb nt us dest off win : U64} {t : Fl4Spec.ApiObjectType}
     {r : Nat} {fiv : U64} (hnt : nt.val = 1) :
     UtBodyHyp (L := L) arI AR pp idx p sb nt us dest off win t r fiv :=
-  fun _ _ _ _ _ _ _ _ _ J hni _ hpp hidx _ hcap hc0 _ hctx hfiv hBO hAF hRU =>
+  fun _ _ _ _ _ _ _ _ _ J hni _ hpp hidx _ hcap hc0 _ hctx hfiv hBO hAF hRU _ _ =>
     J.utTcbBodyJ hni hpp hidx hcap hnt hc0 hctx hfiv hBO hAF hRU
 
 /-- UtCnRet's `JAtZ.utCnBodyJ` as `UtBodyHyp` (CNodes). -/
 theorem utCn_bodyHyp {pp : U64} {idx : List Bool} {p sb nt us dest off win : U64} {t : Fl4Spec.ApiObjectType}
     {r : Nat} {fiv : U64} (hnt : nt.val = 4) :
     UtBodyHyp (L := L) arI AR pp idx p sb nt us dest off win t r fiv :=
-  fun _ _ _ _ _ _ _ _ _ J hni _ hpp hidx _ hcap hc0 _ hctx hfiv hBO hAF hRU =>
+  fun _ _ _ _ _ _ _ _ _ J hni _ hpp hidx _ hcap hc0 _ hctx hfiv hBO hAF hRU _ _ =>
     J.utCnBodyJ hni hpp hidx hcap hnt hc0 hctx hfiv hBO hAF hRU
 
 set_option maxHeartbeats 8000000 in
@@ -334,10 +334,12 @@ theorem JAtZ.utResetJ {s : S} {ar : A} {σ : Fl4Spec.State Unit} (J : JAtZ (L :=
     (hrcb : Fl4Spec.resetChunkBits = 16)
     (hRd0 : σ.consumedTime = 0 → ∀ y n, σ.kheap σ.curSc = some (.schedContext y n) → Fl4Spec.scActive y = true →
       Fl4Spec.refillReady σ.curTime (Fl4Spec.refillHd y) = true)
+    (hnq : ∀ d p, σ.curThread ∉ σ.readyQueues d p)
     (hVM : ∀ s1, sched.set_thread_state st s ct sched.TS_RESTART = ok s1 →
       Vs.VsReachMiss p.val (p.val + 2 ^ sb.val) (L.mem s1) (L.ksb s1)
         (Vs.NeedR Z.th (L.mem s1) 5) (Vs.NeedR Z.th (L.mem s1) 4) (Vs.NeedR Z.th (L.mem s1) 3)
         (Vs.NeedR Z.th (L.mem s1) 2) (Vs.NeedR Z.th (L.mem s1) 1))
+    (hUZ : UtZero (L.mem s) Z.G σ) (hUN : UtNodesJ (L.mem s) Z.G (L.ksb s))
     (hB : UtBodyHyp (L := L) arI AR pp idx p sb nt us dest off win t r fiv) (blk call don : Bool) :
     (do
       let s2 ← sched.set_thread_state st s ct sched.TS_RESTART
@@ -361,9 +363,10 @@ theorem JAtZ.utResetJ {s : S} {ar : A} {σ : Fl4Spec.State Unit} (J : JAtZ (L :=
   have hfiv0 : fiv = 0#u64 := by rw [hctx.fidx]; rfl
   -- the restart
   obtain ⟨s1, σ1, x1, -, hst1, hkx, hcur, he1, -, hid1, hct1, hs1, Ac1, Lst1, D1, J1⟩ := J.restartJ hni hct
-  obtain ⟨s1', σ1', -, hs1', -, hSS1, -, -, -, -⟩ :=
+  obtain ⟨s1', σ1', -, hs1', -, hSS1, -, -, hks1, -⟩ :=
     restart_dstate Z.th hP s σ Z.G J.dstate (L.curW s) hct J.kern.cur J.kern.curT J.kern.act
   rw [hs1] at hs1'; cases eq_of_ok_eq hs1'
+  have hKN1 : UtNodesAt (L.ksb s1) p sb := by rw [hks1]; exact hUN _ hxG p sb fi hcv
   have hσ1k : ∀ o, o ≠ (L.curW s).bv → σ1.kheap o = σ.kheap o := fun o ho => by
     rw [he1, Notif.stsAct_kheap, Notif.updK_kheap]; exact Function.update_of_ne ho _ _
   have hσ1c : σ1.kheap (L.curW s).bv = some (.tcb { x1 with tcbState := .restart }) := by
@@ -408,8 +411,11 @@ theorem JAtZ.utResetJ {s : S} {ar : A} {σ : Fl4Spec.State Unit} (J : JAtZ (L :=
     have hRU1 : ∀ lo hi : Nat, p.val + (0#u64 : U64).val ≤ lo → hi ≤ p.val + 2 ^ sb.val →
         KeptRefsP3 (L := L) H (RegionD H lo hi) s1 ∧ DbgTimerKept (L := L) H (RegionD H lo hi) Cs s1 :=
       fun lo hi h1 h2 => hRU s1 hs1 lo hi (J.free_dead hxG hcv h1 h2)
+    have hms1 : σ1.machineState = σ.machineState := by rw [he1]; unfold Notif.stsAct; split_ifs <;> rfl
+    have hZ1 : UtFreeZ σ1 (p.val + (0#u64 : U64).val) (p.val + 2 ^ sb.val) := fun a h1 h2 => by
+      rw [hms1]; exact hUZ _ hxG p sb _ hcv a h1 h2
     refine WP.spec_mono (hB Z H Cs Ac1 Lst1 D1 s1 ar σ1 J1 hni1 rs hpp hidx 0#u64 hcap1 hc0 true hctx1 hfiv0 hBO1
-      hAF1 hRU1) (fun res h => ?_)
+      hAF1 hRU1 hZ1 hKN1) (fun res h => ?_)
     obtain ⟨σ', hrun, hok, hrel, hJ⟩ := h
     exact utRetPostJ_of_body hst1 ⟨σ', by rw [hU0]; exact hrun, hok, hrel, hJ⟩
   -- a used cap: `reset_untyped` at the restart's state
@@ -418,11 +424,12 @@ theorem JAtZ.utResetJ {s : S} {ar : A} {σ : Fl4Spec.State Unit} (J : JAtZ (L :=
   obtain ⟨hKR, hDT⟩ := hRU s1 hs1 p.val (p.val + 2 ^ sb.val) (fun q k hq hr =>
     (hRD q k hq (by unfold RegionD MeetsR at hr; rw [hq] at hr; simpa using hr)).1)
   have hres1 : σ1.schedulerAction ≠ .chooseNewThread := by rw [hni1.2]; simp
-  have hR0 : PPR0 σ := J.ppr0_start arI hni hRd0
+  have hR0 : PPR0 σ := J.ppr0_start arI hni hRd0 hnq
   have hR01 : PPR0 σ1 := by
     rw [he1]
-    have h := hR0.of_ppk (PPK.updTcbSc (y := { x1 with tcbState := .restart }) hkx rfl)
-    unfold Notif.stsAct; split_ifs <;> exact h
+    have h := hR0.of_ppk (PPK.updTcbSc (y := { x1 with tcbState := .restart }) hkx rfl (hi := fun _ => Or.inr hcur.symm))
+    unfold Notif.stsAct; split_ifs
+    all_goals first | exact h | exact ⟨⟨h.1.1, fun u e => (by cases e), h.1.2.2⟩, h.2⟩
   refine retype_reset_wp arI s1 ar _ _ nt us dest off win false
     (J1.reset_untypedJ hAK hA hnd hPP hrcb hc0 hR01 hres1 hpp hidx hcap1 hnc1 hf0 hKR hDT hAF1
       J1.vsc.needR.1 J1.vsc.needR.2.1 J1.vsc.needR.2.2.1 J1.vsc.needR.2.2.2.1 J1.vsc.needR.2.2.2.2
@@ -433,7 +440,7 @@ theorem JAtZ.utResetJ {s : S} {ar : A} {σ : Fl4Spec.State Unit} (J : JAtZ (L :=
     · simp at h
     · exact utRetPostJ_of_preempt hst1 hmem he hpre hX
   intro s2 a2 hpost
-  rcases hpost with ⟨-, σ2, Ac2, Lst2, D2, hmem, J2, hcap2, -, -, -, hnc2, -, -, hSl2⟩ | ⟨h, -⟩
+  rcases hpost with ⟨-, σ2, Ac2, Lst2, D2, hmem, J2, hcap2, hkb2, -, -, hnc2, -, hz2, hSl2⟩ | ⟨h, -⟩
   swap
   · simp at h
   -- the spec's reset kept the entry fields and the old objects' types off the region
@@ -539,8 +546,12 @@ theorem JAtZ.utResetJ {s : S} {ar : A} {σ : Fl4Spec.State Unit} (J : JAtZ (L :=
     exact ⟨⟨fun _ _ _ _ => hK _, fun _ _ _ => hK _, fun _ _ _ => hK _, fun _ _ _ => hK _, fun _ _ _ => hK _,
       fun _ _ _ => hK _, fun _ _ _ => hK _, fun _ _ _ => hK _⟩,
       fun _ _ _ => ⟨hK _, hK _, hK _, hK _, hK _⟩, fun _ _ => ⟨hK _, hK _, hK _⟩⟩
+  have hZ2 : UtFreeZ σ2 (p.val + (0#u64 : U64).val) (p.val + 2 ^ sb.val) := fun a h1 h2 => hz2 a (by
+    have e0 : (0#u64 : U64).val = 0 := rfl
+    omega) h2
+  have hKN2 : UtNodesAt (L.ksb s2) p sb := by rw [hkb2]; exact hKN1
   exact WP.spec_mono (hB _ _ Cs Ac2 Lst2 D2 s2 a2 σ2 J2 hni2 rs hpp2 hidx 0#u64 hcap2 hc0 true hctx2 hfiv0 hBO2 hAF2
-    hRU2) (fun res h => utRetPostJ_of_reset hst1 hmem h)
+    hRU2 hZ2 hKN2) (fun res h => utRetPostJ_of_reset hst1 hmem h)
 
 
 variable (arI) in
@@ -551,15 +562,14 @@ directories, frames (UtEpRet's `JAtZ.utEpJ`), untypeds (UtUtRet's
 `JAtZ.utUtJ`), SCs (UtScRet's `JAtZ.utScJ`) and PML4s (UtPmRet's
 `JAtZ.utPmJ`), CNodes (UtCnRet's `JAtZ.utCnJ`) and TCBs (UtTcbRet's
 `JAtZ.utTcbJ`), with or without a reset (`JAtZ.utResetJ`): the VCPU/EPT
-types (14..18, also `JUtPath.vtx` [scope]), and for now the frames (9, 10,
-11: `JAtZ.fcov` needs `B` grown by the new pages, `XTopAt.addBuf` with
-`UtZero`, not yet proved; handoff/glob.md gl13). l4v: `invoke_untyped_corres` with
+types (14..18, also `JUtPath.vtx` [scope]). l4v: `invoke_untyped_corres` with
 `invoke_untyped_invs`. -/
 def JUtRetHypR2 (AR : A → Fl4Spec.Cr3 → Prop) (th : TypedHeap) (s : S) (ar : A) (σ : Fl4Spec.State Unit)
     (sl : Fl4Spec.CslotPtr) (p sb fi ct : U64) (blk call don : Bool) (argsU : List U64) : Prop :=
   ∀ (nt us dest off win : U64) (t : Fl4Spec.ApiObjectType) (r : Nat) (reset : Bool) (fiv : U64),
     argsU.head? = some nt → RetCtx (L := L) th s σ sl sb fi false nt us dest off win t r reset fiv →
     (nt.val ≠ 2 ∧ nt.val ≠ 3 ∧ nt.val ≠ 6 ∧ nt.val ≠ 7 ∧ nt.val ≠ 12 ∧ nt.val ≠ 13 ∧
+      nt.val ≠ 9 ∧ nt.val ≠ 10 ∧ nt.val ≠ 11 ∧
       nt.val ≠ 0 ∧ nt.val ≠ 5 ∧ nt.val ≠ 8 ∧ nt.val ≠ 4 ∧ nt.val ≠ 1) →
     (do
       let s2 ← sched.set_thread_state st s ct sched.TS_RESTART
@@ -583,16 +593,18 @@ theorem JAtZ.jUtRetHypR_of {s : S} {ar : A} {σ : Fl4Spec.State Unit} (J : JAtZ 
     (hrcb : Fl4Spec.resetChunkBits = 16)
     (hRd0 : σ.consumedTime = 0 → ∀ y n, σ.kheap σ.curSc = some (.schedContext y n) → Fl4Spec.scActive y = true →
       Fl4Spec.refillReady σ.curTime (Fl4Spec.refillHd y) = true)
+    (hnq : ∀ d p, σ.curThread ∉ σ.readyQueues d p)
     (hVM : ∀ s1, sched.set_thread_state st s ct sched.TS_RESTART = ok s1 →
       Vs.VsReachMiss p.val (p.val + 2 ^ sb.val) (L.mem s1) (L.ksb s1)
         (Vs.NeedR Z.th (L.mem s1) 5) (Vs.NeedR Z.th (L.mem s1) 4) (Vs.NeedR Z.th (L.mem s1) 3)
         (Vs.NeedR Z.th (L.mem s1) 2) (Vs.NeedR Z.th (L.mem s1) 1))
+    (hUZ : UtZero (L.mem s) Z.G σ) (hUN : UtNodesJ (L.mem s) Z.G (L.ksb s))
     {blk call don : Bool} {argsU : List U64}
     (hR : JUtRetHypR2 (L := L) arI AR Z.th s ar σ sl p sb fi ct blk call don argsU) :
     JUtRetHypR (L := L) arI AR Z.th s ar σ sl p sb fi ct blk call don argsU := by
   intro nt us dest off win t r reset fiv hh hctx hcase
   by_cases hcov : nt.val = 2 ∨ nt.val = 3 ∨ nt.val = 6 ∨ nt.val = 7 ∨ nt.val = 12 ∨ nt.val = 13 ∨
-      nt.val = 0 ∨ nt.val = 5 ∨ nt.val = 8 ∨ nt.val = 4 ∨ nt.val = 1
+      nt.val = 9 ∨ nt.val = 10 ∨ nt.val = 11 ∨ nt.val = 0 ∨ nt.val = 5 ∨ nt.val = 8 ∨ nt.val = 4 ∨ nt.val = 1
   · have hrs : reset = true := by
       rcases hcase with h | h
       · exact h
@@ -603,16 +615,17 @@ theorem JAtZ.jUtRetHypR_of {s : S} {ar : A} {σ : Fl4Spec.State Unit} (J : JAtZ 
     dsimp only at hp1 hpp
     subst hp1
     have hB : UtBodyHyp (L := L) arI AR pp idx p sb nt us dest off win t r fiv := by
-      rcases (show (nt.val = 2 ∨ nt.val = 3 ∨ nt.val = 6 ∨ nt.val = 7 ∨ nt.val = 12 ∨ nt.val = 13) ∨
+      rcases (show (nt.val = 2 ∨ nt.val = 3 ∨ nt.val = 6 ∨ nt.val = 7 ∨ nt.val = 12 ∨ nt.val = 13 ∨
+          nt.val = 9 ∨ nt.val = 10 ∨ nt.val = 11) ∨
           nt.val = 0 ∨ nt.val = 5 ∨ nt.val = 8 ∨ nt.val = 4 ∨ nt.val = 1 by omega) with
         h | h | h | h | h | h
-      · exact utEp_bodyHyp (by omega) (by omega)
+      · exact utEp_bodyHyp (by omega)
       · exact utUt_bodyHyp h
       · exact utSc_bodyHyp h
       · exact utPm_bodyHyp h
       · exact utCn_bodyHyp h
       · exact utTcb_bodyHyp h
-    exact J.utResetJ hni hct hpp rfl hcap hc0 hctx hBO hAF hRU hAK hA hnd hPP hrcb hRd0 hVM hB blk call don
+    exact J.utResetJ hni hct hpp rfl hcap hc0 hctx hBO hAF hRU hAK hA hnd hPP hrcb hRd0 hnq hVM hUZ hUN hB blk call don
   · exact hR nt us dest off win t r reset fiv hh hctx (by omega)
 
 end Comp

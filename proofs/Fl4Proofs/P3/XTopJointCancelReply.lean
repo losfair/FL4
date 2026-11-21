@@ -663,6 +663,7 @@ theorem JAtZ.replyRemoveTcbJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ)
     exact ⟨Tr, Cq, hJ.same hF.1 (fun q y n _ hq => szk q.bv y n hq) hks (J.rmW_irq hw)
       (J.idleW_keep hIR.2.2.1 hidle' hisc').2⟩
   have hDbg := J.kw_dbg hfoot
+  have hKd := J.kw_dbgKeep hfoot
   have hao : ∀ p ao, σ.kheap p = some (.archObj ao) → σ'.kheap p = some (.archObj ao) := by
     intro p ao hp
     have h1 : p ≠ t.bv := by rintro rfl; rw [hk] at hp; cases hp
@@ -685,10 +686,10 @@ theorem JAtZ.replyRemoveTcbJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ)
       hrun, hblk⟩
   have hC0 := JCs.same J hF.1 hksz
   have hC : JCs (L := L) (Z.mv Z.G V') s' σ' := ⟨hC0.del, hC0.ut, hC0.finM, hC0.sfree⟩
-  exact ⟨σ', Z.vs, Lst', hrm, J.cs_frameI hks hX3 hw (fun b hb => RmW.oobj J.xtop.fin.1.1.1 hb) harch hao szk hF.1 hkb
+  exact ⟨σ', Z.vs, Lst', hrm, J.cs_frameI hks hX3 hw (fun b hb => RmW.oobj J.xtop.fin.1.1.1 hb) (fun b hb => J.rmW_nv hb) harch hao szk hF.1 hkb
     ((IpcFrKeep.of_otk hK.kh).trans (IpcFrKeep.of_upd2 hk5t kt' rfl rfl hk5r kr'
       (IpcFrKeep.objFrK_other (fun _ e => by cases e) (fun _ e => by cases e) (fun _ e => by cases e)) ko'))
-    hC R, hF.1, hks⟩
+    hC R hKd hCK.orig (J.idleW_keep hIR.2.2.1 hidle' hisc').1 J.zD, hF.1, hks⟩
 
 set_option maxHeartbeats 8000000 in
 /-- **`cancel_ipc` of a thread blocked on its reply, at `J`** (module

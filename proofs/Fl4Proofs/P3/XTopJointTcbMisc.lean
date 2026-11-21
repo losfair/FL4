@@ -338,6 +338,7 @@ theorem JAtZ.reg_frameFp (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {s' :
   have hRF' := RFree.carry J.rfree J.call k4 ck
   have hRR' := J.rrecv.frame k4 hA.khrb
   have hDbg := J.kw_dbg (hfoot.mono fun b hb => kw_empty_mono hb _)
+  have hKd := J.kw_dbgKeep (hfoot.mono fun b hb => kw_empty_mono hb _)
   have hS3 : SchedRel st Z.N Z.T Z.C Z.c s' σ' := hI3.2.2.1
   have hAI3 : ActIdle σ' := hA.actIdle J.act
   have hdead : ∀ q ∈ D, DeadP (L := L) H s' q := J.deadP_qk hA hS3 hI3.1 hwF k3 hAI3.1 (J.yld.frame k2 hyk) hyk
@@ -356,7 +357,7 @@ theorem JAtZ.reg_frameFp (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {s' :
       hAI3, hA.bsa J.bsa, hA.isorted J.isorted, hA.curRunM J.curRun, hblk⟩
   have hC0 := JCs.same J hF.1 hA.ksz
   have hC : JCs (L := L) (Z.mv Z.G V') s' σ' := ⟨hC0.del, hC0.ut, hC0.finM, hC0.sfree⟩
-  exact ⟨Z.vs, J.cs_frameI hks hX3 hwF (fun b hb => Ipc.FinW.oobj J.xtop.fin.1.1.1 hb) hA.arch (fun q ao h => (hA.oth (fun _ e => by cases e) (fun _ _ e => by cases e)).2 h) hA.szKeep hF.1 hA.kback hA.ipcFr hC R⟩
+  exact ⟨Z.vs, J.cs_frameI hks hX3 hwF (fun b hb => Ipc.FinW.oobj J.xtop.fin.1.1.1 hb) (fun b hb => Ipc.FinW.nv J.xtop.fin.1.1.1 hb) hA.arch (fun q ao h => (hA.oth (fun _ e => by cases e) (fun _ _ e => by cases e)).2 h) hA.szKeep hF.1 hA.kback hA.ipcFr hC R hKd hck.orig (J.idleW_keep hS3 hA.idle hA.isc).1 J.zD⟩
 
 open Fl4Proofs.P1 in
 set_option maxHeartbeats 8000000 in
@@ -539,6 +540,7 @@ theorem JAtZ.bindNJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {t n : U64
   have hRF' := RFree.carry J.rfree J.call k4 ck
   have hRR' := J.rrecv.frame k4 F.khrb
   have hDbg := J.kw_dbg (hfoot.mono fun b hb => kw_empty_mono hb _)
+  have hKd := J.kw_dbgKeep (hfoot.mono fun b hb => kw_empty_mono hb _)
   have hS3 := hX2.2.2.1
   have hAI3 : ActIdle σ' := F.actIdle J.act
   -- the dead set without the thread and the notification
@@ -593,7 +595,11 @@ theorem JAtZ.bindNJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {t n : U64
       hAI3, F.bsa J.bsa, F.isorted J.isorted, F.curRunM J.curRun, hblk0⟩
   have hC0 := JCs.same J hF.1 F.ksz
   have hC : JCs (L := L) (Z.mv Z.G V') (L.wr (L.wr s (nBoundA n) t) (P1.boundA t) n) σ' := ⟨hC0.del, hC0.ut, hC0.finM, hC0.sfree⟩
-  exact ⟨Z.vs, D', J.cs_frameI hks hX3 hw (fun b hb => Ipc.FinW.oobj J.xtop.fin.1.1.1 hb) F.arch (fun q ao h => (F.oth (fun _ e => by cases e) (fun _ e => by cases e)).2 h) F.szKeep hF.1 F.kback F.ipcFr hC R⟩
+  exact ⟨Z.vs, D', J.cs_frameI hks hX3 hw (fun b hb => Ipc.FinW.oobj J.xtop.fin.1.1.1 hb) (fun b hb => Ipc.FinW.nv J.xtop.fin.1.1.1 hb) F.arch (fun q ao h => (F.oth (fun _ e => by cases e) (fun _ e => by cases e)).2 h) F.szKeep hF.1 F.kback F.ipcFr hC R hKd hck.orig hidl.1
+    (fun p hp => ⟨J.zD p hp, fun e => J.not_ztcb hxT (fun _ _ _ h => by rw [capV_of_capAt hcT] at h; cases h)
+      (by rw [capV_of_capAt hcT, e]; simp [absCap, Fl4Spec.objRefs]) hp, fun e => by
+        have h1 : H p = some .tcb := J.zH.1 p (J.thT p (J.ztcb_tcb hp))
+        rw [e, J.zH.2.2.2 n hn] at h1; cases h1⟩)⟩
 
 end
 

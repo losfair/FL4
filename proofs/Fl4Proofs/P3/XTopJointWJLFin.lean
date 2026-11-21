@@ -55,7 +55,7 @@ theorem wjl_keep {Z : XSets} {H : P1.Heap} {Cs Ac : Set U64} {Lst : U64 → List
     {V1 : XVs} {Ac1 : Set U64} {Lst1 : U64 → List U64} {D1 : Set U64} {s1 : S} {a1 : A} {σ1 : Fl4Spec.State Unit}
     (J1 : JAtZ (L := L) arI AR (Z.mv G V1) H Cs Ac1 Lst1 D1 s1 a1 σ1) (hE : ZTcb (L := L) Z.th s ⊆ D1)
     (hSS : SlotsSame Z.th (L.mem s) (L.mem s1)) (hDS1 : DState (L := L) Z.th s1 σ1 G)
-    (hK : P1.DbgKeep st (P1.Heap.tcbs H) Cs s s1) :
+    (hK : P1.DbgKeep st (P1.Heap.tcbs H) Cs s s1) (hid : σ1.idleThread = σ.idleThread) :
     LiveJ (L := L) Z.th H G s1 σ1 ∧ DbgWF (P1.Heap.tcbs H) Cs (L.mem s1) (dbgHd (L := L) s1) ∧
       NullOrig Z.th (L.mem s1) σ1 := by
   have horig : σ1.isOriginalCap = σ.isOriginalCap :=
@@ -64,7 +64,7 @@ theorem wjl_keep {Z : XSets} {H : P1.Heap} {Cs Ac : Set U64} {Lst : U64 → List
   have hTz : P1.DbgTz st (P1.Heap.tcbs H) Cs s :=
     ⟨J.blk.2.2.1.2.2.tm.dn, J.blk.2.2.1.2.2.tm.dp, J.blk.2.2.1.2.2.tm.dh⟩
   obtain ⟨lst, hDW⟩ := hDW
-  exact ⟨hL.of_sameZ hSS hmem horig hK J.kern.cs0 hTz fun p hp => J1.jcov.dead p (hE hp),
+  exact ⟨hL.of_sameZ hSS hmem horig hid hK J.kern.cs0 hTz fun p hp => J1.jcov.dead p (hE hp),
     ⟨lst, J.dbgWF_keep J1 rfl rfl hDW hK⟩, hN.of_same (fun y hy => hSS.capV hy) horig⟩
 
 /-- **`RdLO` at a slot whose cap names no container** (module docstring). -/
@@ -101,7 +101,7 @@ theorem jFinAtL_ep : JFinAtL (L := L) arI AR th EpK := by
   have hcv1 : capV (L.mem s1) (cslotAddr sl) = .Endpoint e b x1 x2 x3 x4 := by
     rw [hSS1.capV hA.isSlot, hcv]
   have hDS1 : DState (L := L) Z.th s1 σ1 G := ⟨J1.xtop.rel.2.1, J1.del, J1.xtop.rel.2.2.1⟩
-  obtain ⟨hL1, hDW1, hN1⟩ := wjl_keep arI J hDS hL hDW hN J1 (fun p hp => Or.inr hp) hSS1 hDS1 hK
+  obtain ⟨hL1, hDW1, hN1⟩ := wjl_keep arI J hDS hL hDW hN J1 (fun p hp => Or.inr hp) hSS1 hDS1 hK (gk_idle (Vs.gk_finaliseCap _ _) hmem1)
   have hn : ∀ q, ¬ RefsObj q (capV (L.mem s1) (cslotAddr sl)) := fun q h => by rw [hcv1] at h; exact h
   exact ⟨rfl, trivial, trivial, σ1, G, hmem1, hDS1, hcv1,
     fun y hy _ => Or.inl (hSS1.capV hy), (MdbStep.refl hDS.1.2.2.1).same_right hDS.1.2.2.1 hSS1,
@@ -138,7 +138,7 @@ theorem jFinAtL_ntfn : JFinAtL (L := L) arI AR th NtfnK := by
   have hcv1 : capV (L.mem s1) (cslotAddr sl) = .Notification p b w r := by
     rw [hSS1.capV hA.isSlot, hcv]
   have hDS1 : DState (L := L) Z.th s1 σ1 G := ⟨J1.xtop.rel.2.1, J1.del, J1.xtop.rel.2.2.1⟩
-  obtain ⟨hL1, hDW1, hN1⟩ := wjl_keep arI J hDS hL hDW hN J1 (fun p hp => Or.inr hp) hSS1 hDS1 hK
+  obtain ⟨hL1, hDW1, hN1⟩ := wjl_keep arI J hDS hL hDW hN J1 (fun p hp => Or.inr hp) hSS1 hDS1 hK (gk_idle (Vs.gk_finaliseCap _ _) hmem1)
   have hn : ∀ q, ¬ RefsObj q (capV (L.mem s1) (cslotAddr sl)) := fun q h => by rw [hcv1] at h; exact h
   exact ⟨rfl, trivial, trivial, σ1, G, hmem1, hDS1, hcv1,
     fun y hy _ => Or.inl (hSS1.capV hy), (MdbStep.refl hDS.1.2.2.1).same_right hDS.1.2.2.1 hSS1,
@@ -185,7 +185,7 @@ theorem jFinAtL_sc (hT : P0.ArchTotal arI)
   have hcv1 : capV (L.mem s1) (cslotAddr sl) = .SchedContext p sb := by
     rw [hSS1.capV hA.isSlot, hcv]
   have hDS1 : DState (L := L) Z.th s1 σ1 G := ⟨J1.xtop.rel.2.1, J1.del, J1.xtop.rel.2.2.1⟩
-  obtain ⟨hL1, hDW1, hN1⟩ := wjl_keep arI J hDS hL hDW hN J1 (fun p hp => Or.inr hp) hSS1 hDS1 hK
+  obtain ⟨hL1, hDW1, hN1⟩ := wjl_keep arI J hDS hL hDW hN J1 (fun p hp => Or.inr hp) hSS1 hDS1 hK (gk_idle (Vs.gk_finaliseCap _ _) hm1)
   have hn : ∀ q, ¬ RefsObj q (capV (L.mem s1) (cslotAddr sl)) := fun q h => by rw [hcv1] at h; exact h
   exact ⟨rfl, trivial, trivial, σ1, G, hm1, hDS1, hcv1,
     fun y hy _ => Or.inl (hSS1.capV hy), (MdbStep.refl hDS.1.2.2.1).same_right hDS.1.2.2.1 hSS1,
@@ -227,7 +227,7 @@ theorem jFinAtL_vs [Fl4Proofs.P1.PlainStore st] (hAR : ArchRefines arI AR)
   simp only at h1 h2 h3 hm J1 hSS hks hK ⊢
   have hcv1 : capV (L.mem s1) (cslotAddr sl) = c := by rw [hSS.capV hA.isSlot, hcv]
   have hDS1 : DState (L := L) Z.th s1 σ1 G := ⟨J1.xtop.rel.2.1, J1.del, J1.xtop.rel.2.2.1⟩
-  obtain ⟨hL1, hDW1, hN1⟩ := wjl_keep arI J hDS hL hDW hN J1 (fun p hp => Or.inr hp) hSS hDS1 hK
+  obtain ⟨hL1, hDW1, hN1⟩ := wjl_keep arI J hDS hL hDW hN J1 (fun p hp => Or.inr hp) hSS hDS1 hK (gk_idle (Vs.gk_finaliseCap _ _) hm)
   exact ⟨h1, h2, h3, σ1, G, hm, hDS1, hcv1,
     fun y hy _ => Or.inl (hSS.capV hy), (MdbStep.refl hDS.1.2.2.1).same_right hDS.1.2.2.1 hSS,
     ⟨⟨V, Ac, Lst, _, J1, hks.trans hkb, ak_finaliseCap_ns hm hns, SpecGlob.fin hm hsg, hpp _ _ hm hp0⟩,
@@ -258,7 +258,7 @@ theorem jFinAtL_eptRoot [Fl4Proofs.P1.PlainStore st] (hAR : ArchRefines arI AR)
   simp only at h1 h2 h3 hm J1 hSS hks hK ⊢
   have hcv1 : capV (L.mem s1) (cslotAddr sl) = .Ept p 0#u64 true asid va := by rw [hSS.capV hA.isSlot, hcv]
   have hDS1 : DState (L := L) Z.th s1 σ1 G := ⟨J1.xtop.rel.2.1, J1.del, J1.xtop.rel.2.2.1⟩
-  obtain ⟨hL1, hDW1, hN1⟩ := wjl_keep arI J hDS hL hDW hN J1 (fun p hp => Or.inr hp) hSS hDS1 hK
+  obtain ⟨hL1, hDW1, hN1⟩ := wjl_keep arI J hDS hL hDW hN J1 (fun p hp => Or.inr hp) hSS hDS1 hK (gk_idle (Vs.gk_finaliseCap _ _) hm)
   have hn : ∀ q, ¬ RefsObj q (capV (L.mem s1) (cslotAddr sl)) := fun q h => by rw [hcv1] at h; exact h
   exact ⟨h1, h2, h3, σ1, G, hm, hDS1, hcv1,
     fun y hy _ => Or.inl (hSS.capV hy), (MdbStep.refl hDS.1.2.2.1).same_right hDS.1.2.2.1 hSS,
@@ -287,14 +287,14 @@ theorem jFinAtL_vt (hAR : ArchRefines arI AR) (hK : ARKeep arI AR) (hV : JVtHyps
       (VtPostD (L := L) arI AR (Z.mv G V) H Cs (D ∪ ZTcb (L := L) Z.th s) s σ c true r ∧
         EmptyReady (L := L) H G r.2.1 (cslotAddr sl)) ∧ P1.DbgKeep st (P1.Heap.tcbs H) Cs s r.2.1 ⦄ := by
     rcases hk' with he | hv
-    · exact WP.spec_and (J0.finEptJD (G := G) hAR hV hA hc he) (J.finEptDbg hAR hV he)
+    · exact WP.spec_and (J0.finEptJD (G := G) hAR hV hA hc he) (J.finEptDbg hAR hV hA.isSlot (capV_of_capAt hc) he)
     · exact WP.spec_and (J0.finVcpuJD (G := G) hK hV hA hc hv) (J.finVcpuDbg hK hV hA hc hv)
   refine WP.spec_mono hsp ?_
   rintro ⟨⟨rem, cl⟩, s1, a1⟩ ⟨⟨⟨h1, h2, h3, hm, ⟨Ac1, Lst1, J1⟩, hSS, hks⟩, hRd⟩, hK'⟩
   simp only at h1 h2 h3 hm J1 hSS hks hRd hK' ⊢
   have hcv1 : capV (L.mem s1) (cslotAddr sl) = c := by rw [hSS.capV hA.isSlot, hcv]
   have hDS1 : DState (L := L) Z.th s1 σ G := ⟨J1.xtop.rel.2.1, J1.del, J1.xtop.rel.2.2.1⟩
-  obtain ⟨hL1, hDW1, hN1⟩ := wjl_keep arI J hDS hL hDW hN J1 (fun p hp => Or.inr hp) hSS hDS1 hK'
+  obtain ⟨hL1, hDW1, hN1⟩ := wjl_keep arI J hDS hL hDW hN J1 (fun p hp => Or.inr hp) hSS hDS1 hK' rfl
   exact ⟨h1, h2, h3, σ, G, hm, hDS1, hcv1,
     fun y hy _ => Or.inl (hSS.capV hy), (MdbStep.refl hDS.1.2.2.1).same_right hDS.1.2.2.1 hSS,
     ⟨⟨V, Ac1, Lst1, _, J1, hks.trans hkb, hns, hsg, hp0⟩, hL1, hDW1, hN1⟩,
@@ -375,7 +375,7 @@ theorem jFrMapL [Fl4Proofs.P1.PlainStore st] (hAR : ArchRefines arI AR) (hAp : J
   have hcv1 : capV (L.mem s1) (cslotAddr sl) = .Frame p sz r d true false asid va := by
     rw [hSS.capV hA.isSlot, hcv]
   have hDS1 : DState (L := L) Z.th s1 σ1 G := ⟨J1.xtop.rel.2.1, J1.del, J1.xtop.rel.2.2.1⟩
-  obtain ⟨hL1, hDW1, hN1⟩ := wjl_keep arI J hDS hL hDW hN J1 (fun p hp => Or.inr hp) hSS hDS1 hK
+  obtain ⟨hL1, hDW1, hN1⟩ := wjl_keep arI J hDS hL hDW hN J1 (fun p hp => Or.inr hp) hSS hDS1 hK (gk_idle (Vs.gk_finaliseCap _ _) hm)
   exact ⟨h1, h2, h3, σ1, G, hm, hDS1, hcv1,
     fun y hy _ => Or.inl (hSS.capV hy), (MdbStep.refl hDS.1.2.2.1).same_right hDS.1.2.2.1 hSS,
     ⟨⟨V, Ac, Lst, _, J1, hks.trans hkb, ak_finaliseCap_ns hm hns, SpecGlob.fin hm hsg, hpp _ _ hm hp0⟩,
@@ -393,12 +393,12 @@ theorem jFrVtL [Fl4Proofs.P1.PlainStore st] (hAR : ArchRefines arI AR) (hK : ARK
   subst hth
   have J0 := J.addDeadSet (E := ZTcb (L := L) Z.th s) hL.ztcb
   have hcv := capV_of_capAt hc
-  refine WP.spec_mono (WP.spec_and (J0.frVtJD hAR hK hV hDS hA hc hk _) (J.frVtDbg hAR hK hV hk _)) ?_
+  refine WP.spec_mono (WP.spec_and (J0.frVtJD hAR hK hV hDS hA hc hk _) (J.frVtDbg hAR hK hV hA.isSlot (capV_of_capAt hc) hk _)) ?_
   rintro ⟨⟨rem, cl⟩, s1, a1⟩ ⟨⟨h1, h2, h3, hm, ⟨Ac1, Lst1, J1⟩, hSS, hks⟩, hK'⟩
   simp only at h1 h2 h3 hm J1 hSS hks hK' ⊢
   have hcv1 : capV (L.mem s1) (cslotAddr sl) = c := by rw [hSS.capV hA.isSlot, hcv]
   have hDS1 : DState (L := L) Z.th s1 σ G := ⟨J1.xtop.rel.2.1, J1.del, J1.xtop.rel.2.2.1⟩
-  obtain ⟨hL1, hDW1, hN1⟩ := wjl_keep arI J hDS hL hDW hN J1 (fun p hp => Or.inr hp) hSS hDS1 hK'
+  obtain ⟨hL1, hDW1, hN1⟩ := wjl_keep arI J hDS hL hDW hN J1 (fun p hp => Or.inr hp) hSS hDS1 hK' rfl
   exact ⟨h1, h2, h3, σ, G, hm, hDS1, hcv1,
     fun y hy _ => Or.inl (hSS.capV hy), (MdbStep.refl hDS.1.2.2.1).same_right hDS.1.2.2.1 hSS,
     ⟨⟨V, Ac1, Lst1, _, J1, hks.trans hkb, hns, hsg, hp0⟩, hL1, hDW1, hN1⟩, trivial⟩

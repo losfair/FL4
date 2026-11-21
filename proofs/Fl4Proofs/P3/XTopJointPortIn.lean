@@ -46,8 +46,8 @@ set_option maxHeartbeats 8000000 in
 /-- **The `In` tail at `JAt`** (module docstring). -/
 theorem portInTail_jat (hAM : ARMask arI AR) (hJS : JStepHyps (L := L) arI AR Z.th)
     (hRep : JReplyHyp (L := L) arI AR Z.th) {s : S} {ar : A} {σ : Fl4Spec.State Unit}
-    (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s ar σ) (hC : CurRun σ) {ct : U64} (hcur : σ.curThread = ct.bv)
-    (port z : U64) (call : Bool)
+    (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s ar σ) (hZB : ZNoBlk Z.th (L.mem s) (L.ksb s)) (hC : CurRun σ)
+    {ct : U64} (hcur : σ.curThread = ct.bv) (port z : U64) (call : Bool)
     (hin : ∀ (a : A) p z, ∃ v a', arI.port_in a p z = ok (v, a')) (hval : call = true → PortInVal arI) :
     portInTail (st := st) arI s ar ct port z call ⦃ res => res.1 = .Ok () ∧
       L.mem res.2.1 (stA ct) ≠ sched.TS_RESTART ∧ ∀ σ1,
@@ -92,7 +92,7 @@ theorem portInTail_jat (hAM : ARMask arI AR) (hJS : JStepHyps (L := L) arI AR Z.
       (Steps.ksSpec arI (s := s1) (σ := σ1) (σ' := σy) (by constructor <;> first | rfl | exact hu) rfl rfl
         (fun h => ⟨h.st, h.node⟩) (fun h => h))).trans arI
       (Steps.arch arI (Or.inr (Or.inr (Or.inr (Or.inr (Or.inl ⟨port, z, v, hv⟩))))))
-  obtain ⟨G', V', Ac', Lst', D', J'⟩ := hstp _ (stepClosed_jat arI hAM hJS) Z H Cs Ac Lst D rfl J
+  obtain ⟨G', V', Ac', Lst', D', J', -⟩ := hstp _ (stepClosed_jat arI hAM hJS) Z H Cs Ac Lst D rfl J hZB
   -- `reply1`
   set Z' : XSets := Z.mv G' V'
   have hXy := J'.xtop
@@ -123,8 +123,8 @@ set_option maxHeartbeats 8000000 in
 (`DecOKRMX`), from `portInTail_jat` (as `decode_invocation_ioport_inX`). -/
 theorem decode_invocation_ioport_inJ (hAM : ARMask arI AR) (hJS : JStepHyps (L := L) arI AR Z.th)
     (hRep : JReplyHyp (L := L) arI AR Z.th) (s : S) (ar : A)
-    (σ : Fl4Spec.State Unit) (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s ar σ) (lbl : U64)
-    (hl : 64 ≤ lbl.val ∧ lbl.val ≤ 66)
+    (σ : Fl4Spec.State Unit) (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s ar σ)
+    (hZB : ZNoBlk Z.th (L.mem s) (L.ksb s)) (lbl : U64) (hl : 64 ≤ lbl.val ∧ lbl.val ≤ 66)
     (slbl : Fl4Spec.Data) (hlbl : Fl4Spec.invocationType slbl = .archInvocationLabel (inLabel (portSz lbl)))
     (length buf ct : U64) (hct : sched.cur_thread st s = ok ct) (args : List U64)
     (hlen : length.val = args.length)
@@ -202,7 +202,7 @@ theorem decode_invocation_ioport_inJ (hAM : ARMask arI AR) (hJS : JStepHyps (L :
   rw [if_neg hc]
   rw [if_neg hc] at hens
   simp only [core.result.Result.Insts.CoreOpsTry.branch, bind_ok]
-  refine WP.spec_mono (portInTail_jat arI hAM hJS hRep J hC hcur port ⟨BitVec.ofNat 64 (portSz lbl)⟩
+  refine WP.spec_mono (portInTail_jat arI hAM hJS hRep J hZB hC hcur port ⟨BitVec.ofNat 64 (portSz lbl)⟩
     call hin hval) ?_
   rintro res ⟨hres, hne, hall⟩
   obtain ⟨htcb, x, hk⟩ := J.xtop.curTcb hcur
@@ -223,7 +223,7 @@ message words) by `decode_invocation_ioport_inJ` from `JReplyHyp` [J]. -/
 theorem decode_invocation_ioportJ_steps [Fl4Proofs.P1.PlainStore st] (s : S) (ar : A) (σ : Fl4Spec.State Unit)
     (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s ar σ) (hni : Entered σ)
     (hARI : ARIface arI AR) (hT : P0.ArchTotal arI) (hJ : JStepHyps (L := L) arI AR Z.th)
-    (hRep : JReplyHyp (L := L) arI AR Z.th)
+    (hRep : JReplyHyp (L := L) arI AR Z.th) (hZB : ZNoBlk Z.th (L.mem s) (L.ksb s))
     (lbl : U64) (slbl : Fl4Spec.Data) (hlbl : PortLabel lbl slbl)
     (length buf ct : U64) (hct : sched.cur_thread st s = ok ct) (args : List U64)
     (hlen : length.val = args.length)
@@ -248,9 +248,9 @@ theorem decode_invocation_ioportJ_steps [Fl4Proofs.P1.PlainStore st] (s : S) (ar
     exact ⟨a', h⟩
   exact decode_invocation_ioportXS arI Z.th hX.rel.1 s ar σ lbl slbl hlbl length buf ct hct args hlen hargs hcur
     (hX.curTcb hcur).1 J.kern.act first last hfl (by simpa using hl) call hout rfl hX (J.curRun.run hni)
-    ⟨Z, H, Cs, Ac, Lst, D, J⟩ (fun _ _ _ h => Steps.jat arI hARI.toMask hJ h rfl J) (fun _ _ _ h => JAt.xtop arI h)
+    ⟨Z, H, Cs, Ac, Lst, D, J⟩ (fun _ _ _ h => Steps.jat arI hARI.toMask hJ h rfl J hZB) (fun _ _ _ h => JAt.xtop arI h)
     (cslotAddr sl) blk don fp extra ci sl excaps buffer
-    (fun hI => Or.inr (decode_invocation_ioport_inJ arI hARI.toMask hJ hRep s ar σ J lbl hI slbl (hlbl.1 hI) length
+    (fun hI => Or.inr (decode_invocation_ioport_inJ arI hARI.toMask hJ hRep s ar σ J hZB lbl hI slbl (hlbl.1 hI) length
       buf ct hct args hlen hargs hcur first last hfl (by simpa using hl) (J.curRun.run hni) hin call hval
       (cslotAddr sl) blk don fp extra ci sl excaps buffer))
 

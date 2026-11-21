@@ -26,12 +26,15 @@ theorem LiveJ.liveOther {th : TypedHeap} {H : P1.Heap} {G : MdbGhost} {s : S} {�
       RefsObj q (capV (L.mem s) x) → ∃ y ∈ G.chains.flatten, y ≠ x ∧ RefsObj q (capV (L.mem s) y))
     (hc2 : ∀ w, capV (L.mem s) x = .Thread w → ∃ y ∈ G.chains.flatten, y ≠ x ∧ capV (L.mem s) y = .Thread w) :
     LiveOther (L := L) th s σ G x := by
-  refine ⟨fun q i hqi hne hu => ?_, fun k hk => ?_⟩
-  · obtain ⟨y', hy', hr⟩ := hL.slots q i hqi hu
+  refine ⟨fun q i hqi hne hu => ?_, fun k hk hki => ?_⟩
+  · rcases hL.slots q i hqi hu with ⟨y', hy', hr⟩ | hb
+    rotate_left
+    · exact Or.inr hb
+    refine Or.inl ?_
     by_cases e : y' = x
     · subst e; exact hc1 q i hqi hne hu hr
     · exact ⟨y', hy', e, hr⟩
-  · obtain ⟨y', hy', hT⟩ := hL.dbg k hk
+  · obtain ⟨y', hy', hT⟩ := hL.dbg k hk hki
     by_cases e : y' = x
     · subst e; exact hc2 _ hT
     · exact ⟨y', hy', e, hT⟩

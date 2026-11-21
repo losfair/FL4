@@ -1,0 +1,1973 @@
+diff --git a/proofs/Fl4Proofs/P3/DbgWF.lean b/proofs/Fl4Proofs/P3/DbgWF.lean
+index 7044ea57..71dcbaad 100644
+--- a/proofs/Fl4Proofs/P3/DbgWF.lean
++++ b/proofs/Fl4Proofs/P3/DbgWF.lean
+@@ -27,16 +27,6 @@ open fl4_core Fl4Proofs.P1
+ 
+ /-! ## Successor and predecessor in a list -/
+ 
+-/-- The successor of `x` in `l` (`0` past the end or if absent). -/
+-def nextIn : List U64 → U64 → U64
+-  | [], _ => 0#u64
+-  | a :: r, x => if a = x then r.headD 0#u64 else nextIn r x
+-
+-/-- The predecessor of `x` in `l`, `q` before the first. -/
+-def prevA : U64 → List U64 → U64 → U64
+-  | _, [], _ => 0#u64
+-  | q, a :: r, x => if a = x then q else prevA a r x
+-
+ theorem nextIn_mem (l : List U64) (x : U64) : nextIn l x = 0#u64 ∨ nextIn l x ∈ l := by
+   induction l with
+   | nil => exact Or.inl rfl
+@@ -215,19 +205,6 @@ theorem prevA_head {l : List U64} {t q : U64} (h : l.headD 0#u64 = t) : prevA q
+ 
+ /-! ## The invariant -/
+ 
+-/-- **The debug lists' shape** (module docstring), with the lists given. -/
+-structure DbgWFL (T Cs : Set U64) (m : U64 → U64) (hd : U64 → U64) (lst : U64 → List U64) : Prop where
+-  head : ∀ c ∈ Cs, m (hd c) = (lst c).headD 0#u64
+-  next : ∀ c ∈ Cs, ∀ x ∈ lst c, m (dnA x) = nextIn (lst c) x
+-  prev : ∀ c ∈ Cs, ∀ x ∈ lst c, m (dpA x) = prevA 0#u64 (lst c) x
+-  nodup : ∀ c ∈ Cs, (lst c).Nodup
+-  zero : ∀ c ∈ Cs, 0#u64 ∉ lst c
+-  mem : ∀ c ∈ Cs, ∀ x ∈ lst c, x ∈ T ∧ m (affA x) = c
+-  off : ∀ y ∈ T, (∀ c ∈ Cs, y ∉ lst c) → m (dnA y) = 0#u64 ∧ m (dpA y) = 0#u64
+-
+-/-- **The debug lists are well formed** [J] (module docstring). -/
+-def DbgWF (T Cs : Set U64) (m : U64 → U64) (hd : U64 → U64) : Prop := ∃ lst, DbgWFL T Cs m hd lst
+-
+ /-- The lists of different cores are disjoint. -/
+ theorem DbgWFL.disj {T Cs : Set U64} {m hd : U64 → U64} {lst : U64 → List U64} (h : DbgWFL T Cs m hd lst)
+     {c c' : U64} (hc : c ∈ Cs) (hc' : c' ∈ Cs) {x : U64} (hx : x ∈ lst c) (hx' : x ∈ lst c') : c = c' :=
+@@ -488,27 +465,9 @@ theorem dbgRm_wf {T Cs : Set U64} {hd m : U64 → U64} {lst : U64 → List U64}
+       rw [if_neg c1, if_neg c2]
+       exact hz
+ 
+-/-- `DbgWFL` reads the TCBs' debug and affinity words and the cores' head
+-words only. -/
+-theorem DbgWFL.congr {T Cs : Set U64} {m m' hd hd' : U64 → U64} {lst : U64 → List U64} (h : DbgWFL T Cs m hd lst)
+-    (hy : ∀ y ∈ T, m' (dnA y) = m (dnA y) ∧ m' (dpA y) = m (dpA y) ∧ m' (affA y) = m (affA y))
+-    (hh : ∀ c ∈ Cs, m' (hd' c) = m (hd c)) : DbgWFL T Cs m' hd' lst :=
+-  ⟨fun c hc => (hh c hc).trans (h.head c hc),
+-    fun c hc x hx => ((hy x (h.mem c hc x hx).1).1).trans (h.next c hc x hx),
+-    fun c hc x hx => ((hy x (h.mem c hc x hx).1).2.1).trans (h.prev c hc x hx),
+-    h.nodup, h.zero,
+-    fun c hc x hx => ⟨(h.mem c hc x hx).1, ((hy x (h.mem c hc x hx).1).2.2).trans (h.mem c hc x hx).2⟩,
+-    fun y hyT hn => ⟨((hy y hyT).1).trans (h.off y hyT hn).1, ((hy y hyT).2.1).trans (h.off y hyT hn).2⟩⟩
+-
+ section Store
+ variable {S : Type} {st : machine.Store S} [L : P1.LawfulStore st]
+ 
+-/-- The cores' debug-list head words. -/
+-abbrev dbgHd (s : S) : U64 → U64 := fun c => L.nodeAt s c layout.node.DEBUG_TCBS
+-
+-/-- **The debug lists of a state are well formed** [J] (module docstring). -/
+-abbrev DbgWFs (T Cs : Set U64) (s : S) : Prop := DbgWF T Cs (L.mem s) (dbgHd (L := L) s)
+-
+ /-- The debug words apart, from the TCBs' and the nodes' placement. -/
+ theorem dbgApart_of {T Cs : Set U64} {s : S} (hT : TcbPlaced T) (hN : ∀ c ∈ Cs, NodePlaced st T s c) :
+     DbgApart T Cs (dbgHd (L := L) s) := by
+@@ -531,9 +490,6 @@ theorem dbgApart_of {T Cs : Set U64} {s : S} (hT : TcbPlaced T) (hN : ∀ c ∈
+     fun y hy y' hy' => hne2 (K1 := 3520#u64) (K2 := 3584#u64) hy hy' (by simp) (by simp) (by simp),
+     fun y hy c hc e => hnd (K := 3520#u64) hc hy (by simp) e.symm⟩
+ 
+-theorem dbgHd_of_ksb {s s' : S} (h : L.ksb s' = L.ksb s) : dbgHd (L := L) s' = dbgHd (L := L) s := by
+-  funext c; unfold dbgHd LawfulStore.nodeAt; rw [h]
+-
+ /-- **FL4's `debug_remove t`, word by word** (`dbgRmM`, every aligned word;
+ the kernel-state base kept). -/
+ theorem debug_remove_mem {T Cs : Set U64} (s : S) (t : U64) (hT : TcbPlaced T)
+diff --git a/proofs/Fl4Proofs/P3/JointAt.lean b/proofs/Fl4Proofs/P3/JointAt.lean
+index a430b008..1918668f 100644
+--- a/proofs/Fl4Proofs/P3/JointAt.lean
++++ b/proofs/Fl4Proofs/P3/JointAt.lean
+@@ -38,6 +38,7 @@ import Fl4Proofs.P3.ScIpcSorted
+ import Fl4Proofs.P3.ScRecvLinks
+ import Fl4Proofs.P3.VsCapW
+ import Fl4Proofs.P3.BufDefs
++import Fl4Proofs.P3.LiveDefs
+ open Aeneas Aeneas.Std Result
+ 
+ namespace Fl4Proofs.P3
+@@ -306,6 +307,18 @@ structure JAtZ (AR : A → Fl4Spec.Cr3 → Prop) (Z : XSets) (H : P1.Heap) (Cs A
+   fcap : Vs.FrSlots Z.th (UFr σ) (L.mem s)
+   /-- [carried] **The joint extension** (`JExt`, G2). -/
+   ext : JExt (L := L) Z.th s
++  /-- [carried] **The liveness bundle at the ghosts** (KENTRY-PLAN g2i; INV-PLAN
++  E15, the former `JEntryAt.live` / `kernel_entryJ33`'s `hLv` [J]): `LiveJ`
++  (l4v `if_unsafe_then_cap`, `if_live_then_nonz_cap`, `zombies_final`; the idle
++  thread and the kernel-state block exempt, KENTRY-PLAN g2e), `DbgWF` (FL4's
++  debug lists) and `NullOrig` (l4v `valid_nullcaps`) at `Z.th`, `H`, `Cs`,
++  `Z.G`. Each construction proves it where its frames are visible
++  (`JAtZ.liveX` for a step keeping the slots). -/
++  live : LiveDN (L := L) Z.th H Cs Z.G s σ
++  /-- [carried] **The TCB zombies' TCBs are in the dead set** (so a frame step's
++  dead-set carry keeps `LiveJ.zdead`; every TCB zombie's TCB is `DeadP` by
++  `live`, so `D ∪ ZTcb` is always a dead set: `JAtZ.addDeadSet`). -/
++  zD : ∀ p ∈ ZTcb (L := L) Z.th s, p ∈ D
+ 
+ /-- **`JAt`: the joint invariant at a state** (the ghosts existential). -/
+ def JAt (AR : A → Fl4Spec.Cr3 → Prop) (s : S) (a : A) (σ : Fl4Spec.State Unit) : Prop :=
+@@ -537,6 +550,82 @@ theorem ksW_nv (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {b : U64} (hb :
+   obtain ⟨K, h1, h2, -, e, -⟩ := hb
+   exact J.ks_nv (by omega) (by omega)
+ 
++/-! ## The liveness bundle across a step (KENTRY-PLAN g2i) -/
++
++/-- The spec's idle thread is the idle word at an `XTopAt` state. -/
++theorem _root_.Fl4Proofs.P3.XTopAt.idleThread_bv {Z' : XSets} {s' : S} {a' : A} {σ' : Fl4Spec.State Unit}
++    (hX : XTopAt (L := L) AR Z' s' a' σ') : σ'.idleThread = (L.idleW s').bv := by
++  obtain ⟨Q, R, hc, hs⟩ := hX.fin.1.1.1.lists
++  unfold P1.LawfulStore.idleW
++  have h2 := hs.idleTh
++  unfold nodeW at h2
++  rw [hc.cur, ← h2]
++
++/-- **`LiveJ` at another MDB tree of the same slots** (the trees' members are
++the slots holding a non-null cap). -/
++theorem _root_.Fl4Proofs.P3.LiveJ.regh {th : TypedHeap} {H : P1.Heap} {G G' : MdbGhost} {s : S}
++    {σ : Fl4Spec.State Unit} (hL : LiveJ (L := L) th H G s σ) (hG : ∀ y ∈ G.chains.flatten, IsSlot th y)
++    (hG' : ∀ y, IsSlot th y → capV (L.mem s) y ≠ .Null → y ∈ G'.chains.flatten) :
++    LiveJ (L := L) th H G' s σ := by
++  refine ⟨fun q i hqi hu => ?_, fun n hn hni => ?_, hL.zslots, hL.zdead⟩
++  · rcases hL.slots q i hqi hu with ⟨y, hy, hr⟩ | hb
++    · refine Or.inl ⟨y, hG' y (hG y hy) fun e => ?_, hr⟩
++      rw [e] at hr; exact hr
++    · exact Or.inr hb
++  · obtain ⟨y, hy, hr⟩ := hL.dbg n hn hni
++    exact ⟨y, hG' y (hG y hy) (by rw [hr]; intro e; cases e), hr⟩
++
++/-- `ZTcb` across a step keeping the slots. -/
++theorem _root_.Fl4Proofs.P3.ZTcb.of_same {th : TypedHeap} {s s' : S} (hSS : SlotsSame th (L.mem s) (L.mem s'))
++    {p : U64} (hp : p ∈ ZTcb (L := L) th s') : p ∈ ZTcb (L := L) th s := by
++  obtain ⟨y, hy, zt, n, hz, h65⟩ := hp
++  exact ⟨y, hy, zt, n, by rw [← hSS.capV hy]; exact hz, h65⟩
++
++/-- **`LiveDN` across a step keeping the slots** (KENTRY-PLAN g2i, the core of
++the construction sites' frame, from the fields `JAtZ` and `JAtZR` share): the
++slots (`SlotsSame`), the debug words (`DbgKeep`), the original bits and the
++idle word kept, the dead set's objects dead after (the TCB zombies' TCBs among
++them), the ghost tree `Z'.G` any tree of the sets after (`XTopAt`). -/
++theorem _root_.Fl4Proofs.P3.liveDN_frame {Z : XSets} {H : P1.Heap} {Cs : Set U64} {s : S} {a : A}
++    {σ : Fl4Spec.State Unit} (hX0 : XTopAt (L := L) AR Z s a σ) (hL : LiveDN (L := L) Z.th H Cs Z.G s σ)
++    (hTz : P1.DbgTz st (P1.Heap.tcbs H) Cs s) (hcs0 : 0#u64 ∈ Cs)
++    (hTe : Z.T = P1.Heap.tcbs H)
++    {Z' : XSets} {s' : S} {a' : A}
++    {σ' : Fl4Spec.State Unit} (hX : XTopAt (L := L) AR Z' s' a' σ') (hth : Z'.th = Z.th) (hT : Z'.T = Z.T)
++    (hc : Z'.c = Z.c) (hSS : SlotsSame Z.th (L.mem s) (L.mem s'))
++    (hK : P1.DbgKeep st (P1.Heap.tcbs H) Cs s s') (horig : σ'.isOriginalCap = σ.isOriginalCap)
++    (hidl : L.idleW s' = L.idleW s) (hdead : ∀ p ∈ ZTcb (L := L) Z.th s, Sched.DeadP (L := L) H s' p) :
++    LiveDN (L := L) Z.th H Cs Z'.G s' σ' := by
++  obtain ⟨hLJ, ⟨lst, hDW⟩, hN⟩ := hL
++  have hmem : ∀ y ∈ Z.G.chains.flatten, IsSlot Z.th y := fun y hy => ((hX0.rel.2.1.2.2.1.members y).1 hy).1
++  have hid : σ'.idleThread = σ.idleThread := by
++    rw [XTopAt.idleThread_bv hX, XTopAt.idleThread_bv hX0, hidl]
++  have hM' : MdbLinks Z.th (L.mem s') Z'.G := by rw [← hth]; exact hX.rel.2.1.2.2.1
++  refine ⟨(hLJ.of_sameZ hSS hmem horig hid hK hcs0 hTz hdead).regh hmem
++      fun y hy hne => (hM'.members y).2 ⟨hy, _, capAt_capV _ _, hne⟩, ⟨lst, ?_⟩,
++    hN.of_same (fun y hy => hSS.capV hy) horig⟩
++  obtain ⟨Q0, R0, hc0, -⟩ := hX0.fin.1.1.1.lists
++  obtain ⟨Q1, R1, hc1, -⟩ := hX.fin.1.1.1.lists
++  refine hDW.of_keep hK fun y hy => ?_
++  rw [hc1.aff y (by rw [hT, hTe]; exact hy), hc0.aff y (by rw [hTe]; exact hy), hc]
++
++/-- **`LiveDN` across a step keeping the slots**, at `J` (`liveDN_frame`). -/
++theorem liveX (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {Z' : XSets} {s' : S} {a' : A}
++    {σ' : Fl4Spec.State Unit} (hX : XTopAt (L := L) AR Z' s' a' σ') (hth : Z'.th = Z.th) (hT : Z'.T = Z.T)
++    (hc : Z'.c = Z.c) (hSS : SlotsSame Z.th (L.mem s) (L.mem s'))
++    (hK : P1.DbgKeep st (P1.Heap.tcbs H) Cs s s') (horig : σ'.isOriginalCap = σ.isOriginalCap)
++    (hidl : L.idleW s' = L.idleW s) (hdead : ∀ p ∈ ZTcb (L := L) Z.th s, Sched.DeadP (L := L) H s' p) :
++    LiveDN (L := L) Z.th H Cs Z'.G s' σ' :=
++  liveDN_frame J.xtop J.live ⟨J.blk.2.2.1.2.2.tm.dn, J.blk.2.2.1.2.2.tm.dp, J.blk.2.2.1.2.2.tm.dh⟩ J.kern.cs0
++    (by obtain ⟨Tr, Cq, hJ⟩ := J.jpl
++        exact Set.ext fun t => ⟨fun h => J.zH.1 t h, fun h => J.thT t ((hJ.tcb t).2 h)⟩)
++    hX hth hT hc hSS hK horig hidl hdead
++
++/-- **`JAtZ.zD` across a step keeping the slots**, the dead set grown. -/
++theorem zDX (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {s' : S} {D' : Set U64}
++    (hSS : SlotsSame Z.th (L.mem s) (L.mem s')) (hDD : ∀ p ∈ ZTcb (L := L) Z.th s, p ∈ D') :
++    ∀ p ∈ ZTcb (L := L) Z.th s', p ∈ D' := fun p hp => hDD p (ZTcb.of_same hSS hp)
++
+ end JAtZ
+ 
+ end
+diff --git a/proofs/Fl4Proofs/P3/ScChargeH.lean b/proofs/Fl4Proofs/P3/ScChargeH.lean
+index 47015242..2f7c6f2b 100644
+--- a/proofs/Fl4Proofs/P3/ScChargeH.lean
++++ b/proofs/Fl4Proofs/P3/ScChargeH.lean
+@@ -65,6 +65,10 @@ structure JHole (AR : A → Fl4Spec.Cr3 → Prop) (Z : XSets) (H : P1.Heap) (Cs
+   blk : P1.BlkOK st (P1.Heap.tcbs H) Cs (P1.Heap.omega H) H (P1.Heap.frame H) (P1.Heap.replies H)
+     (P1.Heap.scs H) (P1.Heap.ntfns H) (P1.Heap.scBits H) Ac s
+   dbg : L.mem s (L.nodeAt s0 0#u64 layout.node.DEBUG_TCBS) = L.mem s0 (L.nodeAt s0 0#u64 layout.node.DEBUG_TCBS)
++  /-- Every debug word kept from the base (KENTRY-PLAN g2i: the `LiveDN` frame
++  of the constructions from the hole; `update_timestamp` writes two time
++  words of the current node). -/
++  dbgK : P1.DbgKeep st (P1.Heap.tcbs H) Cs s0 s
+ 
+ variable {arI}
+ 
+@@ -153,8 +157,29 @@ theorem JAtZ.timestampJH {s : S} {a : A} {σ : Fl4Spec.State Unit}
+     rcases hb with hb | hb
+     · have := congrArg UScalar.val hb; rw [hd, h1] at this; simp at this; omega
+     · have := congrArg UScalar.val hb; rw [hd, h2] at this; simp at this; omega
++  have hKd : P1.DbgKeep st (P1.Heap.tcbs H) Cs s s' :=
++    ⟨hw.1, fun b hb => hw.mem_eq (P1.dbgW_aligned J.blk hb) fun h' => by
++      rcases h' with rfl | rfl
++      · exact P1.dbgW_not_kw J.blk (Or.inr (Or.inl ⟨L.cpu s, J.kern.cpuCs, layout.node.CUR_TIME,
++          by simp [layout.node.CUR_TIME], by simp [layout.node.CUR_TIME], rfl⟩)) hb
++      · exact P1.dbgW_not_kw J.blk (Or.inr (Or.inl ⟨L.cpu s, J.kern.cpuCs, layout.node.CONSUMED,
++          by simp [layout.node.CONSUMED], by simp [layout.node.CONSUMED], rfl⟩)) hb⟩
+   exact ⟨J, ⟨ms2, nv.bv, σ.consumedTime + (nv.bv - σ.curTime), hum2, rfl⟩, hwK, hX', hN2, hI2,
+-    J.cur.imp id hC2, hA2 J.act, hBlk', hDbg⟩
++    J.cur.imp id hC2, hA2 J.act, hBlk', hDbg, hKd⟩
++
++/-- **`JHole.dbgK` across one more time-word write** (the consumed-time reset
++of the preemption path; KENTRY-PLAN g2i). -/
++theorem JHole.dbgK_node {s0 : S} {a0 : A} {σ0 : Fl4Spec.State Unit} {s : S} {a : A} {σ : Fl4Spec.State Unit}
++    (Hh : JHole (L := L) arI AR Z H Cs Ac Lst D s0 a0 σ0 s a σ) {c : U64} (hc : c ∈ Cs) {o : U64}
++    (ho : o = layout.node.CUR_TIME ∨ o = layout.node.CONSUMED) {s' : S}
++    (hw : P1.WritesIn st s s' (· = L.nodeAt s c o)) : P1.DbgKeep st (P1.Heap.tcbs H) Cs s0 s' :=
++  Hh.dbgK.trans ⟨hw.1, fun b hb => hw.mem_eq (P1.dbgW_aligned Hh.blk hb) fun h' => by
++    subst h'
++    rcases ho with rfl | rfl
++    · exact P1.dbgW_not_kw Hh.blk (Or.inr (Or.inl ⟨c, hc, layout.node.CUR_TIME,
++        by simp [layout.node.CUR_TIME], by simp [layout.node.CUR_TIME], rfl⟩)) hb
++    · exact P1.dbgW_not_kw Hh.blk (Or.inr (Or.inl ⟨c, hc, layout.node.CONSUMED,
++        by simp [layout.node.CONSUMED], by simp [layout.node.CONSUMED], rfl⟩)) hb⟩
+ 
+ set_option maxHeartbeats 4000000 in
+ /-- **A `JHole` with `OffOK` and `CurOwnW` is a `JAtZ` state** (an SC step
+@@ -179,7 +204,7 @@ theorem JHole.toJ {s0 : S} {a0 : A} {σ0 : Fl4Spec.State Unit} {s : S} {a : A} {
+   exact ⟨Lst', J.sc_frame hwT hK hX' hCR' hRF' hY' hM' (J.sc_buf hwT hK) hRP' (J.sc_apart hwT hK)
+     (J.sc_jpl hwT hK hidW.2) (J.sc_jcov hwT hDead (fun q hq hn => absurd hq hn) hidW)
+     (J.sc_kern hwT hK hF hX' Hh.dbg fun _ h => h)
+-    (J.sc_utc hwT hK Hh.dbg) Hh.nsc Hh.inv Hh.cur hOw hO hAI' hbsa hcr Hh.blk⟩
++    (J.sc_utc hwT hK Hh.dbg) Hh.nsc Hh.inv Hh.cur hOw hO hAI' hbsa hcr Hh.blk Hh.dbgK hidW.1 J.zD⟩
+ 
+ set_option maxHeartbeats 32000000 in
+ /-- **`charge_budget` without timeout faults from a `JHole`** (module
+@@ -329,7 +354,9 @@ theorem JHole.chargeBudgetJ {s0 : S} {a0 : A} {σ0 : Fl4Spec.State Unit} {s : S}
+   exact ⟨Lst', J.sc_frame hW hKc hX' hCR' hRF' hY' hM' (J.sc_buf hW hKc) hRP' (J.sc_apart hW hKc)
+     (J.sc_jpl hW hKc hidW.2) (J.sc_jcov hW hdead (fun q hq hn => absurd hq hn) hidW)
+     (J.sc_kern hW hKc hfkc hX' hDbg fun _ h => h) (J.sc_utc hW hKc hDbg) hN' hI' hcur' hown' hoff hAI' hbsa hcr
+-    hblk'⟩
++    hblk' (Hh.dbgK.trans (P1.Foot.dbgKeep Hh.blk (by first | exact fun _ h => h | exact Set.empty_subset _) hfoot))
++    hidW.1 J.zD⟩
++
+ 
+ set_option maxHeartbeats 8000000 in
+ /-- **`charge_budget` with `can_timeout_fault = true` from a `JHole`, when the
+diff --git a/proofs/Fl4Proofs/P3/ScChargeJ.lean b/proofs/Fl4Proofs/P3/ScChargeJ.lean
+index b0ad55b7..35e9a0db 100644
+--- a/proofs/Fl4Proofs/P3/ScChargeJ.lean
++++ b/proofs/Fl4Proofs/P3/ScChargeJ.lean
+@@ -342,6 +342,7 @@ theorem JAtZ.chargeBudgetJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) (hA
+     ScAll.of_tr hS J.rp J.mcp J.call J.rfree ⟨hS', hR', hN', hI'⟩ hY (hW.mono fun _ h => Or.inl h) hsok rfl
+   have hAI' := hAI J.act
+   have hDbg := J.kw_dbg hfoot
++  have hKd := J.kw_dbgKeep hfoot
+   have hidW := J.idleW_keep hS' hfk.2.1 hfk.2.2
+   have hblk' : P1.BlkOK st (P1.Heap.tcbs H) Cs (P1.Heap.omega H) H (P1.Heap.frame H) (P1.Heap.replies H)
+       (P1.Heap.scs H) (P1.Heap.ntfns H) (P1.Heap.scBits H) Ac s' :=
+@@ -386,7 +387,7 @@ theorem JAtZ.chargeBudgetJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) (hA
+   exact ⟨Lst', J.sc_frame hW hK hX' hCR' hRF' hY' hM' (J.sc_buf hW hK) hRP' (J.sc_apart hW hK)
+     (J.sc_jpl hW hK hidW.2) (J.sc_jcov hW hdead (fun q hq hn => absurd hq hn) hidW)
+     (J.sc_kern hW hK hfk hX' hDbg fun _ h => h) (J.sc_utc hW hK hDbg) hN' hI' hcur' hown' hoff hAI' hbsa hcr
+-    hblk'⟩
++    hblk' hKd hidW.1 J.zD⟩
+ 
+ end
+ 
+diff --git a/proofs/Fl4Proofs/P3/ScJointFrame.lean b/proofs/Fl4Proofs/P3/ScJointFrame.lean
+index bbe11254..c5b3c8c8 100644
+--- a/proofs/Fl4Proofs/P3/ScJointFrame.lean
++++ b/proofs/Fl4Proofs/P3/ScJointFrame.lean
+@@ -243,7 +243,8 @@ theorem JAtZ.sc_frame {AR : A → Fl4Spec.Cr3 → Prop} {Z : XSets} {H : P1.Heap
+     (hown : Sched.CurOwnW Z.T Z.C σ') (hoff : Sched.OffOK σ')
+     (hact : Sched.ActIdle σ') (hbsa : Sched.BlockedScActive σ') (hcr : CurRunM σ')
+     (hblk : P1.BlkOK st (P1.Heap.tcbs H) Cs (P1.Heap.omega H) H (P1.Heap.frame H) (P1.Heap.replies H)
+-      (P1.Heap.scs H) (P1.Heap.ntfns H) (P1.Heap.scBits H) Ac' s') :
++      (P1.Heap.scs H) (P1.Heap.ntfns H) (P1.Heap.scBits H) Ac' s')
++    (hKd : P1.DbgKeep st (P1.Heap.tcbs H) Cs s s') (hidl : L.idleW s' = L.idleW s) (hDD : ∀ p ∈ ZTcb (L := L) Z.th s, p ∈ D') :
+     JAtZ (L := L) arI AR Z H Cs Ac' Lst' D' s' a' σ' := by
+   have hks : L.ksb s' = L.ksb s := hw.1
+   have hSS : SlotsSame Z.th (L.mem s) (L.mem s') :=
+@@ -262,7 +263,8 @@ theorem JAtZ.sc_frame {AR : A → Fl4Spec.Cr3 → Prop} {Z : XSets} {H : P1.Heap
+     J.c0, hbsa, hsv, J.isorted.tkw hK, hsl, hcr, hblk, by rw [hks]; exact J.intL,
+     J.vsc.of_eq fun y hy => hSS.capV hy,
+     J.bok.keep (IpcFrKeep.of_otk hK.kh), J.fcov.ipcFr (IpcFrKeep.of_otk hK.kh),
+-    J.fcap.keepU (Vs.VsSlotsT.of_eq fun y hy => hSS.capV hy) (IpcFrKeep.of_otk hK.kh).page, J.ext.ss hSS (J.tfoot_vkeep hw)⟩
++    J.fcap.keepU (Vs.VsSlotsT.of_eq fun y hy => hSS.capV hy) (IpcFrKeep.of_otk hK.kh).page, J.ext.ss hSS (J.tfoot_vkeep hw),
++    J.liveX hX rfl rfl rfl hSS hKd hK.orig hidl (fun p hp => hjc.dead p (hDD p hp)), J.zDX hSS hDD⟩
+   · refine SpecFree.frame J.sfree (fun x' hx' p sb fi' d hc => ⟨x', hx', fi', ?_, le_rfl⟩) hK.ksz
+     rw [← hSS.capV (hsl' x' hx')]; exact hc
+   · have hG0 : MdbLinks Z.th (L.mem s) G := hG.of_same_symm hSS
+diff --git a/proofs/Fl4Proofs/P3/ScJointSchFrame.lean b/proofs/Fl4Proofs/P3/ScJointSchFrame.lean
+index b2acb63e..9b545f59 100644
+--- a/proofs/Fl4Proofs/P3/ScJointSchFrame.lean
++++ b/proofs/Fl4Proofs/P3/ScJointSchFrame.lean
+@@ -38,7 +38,8 @@ theorem JAtZ.sch_frame {AR : A → Fl4Spec.Cr3 → Prop} {Z : XSets} {H : P1.Hea
+     (hown : Sched.CurOwnW Z.T Z.C σ') (hoff : Sched.OffOK σ')
+     (hact : Sched.ActIdle σ') (hbsa : Sched.BlockedScActive σ') (hcr : CurRunM σ')
+     (hblk : P1.BlkOK st (P1.Heap.tcbs H) Cs (P1.Heap.omega H) H (P1.Heap.frame H) (P1.Heap.replies H)
+-      (P1.Heap.scs H) (P1.Heap.ntfns H) (P1.Heap.scBits H) Ac' s') :
++      (P1.Heap.scs H) (P1.Heap.ntfns H) (P1.Heap.scBits H) Ac' s')
++    (hKd : P1.DbgKeep st (P1.Heap.tcbs H) Cs s s') (hidl : L.idleW s' = L.idleW s) (hDD : ∀ p ∈ ZTcb (L := L) Z.th s, p ∈ D') :
+     JAtZ (L := L) arI AR Z H Cs Ac' Lst' D' s' a' σ' := by
+   have hT := hK.toTK
+   have hobj0 := J.obj.tkw hT
+@@ -68,7 +69,8 @@ theorem JAtZ.sch_frame {AR : A → Fl4Spec.Cr3 → Prop} {Z : XSets} {H : P1.Hea
+     J.vsc.of_eq fun y hy => hSS.capV hy,
+     J.bok.keep (IpcFrKeep.of_otk hK.kh), J.fcov.ipcFr (IpcFrKeep.of_otk hK.kh),
+     J.fcap.keepU (Vs.VsSlotsT.of_eq fun y hy => hSS.capV hy) (IpcFrKeep.of_otk hK.kh).page,
+-    J.ext.ss hSS (VKeep.of_tfoot J.xtop.fin.1.1.1 J.thT hw)⟩
++    J.ext.ss hSS (VKeep.of_tfoot J.xtop.fin.1.1.1 J.thT hw),
++    J.liveX hX rfl rfl rfl hSS hKd hK.orig hidl (fun p hp => hjc.dead p (hDD p hp)), J.zDX hSS hDD⟩
+   · refine SpecFree.frame J.sfree (fun x' hx' p sb fi' d hc => ⟨x', hx', fi', ?_, le_rfl⟩) hksz
+     rw [← hSS.capV (hsl' x' hx')]; exact hc
+   · have hG0 : MdbLinks Z.th (L.mem s) G := hG.of_same_symm hSS
+diff --git a/proofs/Fl4Proofs/P3/ScJointStep.lean b/proofs/Fl4Proofs/P3/ScJointStep.lean
+index 3a8d1e62..d0cbda90 100644
+--- a/proofs/Fl4Proofs/P3/ScJointStep.lean
++++ b/proofs/Fl4Proofs/P3/ScJointStep.lean
+@@ -55,10 +55,12 @@ section
+ variable {S : Type} {st : machine.Store S} [L : P1.LawfulStore st] {A : Type} {arI : machine.Arch A}
+ 
+ /-- **The P1-supplied part of an SC step** (the node-0 `DEBUG_TCBS` word kept,
+-`BlkOK` after). -/
++every debug word kept — KENTRY-PLAN g2i, for `JAtZ.live`; an SC decode writes
++no TCB debug link and no debug head —, `BlkOK` after). -/
+ def ScStepP1 (Z : XSets) (H : P1.Heap) (Cs : Set U64) (s s' : S) : Prop :=
+   ∃ (Ac' : Set U64),
+     L.mem s' (L.nodeAt s 0#u64 layout.node.DEBUG_TCBS) = L.mem s (L.nodeAt s 0#u64 layout.node.DEBUG_TCBS) ∧
++    P1.DbgKeep st (P1.Heap.tcbs H) Cs s s' ∧
+     P1.BlkOK st (P1.Heap.tcbs H) Cs (P1.Heap.omega H) H (P1.Heap.frame H) (P1.Heap.replies H)
+       (P1.Heap.scs H) (P1.Heap.ntfns H) (P1.Heap.scBits H) Ac' s'
+ 
+@@ -201,7 +203,7 @@ theorem sched_controlJ_step {AR : A → Fl4Spec.Cr3 → Prop} {Z : XSets} {H : P
+       (pres_invokeSchedControlConfigureFlags (true, true) _ σ1 _ hm2)
+   obtain ⟨-, hY', hM', ⟨Lst', hCR', hRF'⟩, hRP', -⟩ :=
+     ScAll.of_k hS J.rp J.yld J.mcp J.call J.rfree ⟨⟨hS', hR', hN', hI'⟩, hw, hSOK⟩
+-  obtain ⟨Ac', hDbg, hBlk'⟩ := hRst hr1 σ' inv σ1 hdec he1 he2
++  obtain ⟨Ac', hDbg, hKd, hBlk'⟩ := hRst hr1 σ' inv σ1 hdec he1 he2
+   obtain ⟨a0, rest, hex', q, sz, rfl, b, per, k, badge, flag, rfl⟩ :=
+     (rdp_decodeCfgHead slbl (args.map UScalar.bv) (excaps.map Prod.fst) σ _ (by rw [hdec]; exact Set.mem_singleton _)).2
+       _ rfl
+@@ -467,7 +469,7 @@ theorem sched_contextJ_step {AR : A → Fl4Spec.Cr3 → Prop} {Z : XSets} {H : P
+       (f1 := decide (∀ p, inv ≠ .invokeSchedContextYieldTo p))
+       ((pres_invokeSchedContext inv σ0 _ hm1).weaken (f' := (decide (∀ p, inv ≠ .invokeSchedContextYieldTo p), true))
+         id (fun _ => hu))
+-  obtain ⟨Ac', hDbg, hBlk'⟩ := hRst hr1 σ2 ⟨inv, σ0, hrun, he0, he1⟩
++  obtain ⟨Ac', hDbg, hKd, hBlk'⟩ := hRst hr1 σ2 ⟨inv, σ0, hrun, he0, he1⟩
+   -- the mid-entry facts: the restart keeps them, the invocation is a `MidK` step
+   have hC := J.curInv (by rw [hres]; simp)
+   obtain ⟨hres0, hC0, hO0, hA0, hI0⟩ := restart_mid hcur hkc hcs hres hC J.off J.act J.inv
+diff --git a/proofs/Fl4Proofs/P3/ScJointYield.lean b/proofs/Fl4Proofs/P3/ScJointYield.lean
+index 3958217c..cdd3361f 100644
+--- a/proofs/Fl4Proofs/P3/ScJointYield.lean
++++ b/proofs/Fl4Proofs/P3/ScJointYield.lean
+@@ -246,6 +246,7 @@ theorem JAtZ.linkYieldJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {ct sc
+         have e : (scYieldFromA sc).val = sc.val + 56 := e56
+         exact Or.inr (Or.inr (Or.inr (Or.inl ⟨sc, hscS, by rw [e]; omega, by rw [e]; omega⟩)))
+   have hDbg := J.kw_dbg hKW
++  have hKd := J.kw_dbgKeep hKW
+   have hX' : XTopAt (L := L) AR Z _ a σ' :=
+     xtop_sc_step (ct := σ.curThread) J.xtop J.ip J.nk hW (hK.mono fun _ h => h.elim) hS2 hR2 id
+   have hall := ScAll.of_tr hS J.rp J.mcp J.call J.rfree ⟨hS2, hR2, hN2, hI2⟩ hY2 (hW.mono fun b hb => Or.inl hb)
+@@ -267,7 +268,7 @@ theorem JAtZ.linkYieldJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {ct sc
+     (J.sc_jpl hW hK (J.idleW_keep hX'.fin.1.1.1 hA.fk.2.1 hA.fk.2.2).2) (J.sc_jcov hW hdead (fun q hq hn => absurd hq hn) (J.idleW_keep hX'.fin.1.1.1 hA.fk.2.1 hA.fk.2.2))
+     (J.sc_kern hW hK hA.fk hX' hDbg fun _ h => h)
+     (J.sc_utc hW hK hDbg) hN2 hI2 (hA.cur J.cur) (hA.own J.own) (hA.off J.off) hAI (hA.bsa J.bsa)
+-    (hA.curRunM J.curRun) hblk⟩
++    (hA.curRunM J.curRun) hblk hKd (J.idleW_keep hX'.fin.1.1.1 hA.fk.2.1 hA.fk.2.2).1 J.zD⟩
+ 
+ set_option maxHeartbeats 16000000 in
+ /-- **`yield_switches` at `J`** (ScYieldTo's `yield_switches_refines` with
+diff --git a/proofs/Fl4Proofs/P3/ScSignalBoundJ.lean b/proofs/Fl4Proofs/P3/ScSignalBoundJ.lean
+index 523aec28..84fbd0d3 100644
+--- a/proofs/Fl4Proofs/P3/ScSignalBoundJ.lean
++++ b/proofs/Fl4Proofs/P3/ScSignalBoundJ.lean
+@@ -434,6 +434,7 @@ theorem JAtZ.wake_postB (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {n t :
+     · obtain ⟨h1, h2, h3⟩ := hRR d hd x hx hxt
+       exact ⟨h1, by rw [e2]; exact h2, by rw [e1]; exact h3⟩
+   have hDbg := J.kw_dbg hfoot
++  have hKd := J.kw_dbgKeep hfoot
+   have hS3 : SchedRel st Z.N Z.T Z.C Z.c s' σ' := hIR.2.2.1
+   have hdead : ∀ q ∈ D, DeadP (L := L) H s' q := J.deadP_cfr F hS3 hIR.1 hw k3 hAI3.1 (J.yld.frame k2 F.ykeep) F.ykeep ht
+   have hjpl : ∃ Tr Cq, JPlaced (L := L) Z.th H Tr Cq s' σ' := by
+diff --git a/proofs/Fl4Proofs/P3/ScSignalDonJ.lean b/proofs/Fl4Proofs/P3/ScSignalDonJ.lean
+index b7a2af56..834abdc0 100644
+--- a/proofs/Fl4Proofs/P3/ScSignalDonJ.lean
++++ b/proofs/Fl4Proofs/P3/ScSignalDonJ.lean
+@@ -198,6 +198,7 @@ theorem JAtZ.wake_postD (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {n t :
+     · obtain ⟨h1, h2, h3⟩ := hRR d hd x hx hxt
+       exact ⟨h1, by rw [e2]; exact h2, by rw [e1]; exact h3⟩
+   have hDbg := J.kw_dbg hfoot
++  have hKd := J.kw_dbgKeep hfoot
+   have hS3 : SchedRel st Z.N Z.T Z.C Z.c s' σ' := hIR.2.2.1
+   have hdead : ∀ q ∈ D, DeadP (L := L) H s' q := J.deadP_dfr F hS3 hIR.1 hw k3 hAI3.1 (J.yld.frame k2 F.ykeep) F.ykeep ht
+   have hjpl : ∃ Tr Cq, JPlaced (L := L) Z.th H Tr Cq s' σ' := by
+diff --git a/proofs/Fl4Proofs/P3/ScSignalJ.lean b/proofs/Fl4Proofs/P3/ScSignalJ.lean
+index 31d6b301..ee3c7beb 100644
+--- a/proofs/Fl4Proofs/P3/ScSignalJ.lean
++++ b/proofs/Fl4Proofs/P3/ScSignalJ.lean
+@@ -165,6 +165,7 @@ theorem JAtZ.wake_post {s : S} {a : A} {σ : Fl4Spec.State Unit}
+   have hRF' := RFree.carry J.rfree J.call k4 ck
+   have hRR' := J.rrecv.frame k4 F.khrb
+   have hDbg := J.kw_dbg hfoot
++  have hKd := J.kw_dbgKeep hfoot
+   have hS3 : SchedRel st Z.N Z.T Z.C Z.c s' σ' := hIR.2.2.1
+   have hdead : ∀ q ∈ D, DeadP (L := L) H s' q := J.deadP_nfr F hS3 hIR.1 hw k3 hAI3.1 (J.yld.frame k2 F.ykeep) F.ykeep
+   have hjpl : ∃ Tr Cq, JPlaced (L := L) Z.th H Tr Cq s' σ' := by
+diff --git a/proofs/Fl4Proofs/P3/XTopJointCancel.lean b/proofs/Fl4Proofs/P3/XTopJointCancel.lean
+index e9469d0a..1f8523bc 100644
+--- a/proofs/Fl4Proofs/P3/XTopJointCancel.lean
++++ b/proofs/Fl4Proofs/P3/XTopJointCancel.lean
+@@ -127,6 +127,7 @@ theorem JAtZ.kfrStep (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {t : Fl4S
+     obtain ⟨h1, h2, h3⟩ := J.rfree d hd ⟨y, F.replyB hy, hyt⟩
+     exact ⟨h1, by rw [e2]; exact h2, by rw [e1]; exact h3⟩
+   have hDbg := J.kw_dbg hfoot
++  have hKd := J.kw_dbgKeep hfoot
+   have hS3 : SchedRel st Z.N Z.T Z.C Z.c s' σ' := hIR.2.2.1
+   have hAI3 : ActIdle σ' := by
+     refine ⟨fun u hu => ?_, F.idleOK J.act.2⟩
+diff --git a/proofs/Fl4Proofs/P3/XTopJointCancelReply.lean b/proofs/Fl4Proofs/P3/XTopJointCancelReply.lean
+index 92c42845..17169e31 100644
+--- a/proofs/Fl4Proofs/P3/XTopJointCancelReply.lean
++++ b/proofs/Fl4Proofs/P3/XTopJointCancelReply.lean
+@@ -663,6 +663,7 @@ theorem JAtZ.replyRemoveTcbJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ)
+     exact ⟨Tr, Cq, hJ.same hF.1 (fun q y n _ hq => szk q.bv y n hq) hks (J.rmW_irq hw)
+       (J.idleW_keep hIR.2.2.1 hidle' hisc').2⟩
+   have hDbg := J.kw_dbg hfoot
++  have hKd := J.kw_dbgKeep hfoot
+   have hao : ∀ p ao, σ.kheap p = some (.archObj ao) → σ'.kheap p = some (.archObj ao) := by
+     intro p ao hp
+     have h1 : p ≠ t.bv := by rintro rfl; rw [hk] at hp; cases hp
+diff --git a/proofs/Fl4Proofs/P3/XTopJointCbs.lean b/proofs/Fl4Proofs/P3/XTopJointCbs.lean
+index c0810051..5b5c6555 100644
+--- a/proofs/Fl4Proofs/P3/XTopJointCbs.lean
++++ b/proofs/Fl4Proofs/P3/XTopJointCbs.lean
+@@ -467,6 +467,7 @@ theorem JAtZ.cancelBadgedJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {e
+       exact ⟨h1, by rw [r2]; exact h2, by rw [r1]; exact h3⟩
+     · exact hf.elim
+   have hDbg := J.kw_dbg hfoot
++  have hKd := J.kw_dbgKeep hfoot
+   have hS3 : SchedRel st Z.N Z.T Z.C Z.c s3 σ3 := hI3.2.2.1
+   have hAI3 : ActIdle σ3 := by
+     rcases hact with e' | e'
+diff --git a/proofs/Fl4Proofs/P3/XTopJointFaultC.lean b/proofs/Fl4Proofs/P3/XTopJointFaultC.lean
+index 0b83401e..f062acb9 100644
+--- a/proofs/Fl4Proofs/P3/XTopJointFaultC.lean
++++ b/proofs/Fl4Proofs/P3/XTopJointFaultC.lean
+@@ -65,6 +65,7 @@ theorem JAtZ.stsCurJC (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) (hni : M
+   rintro s6 ⟨⟨⟨⟨hR6, hS6r⟩, hw6⟩, hy6⟩, hblk, hfoot⟩
+   have hX6 := IpcRel.ofSRN hR6 hS6r
+   have hDbg := J.kw_dbg hfoot
++  have hKd := J.kw_dbgKeep hfoot
+   set x6 : Fl4Spec.Tcb := { x with tcbState := .inactive } with hx6
+   set σ1 := updK σ t.bv (.tcb x6) with hσ1
+   set σ6 := stsAct σ1 t.bv with hσ6
+@@ -456,6 +457,7 @@ theorem JAtZ.faultBlockJC (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) (hni
+     obtain ⟨h1, h2, h3⟩ := J.rfree d hd ⟨y, F.replyB hy, hyt⟩
+     exact ⟨h1, by rw [e2]; exact h2, by rw [e1]; exact h3⟩
+   have hDbg := J.kw_dbg hfoot
++  have hKd := J.kw_dbgKeep hfoot
+   have hS3 : SchedRel st Z.N Z.T Z.C Z.c s' σ' := hIR.2.2.1
+   -- the scheduler: the current thread blocked, a reschedule pending
+   have hact' : σ'.schedulerAction = σ.schedulerAction := hactK (by show σf.schedulerAction ≠ _; exact hsw)
+diff --git a/proofs/Fl4Proofs/P3/XTopJointFaultDonM.lean b/proofs/Fl4Proofs/P3/XTopJointFaultDonM.lean
+index 43b25f22..6698a0f7 100644
+--- a/proofs/Fl4Proofs/P3/XTopJointFaultDonM.lean
++++ b/proofs/Fl4Proofs/P3/XTopJointFaultDonM.lean
+@@ -382,6 +382,7 @@ theorem JAtZ.pushDonJS (hAT : P0.ArchTotal arI) (J : JAtZ (L := L) arI AR Z H Cs
+   have hFK : FK σ σ' := ⟨pdS_csc, pdS_idle, pdS_isc⟩
+   have hIK := J.idleW_keep hS' pdS_idle pdS_isc
+   have hDbg := J.kw_dbg hfoot
++  have hKd := J.kw_dbgKeep hfoot
+   -- the bound-before objects at `σB`
+   have hktB : σB.kheap t.bv = some (.tcb xt) := bd_oth hky hkw hws hh (fun _ e => by cases e) (Ne.symm hst') hkt
+   have hkdB : σB.kheap d.bv = some (.tcb xd) := bd_oth hky hkw hws hh (fun _ e => by cases e) (Ne.symm hsd') hkd
+diff --git a/proofs/Fl4Proofs/P3/XTopJointFaultEp.lean b/proofs/Fl4Proofs/P3/XTopJointFaultEp.lean
+index df0fd467..83057f0d 100644
+--- a/proofs/Fl4Proofs/P3/XTopJointFaultEp.lean
++++ b/proofs/Fl4Proofs/P3/XTopJointFaultEp.lean
+@@ -590,6 +590,7 @@ theorem JAtZ.faultBlockJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) (hni
+     obtain ⟨h1, h2, h3⟩ := J.rfree d hd ⟨y, F.replyB hy, hyt⟩
+     exact ⟨h1, by rw [e2]; exact h2, by rw [e1]; exact h3⟩
+   have hDbg := J.kw_dbg hfoot
++  have hKd := J.kw_dbgKeep hfoot
+   have hS3 : SchedRel st Z.N Z.T Z.C Z.c s' σ' := hIR.2.2.1
+   -- the scheduler: the current thread blocked, a reschedule pending
+   have hcn' : σ'.schedulerAction = .chooseNewThread := hcn hcur.symm hni.2
+diff --git a/proofs/Fl4Proofs/P3/XTopJointFaultM.lean b/proofs/Fl4Proofs/P3/XTopJointFaultM.lean
+index fecfc7ea..4e2ab41f 100644
+--- a/proofs/Fl4Proofs/P3/XTopJointFaultM.lean
++++ b/proofs/Fl4Proofs/P3/XTopJointFaultM.lean
+@@ -153,7 +153,8 @@ theorem JAtZ.sc_frameR {AR : A → Fl4Spec.Cr3 → Prop} {Z : XSets} {H : P1.Hea
+     (hown : Sched.CurOwnW Z.T Z.C σ') (hoff : Sched.OffOK σ')
+     (hact : Sched.ActIdle σ') (hbsa : Sched.BlockedScActive σ') (hcr : CurRunM σ')
+     (hblk : P1.BlkOK st (P1.Heap.tcbs H) Cs (P1.Heap.omega H) H (P1.Heap.frame H) (P1.Heap.replies H)
+-      (P1.Heap.scs H) (P1.Heap.ntfns H) (P1.Heap.scBits H) Ac' s') :
++      (P1.Heap.scs H) (P1.Heap.ntfns H) (P1.Heap.scBits H) Ac' s')
++    (hKd : P1.DbgKeep st (P1.Heap.tcbs H) Cs s s') (hidl : L.idleW s' = L.idleW s) (hDD : ∀ p ∈ ZTcb (L := L) Z.th s, p ∈ D') :
+     JAtZR (L := L) arI AR Z H Cs Ac' Lst' D' s' a' σ' := by
+   have hks : L.ksb s' = L.ksb s := hw.1
+   have hSS : SlotsSame Z.th (L.mem s) (L.mem s') :=
+@@ -173,7 +174,8 @@ theorem JAtZ.sc_frameR {AR : A → Fl4Spec.Cr3 → Prop} {Z : XSets} {H : P1.Hea
+     J.vsc.of_eq fun y hy => hSS.capV hy,
+     J.bok.keep (IpcFrKeep.of_otk hK.kh), J.fcov.ipcFr (IpcFrKeep.of_otk hK.kh),
+     J.fcap.keepU (Vs.VsSlotsT.of_eq fun y hy => hSS.capV hy) (IpcFrKeep.of_otk hK.kh).page,
+-    J.ext.ss hSS (VKeep.of_tfoot J.xtop.fin.1.1.1 J.thT hw)⟩
++    J.ext.ss hSS (VKeep.of_tfoot J.xtop.fin.1.1.1 J.thT hw),
++    J.liveX hX rfl rfl rfl hSS hKd hK.orig hidl (fun p hp => hjc.dead p (hDD p hp)), J.zDX hSS hDD⟩
+   · refine SpecFree.frame J.sfree (fun x' hx' p sb fi' d hc => ⟨x', hx', fi', ?_, le_rfl⟩) hK.ksz
+     rw [← hSS.capV (hsl' x' hx')]; exact hc
+   · have hG0 : MdbLinks Z.th (L.mem s) G := hG.of_same_symm hSS
+@@ -240,6 +242,7 @@ theorem JAtZ.stsCurJM (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) (hni : M
+   rintro s6 ⟨⟨⟨⟨hR6, hS6r⟩, hw6⟩, hy6⟩, hblk, hfoot⟩
+   have hX6 := IpcRel.ofSRN hR6 hS6r
+   have hDbg := J.kw_dbg hfoot
++  have hKd := J.kw_dbgKeep hfoot
+   set x6 : Fl4Spec.Tcb := { x with tcbState := .inactive } with hx6
+   set σ1 := updK σ t.bv (.tcb x6) with hσ1
+   set σ6 := stsAct σ1 t.bv with hσ6
+@@ -650,6 +653,7 @@ theorem JAtZ.faultBlockJM (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) (hni
+     obtain ⟨h1, h2, h3⟩ := J.rfree d hd ⟨y, F.replyB hy, hyt⟩
+     exact ⟨h1, by rw [e2]; exact h2, by rw [e1]; exact h3⟩
+   have hDbg := J.kw_dbg hfoot
++  have hKd := J.kw_dbgKeep hfoot
+   have hS3 : SchedRel st Z.N Z.T Z.C Z.c s' σ' := hIR.2.2.1
+   -- the scheduler: the current thread blocked, a reschedule pending
+   have hact' : σ'.schedulerAction = σ.schedulerAction := hactK (by show σf.schedulerAction ≠ _; exact hsw)
+diff --git a/proofs/Fl4Proofs/P3/XTopJointFaultN.lean b/proofs/Fl4Proofs/P3/XTopJointFaultN.lean
+index 12ea79d6..0de0e176 100644
+--- a/proofs/Fl4Proofs/P3/XTopJointFaultN.lean
++++ b/proofs/Fl4Proofs/P3/XTopJointFaultN.lean
+@@ -65,6 +65,7 @@ theorem JAtZ.stsCurJN (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) (hni : M
+   rintro s6 ⟨⟨⟨⟨hR6, hS6r⟩, hw6⟩, hy6⟩, hblk, hfoot⟩
+   have hX6 := IpcRel.ofSRN hR6 hS6r
+   have hDbg := J.kw_dbg hfoot
++  have hKd := J.kw_dbgKeep hfoot
+   set x6 : Fl4Spec.Tcb := { x with tcbState := .inactive } with hx6
+   set σ1 := updK σ t.bv (.tcb x6) with hσ1
+   set σ6 := stsAct σ1 t.bv with hσ6
+@@ -454,6 +455,7 @@ theorem JAtZ.faultBlockJN (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) (hni
+     obtain ⟨h1, h2, h3⟩ := J.rfree d hd ⟨y, F.replyB hy, hyt⟩
+     exact ⟨h1, by rw [e2]; exact h2, by rw [e1]; exact h3⟩
+   have hDbg := J.kw_dbg hfoot
++  have hKd := J.kw_dbgKeep hfoot
+   have hS3 : SchedRel st Z.N Z.T Z.C Z.c s' σ' := hIR.2.2.1
+   -- the scheduler: the current thread blocked, a reschedule pending
+   have hact' : σ'.schedulerAction = σ.schedulerAction := hactK (by show σf.schedulerAction ≠ _; exact hsw)
+diff --git a/proofs/Fl4Proofs/P3/XTopJointFaultRecv.lean b/proofs/Fl4Proofs/P3/XTopJointFaultRecv.lean
+index 1573b1b6..a9228acb 100644
+--- a/proofs/Fl4Proofs/P3/XTopJointFaultRecv.lean
++++ b/proofs/Fl4Proofs/P3/XTopJointFaultRecv.lean
+@@ -83,6 +83,7 @@ theorem JAtZ.fin_frameF (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {s' :
+   have hRF' := RFree.carry J.rfree J.call k4 ck
+   have hRR' := J.rrecv.frame k4 hA.khrb
+   have hDbg := J.kw_dbg (hfoot.mono fun b hb => kw_empty_mono hb _)
++  have hKd := J.kw_dbgKeep (hfoot.mono fun b hb => kw_empty_mono hb _)
+   have hS3 : SchedRel st Z.N Z.T Z.C Z.c s' σ' := hI3.2.2.1
+   have hAI3 : ActIdle σ' := hA.actIdle J.act
+   have hdead : ∀ q ∈ D, DeadP (L := L) H s' q := J.deadP_qk hA hS3 hI3.1 hwF k3 hAI3.1 (J.yld.frame k2 hyk) hyk
+diff --git a/proofs/Fl4Proofs/P3/XTopJointFin.lean b/proofs/Fl4Proofs/P3/XTopJointFin.lean
+index 402c9a09..d9a53a3b 100644
+--- a/proofs/Fl4Proofs/P3/XTopJointFin.lean
++++ b/proofs/Fl4Proofs/P3/XTopJointFin.lean
+@@ -250,6 +250,7 @@ theorem JAtZ.finNtfnJ {AR : A → Fl4Spec.Cr3 → Prop} {Z : XSets} {H : P1.Heap
+   have hRF' := RFree.carry J.rfree J.call k4 ck
+   have hRR' := J.rrecv.frame k4 F.khrb
+   have hDbg := J.kw_dbg hfoot
++  have hKd := J.kw_dbgKeep hfoot
+   have hS3 : SchedRel st Z.N Z.T Z.C Z.c s3 σ3 := hI3.2.2.1
+   -- the scheduler fields
+   have hAI3 : ActIdle σ3 := by
+diff --git a/proofs/Fl4Proofs/P3/XTopJointFinEp.lean b/proofs/Fl4Proofs/P3/XTopJointFinEp.lean
+index eb7ff7ed..00984c63 100644
+--- a/proofs/Fl4Proofs/P3/XTopJointFinEp.lean
++++ b/proofs/Fl4Proofs/P3/XTopJointFinEp.lean
+@@ -171,6 +171,7 @@ theorem JAtZ.finEpJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ)
+     · obtain ⟨h1, h2, h3⟩ := recvReplyHyp_holds Z Ac Lst D s a σ J d hd x t xt hx hxt hkt hrb
+       exact ⟨h1, by rw [r2]; exact h2, by rw [r1]; exact h3⟩
+   have hDbg := J.kw_dbg hfoot
++  have hKd := J.kw_dbgKeep hfoot
+   have hS3 : SchedRel st Z.N Z.T Z.C Z.c s3 σ3 := hI3.2.2.1
+   -- the scheduler fields
+   have hAI3 : ActIdle σ3 := by
+diff --git a/proofs/Fl4Proofs/P3/XTopJointFinScInact.lean b/proofs/Fl4Proofs/P3/XTopJointFinScInact.lean
+index 9ee9b9fc..0cd62b8c 100644
+--- a/proofs/Fl4Proofs/P3/XTopJointFinScInact.lean
++++ b/proofs/Fl4Proofs/P3/XTopJointFinScInact.lean
+@@ -275,10 +275,11 @@ theorem JAtZ.setInactiveJD {AR : A → Fl4Spec.Cr3 → Prop} {Z : XSets} {H : P1
+   obtain ⟨hblk', hfoot⟩ := P1.deact_all J.blk hpS hnbW hnnW r0
+   rw [esp] at hblk' hfoot
+   have hDbg := J.kw_dbg (hfoot.mono (Set.empty_subset _))
++  have hKd := J.kw_dbgKeep (hfoot.mono (Set.empty_subset _))
+   exact ⟨Z.vs, Ac \ {p}, Lst', J.sc_frame hW6 hK6 hX' hCR' hRF' hY' hM' (J.sc_buf hW6 hK6) hRP'
+     (J.sc_apart hW6 hK6) (J.sc_jpl hW6 hK6 (J.idleW_keep hX'.fin.1.1.1 hF.2.1 hF.2.2).2) (J.sc_jcov hW6 hDead (fun q hq hn => absurd hq hn) (J.idleW_keep hX'.fin.1.1.1 hF.2.1 hF.2.2))
+     (J.sc_kern hW6 hK6 hF hX' hDbg fun _ h => h) (J.sc_utc hW6 hK6 hDbg) J.nsc.updSc hI'
+-    (J.cur.imp id (hO.curInv J.inv)) (hO.own J.inv J.own) (hO.off hpi J.off) hact' (hO.bsa J.bsa) (hO.curRun J.curRun) hblk'⟩
++    (J.cur.imp id (hO.curInv J.inv)) (hO.own J.inv J.own) (hO.off hpi J.off) hact' (hO.bsa J.bsa) (hO.curRun J.curRun) hblk' hKd (J.idleW_keep hX'.fin.1.1.1 hF.2.1 hF.2.2).1 J.zD⟩
+ 
+ 
+ set_option maxHeartbeats 4000000 in
+diff --git a/proofs/Fl4Proofs/P3/XTopJointFinScReply.lean b/proofs/Fl4Proofs/P3/XTopJointFinScReply.lean
+index a7b852fb..35b955d1 100644
+--- a/proofs/Fl4Proofs/P3/XTopJointFinScReply.lean
++++ b/proofs/Fl4Proofs/P3/XTopJointFinScReply.lean
+@@ -209,7 +209,8 @@ theorem JAtZ.sc_frameS {AR : A → Fl4Spec.Cr3 → Prop} {Z : XSets} {H : P1.Hea
+     (hown : Sched.CurOwnW Z.T Z.C σ') (hoff : Sched.OffOK σ')
+     (hact : Sched.ActIdle σ') (hbsa : Sched.BlockedScActive σ') (hcr : CurRunM σ')
+     (hblk : P1.BlkOK st (P1.Heap.tcbs H) Cs (P1.Heap.omega H) H (P1.Heap.frame H) (P1.Heap.replies H)
+-      (P1.Heap.scs H) (P1.Heap.ntfns H) (P1.Heap.scBits H) Ac' s') :
++      (P1.Heap.scs H) (P1.Heap.ntfns H) (P1.Heap.scBits H) Ac' s')
++    (hKd : P1.DbgKeep st (P1.Heap.tcbs H) Cs s s') (hidl : L.idleW s' = L.idleW s) (hDD : ∀ p ∈ ZTcb (L := L) Z.th s, p ∈ D') :
+     JAtZ (L := L) arI AR Z H Cs Ac' Lst' D' s' a' σ' := by
+   obtain ⟨-, ⟨-, -, hM, -, -⟩, -⟩ := J.xtop.rel
+   have hsl' : ∀ x ∈ Z.G.chains.flatten, IsSlot Z.th x := fun x h => ((hM.members x).1 h).1
+@@ -224,7 +225,8 @@ theorem JAtZ.sc_frameS {AR : A → Fl4Spec.Cr3 → Prop} {Z : XSets} {H : P1.Hea
+     J.vsc.of_eq fun y hy => hSS.capV hy,
+     J.bok.keep (IpcFrKeep.of_otk hK.kh), J.fcov.ipcFr (IpcFrKeep.of_otk hK.kh),
+     J.fcap.keepU (Vs.VsSlotsT.of_eq fun y hy => hSS.capV hy) (IpcFrKeep.of_otk hK.kh).page,
+-    J.ext.ss hSS hv⟩
++    J.ext.ss hSS hv,
++    J.liveX hX rfl rfl rfl hSS hKd hK.orig hidl (fun p hp => hjc.dead p (hDD p hp)), J.zDX hSS hDD⟩
+   · refine SpecFree.frame J.sfree (fun x' hx' p sb fi' d hc => ⟨x', hx', fi', ?_, le_rfl⟩) hK.ksz
+     rw [← hSS.capV (hsl' x' hx')]; exact hc
+   · have hG0 : MdbLinks Z.th (L.mem s) G := hG.of_same_symm hSS
+@@ -641,6 +643,7 @@ theorem JAtZ.unbindReplyJD {AR : A → Fl4Spec.Cr3 → Prop} {Z : XSets} {H : P1
+       (J.ymd hX'.fin.1.1.1 hY' ((hsok.ykeep rfl).dk q.bv)) (fun h => h) (J.jcov.dead q hq)
+   -- the rest
+   have hDbg := J.kw_dbg (hfoot.mono (Set.empty_subset _))
++  have hKd := J.kw_dbgKeep (hfoot.mono (Set.empty_subset _))
+   exact ⟨σ', he, Z.vs, Ac, Lst', J.sc_frameS hks hSS (J.vkeep_of hwR fun b hb u hu => Sched.RW.ne_tcbw hS J.rp hb hu (K := 3664#u64) (by simp)) hK hX' hCR' hRF' hRR' hY' hM' hbuf hRP'
+     (J.apart.sc_frame hks hK.szKeep) hjpl (J.sc_jcovS hks hSS hDead (fun q hq hn => absurd hq hn) (J.idleW_keep hX'.fin.1.1.1 hF.fk.2.1 hF.fk.2.2))
+     (J.sc_kernW hw hK hF.fk hX' hDbg fun _ h => h) (J.sc_utcR hwR hSS hK hDbg) hN' hI'
+diff --git a/proofs/Fl4Proofs/P3/XTopJointFinThread.lean b/proofs/Fl4Proofs/P3/XTopJointFinThread.lean
+index ba071f8b..86401f57 100644
+--- a/proofs/Fl4Proofs/P3/XTopJointFinThread.lean
++++ b/proofs/Fl4Proofs/P3/XTopJointFinThread.lean
+@@ -228,6 +228,7 @@ theorem JAtZ.nfrStep (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {s' : S}
+   have hRF' := RFree.carry J.rfree J.call k4 ck
+   have hRR' := J.rrecv.frame k4 F.khrb
+   have hDbg := J.kw_dbg (hfoot.mono fun b hb => kw_empty_mono hb _)
++  have hKd := J.kw_dbgKeep (hfoot.mono fun b hb => kw_empty_mono hb _)
+   have hS3 : SchedRel st Z.N Z.T Z.C Z.c s' σ' := hI3.2.2.1
+   have hAI3 : ActIdle σ' := F.actIdle J.act
+   have hcur3 : σ'.schedulerAction = .chooseNewThread ∨ CurInv σ' :=
+diff --git a/proofs/Fl4Proofs/P3/XTopJointFinThreadSc.lean b/proofs/Fl4Proofs/P3/XTopJointFinThreadSc.lean
+index c7ed3452..9314ea0e 100644
+--- a/proofs/Fl4Proofs/P3/XTopJointFinThreadSc.lean
++++ b/proofs/Fl4Proofs/P3/XTopJointFinThreadSc.lean
+@@ -329,9 +329,10 @@ theorem JAtZ.unbindTcbJD (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {t i
+     J.deadP_sc_step hX' hW hK (fun _ _ h => h.elim) hL hF hact'.1 hY'
+       ((((pres_schedContextUnbindTcb (true, true) _).of_eq he).ykeep rfl).dk q.bv) (fun h => h) (J.jcov.dead q hq)
+   have hDbg := J.kw_dbg (hfoot.mono (Set.empty_subset _))
++  have hKd := J.kw_dbgKeep (hfoot.mono (Set.empty_subset _))
+   exact ⟨σ', he, Ac, Lst', J.sc_frame hW hK hX' hCR' hRF' hY' hM' (J.sc_buf hW hK) hRP' (J.sc_apart hW hK)
+     (J.sc_jpl hW hK (J.idleW_keep hX'.fin.1.1.1 hF.2.1 hF.2.2).2) (J.sc_jcov hW hdead (fun q hq hn => absurd hq hn) (J.idleW_keep hX'.fin.1.1.1 hF.2.1 hF.2.2)) (J.sc_kern hW hK hF hX' hDbg fun _ h => h)
+-    (J.sc_utc hW hK hDbg) hN' hI' hcur' hown' hoff' hact' hB' hcr' hblk⟩
++    (J.sc_utc hW hK hDbg) hN' hI' hcur' hown' hoff' hact' hB' hcr' hblk hKd (J.idleW_keep hX'.fin.1.1.1 hF.2.1 hF.2.2).1 J.zD⟩
+ 
+ /-- `unbindTcbJD` with the dead set existential. -/
+ theorem JAtZ.unbindTcbJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {t i : U64} {x : Fl4Spec.Tcb}
+diff --git a/proofs/Fl4Proofs/P3/XTopJointFinW.lean b/proofs/Fl4Proofs/P3/XTopJointFinW.lean
+index cd4eb772..4bb6df7b 100644
+--- a/proofs/Fl4Proofs/P3/XTopJointFinW.lean
++++ b/proofs/Fl4Proofs/P3/XTopJointFinW.lean
+@@ -201,6 +201,15 @@ theorem JAtZ.kw_dbg {AR : A → Fl4Spec.Cr3 → Prop} {Z : XSets} {H : P1.Heap}
+     L.mem s' (L.nodeAt s 0#u64 layout.node.DEBUG_TCBS) = L.mem s (L.nodeAt s 0#u64 layout.node.DEBUG_TCBS) :=
+   hw.mem_eq J.kern.dwAl fun hk => P1.dbg0_not_schedW J.blk J.kern.cs0 (Or.inl hk)
+ 
++/-- **P1's footprint keeps every debug word** (`P1.Foot.dbgKeep`; KENTRY-PLAN
++g2i, the `DbgKeep` of the construction sites' `LiveDN` frame). -/
++theorem JAtZ.kw_dbgKeep {AR : A → Fl4Spec.Cr3 → Prop} {Z : XSets} {H : P1.Heap} {Cs Ac : Set U64}
++    {Lst : U64 → List U64} {D : Set U64} {s : S} {a : A} {σ : Fl4Spec.State Unit}
++    (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {s' : S}
++    (hw : P1.WritesIn st s s' (P1.KW st (P1.Heap.tcbs H) Cs (P1.Heap.frame H) (P1.Heap.scs H) (P1.Heap.scBits H)
++      (P1.EH H) s)) : P1.DbgKeep st (P1.Heap.tcbs H) Cs s s' :=
++  P1.Foot.dbgKeep J.blk (fun _ h => h) hw
++
+ end
+ 
+ end
+diff --git a/proofs/Fl4Proofs/P3/XTopJointJAtZR.lean b/proofs/Fl4Proofs/P3/XTopJointJAtZR.lean
+index 8dfb1664..df49190b 100644
+--- a/proofs/Fl4Proofs/P3/XTopJointJAtZR.lean
++++ b/proofs/Fl4Proofs/P3/XTopJointJAtZR.lean
+@@ -171,6 +171,10 @@ structure JAtZR (AR : A → Fl4Spec.Cr3 → Prop) (Z : XSets) (H : P1.Heap) (Cs
+   fcap : Vs.FrSlots Z.th (UFr σ) (L.mem s)
+   /-- JAtZ's `ext` (`JExt`, G2). -/
+   ext : JExt (L := L) Z.th s
++  /-- [carried] As `JAtZ.live` (KENTRY-PLAN g2i). -/
++  live : LiveDN (L := L) Z.th H Cs Z.G s σ
++  /-- [carried] As `JAtZ.zD`. -/
++  zD : ∀ p ∈ ZTcb (L := L) Z.th s, p ∈ D
+ 
+ variable {arI} {AR : A → Fl4Spec.Cr3 → Prop} {Z : XSets} {H : P1.Heap} {Cs Ac : Set U64}
+   {Lst : U64 → List U64} {D : Set U64} {s : S} {a : A} {σ : Fl4Spec.State Unit}
+@@ -224,6 +228,8 @@ theorem JAtZ.toR (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) : JAtZR (L :=
+   fcov := J.fcov
+   fcap := J.fcap
+   ext := J.ext
++  live := J.live
++  zD := J.zD
+ 
+ theorem JAtZS.toR (J : JAtZS (L := L) arI AR Z H Cs Ac Lst D s a σ) : JAtZR (L := L) arI AR Z H Cs Ac Lst D s a σ where
+   xtop := J.xtop
+@@ -274,6 +280,8 @@ theorem JAtZS.toR (J : JAtZS (L := L) arI AR Z H Cs Ac Lst D s a σ) : JAtZR (L
+   fcov := J.fcov
+   fcap := J.fcap
+   ext := J.ext
++  live := J.live
++  zD := J.zD
+ 
+ theorem JAtZR.toJ (J : JAtZR (L := L) arI AR Z H Cs Ac Lst D s a σ)
+     (h : σ.schedulerAction = .chooseNewThread ∨ Sched.CurInv σ) : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ where
+@@ -325,6 +333,26 @@ theorem JAtZR.toJ (J : JAtZR (L := L) arI AR Z H Cs Ac Lst D s a σ)
+   fcov := J.fcov
+   fcap := J.fcap
+   ext := J.ext
++  live := J.live
++  zD := J.zD
++
++
++/-- `JAtZ.liveX` at `JAtZR` (`liveDN_frame`). -/
++theorem JAtZR.liveX (J : JAtZR (L := L) arI AR Z H Cs Ac Lst D s a σ) {Z' : XSets} {s' : S} {a' : A}
++    {σ' : Fl4Spec.State Unit} (hX : XTopAt (L := L) AR Z' s' a' σ') (hth : Z'.th = Z.th) (hT : Z'.T = Z.T)
++    (hc : Z'.c = Z.c) (hSS : SlotsSame Z.th (L.mem s) (L.mem s'))
++    (hK : P1.DbgKeep st (P1.Heap.tcbs H) Cs s s') (horig : σ'.isOriginalCap = σ.isOriginalCap)
++    (hidl : L.idleW s' = L.idleW s) (hdead : ∀ p ∈ ZTcb (L := L) Z.th s, Sched.DeadP (L := L) H s' p) :
++    LiveDN (L := L) Z.th H Cs Z'.G s' σ' :=
++  liveDN_frame J.xtop J.live ⟨J.blk.2.2.1.2.2.tm.dn, J.blk.2.2.1.2.2.tm.dp, J.blk.2.2.1.2.2.tm.dh⟩ J.kern.cs0
++    (by obtain ⟨Tr, Cq, hJ⟩ := J.jpl
++        exact Set.ext fun t => ⟨fun h => J.zH.1 t h, fun h => J.thT t ((hJ.tcb t).2 h)⟩)
++    hX hth hT hc hSS hK horig hidl hdead
++
++/-- `JAtZ.zDX` at `JAtZR`. -/
++theorem JAtZR.zDX (J : JAtZR (L := L) arI AR Z H Cs Ac Lst D s a σ) {s' : S} {D' : Set U64}
++    (hSS : SlotsSame Z.th (L.mem s) (L.mem s')) (hDD : ∀ p ∈ ZTcb (L := L) Z.th s, p ∈ D') :
++    ∀ p ∈ ZTcb (L := L) Z.th s', p ∈ D' := fun p hp => hDD p (ZTcb.of_same hSS hp)
+ 
+ end
+ 
+diff --git a/proofs/Fl4Proofs/P3/XTopJointJAtZRA.lean b/proofs/Fl4Proofs/P3/XTopJointJAtZRA.lean
+index 860e726e..5e611d2a 100644
+--- a/proofs/Fl4Proofs/P3/XTopJointJAtZRA.lean
++++ b/proofs/Fl4Proofs/P3/XTopJointJAtZRA.lean
+@@ -1126,7 +1126,8 @@ theorem JAtZR.sch_frame {AR : A → Fl4Spec.Cr3 → Prop} {Z : XSets} {H : P1.He
+     (hown : Sched.CurOwnW Z.T Z.C σ') (hoff : Sched.OffOK σ')
+     (hact : Sched.ActIdle σ') (hbsa : Sched.BlockedScActive σ') (hcr : CurRunM σ')
+     (hblk : P1.BlkOK st (P1.Heap.tcbs H) Cs (P1.Heap.omega H) H (P1.Heap.frame H) (P1.Heap.replies H)
+-      (P1.Heap.scs H) (P1.Heap.ntfns H) (P1.Heap.scBits H) Ac' s') :
++      (P1.Heap.scs H) (P1.Heap.ntfns H) (P1.Heap.scBits H) Ac' s')
++    (hKd : P1.DbgKeep st (P1.Heap.tcbs H) Cs s s') (hidl : L.idleW s' = L.idleW s) (hDD : ∀ p ∈ ZTcb (L := L) Z.th s, p ∈ D') :
+     JAtZR (L := L) arI AR Z H Cs Ac' Lst' D' s' a' σ' := by
+   have hT := hK.toTK
+   have hobj0 := J.obj.tkw hT
+@@ -1156,7 +1157,8 @@ theorem JAtZR.sch_frame {AR : A → Fl4Spec.Cr3 → Prop} {Z : XSets} {H : P1.He
+     J.vsc.of_eq fun y hy => hSS.capV hy,
+     J.bok.keep (IpcFrKeep.of_otk hK.kh), J.fcov.ipcFr (IpcFrKeep.of_otk hK.kh),
+     J.fcap.keepU (Vs.VsSlotsT.of_eq fun y hy => hSS.capV hy) (IpcFrKeep.of_otk hK.kh).page,
+-    J.ext.ss hSS (VKeep.of_tfoot J.xtop.fin.1.1.1 J.thT hw)⟩
++    J.ext.ss hSS (VKeep.of_tfoot J.xtop.fin.1.1.1 J.thT hw),
++    J.liveX hX rfl rfl rfl hSS hKd hK.orig hidl (fun p hp => hjc.dead p (hDD p hp)), J.zDX hSS hDD⟩
+   · refine SpecFree.frame J.sfree (fun x' hx' p sb fi' d hc => ⟨x', hx', fi', ?_, le_rfl⟩) hksz
+     rw [← hSS.capV (hsl' x' hx')]; exact hc
+   · have hG0 : MdbLinks Z.th (L.mem s) G := hG.of_same_symm hSS
+@@ -1711,6 +1713,14 @@ theorem JAtZR.kw_dbg {AR : A → Fl4Spec.Cr3 → Prop} {Z : XSets} {H : P1.Heap}
+     L.mem s' (L.nodeAt s 0#u64 layout.node.DEBUG_TCBS) = L.mem s (L.nodeAt s 0#u64 layout.node.DEBUG_TCBS) :=
+   hw.mem_eq J.kern.dwAl fun hk => P1.dbg0_not_schedW J.blk J.kern.cs0 (Or.inl hk)
+ 
++/-- `JAtZ.kw_dbgKeep` at `JAtZR`. -/
++theorem JAtZR.kw_dbgKeep {AR : A → Fl4Spec.Cr3 → Prop} {Z : XSets} {H : P1.Heap} {Cs Ac : Set U64}
++    {Lst : U64 → List U64} {D : Set U64} {s : S} {a : A} {σ : Fl4Spec.State Unit}
++    (J : JAtZR (L := L) arI AR Z H Cs Ac Lst D s a σ) {s' : S}
++    (hw : P1.WritesIn st s s' (P1.KW st (P1.Heap.tcbs H) Cs (P1.Heap.frame H) (P1.Heap.scs H) (P1.Heap.scBits H)
++      (P1.EH H) s)) : P1.DbgKeep st (P1.Heap.tcbs H) Cs s s' :=
++  P1.Foot.dbgKeep J.blk (fun _ h => h) hw
++
+ 
+ end
+ end
+diff --git a/proofs/Fl4Proofs/P3/XTopJointJAtZRB.lean b/proofs/Fl4Proofs/P3/XTopJointJAtZRB.lean
+index 939b5e78..1ecab10b 100644
+--- a/proofs/Fl4Proofs/P3/XTopJointJAtZRB.lean
++++ b/proofs/Fl4Proofs/P3/XTopJointJAtZRB.lean
+@@ -886,6 +886,7 @@ theorem JAtZR.wake_postB (J : JAtZR (L := L) arI AR Z H Cs Ac Lst D s a σ) {n t
+     · obtain ⟨h1, h2, h3⟩ := hRR d hd x hx hxt
+       exact ⟨h1, by rw [e2]; exact h2, by rw [e1]; exact h3⟩
+   have hDbg := J.kw_dbg hfoot
++  have hKd := J.kw_dbgKeep hfoot
+   have hS3 : SchedRel st Z.N Z.T Z.C Z.c s' σ' := hIR.2.2.1
+   have hdead : ∀ q ∈ D, DeadP (L := L) H s' q := J.deadP_cfr F hS3 hIR.1 hw k3 hAI3.1 (J.yld.frame k2 F.ykeep) F.ykeep ht
+   have hjpl : ∃ Tr Cq, JPlaced (L := L) Z.th H Tr Cq s' σ' := by
+@@ -1364,6 +1365,7 @@ theorem JAtZR.wake_postD (J : JAtZR (L := L) arI AR Z H Cs Ac Lst D s a σ) {n t
+     · obtain ⟨h1, h2, h3⟩ := hRR d hd x hx hxt
+       exact ⟨h1, by rw [e2]; exact h2, by rw [e1]; exact h3⟩
+   have hDbg := J.kw_dbg hfoot
++  have hKd := J.kw_dbgKeep hfoot
+   have hS3 : SchedRel st Z.N Z.T Z.C Z.c s' σ' := hIR.2.2.1
+   have hdead : ∀ q ∈ D, DeadP (L := L) H s' q := J.deadP_dfr F hS3 hIR.1 hw k3 hAI3.1 (J.yld.frame k2 F.ykeep) F.ykeep ht
+   have hjpl : ∃ Tr Cq, JPlaced (L := L) Z.th H Tr Cq s' σ' := by
+diff --git a/proofs/Fl4Proofs/P3/XTopJointJAtZRM.lean b/proofs/Fl4Proofs/P3/XTopJointJAtZRM.lean
+index 7da5b254..bb90e1ef 100644
+--- a/proofs/Fl4Proofs/P3/XTopJointJAtZRM.lean
++++ b/proofs/Fl4Proofs/P3/XTopJointJAtZRM.lean
+@@ -162,7 +162,8 @@ theorem JAtZR.sc_frame {AR : A → Fl4Spec.Cr3 → Prop} {Z : XSets} {H : P1.Hea
+     (hown : Sched.CurOwnW Z.T Z.C σ') (hoff : Sched.OffOK σ')
+     (hact : Sched.ActIdle σ') (hbsa : Sched.BlockedScActive σ') (hcr : CurRunM σ')
+     (hblk : P1.BlkOK st (P1.Heap.tcbs H) Cs (P1.Heap.omega H) H (P1.Heap.frame H) (P1.Heap.replies H)
+-      (P1.Heap.scs H) (P1.Heap.ntfns H) (P1.Heap.scBits H) Ac' s') :
++      (P1.Heap.scs H) (P1.Heap.ntfns H) (P1.Heap.scBits H) Ac' s')
++    (hKd : P1.DbgKeep st (P1.Heap.tcbs H) Cs s s') (hidl : L.idleW s' = L.idleW s) (hDD : ∀ p ∈ ZTcb (L := L) Z.th s, p ∈ D') :
+     JAtZR (L := L) arI AR Z H Cs Ac' Lst' D' s' a' σ' := by
+   have hks : L.ksb s' = L.ksb s := hw.1
+   have hSS : SlotsSame Z.th (L.mem s) (L.mem s') :=
+@@ -182,7 +183,8 @@ theorem JAtZR.sc_frame {AR : A → Fl4Spec.Cr3 → Prop} {Z : XSets} {H : P1.Hea
+     J.vsc.of_eq fun y hy => hSS.capV hy,
+     J.bok.keep (IpcFrKeep.of_otk hK.kh), J.fcov.ipcFr (IpcFrKeep.of_otk hK.kh),
+     J.fcap.keepU (Vs.VsSlotsT.of_eq fun y hy => hSS.capV hy) (IpcFrKeep.of_otk hK.kh).page,
+-    J.ext.ss hSS (VKeep.of_tfoot J.xtop.fin.1.1.1 J.thT hw)⟩
++    J.ext.ss hSS (VKeep.of_tfoot J.xtop.fin.1.1.1 J.thT hw),
++    J.liveX hX rfl rfl rfl hSS hKd hK.orig hidl (fun p hp => hjc.dead p (hDD p hp)), J.zDX hSS hDD⟩
+   · refine SpecFree.frame J.sfree (fun x' hx' p sb fi' d hc => ⟨x', hx', fi', ?_, le_rfl⟩) hK.ksz
+     rw [← hSS.capV (hsl' x' hx')]; exact hc
+   · have hG0 : MdbLinks Z.th (L.mem s) G := hG.of_same_symm hSS
+@@ -743,11 +745,12 @@ theorem JAtZR.maybeReturnJQ (J : JAtZR (L := L) arI AR Z H Cs Ac Lst D s a σ) {
+     J.deadP_sc_step hX' hW hK (fun _ _ h => h.elim) hL hF hact'.1 hY'
+       ((((pres_maybeReturnSc (true, true) _ _).of_eq he).ykeep rfl).dk q.bv) (fun h => h) (J.jcov.dead q hq)
+   have hDbg := J.kw_dbg hfoot
++  have hKd := J.kw_dbgKeep hfoot
+   exact ⟨hW, σ2, he, Ac, Lst', J.sc_frame hW hK hX' hCR' hRF' hY' hM' (J.sc_buf hW hK) hRP' (J.sc_apart hW hK)
+     (J.sc_jpl hW hK (J.idleW_keep hX'.fin.1.1.1 hF.2.1 hF.2.2).2)
+     (J.sc_jcov hW hdead (fun q hq hn => absurd hq hn) (J.idleW_keep hX'.fin.1.1.1 hF.2.1 hF.2.2))
+     (J.sc_kern hW hK hF hX' hDbg fun _ h => h)
+-    (J.sc_utc hW hK hDbg) hN' hI' hcur' hown' hoff' hact' hB' hcr' hblk⟩
++    (J.sc_utc hW hK hDbg) hN' hI' hcur' hown' hoff' hact' hB' hcr' hblk hKd (J.idleW_keep hX'.fin.1.1.1 hF.2.1 hF.2.2).1 J.zD⟩
+ 
+ 
+ end
+diff --git a/proofs/Fl4Proofs/P3/XTopJointJAtZS.lean b/proofs/Fl4Proofs/P3/XTopJointJAtZS.lean
+index 12e1c1db..2740546e 100644
+--- a/proofs/Fl4Proofs/P3/XTopJointJAtZS.lean
++++ b/proofs/Fl4Proofs/P3/XTopJointJAtZS.lean
+@@ -163,6 +163,10 @@ structure JAtZS (AR : A → Fl4Spec.Cr3 → Prop) (Z : XSets) (H : P1.Heap) (Cs
+   fcap : Vs.FrSlots Z.th (UFr σ) (L.mem s)
+   /-- JAtZ's `ext` (`JExt`, G2). -/
+   ext : JExt (L := L) Z.th s
++  /-- [carried] As `JAtZ.live` (KENTRY-PLAN g2i). -/
++  live : LiveDN (L := L) Z.th H Cs Z.G s σ
++  /-- [carried] As `JAtZ.zD`. -/
++  zD : ∀ p ∈ ZTcb (L := L) Z.th s, p ∈ D
+ 
+ /-- `JAtS`: `JAtZS` at a state (the ghosts existential). -/
+ def JAtS (AR : A → Fl4Spec.Cr3 → Prop) (s : S) (a : A) (σ : Fl4Spec.State Unit) : Prop :=
+@@ -221,6 +225,8 @@ theorem JAtZ.toS (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) : JAtZS (L :=
+   fcov := J.fcov
+   fcap := J.fcap
+   ext := J.ext
++  live := J.live
++  zD := J.zD
+ 
+ theorem JAtZS.toJ (J : JAtZS (L := L) arI AR Z H Cs Ac Lst D s a σ)
+     (h : σ.schedulerAction = .chooseNewThread ∨ Sched.CurInv σ) : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ where
+@@ -272,6 +278,8 @@ theorem JAtZS.toJ (J : JAtZS (L := L) arI AR Z H Cs Ac Lst D s a σ)
+   fcov := J.fcov
+   fcap := J.fcap
+   ext := J.ext
++  live := J.live
++  zD := J.zD
+ 
+ /-- A `JAtZS` state is a `JAtZ` state, or `SwBlk` holds. -/
+ theorem JAtZS.toJ_or (J : JAtZS (L := L) arI AR Z H Cs Ac Lst D s a σ) :
+diff --git a/proofs/Fl4Proofs/P3/XTopJointLive.lean b/proofs/Fl4Proofs/P3/XTopJointLive.lean
+index 74f4ea98..12c6fabb 100644
+--- a/proofs/Fl4Proofs/P3/XTopJointLive.lean
++++ b/proofs/Fl4Proofs/P3/XTopJointLive.lean
+@@ -49,50 +49,15 @@ open fl4_core Classical Fl4Proofs.P3.Vs Fl4Proofs.P3.Notif Fl4Proofs.P3.Endp Fl4
+ 
+ noncomputable section
+ 
+-/-- The cap names the CNode or TCB `q` as a container (module docstring). -/
+-def RefsObj (q : U64) : capability.Cap → Prop
+-  | .CNode p _ _ _ => p = q
+-  | .Thread p => p = q
+-  | .Zombie p _ _ => p = q
+-  | _ => False
+-
+-/-- The slot `y` holds a cap or an original bit. -/
+-def InUse (m : U64 → U64) (σ : Fl4Spec.State Unit) (y : U64) : Prop :=
+-  capV m y ≠ .Null ∨ ∃ x, cslotAddr x = y ∧ σ.isOriginalCap x = true
+-
+-/-- The `n`-th TCB of the debug list from `h` (`0` past its end). -/
+-def dbgNth (m : U64 → U64) : Nat → U64 → U64
+-  | 0, h => h
+-  | n + 1, h => if h = 0#u64 then 0#u64 else dbgNth m n (m (P1.dnA h))
+-
+ section
+ variable {S : Type} {st : machine.Store S} [L : P1.LawfulStore st] {A : Type} {arI : machine.Arch A}
+ 
+-/-- **A slot inside the kernel-state block** `[kb, kb + 13568)` (the IRQ
+-node's one-slot CNodes, `IntLayout.node`; `SlotLiveAt`'s right disjunct). -/
+-abbrev KsSlot (kb y : U64) : Prop := kb.val ≤ y.val ∧ y.val < kb.val + 13568
+-
+ /-- The spec's idle thread kept by every outcome of a deletion step (the
+ `GK` family) or a `CnK` step. -/
+ theorem _root_.Fl4Proofs.P3.Ipc.CnK.idle {σ σ' : Fl4Spec.State Unit} (h : Ipc.CnK σ σ') :
+     σ'.idleThread = σ.idleThread :=
+   by have e := congrArg Fl4Spec.AbstractState.idleThread h.1; exact e
+ 
+-/-- Core 0's debug-list head. -/
+-abbrev dbgHead (s : S) : U64 := L.mem s (L.nodeAt s 0#u64 layout.node.DEBUG_TCBS)
+-
+-/-- **The liveness invariant of FL4's caps** [J] (module docstring). -/
+-structure LiveJ (th : TypedHeap) (H : P1.Heap) (G : MdbGhost) (s : S) (σ : Fl4Spec.State Unit) : Prop where
+-  slots : ∀ q i, IsSlotAt th q i → InUse (L.mem s) σ (slotOf q i) →
+-    (∃ y ∈ G.chains.flatten, RefsObj q (capV (L.mem s) y)) ∨ KsSlot (L.ksb s) (slotOf q i)
+-  dbg : ∀ n, dbgNth (L.mem s) n (dbgHead (L := L) s) ≠ 0#u64 →
+-    (dbgNth (L.mem s) n (dbgHead (L := L) s)).bv ≠ σ.idleThread →
+-    ∃ y ∈ G.chains.flatten, capV (L.mem s) y = .Thread (dbgNth (L.mem s) n (dbgHead (L := L) s))
+-  zslots : ∀ y, IsSlot th y → ∀ p zt n, capV (L.mem s) y = .Zombie p zt n →
+-    ∀ i, IsSlotAt th p i → n.val ≤ i → ¬ InUse (L.mem s) σ (slotOf p i)
+-  zdead : ∀ y, IsSlot th y → ∀ p zt n, capV (L.mem s) y = .Zombie p zt n → zt.val = 65 →
+-    DeadP (L := L) H s p
+-
+ /-- **The emptied slot's liveness readiness** (module docstring). -/
+ def ReadyLive (th : TypedHeap) (s : S) (σ : Fl4Spec.State Unit) (G : MdbGhost) (x : U64) : Prop :=
+   (∀ y, IsSlot th y → y ≠ x → InUse (L.mem s) σ y → SlotLiveAt (L.mem s) G (L.ksb s) x y) ∧
+diff --git a/proofs/Fl4Proofs/P3/XTopJointLiveKeep.lean b/proofs/Fl4Proofs/P3/XTopJointLiveKeep.lean
+index 57cf09ec..c9898d3e 100644
+--- a/proofs/Fl4Proofs/P3/XTopJointLiveKeep.lean
++++ b/proofs/Fl4Proofs/P3/XTopJointLiveKeep.lean
+@@ -20,102 +20,9 @@ open fl4_core Classical Fl4Proofs.P3.Vs Fl4Proofs.P3.Notif Fl4Proofs.P3.Endp Fl4
+ 
+ noncomputable section
+ 
+-/-- **The debug list walked over kept links** (module docstring). -/
+-theorem dbgNth_keep {T : Set U64} {m m' : U64 → U64} (hdn : ∀ y ∈ T, m' (P1.dnA y) = m (P1.dnA y))
+-    (hcl : ∀ y ∈ T, P1.Tz T (m (P1.dnA y))) : ∀ (n : Nat) (h : U64), P1.Tz T h → dbgNth m' n h = dbgNth m n h := by
+-  intro n
+-  induction n with
+-  | zero => intro h _; rfl
+-  | succ n ih =>
+-    intro h hh
+-    simp only [dbgNth]
+-    by_cases h0 : h = 0#u64
+-    · simp [h0]
+-    · have hT : h ∈ T := hh.ne0 h0
+-      simp only [h0, ↓reduceIte]
+-      rw [hdn h hT]
+-      exact ih _ (hcl h hT)
+-
+ section
+ variable {S : Type} {st : machine.Store S} [L : P1.LawfulStore st] {A : Type} {arI : machine.Arch A}
+ 
+-/-- **`LiveJ` across a step keeping the slots** (module docstring). -/
+-theorem LiveJ.of_same {th : TypedHeap} {H : P1.Heap} {G : MdbGhost} {Cs : Set U64} {s s' : S}
+-    {σ σ' : Fl4Spec.State Unit} (hL : LiveJ (L := L) th H G s σ) (hSS : SlotsSame th (L.mem s) (L.mem s'))
+-    (hmem : ∀ y ∈ G.chains.flatten, IsSlot th y) (horig : σ'.isOriginalCap = σ.isOriginalCap)
+-    (hid : σ'.idleThread = σ.idleThread)
+-    (hK : P1.DbgKeep st (P1.Heap.tcbs H) Cs s s') (hc0 : 0#u64 ∈ Cs) (hTz : P1.DbgTz st (P1.Heap.tcbs H) Cs s)
+-    (hdead : ∀ p, DeadP (L := L) H s p → DeadP (L := L) H s' p) :
+-    LiveJ (L := L) th H G s' σ' := by
+-  have hU : ∀ y, IsSlot th y → InUse (L.mem s') σ' y → InUse (L.mem s) σ y := fun y hy hu => by
+-    unfold InUse at hu ⊢
+-    rw [hSS.capV hy, horig] at hu
+-    exact hu
+-  have hhd : dbgHead (L := L) s' = dbgHead (L := L) s := by
+-    unfold dbgHead
+-    rw [nodeAt_of_ksb hK.1]
+-    exact hK.2 _ (Or.inr ⟨0#u64, hc0, rfl⟩)
+-  have hN : ∀ n, dbgNth (L.mem s') n (dbgHead (L := L) s') = dbgNth (L.mem s) n (dbgHead (L := L) s) := fun n => by
+-    rw [hhd]
+-    exact dbgNth_keep (fun y hy => hK.2 _ (Or.inl ⟨y, hy, Or.inl rfl⟩)) (fun y hy => hTz.dn y hy) n _ (hTz.dh _ hc0)
+-  refine ⟨fun q i hqi hu => ?_, fun n hn hni => ?_, fun y hy p zt n hz i hpi hni hu => ?_,
+-    fun y hy p zt n hz hzt => ?_⟩
+-  · rcases hL.slots q i hqi (hU _ ⟨q, i, hqi, rfl⟩ hu) with ⟨y, hy, hr⟩ | hb
+-    · exact Or.inl ⟨y, hy, by rw [hSS.capV (hmem y hy)]; exact hr⟩
+-    · exact Or.inr (by rw [hK.1]; exact hb)
+-  · rw [hN] at hn hni ⊢
+-    obtain ⟨y, hy, hr⟩ := hL.dbg n hn (by rw [← hid]; exact hni)
+-    exact ⟨y, hy, by rw [hSS.capV (hmem y hy)]; exact hr⟩
+-  · exact hL.zslots y hy p zt n (by rw [← hSS.capV hy]; exact hz) i hpi hni (hU _ ⟨p, i, hpi, rfl⟩ hu)
+-  · exact hdead p (hL.zdead y hy p zt n (by rw [← hSS.capV hy]; exact hz) hzt)
+-
+-/-- The TCBs of the TCB zombies (type 65) in the slots. -/
+-def ZTcb (th : TypedHeap) (s : S) : Set U64 :=
+-  {p | ∃ y, IsSlot th y ∧ ∃ zt n, capV (L.mem s) y = .Zombie p zt n ∧ zt.val = 65}
+-
+-/-- `LiveJ.zdead` on `ZTcb`. -/
+-theorem LiveJ.ztcb {th : TypedHeap} {H : P1.Heap} {G : MdbGhost} {s : S} {σ : Fl4Spec.State Unit}
+-    (hL : LiveJ (L := L) th H G s σ) : ∀ p ∈ ZTcb (L := L) th s, DeadP (L := L) H s p :=
+-  fun _ ⟨y, hy, zt, n, hz, h65⟩ => hL.zdead y hy _ zt n hz h65
+-
+-/-- **`LiveJ.of_same` with only the TCB zombies' TCBs dead after** (`ZTcb`). -/
+-theorem LiveJ.of_sameZ {th : TypedHeap} {H : P1.Heap} {G : MdbGhost} {Cs : Set U64} {s s' : S}
+-    {σ σ' : Fl4Spec.State Unit} (hL : LiveJ (L := L) th H G s σ) (hSS : SlotsSame th (L.mem s) (L.mem s'))
+-    (hmem : ∀ y ∈ G.chains.flatten, IsSlot th y) (horig : σ'.isOriginalCap = σ.isOriginalCap)
+-    (hid : σ'.idleThread = σ.idleThread)
+-    (hK : P1.DbgKeep st (P1.Heap.tcbs H) Cs s s') (hc0 : 0#u64 ∈ Cs) (hTz : P1.DbgTz st (P1.Heap.tcbs H) Cs s)
+-    (hdead : ∀ p ∈ ZTcb (L := L) th s, DeadP (L := L) H s' p) :
+-    LiveJ (L := L) th H G s' σ' := by
+-  have hU : ∀ y, IsSlot th y → InUse (L.mem s') σ' y → InUse (L.mem s) σ y := fun y hy hu => by
+-    unfold InUse at hu ⊢
+-    rw [hSS.capV hy, horig] at hu
+-    exact hu
+-  have hhd : dbgHead (L := L) s' = dbgHead (L := L) s := by
+-    unfold dbgHead
+-    rw [nodeAt_of_ksb hK.1]
+-    exact hK.2 _ (Or.inr ⟨0#u64, hc0, rfl⟩)
+-  have hN : ∀ n, dbgNth (L.mem s') n (dbgHead (L := L) s') = dbgNth (L.mem s) n (dbgHead (L := L) s) := fun n => by
+-    rw [hhd]
+-    exact dbgNth_keep (fun y hy => hK.2 _ (Or.inl ⟨y, hy, Or.inl rfl⟩)) (fun y hy => hTz.dn y hy) n _ (hTz.dh _ hc0)
+-  refine ⟨fun q i hqi hu => ?_, fun n hn hni => ?_, fun y hy p zt n hz i hpi hni hu => ?_,
+-    fun y hy p zt n hz hzt => ?_⟩
+-  · rcases hL.slots q i hqi (hU _ ⟨q, i, hqi, rfl⟩ hu) with ⟨y, hy, hr⟩ | hb
+-    · exact Or.inl ⟨y, hy, by rw [hSS.capV (hmem y hy)]; exact hr⟩
+-    · exact Or.inr (by rw [hK.1]; exact hb)
+-  · rw [hN] at hn hni ⊢
+-    obtain ⟨y, hy, hr⟩ := hL.dbg n hn (by rw [← hid]; exact hni)
+-    exact ⟨y, hy, by rw [hSS.capV (hmem y hy)]; exact hr⟩
+-  · exact hL.zslots y hy p zt n (by rw [← hSS.capV hy]; exact hz) i hpi hni (hU _ ⟨p, i, hpi, rfl⟩ hu)
+-  · exact hdead p ⟨y, hy, zt, n, by rw [← hSS.capV hy]; exact hz, hzt⟩
+-
+-/-- **`DbgWFL` across a step keeping the debug words and the affinities.** -/
+-theorem DbgWFL.of_keep {T Cs : Set U64} {s s' : S} {lst : U64 → List U64}
+-    (hW : DbgWFL T Cs (L.mem s) (dbgHd (L := L) s) lst) (hK : P1.DbgKeep st T Cs s s')
+-    (haff : ∀ y ∈ T, L.mem s' (P1.affA y) = L.mem s (P1.affA y)) :
+-    DbgWFL T Cs (L.mem s') (dbgHd (L := L) s') lst :=
+-  hW.congr (fun y hy => ⟨hK.2 _ (Or.inl ⟨y, hy, Or.inl rfl⟩), hK.2 _ (Or.inl ⟨y, hy, Or.inr rfl⟩), haff y hy⟩)
+-    (fun c hc => by rw [dbgHd_of_ksb hK.1]; exact hK.2 _ (Or.inr ⟨c, hc, rfl⟩))
+-
+ variable {AR : A → Fl4Spec.Cr3 → Prop} {Z : XSets} {H : P1.Heap} {Cs Ac : Set U64} {Lst : U64 → List U64}
+   {D : Set U64}
+ 
+diff --git a/proofs/Fl4Proofs/P3/XTopJointLiveSt.lean b/proofs/Fl4Proofs/P3/XTopJointLiveSt.lean
+index e94e4efe..4a4599b0 100644
+--- a/proofs/Fl4Proofs/P3/XTopJointLiveSt.lean
++++ b/proofs/Fl4Proofs/P3/XTopJointLiveSt.lean
+@@ -69,206 +69,6 @@ theorem JAtZ.regWrSD (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {t : U64}
+       ⟨by rw [hKv]; omega, by rw [hKv]; omega⟩
+ 
+ 
+-set_option maxHeartbeats 16000000 in
+-/-- **`set_thread_state Running` of a `Restart` thread at `J`, the dead set
+-kept** (XTopJointReply's `JAtZ.runJ`, same proof; the post names the dead
+-set `D` and adds the slot and debug-word frames). -/
+-theorem JAtZ.runJD (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {t : U64} (ht : t ∈ Z.T)
+-    {x : Fl4Spec.Tcb} (hk : σ.kheap t.bv = some (.tcb x)) (hrs : x.tcbState = .restart) :
+-    sched.set_thread_state st s t sched.TS_RUNNING ⦃ s6 => ∃ (Lst' : U64 → List U64),
+-      JAtZ (L := L) arI AR Z H Cs Ac Lst' D s6 a
+-        (stsAct (updK σ t.bv (.tcb { x with tcbState := .running })) t.bv) ∧
+-      SlotsSame Z.th (L.mem s) (L.mem s6) ∧ P1.DbgKeep st (P1.Heap.tcbs H) Cs s s6 ⦄ := by
+-  have hP0 := J.ip
+-  have hI := J.xtop.irelK J.ks J.buf
+-  have hS := J.xtop.fin.1.1.1
+-  have hT : TcbPlaced Z.T := hP0.e.tcb
+-  have htH : t ∈ P1.Heap.tcbs H := J.zH.1 t ht
+-  obtain ⟨x0, hk0, hTR⟩ := hI.1.tcb t ht
+-  rw [hk] at hk0; cases hk0
+-  have hst : (L.mem s (tStA t)).val = tsCode x.tcbState := hTR.st
+-  have hq := IpcRel.not_ep_queued hI.1 (t := t) ⟨by rw [hst, hrs]; decide, by rw [hst, hrs]; decide⟩
+-  have hH := ipcCore_top (st := st) (th := Z.th) (cr := σ.archState.x64CurrentCr3) (N := Z.N) (C := Z.C)
+-    (c := Z.c) hP0.e
+-  have hSR := IpcRel.toSRN hI.1 hI.2
+-  have hr0 : L.mem s (P1.stA t) = sched.TS_RESTART := by
+-    apply UScalar.eq_of_val_eq
+-    rw [P1.stA_eq, ← tStA_eq, hst, hrs]; unfold sched.TS_RESTART; rfl
+-  refine WP.spec_mono (WP.spec_and (WP.spec_and (WP.spec_and (set_thread_state_c hH hP0 hP0.e s σ hI.1.toE hSR ht
+-    hk hq (by rw [hrs]; decide) .running (by decide) sched.TS_RUNNING (by unfold sched.TS_RUNNING; rfl))
+-    (set_thread_state_sfoot hS ht _)) (set_thread_state_yw hS ht _))
+-    (P1.sched.set_thread_state.running_blk (Es := P1.EH H) s t J.blk htH hr0)) ?_
+-  rintro s6 ⟨⟨⟨⟨hR6, hS6r⟩, hw6⟩, hy6⟩, hblk, hfoot⟩
+-  have hX6 := IpcRel.ofSRN hR6 hS6r
+-  have hDbg := J.kw_dbg hfoot
+-  set x6 : Fl4Spec.Tcb := { x with tcbState := .running } with hx6
+-  set σ1 := updK σ t.bv (.tcb x6) with hσ1
+-  set σ6 := stsAct σ1 t.bv with hσ6
+-  have hrec : σ6 = { σ1 with schedulerAction := σ6.schedulerAction } := stsAct_rec σ1 t.bv
+-  have hk1 : σ1.kheap t.bv = some (.tcb x6) := by simp [hσ1, updK]
+-  have hk6 : σ6.kheap t.bv = some (.tcb x6) := by rw [hσ6, stsAct_kheap]; exact hk1
+-  have hkp : ∀ p, p ≠ t.bv → σ6.kheap p = σ.kheap p := by
+-    intro p hp; rw [hσ6, stsAct_kheap, hσ1]; simp [updK, hp]
+-  have hact6 : σ6.schedulerAction = .chooseNewThread ∨ σ6.schedulerAction = σ.schedulerAction :=
+-    stsAct_action σ1 t.bv
+-  have e_ct : σ6.curThread = σ.curThread := by rw [hrec]; rfl
+-  have e_csc : σ6.curSc = σ.curSc := by rw [hrec]; rfl
+-  have e_cons : σ6.consumedTime = σ.consumedTime := by rw [hrec]; rfl
+-  have e_tm : σ6.curTime = σ.curTime := by rw [hrec]; rfl
+-  have e_idle : σ6.idleThread = σ.idleThread := by rw [hrec]; rfl
+-  have e_isc : σ6.idleSc = σ.idleSc := by rw [hrec]; rfl
+-  have e_rel : σ6.releaseQueue = σ.releaseQueue := by rw [hrec]; rfl
+-  have hW : P1.WritesIn st s s6 (TFoot st Z.T Z.N Z.C Z.c s σ) := WritesIn.tfoot_sfoot (P1.WritesIn.refl _ _) hw6
+-  have hfx : IpcFree x.tcbState := by
+-    rw [hrs]; exact ⟨rfl, rfl, fun _ e => by cases e⟩
+-  have hK : ScTKw (fun p => p = t.bv) σ σ6 := by
+-    refine ⟨fun p => ?_, by rw [hrec]; rfl, by rw [hrec]; rfl, by rw [hrec]; rfl, by rw [hrec]; rfl,
+-      by rw [hrec]; rfl, by rw [hrec]; rfl, by rw [hrec]; rfl, by rw [hrec]; rfl, e_ct, e_isc⟩
+-    by_cases hp : p = t.bv
+-    · subst hp; rw [hk, hk6]
+-      show TKObj _ _ _
+-      exact Or.inr (Or.inl ⟨x, x6, rfl, rfl, rfl, Or.inr ⟨rfl, hfx, rfl, rfl, fun _ e => by cases e⟩⟩)
+-    · rw [hkp p hp]; exact OTK.refl _ _
+-  have hX' : XTopAt (L := L) AR Z s6 a σ6 := xtop_sc_step J.xtop hP0 J.nk hW hK hX6.2.2.1 hX6.1.toN id
+-  -- `Inv`
+-  have hI1 : Inv σ1 := by
+-    refine J.inv.step (NtfnStep.tcb hk .running x.tcbArch) (fun u x0 y h1 h2 _ hr => ?_)
+-      (fun u x0 y h1 h2 hc => ?_)
+-    · by_cases e : u = t.bv
+-      · subst e; rw [hk] at h1; cases h1; simp [hσ1, updK] at h2; subst h2; rfl
+-      · have h2' : σ.kheap u = some (.tcb y) := by simpa [hσ1, updK, e] using h2
+-        rw [h1] at h2'; cases h2'; exact hr
+-    · by_cases e : u = t.bv
+-      · subst e; exact J.inv.rd _ x hk (Or.inl (by rw [hrs]; rfl))
+-      · have h2' : σ.kheap u = some (.tcb y) := by simpa [hσ1, updK, e] using h2
+-        exact J.inv.rd u y h2' hc
+-  have hInv : Inv σ6 := hI1.qchange (qchange_stsAct σ1 t.bv)
+-  -- the yield words
+-  have hY6 : YieldRel Z.T Z.C (L.mem s6) σ6 := by
+-    have h1 := J.yld.frame (m' := L.mem s6) (σ' := σ1)
+-      (fun y hy => hy6.mem_eq (yieldA_aligned hT hy) fun h => h ⟨y, hy, rfl⟩)
+-      (YK.YKS.updTcb (y := x6) hk rfl).ykeep
+-    exact h1.frame (m' := L.mem s6) (σ' := σ6) (fun _ _ => rfl) (YKeep.of_kheap (stsAct_kheap _ _))
+-  have hYK6 : YKeep σ σ6 := (YK.YKS.updTcb (y := x6) hk rfl).ykeep.trans (YKeep.of_kheap (stsAct_kheap _ _))
+-  have hsp : Fl4Spec.setThreadState (Z := Unit) t.bv .running σ = ({((), σ6)}, False) :=
+-    Notif.setThreadState_eq .running hk
+-  have hsok : SOK (false, true) σ σ6 := Pres.of_eq (pres_setThreadState _ _ _) hsp
+-  have hNSC : NSC Z.N Z.C σ6 := by
+-    intro n hn y p hy hp
+-    by_cases e : n.bv = t.bv
+-    · rw [e, hk6] at hy; cases hy
+-    · rw [hkp _ e] at hy; exact J.nsc n hn y p hy hp
+-  obtain ⟨-, hY', hM', ⟨Lst', hCR', hRF'⟩, hRP', -⟩ :=
+-    ScAll.of_tr hS J.rp J.mcp J.call J.rfree ⟨hX6.2.2.1, hX6.1.toN, hNSC, hInv⟩ hY6 (hW.mono fun _ h => Or.inl h)
+-      hsok rfl
+-  -- the scheduler facts
+-  have hsched : ∀ u, Fl4Spec.schedulable u σ = true → Fl4Spec.schedulable u σ6 = true := by
+-    intro u hs
+-    obtain ⟨y, scp, z, n, hky, hsc, hrun, hkz, hac, hnr⟩ := schedulable_inv hs
+-    have hzt : scp ≠ t.bv := by rintro rfl; rw [hk] at hkz; cases hkz
+-    have hkz6 : σ6.kheap scp = some (.schedContext z n) := by rw [hkp _ hzt]; exact hkz
+-    have hnr6 : u ∉ σ6.releaseQueue := by rw [e_rel]; exact hnr
+-    by_cases e : u = t.bv
+-    · subst e; rw [hk] at hky; cases hky
+-      exact schedulable_of hk6 hsc rfl hkz6 hac hnr6
+-    · exact schedulable_of (by rw [hkp _ e]; exact hky) hsc hrun hkz6 hac hnr6
+-  have hidt : σ.idleThread ≠ t.bv := by
+-    intro e
+-    obtain ⟨y, h1, -, h3, -⟩ := J.act.2
+-    rw [e, hk] at h1; cases h1; rw [hrs] at h3; cases h3
+-  have hAI : ActIdle σ6 := by
+-    refine ⟨fun u hu => ?_, ?_⟩
+-    · have hu0 : σ.schedulerAction = .switchThread u := by
+-        rcases hact6 with e | e
+-        · rw [e] at hu; cases hu
+-        · rw [← e]; exact hu
+-      exact hsched u (J.act.1 u hu0)
+-    · obtain ⟨y, h1, h2, h3, h4⟩ := J.act.2
+-      exact ⟨y, by rw [e_idle, hkp _ hidt]; exact h1, by rw [e_isc]; exact h2, h3, by rw [e_idle, e_rel]; exact h4⟩
+-  have hoff : OffOK σ6 := by
+-    intro h0 y n hy ha
+-    rw [e_cons] at h0 ⊢; rw [e_tm]; rw [e_csc] at hy; rw [e_csc, e_isc] at ha
+-    by_cases e : σ.curSc = t.bv
+-    · rw [e, hk6] at hy; cases hy
+-    · rw [hkp _ e] at hy; exact J.off h0 y n hy ha
+-  have hcur6 : σ6.schedulerAction = .chooseNewThread ∨ CurInv σ6 := by
+-    rcases J.cur with e | hC
+-    · left
+-      rcases hact6 with e' | e'
+-      · exact e'
+-      · rw [e', e]
+-    · right
+-      obtain ⟨xt, hkc, hcs, hnb⟩ := hC.tcb
+-      obtain ⟨y1, n1, hk1'⟩ := hC.sc
+-      have hne : σ.curSc ≠ t.bv := by intro e; rw [e, hk] at hk1'; cases hk1'
+-      refine ⟨?_, ⟨y1, n1, by rw [e_csc, hkp _ hne]; exact hk1'⟩, fun hne' y n hy => ?_,
+-        fun hm => hC.notRel (by rw [e_ct, e_rel] at hm; exact hm)⟩
+-      · by_cases hct : σ.curThread = t.bv
+-        · rw [hct, hk] at hkc; cases hkc
+-          have hnb6 : NotIpcBlk Fl4Spec.ThreadState.running := by
+-            refine ⟨?_, ?_, ?_⟩
+-            · intro _ e; cases e
+-            · intro _ _ e; cases e
+-            · intro _ _ _ e; cases e
+-          exact ⟨x6, by rw [e_ct, hct]; exact hk6, by rw [e_csc]; exact hcs, hnb6⟩
+-        · exact ⟨xt, by rw [e_ct, hkp _ hct]; exact hkc, by rw [e_csc]; exact hcs, hnb⟩
+-      · rw [e_csc, e_isc] at hne'; rw [e_csc] at hy
+-        rw [hkp _ hne] at hy
+-        exact hC.active hne' y n hy
+-  have hown6 : CurOwnW Z.T Z.C σ6 := by
+-    have hsc6 : ∀ y n, σ6.kheap σ6.curSc = some (.schedContext y n) → σ.kheap σ.curSc = some (.schedContext y n) := by
+-      intro y n hy
+-      rw [e_csc] at hy
+-      by_cases e : σ.curSc = t.bv
+-      · rw [e, hk6] at hy; cases hy
+-      · rw [hkp _ e] at hy; exact hy
+-    rcases J.own with ⟨u, hu, xt, hkt, hxs, hown, hnr⟩ | ⟨hcs, hun⟩
+-    · left
+-      by_cases hut : u.bv = t.bv
+-      · rw [hut, hk] at hkt; cases hkt
+-        exact ⟨u, hu, x6, by rw [hut]; exact hk6, by rw [e_csc]; exact hxs, fun y n hy => hown y n (hsc6 y n hy),
+-          fun h0 hm => hnr (by rw [← e_cons]; exact h0) (by rw [e_rel] at hm; exact hm)⟩
+-      · exact ⟨u, hu, xt, by rw [hkp _ hut]; exact hkt, by rw [e_csc]; exact hxs, fun y n hy => hown y n (hsc6 y n hy),
+-          fun h0 hm => hnr (by rw [← e_cons]; exact h0) (by rw [e_rel] at hm; exact hm)⟩
+-    · exact Or.inr ⟨by rw [e_csc]; exact hcs, fun y n hy => hun y n (hsc6 y n hy)⟩
+-  have hcr6 : CurRunM σ6 := by
+-    by_cases hnr : σ6.schedulerAction ≠ .resumeCurThread
+-    · exact Or.inl hnr
+-    have hr' : σ6.schedulerAction = .resumeCurThread := not_not.1 hnr
+-    have ha : σ6.schedulerAction = σ.schedulerAction := hact6.resolve_left (by rw [hr']; intro e; cases e)
+-    have h0 : ¬ σ.schedulerAction ≠ .resumeCurThread := fun e => e (by rw [← ha]; exact hr')
+-    right
+-    rcases J.curRun.resolve_left h0 with h | h
+-    · left
+-      intro y hy
+-      rw [e_ct] at hy
+-      by_cases hct : σ.curThread = t.bv
+-      · rw [hct, hk6] at hy; cases hy; rfl
+-      · rw [hkp _ hct] at hy; exact h y hy
+-    · right; rw [e_ct, e_idle]; exact h
+-  have hlk : LK (fun _ => False) σ σ6 := fun p => Or.inr (by
+-    by_cases hp : p = t.bv
+-    · subst hp; rw [hk, hk6]
+-      show LObj _ _
+-      refine ⟨?_, ?_, ?_⟩
+-      · intro y ey; cases ey; exact ⟨_, rfl, Or.inl rfl⟩
+-      · intro y n ey; cases ey
+-      · intro y ey; cases ey
+-    · rw [hkp p hp]; exact OL.refl _)
+-  have hfk : FK σ σ6 := ⟨e_csc, e_idle, e_isc⟩
+-  have hdead : ∀ q ∈ D, DeadP (L := L) H s6 q := fun q hq =>
+-    J.deadP_sc_stepG hX' hW hK (fun p x' hp hk' h0 y hy => by
+-        subst hp; rw [hk] at hk'; cases hk'; rw [hrs] at h0; simp [tsCode] at h0)
+-      hlk hfk hAI.1 hY' (hYK6.dk q.bv) (fun h => h) (J.jcov.dead q hq)
+-  exact ⟨Lst', J.sc_frame hW hK hX' hCR' hRF' hY' hM' (J.sc_buf hW hK) hRP' (J.sc_apart hW hK)
+-    (J.sc_jpl hW hK (J.idleW_keep hX'.fin.1.1.1 hfk.2.1 hfk.2.2).2) (J.sc_jcov hW hdead (fun q hq hn => absurd hq hn) (J.idleW_keep hX'.fin.1.1.1 hfk.2.1 hfk.2.2)) (J.sc_kern hW hK hfk hX' hDbg fun _ h => h)
+-    (J.sc_utc hW hK hDbg) hNSC hInv hcur6 hown6 hoff hAI (BlockedScActive.tkw J.bsa hK fun p y n hp ha => by
+-      by_cases e : p = t.bv
+-      · rw [e, hk6] at hp; cases hp
+-      · rw [hkp _ e] at hp; exact ⟨y, hp, ha, fun _ h => h, id⟩) hcr6 hblk,
+-    J.xtop.slotsSame_of hW (fun b hb => tfoot_oobj hS hb), P1.Foot.dbgKeep J.blk (fun _ h => h) hfoot⟩
+-
+-
+ set_option maxHeartbeats 16000000 in
+ /-- **`reply1` at `J` keeps `LiveDN`** (XTopJointReply's `JAtZ.reply1J` from
+ `J.addDeadSet`, with `runJD` and `regWrSD`; `LiveDN.of_jstep` at the end). -/
+diff --git a/proofs/Fl4Proofs/P3/XTopJointMRPath4.lean b/proofs/Fl4Proofs/P3/XTopJointMRPath4.lean
+index 6c13db04..cf7fb864 100644
+--- a/proofs/Fl4Proofs/P3/XTopJointMRPath4.lean
++++ b/proofs/Fl4Proofs/P3/XTopJointMRPath4.lean
+@@ -137,7 +137,9 @@ theorem JHole.mcsPPJIM {s0 : S} {a0 : A} {σ0 : Fl4Spec.State Unit} {s : S} {a :
+     have Hh2 : JHole (L := L) arI AR Z H Cs Ac Lst D s0 a0 σ0
+         (L.wr s (L.nodeAt s Z.c layout.node.CONSUMED) 0#u64) a (cons0 σ) :=
+       ⟨J, ⟨ms, t, 0, hum, eσ'⟩, hwK, hX2, Hh.nsc, Hh.inv.congr rfl rfl rfl rfl,
+-        Hh.cur.imp id fun h => h.congr rfl rfl rfl rfl, Hh.act, hblk', hDbg⟩
++        Hh.cur.imp id fun h => h.congr rfl rfl rfl rfl, Hh.act, hblk', hDbg,
++        Hh.dbgK_node (by obtain ⟨Q, R0, hc, -⟩ := J.xtop.fin.1.1.1.lists; exact hc.cur ▸ J.kern.cpuCs)
++          (Or.inr rfl) hw1⟩
+     have hO : OffOK (cons0 σ) := fun h0 => absurd h0 (by show ¬ (0 : BitVec 64) < 0; decide)
+     have hOw : CurOwnW Z.T Z.C (cons0 σ) := by
+       rcases J.own with ⟨u, hu, xt, hk1, hxs, hb', -⟩ | ⟨⟨c', hc', hcv'⟩, h2⟩
+diff --git a/proofs/Fl4Proofs/P3/XTopJointNoFault.lean b/proofs/Fl4Proofs/P3/XTopJointNoFault.lean
+index c3bc1197..631ad8d9 100644
+--- a/proofs/Fl4Proofs/P3/XTopJointNoFault.lean
++++ b/proofs/Fl4Proofs/P3/XTopJointNoFault.lean
+@@ -161,6 +161,7 @@ theorem JAtZ.stsCurJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) (hni : En
+   rintro s6 ⟨⟨⟨⟨hR6, hS6r⟩, hw6⟩, hy6⟩, hblk, hfoot⟩
+   have hX6 := IpcRel.ofSRN hR6 hS6r
+   have hDbg := J.kw_dbg hfoot
++  have hKd := J.kw_dbgKeep hfoot
+   set x6 : Fl4Spec.Tcb := { x with tcbState := .inactive } with hx6
+   set σ1 := updK σ t.bv (.tcb x6) with hσ1
+   set σ6 := stsAct σ1 t.bv with hσ6
+@@ -279,7 +280,7 @@ theorem JAtZ.stsCurJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) (hni : En
+     (J.sc_utc hW hK hDbg) hNSC hInv hcur6 hown6 hoff hAI (BlockedScActive.tkw J.bsa hK fun p y n hp ha => by
+       by_cases e : p = t.bv
+       · rw [e, hk6] at hp; cases hp
+-      · rw [hkp _ e] at hp; exact ⟨y, hp, ha, fun _ h => h, id⟩) hcr6 hblk⟩
++      · rw [hkp _ e] at hp; exact ⟨y, hp, ha, fun _ h => h, id⟩) hcr6 hblk hKd (J.idleW_keep hX'.fin.1.1.1 hfk.2.1 hfk.2.2).1 J.zD⟩
+ 
+ /-- FL4's and the spec's fault-handler slot of a related TCB. -/
+ theorem fhCap_rel {th : TypedHeap} {m : U64 → U64} {σ' : Fl4Spec.State Unit} (hR : StateRel th m σ') {t : U64}
+diff --git a/proofs/Fl4Proofs/P3/XTopJointNullOrig.lean b/proofs/Fl4Proofs/P3/XTopJointNullOrig.lean
+index 72521ab3..600fcb40 100644
+--- a/proofs/Fl4Proofs/P3/XTopJointNullOrig.lean
++++ b/proofs/Fl4Proofs/P3/XTopJointNullOrig.lean
+@@ -24,10 +24,6 @@ open fl4_core Classical
+ 
+ noncomputable section
+ 
+-/-- **A null abstract slot is not original** [J] (module docstring). -/
+-def NullOrig (th : TypedHeap) (m : U64 → U64) (σ : Fl4Spec.State Unit) : Prop :=
+-  ∀ sl, AbsSlot th sl → capV m (cslotAddr sl) = .Null → σ.isOriginalCap sl = false
+-
+ section Spec
+ open Fl4Spec
+ 
+@@ -99,35 +95,6 @@ end Spec
+ section
+ variable {S : Type} {st : machine.Store S} [L : P1.LawfulStore st]
+ 
+-/-- **A null slot is not in use.** -/
+-theorem NullOrig.notInUse {th : TypedHeap} {m : U64 → U64} {σ : Fl4Spec.State Unit} (hN : NullOrig th m σ)
+-    (horig : ∀ sl, σ.isOriginalCap sl = true → AbsSlot th sl) {y : U64} (hy : capV m y = .Null) :
+-    ¬ InUse m σ y := by
+-  rintro (h | ⟨x, rfl, hx⟩)
+-  · exact h hy
+-  · rw [hN x (horig x hx) hy] at hx; cases hx
+-
+-/-- **`NullOrig` across a step keeping the slots' caps and the original bits.** -/
+-theorem NullOrig.of_same {th : TypedHeap} {m m' : U64 → U64} {σ σ' : Fl4Spec.State Unit} (hN : NullOrig th m σ)
+-    (hcv : ∀ y, IsSlot th y → capV m' y = capV m y) (ho : σ'.isOriginalCap = σ.isOriginalCap) :
+-    NullOrig th m' σ' := fun sl hA h => by
+-  rw [ho]; exact hN sl hA (by rw [← hcv _ hA.isSlot]; exact h)
+-
+-/-- **The original bits kept by a step keeping the slots' words** (`CdtRel`
+-before and after, the bits only on abstract slots). -/
+-theorem orig_eq_of_slots {th : TypedHeap} {m m' : U64 → U64} {σ σ' : Fl4Spec.State Unit} {G G' : MdbGhost}
+-    (hC : CdtRel th m σ G) (hC' : CdtRel th m' σ' G') (ho : ∀ sl, σ.isOriginalCap sl = true → AbsSlot th sl)
+-    (ho' : ∀ sl, σ'.isOriginalCap sl = true → AbsSlot th sl) (hS : SlotsSame th m m') :
+-    σ'.isOriginalCap = σ.isOriginalCap := by
+-  funext sl
+-  by_cases hA : AbsSlot th sl
+-  · rw [hC'.orig sl hA, hC.orig sl hA, hS.revOf hA.isSlot]
+-  · cases h1 : σ'.isOriginalCap sl
+-    · cases h2 : σ.isOriginalCap sl
+-      · rfl
+-      · exact absurd (ho sl h2) hA
+-    · exact absurd (ho' sl h1) hA
+-
+ /-- **`empty_slot` keeps `NullOrig`**: the emptied slot's bit cleared, the
+ other slots' caps and bits kept. -/
+ theorem NullOrig.empty {th : TypedHeap} (hP : Placed th) {s s' : S} {σ σ' : Fl4Spec.State Unit}
+diff --git a/proofs/Fl4Proofs/P3/XTopJointPreempt.lean b/proofs/Fl4Proofs/P3/XTopJointPreempt.lean
+index d97209b7..d0ae03d5 100644
+--- a/proofs/Fl4Proofs/P3/XTopJointPreempt.lean
++++ b/proofs/Fl4Proofs/P3/XTopJointPreempt.lean
+@@ -177,7 +177,7 @@ theorem JHole.msAr {s0 : S} {a0 : A} {σ0 : Fl4Spec.State Unit} {s : S} {a : A}
+     xtop_sc_step J.xtop J.ip J.nk hwT (ct := σ0.curThread) (hK.mono fun _ h => h.elim) hS2 hR2
+       fun _ => by rw [← earch]; exact hAR hARh
+   exact ⟨J, ⟨ms, t, c, hum', by rw [e]⟩, Hh.ws, hX', Hh.nsc, Hh.inv.congr rfl rfl rfl rfl,
+-    Hh.cur.imp id fun h => h.congr rfl rfl rfl rfl, Hh.act, Hh.blk, Hh.dbg⟩
++    Hh.cur.imp id fun h => h.congr rfl rfl rfl rfl, Hh.act, Hh.blk, Hh.dbg, Hh.dbgK⟩
+ 
+ variable (arI) in
+ /-- Some `JHole` ends at `(s, a, σ)`. -/
+diff --git a/proofs/Fl4Proofs/P3/XTopJointPreemptI.lean b/proofs/Fl4Proofs/P3/XTopJointPreemptI.lean
+index 1be47a78..16a8db08 100644
+--- a/proofs/Fl4Proofs/P3/XTopJointPreemptI.lean
++++ b/proofs/Fl4Proofs/P3/XTopJointPreemptI.lean
+@@ -195,7 +195,9 @@ theorem JHole.mcsPPJI {s0 : S} {a0 : A} {σ0 : Fl4Spec.State Unit} {s : S} {a :
+   have Hh2 : JHole (L := L) arI AR Z H Cs Ac Lst D s0 a0 σ0
+       (L.wr s (L.nodeAt s Z.c layout.node.CONSUMED) 0#u64) a (cons0 σ) :=
+     ⟨J, ⟨ms, t, 0, hum, eσ'⟩, hwK, hX2, Hh.nsc, Hh.inv.congr rfl rfl rfl rfl,
+-      Hh.cur.imp id fun h => h.congr rfl rfl rfl rfl, Hh.act, hblk', hDbg⟩
++      Hh.cur.imp id fun h => h.congr rfl rfl rfl rfl, Hh.act, hblk', hDbg,
++        Hh.dbgK_node (by obtain ⟨Q, R0, hc, -⟩ := J.xtop.fin.1.1.1.lists; exact hc.cur ▸ J.kern.cpuCs)
++          (Or.inr rfl) hw1⟩
+   have hO : OffOK (cons0 σ) := fun h0 => absurd h0 (by show ¬ (0 : BitVec 64) < 0; decide)
+   have hOw : CurOwnW Z.T Z.C (cons0 σ) := by
+     rcases J.own with ⟨u, hu, xt, hk1, hxs, hb', -⟩ | ⟨⟨c', hc', hcv'⟩, h2⟩
+diff --git a/proofs/Fl4Proofs/P3/XTopJointPushDon.lean b/proofs/Fl4Proofs/P3/XTopJointPushDon.lean
+index e6773696..312d49cc 100644
+--- a/proofs/Fl4Proofs/P3/XTopJointPushDon.lean
++++ b/proofs/Fl4Proofs/P3/XTopJointPushDon.lean
+@@ -1211,6 +1211,7 @@ theorem JAtZ.pushDonJ (hAT : P0.ArchTotal arI) (J : JAtZ (L := L) arI AR Z H Cs
+   have hFK : FK σ σ' := ⟨pd_csc, pd_idle, pd_isc⟩
+   have hIK := J.idleW_keep hS' pd_idle pd_isc
+   have hDbg := J.kw_dbg hfoot
++  have hKd := J.kw_dbgKeep hfoot
+   -- the bound-before objects at `σB`
+   have hktB : σB.kheap t.bv = some (.tcb xt) := bd_oth hky hkw hws hh (fun _ e => by cases e) (Ne.symm hst') hkt
+   have hkdB : σB.kheap d.bv = some (.tcb xd) := bd_oth hky hkw hws hh (fun _ e => by cases e) (Ne.symm hsd') hkd
+diff --git a/proofs/Fl4Proofs/P3/XTopJointRecvIpcBlock.lean b/proofs/Fl4Proofs/P3/XTopJointRecvIpcBlock.lean
+index 470113b2..9580ffa8 100644
+--- a/proofs/Fl4Proofs/P3/XTopJointRecvIpcBlock.lean
++++ b/proofs/Fl4Proofs/P3/XTopJointRecvIpcBlock.lean
+@@ -936,6 +936,7 @@ theorem JAtZ.recvIpcBlockJG (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ)
+   have hblk : P1.BlkOK st (P1.Heap.tcbs H) Cs (P1.Heap.omega H) H (P1.Heap.frame H) (P1.Heap.replies H)
+       (P1.Heap.scs H) (P1.Heap.ntfns H) (P1.Heap.scBits H) Ac s' := ⟨⟨Q0, R0, hbk.1⟩, hbk.2⟩
+   have hDbg := J.kw_dbg hfoot
++  have hKd := J.kw_dbgKeep hfoot
+   -- the assembly (as XTopJointSendBlock's `JAtZ.sendBlockJ`)
+   have hAR : AR a σ.archState.x64CurrentCr3 := J.xtop.fin.1.1.2.2.2.2.2.2
+   have hF : IFrame (L := L) Z.th s s' := IRel.iframe_of hI hW fun b hb => CnW.oobj hI.2.2.1 hb
+diff --git a/proofs/Fl4Proofs/P3/XTopJointRecvIpcBlockM.lean b/proofs/Fl4Proofs/P3/XTopJointRecvIpcBlockM.lean
+index 8a34fd6d..aded638b 100644
+--- a/proofs/Fl4Proofs/P3/XTopJointRecvIpcBlockM.lean
++++ b/proofs/Fl4Proofs/P3/XTopJointRecvIpcBlockM.lean
+@@ -265,6 +265,7 @@ theorem JAtZ.recvIpcBlockJGM (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ)
+   have hblk : P1.BlkOK st (P1.Heap.tcbs H) Cs (P1.Heap.omega H) H (P1.Heap.frame H) (P1.Heap.replies H)
+       (P1.Heap.scs H) (P1.Heap.ntfns H) (P1.Heap.scBits H) Ac s' := ⟨⟨Q0, R0, hbk.1⟩, hbk.2⟩
+   have hDbg := J.kw_dbg hfoot
++  have hKd := J.kw_dbgKeep hfoot
+   -- the assembly (as XTopJointSendBlock's `JAtZ.sendBlockJ`)
+   have hAR : AR a σ.archState.x64CurrentCr3 := J.xtop.fin.1.1.2.2.2.2.2.2
+   have hF : IFrame (L := L) Z.th s s' := IRel.iframe_of hI hW fun b hb => CnW.oobj hI.2.2.1 hb
+diff --git a/proofs/Fl4Proofs/P3/XTopJointRecvIpcC.lean b/proofs/Fl4Proofs/P3/XTopJointRecvIpcC.lean
+index 46fd712f..24fe33be 100644
+--- a/proofs/Fl4Proofs/P3/XTopJointRecvIpcC.lean
++++ b/proofs/Fl4Proofs/P3/XTopJointRecvIpcC.lean
+@@ -212,6 +212,7 @@ theorem JAtZ.recvIpcBlockJGC (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ)
+   have hblk : P1.BlkOK st (P1.Heap.tcbs H) Cs (P1.Heap.omega H) H (P1.Heap.frame H) (P1.Heap.replies H)
+       (P1.Heap.scs H) (P1.Heap.ntfns H) (P1.Heap.scBits H) Ac s' := ⟨⟨Q0, R0, hbk.1⟩, hbk.2⟩
+   have hDbg := J.kw_dbg hfoot
++  have hKd := J.kw_dbgKeep hfoot
+   -- the assembly (as XTopJointSendBlock's `JAtZ.sendBlockJ`)
+   have hAR : AR a σ.archState.x64CurrentCr3 := J.xtop.fin.1.1.2.2.2.2.2.2
+   have hF : IFrame (L := L) Z.th s s' := IRel.iframe_of hI hW fun b hb => CnW.oobj hI.2.2.1 hb
+diff --git a/proofs/Fl4Proofs/P3/XTopJointRecvSendP.lean b/proofs/Fl4Proofs/P3/XTopJointRecvSendP.lean
+index d2b56a8e..0c7e2ac2 100644
+--- a/proofs/Fl4Proofs/P3/XTopJointRecvSendP.lean
++++ b/proofs/Fl4Proofs/P3/XTopJointRecvSendP.lean
+@@ -248,6 +248,7 @@ theorem JAtZ.rsfr_postGR (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {n t
+     obtain ⟨h1, h2, h3⟩ := J.rfree d hd ⟨y, F.replyB hy', hyt⟩
+     exact ⟨h1, by rw [e2]; exact h2, by rw [e1]; exact h3⟩
+   have hDbg := J.kw_dbg hfoot
++  have hKd := J.kw_dbgKeep hfoot
+   have hS3 : SchedRel st Z.N Z.T Z.C Z.c s' σ' := hIR.2.2.1
+   have hidl0 : σ'.idleThread = σ.idleThread := G.idle.trans F.sk.idle
+   have hisc0 : σ'.idleSc = σ.idleSc := G.isc.trans F.sk.isc
+diff --git a/proofs/Fl4Proofs/P3/XTopJointRecvSendPDD.lean b/proofs/Fl4Proofs/P3/XTopJointRecvSendPDD.lean
+index 08727ac8..1f639011 100644
+--- a/proofs/Fl4Proofs/P3/XTopJointRecvSendPDD.lean
++++ b/proofs/Fl4Proofs/P3/XTopJointRecvSendPDD.lean
+@@ -188,6 +188,7 @@ theorem JAtZ.pushDonRJW (hAT : P0.ArchTotal arI) (J : JAtZ (L := L) arI AR Z H C
+   have hFK : FK σ σ' := ⟨pd_csc, pd_idle, pd_isc⟩
+   have hIK := J.idleW_keep hS' pd_idle pd_isc
+   have hDbg := J.kw_dbg hfoot
++  have hKd := J.kw_dbgKeep hfoot
+   -- the bound-before objects at `σB`
+   have hktB : σB.kheap t.bv = some (.tcb xt) := bd_oth hky hkw hws hh (fun _ e => by cases e) (Ne.symm hst') hkt
+   have hkdB : σB.kheap d.bv = some (.tcb xd) := bd_oth hky hkw hws hh (fun _ e => by cases e) (Ne.symm hsd') hkd
+diff --git a/proofs/Fl4Proofs/P3/XTopJointRecvSendRD.lean b/proofs/Fl4Proofs/P3/XTopJointRecvSendRD.lean
+index 4a82be80..f82d5018 100644
+--- a/proofs/Fl4Proofs/P3/XTopJointRecvSendRD.lean
++++ b/proofs/Fl4Proofs/P3/XTopJointRecvSendRD.lean
+@@ -364,6 +364,7 @@ theorem JAtZ.pushDonRJ (hAT : P0.ArchTotal arI) (J : JAtZ (L := L) arI AR Z H Cs
+   have hFK : FK σ σ' := ⟨pd_csc, pd_idle, pd_isc⟩
+   have hIK := J.idleW_keep hS' pd_idle pd_isc
+   have hDbg := J.kw_dbg hfoot
++  have hKd := J.kw_dbgKeep hfoot
+   -- the bound-before objects at `σB`
+   have hktB : σB.kheap t.bv = some (.tcb xt) := bd_oth hky hkw hws hh (fun _ e => by cases e) (Ne.symm hst') hkt
+   have hkdB : σB.kheap d.bv = some (.tcb xd) := bd_oth hky hkw hws hh (fun _ e => by cases e) (Ne.symm hsd') hkd
+diff --git a/proofs/Fl4Proofs/P3/XTopJointRecvSendStep.lean b/proofs/Fl4Proofs/P3/XTopJointRecvSendStep.lean
+index 9a4330a7..e42930ea 100644
+--- a/proofs/Fl4Proofs/P3/XTopJointRecvSendStep.lean
++++ b/proofs/Fl4Proofs/P3/XTopJointRecvSendStep.lean
+@@ -107,6 +107,7 @@ theorem JAtZ.rsfrStep (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {t r : F
+     obtain ⟨h1, h2, h3⟩ := J.rfree d hd ⟨y, F.replyB hy, hyt⟩
+     exact ⟨h1, by rw [e2]; exact h2, by rw [e1]; exact h3⟩
+   have hDbg := J.kw_dbg hfoot
++  have hKd := J.kw_dbgKeep hfoot
+   have hS3 : SchedRel st Z.N Z.T Z.C Z.c s' σ' := hIR.2.2.1
+   have hAI3 : ActIdle σ' := by
+     refine ⟨fun u hu => ?_, F.idleOK J.act.2⟩
+diff --git a/proofs/Fl4Proofs/P3/XTopJointRecvSigRet.lean b/proofs/Fl4Proofs/P3/XTopJointRecvSigRet.lean
+index 670f2a67..115247e5 100644
+--- a/proofs/Fl4Proofs/P3/XTopJointRecvSigRet.lean
++++ b/proofs/Fl4Proofs/P3/XTopJointRecvSigRet.lean
+@@ -782,11 +782,12 @@ theorem JAtZ.maybeReturnJQ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {t
+     J.deadP_sc_step hX' hW hK (fun _ _ h => h.elim) hL hF hact'.1 hY'
+       ((((pres_maybeReturnSc (true, true) _ _).of_eq he).ykeep rfl).dk q.bv) (fun h => h) (J.jcov.dead q hq)
+   have hDbg := J.kw_dbg hfoot
++  have hKd := J.kw_dbgKeep hfoot
+   exact ⟨hW, σ2, he, Ac, Lst', J.sc_frame hW hK hX' hCR' hRF' hY' hM' (J.sc_buf hW hK) hRP' (J.sc_apart hW hK)
+     (J.sc_jpl hW hK (J.idleW_keep hX'.fin.1.1.1 hF.2.1 hF.2.2).2)
+     (J.sc_jcov hW hdead (fun q hq hn => absurd hq hn) (J.idleW_keep hX'.fin.1.1.1 hF.2.1 hF.2.2))
+     (J.sc_kern hW hK hF hX' hDbg fun _ h => h)
+-    (J.sc_utc hW hK hDbg) hN' hI' hcur' hown' hoff' hact' hB' hcr' hblk⟩
++    (J.sc_utc hW hK hDbg) hN' hI' hcur' hown' hoff' hact' hB' hcr' hblk hKd (J.idleW_keep hX'.fin.1.1.1 hF.2.1 hF.2.2).1 J.zD⟩
+ 
+ /-- **`maybe_return_sched_context` at `J`** (module docstring): a thread
+ `t`, not runnable, neither the idle thread nor the switch target, whose SC
+diff --git a/proofs/Fl4Proofs/P3/XTopJointRegFrame.lean b/proofs/Fl4Proofs/P3/XTopJointRegFrame.lean
+index 3483fd3a..fb7fc16e 100644
+--- a/proofs/Fl4Proofs/P3/XTopJointRegFrame.lean
++++ b/proofs/Fl4Proofs/P3/XTopJointRegFrame.lean
+@@ -373,6 +373,7 @@ theorem JAtZ.reg_frameF (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {s' :
+   have hRF' := RFree.carry J.rfree J.call k4 ck
+   have hRR' := J.rrecv.frame k4 hA.khrb
+   have hDbg := J.kw_dbg (hfoot.mono fun b hb => kw_empty_mono hb _)
++  have hKd := J.kw_dbgKeep (hfoot.mono fun b hb => kw_empty_mono hb _)
+   have hS3 : SchedRel st Z.N Z.T Z.C Z.c s' σ' := hI3.2.2.1
+   have hAI3 : ActIdle σ' := hA.actIdle J.act
+   have hdead : ∀ q ∈ D, DeadP (L := L) H s' q := J.deadP_qk hA hS3 hI3.1 hwF k3 hAI3.1 (J.yld.frame k2 hyk) hyk
+diff --git a/proofs/Fl4Proofs/P3/XTopJointRemove.lean b/proofs/Fl4Proofs/P3/XTopJointRemove.lean
+index c1c94c84..6100b52b 100644
+--- a/proofs/Fl4Proofs/P3/XTopJointRemove.lean
++++ b/proofs/Fl4Proofs/P3/XTopJointRemove.lean
+@@ -949,6 +949,7 @@ theorem JAtZ.replyRemoveJD (hT : P0.ArchTotal arI) (J : JAtZ (L := L) arI AR Z H
+     exact ⟨Tr, Cq, hJ.same hF.1 (fun q y n _ hq => szk q.bv y n hq) hks (J.rmW_irq hw)
+       (J.idleW_keep hIR.2.2.1 hidle' hisc').2⟩
+   have hDbg := J.kw_dbg hfoot
++  have hKd := J.kw_dbgKeep hfoot
+   have hao : ∀ p ao, σ.kheap p = some (.archObj ao) → σ'.kheap p = some (.archObj ao) := by
+     intro p ao hp
+     have h1 : p ≠ t.bv := by rintro rfl; rw [hk] at hp; cases hp
+diff --git a/proofs/Fl4Proofs/P3/XTopJointReply.lean b/proofs/Fl4Proofs/P3/XTopJointReply.lean
+index c4ddc0c6..dc9241bd 100644
+--- a/proofs/Fl4Proofs/P3/XTopJointReply.lean
++++ b/proofs/Fl4Proofs/P3/XTopJointReply.lean
+@@ -107,13 +107,15 @@ theorem JAtZ.regWrJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {t : U64}
+     (J.inv.updSame (y := setReg x r v.bv) hk rfl rfl (Or.inl rfl)) hblk hfoot
+ 
+ set_option maxHeartbeats 16000000 in
+-/-- **`set_thread_state Running` of a `Restart` thread at `J`** (module
+-docstring). -/
+-theorem JAtZ.runJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {t : U64} (ht : t ∈ Z.T)
++/-- **`set_thread_state Running` of a `Restart` thread at `J`, the dead set
++kept** (XTopJointReply's `JAtZ.runJ`, same proof; the post names the dead
++set `D` and adds the slot and debug-word frames). -/
++theorem JAtZ.runJD (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {t : U64} (ht : t ∈ Z.T)
+     {x : Fl4Spec.Tcb} (hk : σ.kheap t.bv = some (.tcb x)) (hrs : x.tcbState = .restart) :
+-    sched.set_thread_state st s t sched.TS_RUNNING ⦃ s6 => ∃ (Lst' : U64 → List U64) (D' : Set U64),
+-      JAtZ (L := L) arI AR Z H Cs Ac Lst' D' s6 a
+-        (stsAct (updK σ t.bv (.tcb { x with tcbState := .running })) t.bv) ⦄ := by
++    sched.set_thread_state st s t sched.TS_RUNNING ⦃ s6 => ∃ (Lst' : U64 → List U64),
++      JAtZ (L := L) arI AR Z H Cs Ac Lst' D s6 a
++        (stsAct (updK σ t.bv (.tcb { x with tcbState := .running })) t.bv) ∧
++      SlotsSame Z.th (L.mem s) (L.mem s6) ∧ P1.DbgKeep st (P1.Heap.tcbs H) Cs s s6 ⦄ := by
+   have hP0 := J.ip
+   have hI := J.xtop.irelK J.ks J.buf
+   have hS := J.xtop.fin.1.1.1
+@@ -136,6 +138,7 @@ theorem JAtZ.runJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {t : U64} (h
+   rintro s6 ⟨⟨⟨⟨hR6, hS6r⟩, hw6⟩, hy6⟩, hblk, hfoot⟩
+   have hX6 := IpcRel.ofSRN hR6 hS6r
+   have hDbg := J.kw_dbg hfoot
++  have hKd := J.kw_dbgKeep hfoot
+   set x6 : Fl4Spec.Tcb := { x with tcbState := .running } with hx6
+   set σ1 := updK σ t.bv (.tcb x6) with hσ1
+   set σ6 := stsAct σ1 t.bv with hσ6
+@@ -295,12 +298,22 @@ theorem JAtZ.runJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {t : U64} (h
+     J.deadP_sc_stepG hX' hW hK (fun p x' hp hk' h0 y hy => by
+         subst hp; rw [hk] at hk'; cases hk'; rw [hrs] at h0; simp [tsCode] at h0)
+       hlk hfk hAI.1 hY' (hYK6.dk q.bv) (fun h => h) (J.jcov.dead q hq)
+-  exact ⟨Lst', D, J.sc_frame hW hK hX' hCR' hRF' hY' hM' (J.sc_buf hW hK) hRP' (J.sc_apart hW hK)
++  exact ⟨Lst', J.sc_frame hW hK hX' hCR' hRF' hY' hM' (J.sc_buf hW hK) hRP' (J.sc_apart hW hK)
+     (J.sc_jpl hW hK (J.idleW_keep hX'.fin.1.1.1 hfk.2.1 hfk.2.2).2) (J.sc_jcov hW hdead (fun q hq hn => absurd hq hn) (J.idleW_keep hX'.fin.1.1.1 hfk.2.1 hfk.2.2)) (J.sc_kern hW hK hfk hX' hDbg fun _ h => h)
+     (J.sc_utc hW hK hDbg) hNSC hInv hcur6 hown6 hoff hAI (BlockedScActive.tkw J.bsa hK fun p y n hp ha => by
+       by_cases e : p = t.bv
+       · rw [e, hk6] at hp; cases hp
+-      · rw [hkp _ e] at hp; exact ⟨y, hp, ha, fun _ h => h, id⟩) hcr6 hblk⟩
++      · rw [hkp _ e] at hp; exact ⟨y, hp, ha, fun _ h => h, id⟩) hcr6 hblk hKd (J.idleW_keep hX'.fin.1.1.1 hfk.2.1 hfk.2.2).1 J.zD,
++    J.xtop.slotsSame_of hW (fun b hb => tfoot_oobj hS hb), P1.Foot.dbgKeep J.blk (fun _ h => h) hfoot⟩
++
++/-- **`set_thread_state Running` of a `Restart` thread at `J`** (module
++docstring; `runJD` with the dead set hidden). -/
++theorem JAtZ.runJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {t : U64} (ht : t ∈ Z.T)
++    {x : Fl4Spec.Tcb} (hk : σ.kheap t.bv = some (.tcb x)) (hrs : x.tcbState = .restart) :
++    sched.set_thread_state st s t sched.TS_RUNNING ⦃ s6 => ∃ (Lst' : U64 → List U64) (D' : Set U64),
++      JAtZ (L := L) arI AR Z H Cs Ac Lst' D' s6 a
++        (stsAct (updK σ t.bv (.tcb { x with tcbState := .running })) t.bv) ⦄ :=
++  WP.spec_mono (J.runJD ht hk hrs) fun _ ⟨Lst', J', _⟩ => ⟨Lst', D, J'⟩
+ 
+ set_option maxHeartbeats 16000000 in
+ /-- **`reply1` at `J`** (module docstring): every outcome of the spec's
+diff --git a/proofs/Fl4Proofs/P3/XTopJointRunI.lean b/proofs/Fl4Proofs/P3/XTopJointRunI.lean
+index 17a09ade..17c91b4c 100644
+--- a/proofs/Fl4Proofs/P3/XTopJointRunI.lean
++++ b/proofs/Fl4Proofs/P3/XTopJointRunI.lean
+@@ -93,6 +93,7 @@ theorem JAtZ.runIJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {t : U64} (
+   rintro s6 ⟨⟨⟨⟨hR6, hS6r⟩, hw6⟩, hy6⟩, hblk, hfoot⟩
+   have hX6 := IpcRel.ofSRN hR6 hS6r
+   have hDbg := J.kw_dbg hfoot
++  have hKd := J.kw_dbgKeep hfoot
+   set x6 : Fl4Spec.Tcb := { x with tcbState := .running } with hx6
+   set σ1 := updK σ t.bv (.tcb x6) with hσ1
+   set σ6 := stsAct σ1 t.bv with hσ6
+@@ -256,7 +257,7 @@ theorem JAtZ.runIJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {t : U64} (
+     (J.sc_utc hW hK hDbg) hNSC hInv hcur6 hown6 hoff hAI (BlockedScActive.tkw J.bsa hK fun p y n hp ha => by
+       by_cases e : p = t.bv
+       · rw [e, hk6] at hp; cases hp
+-      · rw [hkp _ e] at hp; exact ⟨y, hp, ha, fun _ h => h, id⟩) hcr6 hblk⟩
++      · rw [hkp _ e] at hp; exact ⟨y, hp, ha, fun _ h => h, id⟩) hcr6 hblk hKd (J.idleW_keep hX'.fin.1.1.1 hfk.2.1 hfk.2.2).1 J.zD⟩
+ 
+ end
+ 
+diff --git a/proofs/Fl4Proofs/P3/XTopJointRunPost.lean b/proofs/Fl4Proofs/P3/XTopJointRunPost.lean
+index 7491cfc5..f889b10e 100644
+--- a/proofs/Fl4Proofs/P3/XTopJointRunPost.lean
++++ b/proofs/Fl4Proofs/P3/XTopJointRunPost.lean
+@@ -378,6 +378,7 @@ theorem JAtZ.runPostJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {t : U64
+     · rw [hkp7 p hp]; exact OL.refl _)
+   have hfk : FK σ σ7 := ⟨e7_csc, e7_idle, e7_isc⟩
+   have hDbg := J.kw_dbg (P1.Foot.trans hfoot6 hfoot7)
++  have hKd := J.kw_dbgKeep (P1.Foot.trans hfoot6 hfoot7)
+   have hdead : ∀ q ∈ D, DeadP (L := L) H s7 q := fun q hq =>
+     J.deadP_sc_stepQ hX7 hW7 hK7 (fun _ hp => absurd (show q = t from P1.eq_of_bv hp) (fun e => htD (e ▸ hq)))
+       hlk hfk hAI.1 hY' ((hYK6.trans (YKeep.of_kheap hke)).dk q.bv) (fun h => h) (J.jcov.dead q hq)
+@@ -387,7 +388,7 @@ theorem JAtZ.runPostJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {t : U64
+     (J.sc_utc hW7 hK7 hDbg) hNSC hI7 hcur7 hown7 hoff hAI (BlockedScActive.tkw J.bsa hK7 fun p y1 n1 hp ha => by
+       by_cases e : p = t.bv
+       · rw [e, hk7] at hp; cases hp
+-      · rw [hkp7 _ e] at hp; exact ⟨y1, hp, ha, fun _ h => h, id⟩) hcr7 hblk⟩
++      · rw [hkp7 _ e] at hp; exact ⟨y1, hp, ha, fun _ h => h, id⟩) hcr7 hblk hKd (J.idleW_keep hX7.fin.1.1.1 hfk.2.1 hfk.2.2).1 J.zD⟩
+ 
+ end
+ 
+diff --git a/proofs/Fl4Proofs/P3/XTopJointSendBlock.lean b/proofs/Fl4Proofs/P3/XTopJointSendBlock.lean
+index a3723bd5..c3350ca5 100644
+--- a/proofs/Fl4Proofs/P3/XTopJointSendBlock.lean
++++ b/proofs/Fl4Proofs/P3/XTopJointSendBlock.lean
+@@ -761,6 +761,7 @@ theorem JAtZ.sendBlockJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {t : U
+     obtain ⟨h1, h2, h3⟩ := J.rfree d hd ⟨y, F.replyB hy, hyt⟩
+     exact ⟨h1, by rw [e2]; exact h2, by rw [e1]; exact h3⟩
+   have hDbg := J.kw_dbg hfoot
++  have hKd := J.kw_dbgKeep hfoot
+   have hS3 : SchedRel st Z.N Z.T Z.C Z.c s' σ' := hIR.2.2.1
+   have hAI3 : ActIdle σ' := ⟨fun u hu => (by rw [hcn'] at hu; cases hu), F.idleOK J.act.2⟩
+   have hcur3 : σ'.schedulerAction = .chooseNewThread ∨ CurInv σ' := Or.inl hcn'
+diff --git a/proofs/Fl4Proofs/P3/XTopJointSendBlockG.lean b/proofs/Fl4Proofs/P3/XTopJointSendBlockG.lean
+index 61a64dfe..699927ce 100644
+--- a/proofs/Fl4Proofs/P3/XTopJointSendBlockG.lean
++++ b/proofs/Fl4Proofs/P3/XTopJointSendBlockG.lean
+@@ -682,6 +682,7 @@ theorem JAtZ.runTmoJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {t : U64}
+       obtain ⟨h1, h2, h3⟩ := J.rfree d hd ⟨y, F.replyB hy, hyt⟩
+       exact ⟨h1, by rw [e2]; exact h2, by rw [e1]; exact h3⟩
+     have hDbg := J.kw_dbg hfoot
++    have hKd := J.kw_dbgKeep hfoot
+     have hS3 : SchedRel st Z.N Z.T Z.C Z.c s' σ' := hIR.2.2.1
+     -- the scheduler action: kept, or a reschedule
+     have hact3 : σ'.schedulerAction = σ.schedulerAction ∨ σ'.schedulerAction = .chooseNewThread := by
+diff --git a/proofs/Fl4Proofs/P3/XTopJointSendCall.lean b/proofs/Fl4Proofs/P3/XTopJointSendCall.lean
+index 6ef33af7..39b3b8b9 100644
+--- a/proofs/Fl4Proofs/P3/XTopJointSendCall.lean
++++ b/proofs/Fl4Proofs/P3/XTopJointSendCall.lean
+@@ -415,6 +415,7 @@ theorem JAtZ.wake_postCI (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {n t
+     · obtain ⟨h1, h2, h3⟩ := hRR d hd x hx hxt
+       exact ⟨h1, by rw [e2]; exact h2, by rw [e1]; exact h3⟩
+   have hDbg := J.kw_dbg hfoot
++  have hKd := J.kw_dbgKeep hfoot
+   have hS3 : SchedRel st Z.N Z.T Z.C Z.c s' σ' := hIR.2.2.1
+   have hidl0 : σ'.idleThread = σ.idleThread := G.idle.trans F.sk.idle
+   have hisc0 : σ'.idleSc = σ.idleSc := G.isc.trans F.sk.isc
+diff --git a/proofs/Fl4Proofs/P3/XTopJointSendDon.lean b/proofs/Fl4Proofs/P3/XTopJointSendDon.lean
+index 291a9089..0af0902a 100644
+--- a/proofs/Fl4Proofs/P3/XTopJointSendDon.lean
++++ b/proofs/Fl4Proofs/P3/XTopJointSendDon.lean
+@@ -633,6 +633,7 @@ theorem JAtZ.wake_postG (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {n t :
+     · obtain ⟨h1, h2, h3⟩ := hRR d hd x hx hxt
+       exact ⟨h1, by rw [e2]; exact h2, by rw [e1]; exact h3⟩
+   have hDbg := J.kw_dbg hfoot
++  have hKd := J.kw_dbgKeep hfoot
+   have hS3 : SchedRel st Z.N Z.T Z.C Z.c s' σ' := hIR.2.2.1
+   have hidl0 : σ'.idleThread = σ.idleThread := G.idle.trans F.sk.idle
+   have hisc0 : σ'.idleSc = σ.idleSc := G.isc.trans F.sk.isc
+diff --git a/proofs/Fl4Proofs/P3/XTopJointSendPush.lean b/proofs/Fl4Proofs/P3/XTopJointSendPush.lean
+index 4fff61c3..4b0d0768 100644
+--- a/proofs/Fl4Proofs/P3/XTopJointSendPush.lean
++++ b/proofs/Fl4Proofs/P3/XTopJointSendPush.lean
+@@ -533,6 +533,7 @@ theorem JAtZ.wake_postGR (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {n t
+     · obtain ⟨h1, h2, h3⟩ := hRR d hd x hx hxt
+       exact ⟨h1, by rw [e2]; exact h2, by rw [e1]; exact h3⟩
+   have hDbg := J.kw_dbg hfoot
++  have hKd := J.kw_dbgKeep hfoot
+   have hS3 : SchedRel st Z.N Z.T Z.C Z.c s' σ' := hIR.2.2.1
+   have hidl0 : σ'.idleThread = σ.idleThread := G.idle.trans F.sk.idle
+   have hisc0 : σ'.idleSc = σ.idleSc := G.isc.trans F.sk.isc
+diff --git a/proofs/Fl4Proofs/P3/XTopJointSendRecv.lean b/proofs/Fl4Proofs/P3/XTopJointSendRecv.lean
+index 53702791..f536c025 100644
+--- a/proofs/Fl4Proofs/P3/XTopJointSendRecv.lean
++++ b/proofs/Fl4Proofs/P3/XTopJointSendRecv.lean
+@@ -179,10 +179,11 @@ theorem JAtZ.unblockRJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {t : U6
+   have hdead : ∀ q ∈ D, DeadP (L := L) H s' q := fun q hq =>
+     J.deadP_sc_stepQ hX' hwT hK0 (fun _ hp => hp.elim) hL hFK hAI.1 hY' ((hsok.ykeep rfl).dk q.bv) (fun h => h) (J.jcov.dead q hq)
+   have hDbg := J.kw_dbg hfoot
++  have hKd := J.kw_dbgKeep hfoot
+   exact ⟨Lst', J.sc_frame hwT hK hX' hCR' hRF' hY' hM' (J.sc_buf hwT hK) hRP' (J.sc_apart hwT hK)
+     (J.sc_jpl hwT hK (J.idleW_keep hX'.fin.1.1.1 hFK.2.1 hFK.2.2).2) (J.sc_jcov hwT hdead (fun q hq hn => absurd hq hn) (J.idleW_keep hX'.fin.1.1.1 hFK.2.1 hFK.2.2))
+     (J.sc_kern hwT hK hFK hX' hDbg fun _ h => h) (J.sc_utc hwT hK hDbg) hN' hI' hC' hown' hoff hAI
+-    (J.bsa.bk hBK hsok) hcr ⟨⟨Q1, R1, hq2⟩, hB2, hX2, hS2, hSg2⟩⟩
++    (J.bsa.bk hBK hsok) hcr ⟨⟨Q1, R1, hq2⟩, hB2, hX2, hS2, hSg2⟩ hKd (J.idleW_keep hX'.fin.1.1.1 hFK.2.1 hFK.2.2).1 J.zD⟩
+ 
+ /-- What `sendUnblockJ` keeps of the spec's state. -/
+ def UnblockKeep (σ σ' : Fl4Spec.State Unit) : Prop :=
+diff --git a/proofs/Fl4Proofs/P3/XTopJointStep.lean b/proofs/Fl4Proofs/P3/XTopJointStep.lean
+index 7d21949b..b0a4390f 100644
+--- a/proofs/Fl4Proofs/P3/XTopJointStep.lean
++++ b/proofs/Fl4Proofs/P3/XTopJointStep.lean
+@@ -210,7 +210,8 @@ theorem JAtZ.cs_frameV {AR : A → Fl4Spec.Cr3 → Prop} {Z : XSets} {H : P1.Hea
+     {Ac' : Set U64} {Lst' : U64 → List U64} {D' : Set U64} (hks : L.ksb s' = L.ksb s)
+     (hX : XTopAt (L := L) AR (Z.mv G' V') s' a' σ') (hkb : KBack σ σ') (hbf : JBuf (L := L) Z s' σ')
+     (hC : JCs (L := L) (Z.mv G' V') s' σ') (R : JRest (L := L) arI (Z.mv G' V') H Cs Ac' Lst' D' s' σ')
+-    (hvc : Vs.VsSlotsW Z.th V'.1 V'.2.1 V'.2.2.1 V'.2.2.2.1 V'.2.2.2.2 (L.mem s')) (hext : JExt (L := L) Z.th s') :
++    (hvc : Vs.VsSlotsW Z.th V'.1 V'.2.1 V'.2.2.1 V'.2.2.2.1 V'.2.2.2.2 (L.mem s')) (hext : JExt (L := L) Z.th s')
++    (hlv : LiveDN (L := L) Z.th H Cs G' s' σ') (hzD : ∀ p ∈ ZTcb (L := L) Z.th s', p ∈ D') :
+     JAtZ (L := L) arI AR (Z.mv G' V') H Cs Ac' Lst' D' s' a' σ' :=
+   have hsl : Sched.ScLinkHyp σ' := scLink_rebuild hX J.tcbs_eq.1 (J.obj.kback hkb) R.blk J.hset.2.1 R.jpl J.c0
+   ⟨hX, R.call, R.rfree, R.rrecv, R.yld, R.mcp, R.buf, by rw [hks]; exact J.ks, J.thT, J.thk, J.ip, R.rp, R.apart,
+@@ -218,7 +219,7 @@ theorem JAtZ.cs_frameV {AR : A → Fl4Spec.Cr3 → Prop} {Z : XSets} {H : P1.Hea
+     fun wp hw c hc => by simp only [P1.LawfulStore.nodeBase, hks]; exact J.nodeB wp hw c hc, R.jpl, J.cover.kback hkb, J.obj.kback hkb, J.zH, hC.sfree, J.hset, J.hscC, R.jcov,
+     R.kern, hC.del, hC.ut, J.bound, hC.finM, R.utc, R.nsc, R.inv, R.cur, R.own, R.off, R.act, J.c0, R.bsa,
+     schedValid_rebuild hX J.tcbs_eq.1 J.tcbs_eq.2 (J.obj.kback hkb) R.blk J.hset.1 J.hset.2.1 R.call R.yld J.c0 R.inv
+-      hsl, R.isorted, hsl, R.curRun, R.blk, by rw [hks]; exact J.intL, hvc, hbf.1, hbf.2.1, hbf.2.2, hext⟩
++      hsl, R.isorted, hsl, R.curRun, R.blk, by rw [hks]; exact J.intL, hvc, hbf.1, hbf.2.1, hbf.2.2, hext, hlv, hzD⟩
+ 
+ /-- `cs_frameV` at the same VSpace sets. -/
+ theorem JAtZ.cs_frame {AR : A → Fl4Spec.Cr3 → Prop} {Z : XSets} {H : P1.Heap} {Cs Ac : Set U64}
+@@ -227,9 +228,10 @@ theorem JAtZ.cs_frame {AR : A → Fl4Spec.Cr3 → Prop} {Z : XSets} {H : P1.Heap
+     {Ac' : Set U64} {Lst' : U64 → List U64} {D' : Set U64} (hks : L.ksb s' = L.ksb s)
+     (hX : XTopAt (L := L) AR { Z with G := G' } s' a' σ') (hkb : KBack σ σ') (hfk : IpcFrKeep σ σ')
+     (hC : JCs (L := L) { Z with G := G' } s' σ') (R : JRest (L := L) arI { Z with G := G' } H Cs Ac' Lst' D' s' σ')
+-    (hvT : Vs.VsSlotsT Z.th (L.mem s) (L.mem s')) (hv : VKeep (L := L) Z.th s s') :
++    (hvT : Vs.VsSlotsT Z.th (L.mem s) (L.mem s')) (hv : VKeep (L := L) Z.th s s')
++    (hlv : LiveDN (L := L) Z.th H Cs G' s' σ') (hzD : ∀ p ∈ ZTcb (L := L) Z.th s', p ∈ D') :
+     JAtZ (L := L) arI AR { Z with G := G' } H Cs Ac' Lst' D' s' a' σ' :=
+-  J.cs_frameV (V' := Z.vs) hks hX hkb (J.bfK hfk hvT) hC R (J.vsc.step hvT) (J.ext.step hvT hv)
++  J.cs_frameV (V' := Z.vs) hks hX hkb (J.bfK hfk hvT) hC R (J.vsc.step hvT) (J.ext.step hvT hv) hlv hzD
+ 
+ /-- **`cs_frameV` with the VSpace sets put back** (`XTopAt` at `Z`'s sets
+ after; the CSpace fields and `JRest` from a post at any sets `V'`, which they
+@@ -240,11 +242,12 @@ theorem JAtZ.cs_frameB {AR : A → Fl4Spec.Cr3 → Prop} {Z : XSets} {H : P1.Hea
+     {σ' : Fl4Spec.State Unit} {Ac' : Set U64} {Lst' : U64 → List U64} {D' : Set U64} (hks : L.ksb s' = L.ksb s)
+     (hX : XTopAt (L := L) AR (Z.mv G' Z.vs) s' a' σ') (hkb : KBack σ σ') (hbf : JBuf (L := L) Z s' σ')
+     (hC : JCs (L := L) (Z.mv G' V') s' σ') (R : JRest (L := L) arI (Z.mv G' V') H Cs Ac' Lst' D' s' σ')
+-    (hvc : Vs.VsSlotsW Z.th Z.P Z.L4 Z.L3 Z.L2 Z.L1 (L.mem s')) (hext : JExt (L := L) Z.th s') :
++    (hvc : Vs.VsSlotsW Z.th Z.P Z.L4 Z.L3 Z.L2 Z.L1 (L.mem s')) (hext : JExt (L := L) Z.th s')
++    (hlv : LiveDN (L := L) Z.th H Cs G' s' σ') (hzD : ∀ p ∈ ZTcb (L := L) Z.th s', p ∈ D') :
+     JAtZ (L := L) arI AR (Z.mv G' Z.vs) H Cs Ac' Lst' D' s' a' σ' :=
+   J.cs_frameV hks hX hkb hbf ⟨hC.del, hC.ut, hC.finM, hC.sfree⟩
+     ⟨R.call, R.rfree, R.rrecv, R.yld, R.mcp, R.buf, R.rp, R.apart, R.jpl, R.jcov, R.kern, R.utc, R.nsc, R.inv,
+-      R.cur, R.own, R.off, R.act, R.bsa, R.isorted, R.curRun, R.blk⟩ hvc hext
++      R.cur, R.own, R.off, R.act, R.bsa, R.isorted, R.curRun, R.blk⟩ hvc hext hlv hzD
+ 
+ /-- **`cs_frameV` after IPC work** (`IRel` after, VSpace sets `V'`): the
+ sets put back to `Z`'s (`XTopAt.vs_backO`: FL4 wrote only `OObj` words, the
+@@ -259,10 +262,13 @@ theorem JAtZ.cs_frameI {AR : A → Fl4Spec.Cr3 → Prop} {Z : XSets} {H : P1.Hea
+     (har : σ'.archState = σ.archState)
+     (hao : ∀ q ao, σ.kheap q = some (.archObj ao) → σ'.kheap q = some (.archObj ao)) (hsz : Sched.SzKeep σ σ')
+     (hSS : SlotsSame Z.th (L.mem s) (L.mem s')) (hkb : KBack σ σ') (hfk : IpcFrKeep σ σ')
+-    (hC : JCs (L := L) (Z.mv G' V') s' σ') (R : JRest (L := L) arI (Z.mv G' V') H Cs Ac' Lst' D' s' σ') :
++    (hC : JCs (L := L) (Z.mv G' V') s' σ') (R : JRest (L := L) arI (Z.mv G' V') H Cs Ac' Lst' D' s' σ')
++    (hK : P1.DbgKeep st (P1.Heap.tcbs H) Cs s s') (horig : σ'.isOriginalCap = σ.isOriginalCap)
++    (hidl : L.idleW s' = L.idleW s) (hDD : ∀ p ∈ ZTcb (L := L) Z.th s, p ∈ D') :
+     JAtZ (L := L) arI AR (Z.mv G' Z.vs) H Cs Ac' Lst' D' s' a' σ' :=
+   J.cs_frameB hks (J.xtop.vs_backO hX hW hWO har hao hsz) hkb (J.bfK hfk (Vs.VsSlotsT.of_eq fun y hy => hSS.capV hy))
+     hC R (J.vsc.of_eq fun y hy => hSS.capV hy) (J.ext.ss hSS (J.vkeep_of hW hWV))
++    (J.liveX hX rfl rfl rfl hSS hK horig hidl fun p hp => R.jcov.dead p (hDD p hp)) (J.zDX hSS hDD)
+ 
+ /-- `cs_frameI` with `JAtZ.bok`/`fcov` after given (a step changing an IPC
+ frame: SetIPCBuffer). -/
+@@ -275,9 +281,12 @@ theorem JAtZ.cs_frameIS {AR : A → Fl4Spec.Cr3 → Prop} {Z : XSets} {H : P1.He
+     (har : σ'.archState = σ.archState)
+     (hao : ∀ q ao, σ.kheap q = some (.archObj ao) → σ'.kheap q = some (.archObj ao)) (hsz : Sched.SzKeep σ σ')
+     (hSS : SlotsSame Z.th (L.mem s) (L.mem s')) (hkb : KBack σ σ') (hbf : JBuf (L := L) Z s' σ')
+-    (hC : JCs (L := L) (Z.mv G' V') s' σ') (R : JRest (L := L) arI (Z.mv G' V') H Cs Ac' Lst' D' s' σ') :
++    (hC : JCs (L := L) (Z.mv G' V') s' σ') (R : JRest (L := L) arI (Z.mv G' V') H Cs Ac' Lst' D' s' σ')
++    (hK : P1.DbgKeep st (P1.Heap.tcbs H) Cs s s') (horig : σ'.isOriginalCap = σ.isOriginalCap)
++    (hidl : L.idleW s' = L.idleW s) (hDD : ∀ p ∈ ZTcb (L := L) Z.th s, p ∈ D') :
+     JAtZ (L := L) arI AR (Z.mv G' Z.vs) H Cs Ac' Lst' D' s' a' σ' :=
+   J.cs_frameB hks (J.xtop.vs_backO hX hW hWO har hao hsz) hkb hbf hC R (J.vsc.of_eq fun y hy => hSS.capV hy) (J.ext.ss hSS (J.vkeep_of hW hWV))
++    (J.liveX hX rfl rfl rfl hSS hK horig hidl fun p hp => R.jcov.dead p (hDD p hp)) (J.zDX hSS hDD)
+ 
+ /-- **The CSpace fields across a step keeping every slot and the objects'
+ sizes** (module docstring). -/
+diff --git a/proofs/Fl4Proofs/P3/XTopJointStsI.lean b/proofs/Fl4Proofs/P3/XTopJointStsI.lean
+index 1efaaa1c..51f992f4 100644
+--- a/proofs/Fl4Proofs/P3/XTopJointStsI.lean
++++ b/proofs/Fl4Proofs/P3/XTopJointStsI.lean
+@@ -104,6 +104,7 @@ theorem JAtZ.stsIJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {t : U64} (
+   rintro s6 ⟨⟨⟨⟨hR6, hS6r⟩, hw6⟩, hy6⟩, hblk, hfoot⟩
+   have hX6 := IpcRel.ofSRN hR6 hS6r
+   have hDbg := J.kw_dbg hfoot
++  have hKd := J.kw_dbgKeep hfoot
+   set x6 : Fl4Spec.Tcb := { x with tcbState := ts } with hx6
+   set σ1 := updK σ t.bv (.tcb x6) with hσ1
+   set σ6 := stsAct σ1 t.bv with hσ6
+@@ -262,7 +263,7 @@ theorem JAtZ.stsIJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {t : U64} (
+     (J.sc_utc hW hK hDbg) hNSC hInv hcur6 hown6 hoff hAI (BlockedScActive.tkw J.bsa hK fun p y n hp ha => by
+       by_cases e : p = t.bv
+       · rw [e, hk6] at hp; cases hp
+-      · rw [hkp _ e] at hp; exact ⟨y, hp, ha, fun _ h => h, id⟩) hcr6 hblk⟩
++      · rw [hkp _ e] at hp; exact ⟨y, hp, ha, fun _ h => h, id⟩) hcr6 hblk hKd (J.idleW_keep hX'.fin.1.1.1 hfk.2.1 hfk.2.2).1 J.zD⟩
+ 
+ 
+ set_option maxHeartbeats 32000000 in
+@@ -549,6 +550,7 @@ theorem JAtZ.rstPostJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {t : U64
+     · rw [hkp7 p hp]; exact OL.refl _)
+   have hfk : FK σ σ7 := ⟨e7_csc, e7_idle, e7_isc⟩
+   have hDbg := J.kw_dbg (P1.Foot.trans hfoot6 hfoot7)
++  have hKd := J.kw_dbgKeep (P1.Foot.trans hfoot6 hfoot7)
+   have hdead : ∀ q ∈ D, DeadP (L := L) H s7 q := fun q hq =>
+     J.deadP_sc_stepQ hX7 hW7 hK7 (fun _ hp => absurd (show q = t from P1.eq_of_bv hp) (fun e => htD (e ▸ hq)))
+       hlk hfk hAI.1 hY' ((hYK6.trans (YKeep.of_kheap hke)).dk q.bv) (fun h => h) (J.jcov.dead q hq)
+@@ -558,7 +560,7 @@ theorem JAtZ.rstPostJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {t : U64
+     (J.sc_utc hW7 hK7 hDbg) hNSC hI7 hcur7 hown7 hoff hAI (BlockedScActive.tkw J.bsa hK7 fun p y1 n1 hp ha => by
+       by_cases e : p = t.bv
+       · rw [e, hk7] at hp; cases hp
+-      · rw [hkp7 _ e] at hp; exact ⟨y1, hp, ha, fun _ h => h, id⟩) hcr7 hblk⟩
++      · rw [hkp7 _ e] at hp; exact ⟨y1, hp, ha, fun _ h => h, id⟩) hcr7 hblk hKd (J.idleW_keep hX7.fin.1.1.1 hfk.2.1 hfk.2.2).1 J.zD⟩
+ 
+ end
+ 
+diff --git a/proofs/Fl4Proofs/P3/XTopJointSwitch.lean b/proofs/Fl4Proofs/P3/XTopJointSwitch.lean
+index e473ee74..6e791bfa 100644
+--- a/proofs/Fl4Proofs/P3/XTopJointSwitch.lean
++++ b/proofs/Fl4Proofs/P3/XTopJointSwitch.lean
+@@ -121,9 +121,10 @@ theorem JAtZ.switchJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {t : U64}
+   have hdead : ∀ q ∈ D, DeadP (L := L) H s' q := fun q hq =>
+     J.deadP_sc_stepQ hX' hwT hK (fun _ hp => hp.elim) hL hF hAI.1 hY' ((hsok.ykeep rfl).dk q.bv) (fun h => h) (J.jcov.dead q hq)
+   have hDbg := J.kw_dbg hfoot
++  have hKd := J.kw_dbgKeep hfoot
+   exact ⟨σ', he, Lst', J.sc_frame hwT hK hX' hCR' hRF' hY' hM' (J.sc_buf hwT hK) hRP' (J.sc_apart hwT hK)
+     (J.sc_jpl hwT hK (J.idleW_keep hX'.fin.1.1.1 hF.2.1 hF.2.2).2) (J.sc_jcov hwT hdead (fun q hq hn => absurd hq hn) (J.idleW_keep hX'.fin.1.1.1 hF.2.1 hF.2.2))
+-    (J.sc_kern hwT hK hF hX' hDbg fun _ h => h) (J.sc_utc hwT hK hDbg) hN' hI' hcur hown hoff hAI hbsa hcr hblk⟩
++    (J.sc_kern hwT hK hF hX' hDbg fun _ h => h) (J.sc_utc hwT hK hDbg) hN' hI' hcur hown hoff hAI hbsa hcr hblk hKd (J.idleW_keep hX'.fin.1.1.1 hF.2.1 hF.2.2).1 J.zD⟩
+ 
+ end
+ 
+diff --git a/proofs/Fl4Proofs/P3/XTopJointTcb.lean b/proofs/Fl4Proofs/P3/XTopJointTcb.lean
+index 8cb983cd..bb255f4b 100644
+--- a/proofs/Fl4Proofs/P3/XTopJointTcb.lean
++++ b/proofs/Fl4Proofs/P3/XTopJointTcb.lean
+@@ -170,6 +170,7 @@ theorem JAtZ.reg_frameG (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {s' :
+   have hRF' := RFree.carry J.rfree J.call k4 ck
+   have hRR' := J.rrecv.frame k4 hA.khrb
+   have hDbg := J.kw_dbg (hfoot.mono fun b hb => kw_empty_mono hb _)
++  have hKd := J.kw_dbgKeep (hfoot.mono fun b hb => kw_empty_mono hb _)
+   have hS3 : SchedRel st Z.N Z.T Z.C Z.c s' σ' := hI3.2.2.1
+   have hAI3 : ActIdle σ' := hA.actIdle J.act
+   have hdead : ∀ q ∈ D, DeadP (L := L) H s' q := J.deadP_qk hA hS3 hI3.1 hwF k3 hAI3.1 (J.yld.frame k2 hyk) hyk
+diff --git a/proofs/Fl4Proofs/P3/XTopJointTcbInstall.lean b/proofs/Fl4Proofs/P3/XTopJointTcbInstall.lean
+index 2a9b61e7..2646e894 100644
+--- a/proofs/Fl4Proofs/P3/XTopJointTcbInstall.lean
++++ b/proofs/Fl4Proofs/P3/XTopJointTcbInstall.lean
+@@ -597,6 +597,7 @@ theorem JAtZ.bufWrJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {t : U64}
+   have hRF' := RFree.carry J.rfree J.call k4 ck
+   have hRR' := J.rrecv.frame k4 hA.khrb
+   have hDbg := J.kw_dbg (hfoot.mono fun b hb => kw_empty_mono hb _)
++  have hKd := J.kw_dbgKeep (hfoot.mono fun b hb => kw_empty_mono hb _)
+   have hS3 : SchedRel st Z.N Z.T Z.C Z.c s' σ' := hI3.2.2.1
+   have hAI3 : ActIdle σ' := hA.actIdle J.act
+   have hyk : YKeep σ σ' := by
+diff --git a/proofs/Fl4Proofs/P3/XTopJointTcbMisc.lean b/proofs/Fl4Proofs/P3/XTopJointTcbMisc.lean
+index 2428d625..8f519728 100644
+--- a/proofs/Fl4Proofs/P3/XTopJointTcbMisc.lean
++++ b/proofs/Fl4Proofs/P3/XTopJointTcbMisc.lean
+@@ -338,6 +338,7 @@ theorem JAtZ.reg_frameFp (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {s' :
+   have hRF' := RFree.carry J.rfree J.call k4 ck
+   have hRR' := J.rrecv.frame k4 hA.khrb
+   have hDbg := J.kw_dbg (hfoot.mono fun b hb => kw_empty_mono hb _)
++  have hKd := J.kw_dbgKeep (hfoot.mono fun b hb => kw_empty_mono hb _)
+   have hS3 : SchedRel st Z.N Z.T Z.C Z.c s' σ' := hI3.2.2.1
+   have hAI3 : ActIdle σ' := hA.actIdle J.act
+   have hdead : ∀ q ∈ D, DeadP (L := L) H s' q := J.deadP_qk hA hS3 hI3.1 hwF k3 hAI3.1 (J.yld.frame k2 hyk) hyk
+@@ -539,6 +540,7 @@ theorem JAtZ.bindNJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {t n : U64
+   have hRF' := RFree.carry J.rfree J.call k4 ck
+   have hRR' := J.rrecv.frame k4 F.khrb
+   have hDbg := J.kw_dbg (hfoot.mono fun b hb => kw_empty_mono hb _)
++  have hKd := J.kw_dbgKeep (hfoot.mono fun b hb => kw_empty_mono hb _)
+   have hS3 := hX2.2.2.1
+   have hAI3 : ActIdle σ' := F.actIdle J.act
+   -- the dead set without the thread and the notification
+diff --git a/proofs/Fl4Proofs/P3/XTopJointTcbPrio.lean b/proofs/Fl4Proofs/P3/XTopJointTcbPrio.lean
+index 03858d3c..5bd5402a 100644
+--- a/proofs/Fl4Proofs/P3/XTopJointTcbPrio.lean
++++ b/proofs/Fl4Proofs/P3/XTopJointTcbPrio.lean
+@@ -638,6 +638,7 @@ theorem JAtZ.setPrioJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ)
+     obtain ⟨h1, h2, h3⟩ := J.rfree d hd ⟨y, F.replyB hy, hyt⟩
+     exact ⟨h1, by rw [e2]; exact h2, by rw [e1]; exact h3⟩
+   have hDbg := J.kw_dbg hfoot
++  have hKd := J.kw_dbgKeep hfoot
+   have hS3 : SchedRel st Z.N Z.T Z.C Z.c s' σ' := hIR.2.2.1
+   have hAI3 : ActIdle σ' := F.actIdle J.act
+   have hdead : ∀ q ∈ D, DeadP (L := L) H s' q := J.deadP_pfr F hS3 hIR.1 hw k3 hAI3.1 (J.yld.frame k2 F.ykeep) F.ykeep
+diff --git a/proofs/Fl4Proofs/P3/XTopJointTcbSched.lean b/proofs/Fl4Proofs/P3/XTopJointTcbSched.lean
+index 8b7a5db4..8b8a4f3a 100644
+--- a/proofs/Fl4Proofs/P3/XTopJointTcbSched.lean
++++ b/proofs/Fl4Proofs/P3/XTopJointTcbSched.lean
+@@ -550,6 +550,7 @@ theorem JAtZ.mcpWrJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {t : U64}
+   have hRF' := RFree.carry J.rfree J.call k4 ck
+   have hRR' := J.rrecv.frame k4 hA.khrb
+   have hDbg := J.kw_dbg (hfoot.mono fun b hb => kw_empty_mono hb _)
++  have hKd := J.kw_dbgKeep (hfoot.mono fun b hb => kw_empty_mono hb _)
+   have hS3 : SchedRel st Z.N Z.T Z.C Z.c s' σ' := hI3.2.2.1
+   have hAI3 : ActIdle σ' := hA.actIdle J.act
+   have hyk : YKeep σ σ' := by
+diff --git a/proofs/Fl4Proofs/P3/XTopJointTcbSsp.lean b/proofs/Fl4Proofs/P3/XTopJointTcbSsp.lean
+index 5568e4c9..abffb231 100644
+--- a/proofs/Fl4Proofs/P3/XTopJointTcbSsp.lean
++++ b/proofs/Fl4Proofs/P3/XTopJointTcbSsp.lean
+@@ -344,6 +344,7 @@ theorem JAtZ.bindTcbJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) (hAT : P
+       (AK.schedcontext_bind_tcb (P1.LawfulStore.total (st := st)) hAT hAK hA0))) ?_
+   rintro ⟨s', a'⟩ ⟨⟨σ', he, hS', hR', hN', hI', -, hwk⟩, ⟨hblk', hfD⟩, hA'⟩
+   have hDbg := J.kw_dbg (P1.Foot.mono hfD (Set.empty_subset _))
++  have hKd := J.kw_dbgKeep (P1.Foot.mono hfD (Set.empty_subset _))
+   have hm : ((), σ') ∈ (Fl4Spec.schedContextBindTcb (Z := Unit) sc.bv t.bv σ).1 := by
+     rw [he]; exact Set.mem_singleton _
+   have hWk : P1.WritesIn st s s' (KFoot st Z.T Z.N Z.C Z.c s σ) := hwk
+diff --git a/proofs/Fl4Proofs/P3/XTopJointUnblock.lean b/proofs/Fl4Proofs/P3/XTopJointUnblock.lean
+index bff4faa3..cd822017 100644
+--- a/proofs/Fl4Proofs/P3/XTopJointUnblock.lean
++++ b/proofs/Fl4Proofs/P3/XTopJointUnblock.lean
+@@ -140,10 +140,11 @@ theorem JAtZ.unblockJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {t : U64
+   have hdead : ∀ q ∈ D, DeadP (L := L) H s' q := fun q hq =>
+     J.deadP_sc_stepQ hX' hwT hK0 (fun _ hp => hp.elim) hL hFK hAI.1 hY' ((hsok.ykeep rfl).dk q.bv) (fun h => h) (J.jcov.dead q hq)
+   have hDbg := J.kw_dbg hfoot
++  have hKd := J.kw_dbgKeep hfoot
+   exact ⟨Lst', J.sc_frame hwT hK hX' hCR' hRF' hY' hM' (J.sc_buf hwT hK) hRP' (J.sc_apart hwT hK)
+     (J.sc_jpl hwT hK (J.idleW_keep hX'.fin.1.1.1 hFK.2.1 hFK.2.2).2) (J.sc_jcov hwT hdead (fun q hq hn => absurd hq hn) (J.idleW_keep hX'.fin.1.1.1 hFK.2.1 hFK.2.2))
+     (J.sc_kern hwT hK hFK hX' hDbg fun _ h => h) (J.sc_utc hwT hK hDbg) hN' hI' hC' hown' hoff hAI
+-    (J.bsa.bk hBK hsok) hcr ⟨⟨Q1, R1, hq2⟩, hB2, hX2, hS2, hSg2⟩⟩
++    (J.bsa.bk hBK hsok) hcr ⟨⟨Q1, R1, hq2⟩, hB2, hX2, hS2, hSg2⟩ hKd (J.idleW_keep hX'.fin.1.1.1 hFK.2.1 hFK.2.2).1 J.zD⟩
+ 
+ set_option maxHeartbeats 8000000 in
+ /-- **The reply's sporadic unblock check at `J`** (module docstring). -/
+diff --git a/proofs/Fl4Proofs/P3/XTopJointVsReply.lean b/proofs/Fl4Proofs/P3/XTopJointVsReply.lean
+index b255e4b7..39c5ce24 100644
+--- a/proofs/Fl4Proofs/P3/XTopJointVsReply.lean
++++ b/proofs/Fl4Proofs/P3/XTopJointVsReply.lean
+@@ -104,6 +104,7 @@ theorem JAtZ.runRJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {t : U64} (
+   rintro s6 ⟨⟨⟨⟨hR6, hS6r⟩, hw6⟩, hy6⟩, hblk, hfoot⟩
+   have hX6 := IpcRel.ofSRN hR6 hS6r
+   have hDbg := J.kw_dbg hfoot
++  have hKd := J.kw_dbgKeep hfoot
+   set x6 : Fl4Spec.Tcb := { x with tcbState := .running } with hx6
+   set σ1 := updK σ t.bv (.tcb x6) with hσ1
+   set σ6 := stsAct σ1 t.bv with hσ6
+@@ -268,7 +269,7 @@ theorem JAtZ.runRJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {t : U64} (
+     (J.sc_utc hW hK hDbg) hNSC hInv hcur6 hown6 hoff hAI (BlockedScActive.tkw J.bsa hK fun p y n hp ha => by
+       by_cases e : p = t.bv
+       · rw [e, hk6] at hp; cases hp
+-      · rw [hkp _ e] at hp; exact ⟨y, hp, ha, fun _ h => h, id⟩) hcr6 hblk⟩
++      · rw [hkp _ e] at hp; exact ⟨y, hp, ha, fun _ h => h, id⟩) hcr6 hblk hKd (J.idleW_keep hX'.fin.1.1.1 hfk.2.1 hfk.2.2).1 J.zD⟩
+ 
+ set_option maxHeartbeats 16000000 in
+ /-- **`reply1` of a runnable thread at `J`** (XTopJointReply's
+diff --git a/proofs/Fl4Proofs/P3/XTopJointWJLRestart.lean b/proofs/Fl4Proofs/P3/XTopJointWJLRestart.lean
+index 468467df..7591a293 100644
+--- a/proofs/Fl4Proofs/P3/XTopJointWJLRestart.lean
++++ b/proofs/Fl4Proofs/P3/XTopJointWJLRestart.lean
+@@ -32,11 +32,6 @@ noncomputable section
+ section
+ variable {S : Type} {st : machine.Store S} [L : P1.LawfulStore st]
+ 
+-/-- **`LiveJ`, `DbgWF` and `NullOrig` at a state** (module docstring). -/
+-abbrev LiveDN (th : TypedHeap) (H : P1.Heap) (Cs : Set U64) (G : MdbGhost) (s : S) (σ : Fl4Spec.State Unit) :
+-    Prop :=
+-  LiveJ (L := L) th H G s σ ∧ DbgWF (P1.Heap.tcbs H) Cs (L.mem s) (dbgHd (L := L) s) ∧ NullOrig th (L.mem s) σ
+-
+ end
+ 
+ section
+diff --git a/proofs/Fl4Proofs/P3/XTopJointYield.lean b/proofs/Fl4Proofs/P3/XTopJointYield.lean
+index b10f17cf..ce75220b 100644
+--- a/proofs/Fl4Proofs/P3/XTopJointYield.lean
++++ b/proofs/Fl4Proofs/P3/XTopJointYield.lean
+@@ -220,10 +220,11 @@ theorem JAtZ.cancelYieldJD (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {y
+     J.deadP_sc_step hX' hW hK (fun _ _ h => h.elim) (hA.lk (W := fun _ => False)) hA.fk hAI.1 hY' (hYD q.bv)
+       (fun h => h) (J.jcov.dead q hq)
+   have hDbg := J.kw_dbg (hP.2.1.mono (Set.empty_subset _))
++  have hKd := J.kw_dbgKeep (hP.2.1.mono (Set.empty_subset _))
+   exact ⟨_, he, Ac, Lst', J.sc_frame hW hK hX' hCR' hRF' hY' hM' (J.sc_buf hW hK) hRP' (J.sc_apart hW hK)
+     (J.sc_jpl hW hK (J.idleW_keep hX'.fin.1.1.1 hA.fk.2.1 hA.fk.2.2).2) (J.sc_jcov hW hdead (fun q hq hn => absurd hq hn) (J.idleW_keep hX'.fin.1.1.1 hA.fk.2.1 hA.fk.2.2)) (J.sc_kern hW hK hA.fk hX' hDbg fun _ h => h)
+     (J.sc_utc hW hK hDbg) hN' hI' (hA.cur J.cur) (hA.own J.own) (hA.off J.off) hAI (hA.bsa J.bsa)
+-    (hA.curRunM J.curRun) hP.1⟩
++    (hA.curRunM J.curRun) hP.1 hKd (J.idleW_keep hX'.fin.1.1.1 hA.fk.2.1 hA.fk.2.2).1 J.zD⟩
+ 
+ /-- `cancelYieldJD` with the dead set existential. -/
+ theorem JAtZ.cancelYieldJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {y p : U64} (hy : y ∈ Z.T)

@@ -43,6 +43,28 @@ theorem winZero_tcbF {m : U64 → U64} {A win : Nat} {T : Prop} (hWZ : WinZero m
     · omega
     · omega
 
+/-- **A new TCB's VCPU word is zero** (KENTRY-PLAN g2b): creation writes
+no VCPU word (`InT`). -/
+theorem winZero_vcpu {m : U64 → U64} {A win : Nat} {T : Prop} (hWZ : WinZero m A 4096 win T)
+    (hfit : A + win * 4096 ≤ 2 ^ 64) {j : Nat} (hj : j < win) (w : U64) (hw : P1.Aligned w)
+    (h1 : w.val = (bT A j).val + 3664) : m w = 0#u64 := by
+  have hb := bT_v hj hfit
+  rw [hb] at h1
+  have hjk : (j + 1) * 4096 ≤ win * 4096 := Nat.mul_le_mul_right _ hj
+  rcases hWZ w hw (by omega) (by omega) with h | ⟨-, j', hj', hin⟩
+  · exact h
+  · exfalso
+    have e : (⟨BitVec.ofNat 64 (A + j' * 4096)⟩ : U64).val = A + j' * 4096 := bT_v hj' hfit
+    unfold InT at hin
+    rw [e] at hin
+    obtain ⟨g1, g2, g3, g4⟩ := hin
+    rcases Nat.lt_trichotomy j' j with hl | rfl | hl
+    · have : (j' + 1) * 4096 ≤ j * 4096 := Nat.mul_le_mul_right _ hl
+      omega
+    · omega
+    · have : (j + 1) * 4096 ≤ j' * 4096 := Nat.mul_le_mul_right _ hl
+      omega
+
 section Rel
 open Fl4Spec
 

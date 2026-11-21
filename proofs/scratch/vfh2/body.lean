@@ -1,0 +1,57 @@
+theorem vfhg_doIpcTransfer (sender : ObjRef) (ep : Option ObjRef) (badge : Badge) (grant : Bool) (receiver : ObjRef) : IK (VS σ0) (doIpcTransfer (Z := Unit) sender ep badge grant receiver) := by
+  unfold doIpcTransfer; vfhg_auto
+macro_rules | `(tactic| vfhg_leaf) => `(tactic| with_reducible exact vfhg_doIpcTransfer _ _ _ _ _)
+
+theorem vfhg_sendIpc (block call : Bool) (badge : Badge) (canGrant canGrantReply canDonate : Bool) (thread epptr : ObjRef) : IK (VS σ0) (sendIpc (Z := Unit) block call badge canGrant canGrantReply canDonate thread epptr) := by
+  unfold sendIpc; vfhg_auto
+macro_rules | `(tactic| vfhg_leaf) => `(tactic| with_reducible exact vfhg_sendIpc _ _ _ _ _ _ _ _)
+
+theorem vfhg_sendFaultIpc (tptr : ObjRef) (handlerCap : Cap) (fault : Fault) (canDonate : Bool) : IK (VS σ0) (sendFaultIpc (Z := Unit) tptr handlerCap fault canDonate) := by
+  unfold sendFaultIpc; vfhg_auto
+macro_rules | `(tactic| vfhg_leaf) => `(tactic| with_reducible exact vfhg_sendFaultIpc _ _ _ _)
+
+theorem vfhg_handleTimeout (tptr : ObjRef) (ex : Fault) : IK (VS σ0) (handleTimeout (Z := Unit) tptr ex) := by
+  unfold handleTimeout; vfhg_auto
+macro_rules | `(tactic| vfhg_leaf) => `(tactic| with_reducible exact vfhg_handleTimeout _ _)
+
+theorem vfhg_endTimeslice (canTimeout : Bool) : IK (VS σ0) (endTimeslice (Z := Unit) canTimeout) := by
+  unfold endTimeslice; vfhg_auto
+macro_rules | `(tactic| vfhg_leaf) => `(tactic| with_reducible exact vfhg_endTimeslice _)
+
+theorem vfhg_chargeBudget (consumed : Ticks) (canTimeout : Bool) : IK (VS σ0) (chargeBudget (Z := Unit) consumed canTimeout) := by
+  unfold chargeBudget; vfhg_auto
+macro_rules | `(tactic| vfhg_leaf) => `(tactic| with_reducible exact vfhg_chargeBudget _ _)
+
+theorem vfhg_checkBudget  : IK (VS σ0) (checkBudget (Z := Unit)) := by
+  unfold checkBudget; vfhg_auto
+macro_rules | `(tactic| vfhg_leaf) => `(tactic| with_reducible exact vfhg_checkBudget)
+
+theorem vfhg_checkBudgetRestart  : IK (VS σ0) (checkBudgetRestart (Z := Unit)) := by
+  unfold checkBudgetRestart; vfhg_auto
+macro_rules | `(tactic| vfhg_leaf) => `(tactic| with_reducible exact vfhg_checkBudgetRestart)
+
+theorem vfhg_doReplyTransfer (sender reply : ObjRef) (grant : Bool) : IK (VS σ0) (doReplyTransfer (Z := Unit) sender reply grant) := by
+  unfold doReplyTransfer; vfhg_auto
+macro_rules | `(tactic| vfhg_leaf) => `(tactic| with_reducible exact vfhg_doReplyTransfer _ _ _)
+
+theorem vfhg_handleFault (thread : ObjRef) (ex : Fault) : IK (VS σ0) (handleFault (Z := Unit) thread ex) := by
+  unfold handleFault; vfhg_auto
+macro_rules | `(tactic| vfhg_leaf) => `(tactic| with_reducible exact vfhg_handleFault _ _)
+
+set_option maxHeartbeats 4000000 in
+theorem vfhg_receiveIpc (thread : ObjRef) (cap : Cap) (isBlocking : Bool) (replyCap : Cap) :
+    IK (VS σ0) (receiveIpc (Z := Unit) thread cap isBlocking replyCap) := by
+  unfold receiveIpc; vfhg_auto
+macro_rules | `(tactic| vfhg_leaf) => `(tactic| with_reducible exact vfhg_receiveIpc _ _ _ _)
+
+theorem vfhg_handleRecv (isBlocking canReply : Bool) : IK (VS σ0) (handleRecv (Z := Unit) isBlocking canReply) := by
+  unfold handleRecv; vfhg_auto
+macro_rules | `(tactic| vfhg_leaf) => `(tactic| with_reducible exact vfhg_handleRecv _ _)
+
+theorem vfhg_handleYield  : IK (VS σ0) (handleYield (Z := Unit)) := by
+  unfold handleYield; vfhg_auto
+macro_rules | `(tactic| vfhg_leaf) => `(tactic| with_reducible exact vfhg_handleYield)
+
+theorem vfhg_preemptionPath  : IK (VS σ0) (preemptionPath (Z := Unit)) := by
+  unfold preemptionPath; vfhg_auto
+macro_rules | `(tactic| vfhg_leaf) => `(tactic| with_reducible exact vfhg_preemptionPath)

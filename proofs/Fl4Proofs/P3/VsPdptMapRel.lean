@@ -415,7 +415,7 @@ theorem pdpt_map_rel {A : Type} {ar : machine.Arch A} {th : TypedHeap} {P L4 L3 
             exact performPdptMap_mem (setCap_cnode nc hkc1 hwf hidx) hstore hm' (hH.flushOK _ _ _)
           · exact (SlotFoot.of_same hSS1 _).trans (hF2.trans (SlotFoot.wr_out hPl s2 hbo _))
           · show VsLike (capV (L.mem s3) _) _
-            rw [hs3, capV_wr_out hPl hxsl s2 hbo, hcv2]; exact ⟨⟨rfl, rfl, rfl⟩, fun _ _ _ _ _ h => by simp only [VCapOK] at h ⊢; exact ⟨h.1, h.2.1, fun _ => has1, fun _ => userV_of_not_gt hv⟩⟩
+            rw [hs3, capV_wr_out hPl hxsl s2 hbo, hcv2]; exact ⟨⟨rfl, rfl, rfl, rfl⟩, fun _ _ _ _ _ h => by simp only [VCapOK] at h ⊢; exact ⟨h.1, h.2.1, fun _ => has1, fun _ => userV_of_not_gt hv⟩⟩
           · exact (KFoot.sts hkt' _).trans ((KFoot.cnode hkc1 hwf idx nc).trans ((KFoot.arch hk2 _).trans (KFoot.ms _ ms)))
         · have : ((L.mem s (peA q (vIdx v 39)) &&& 1#u64) != 0#u64) = true := by simp [hpres]
           simp only [this, ↓reduceIte]

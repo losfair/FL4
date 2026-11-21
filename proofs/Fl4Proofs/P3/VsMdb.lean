@@ -16,7 +16,7 @@ open fl4_core Fl4Proofs.P1 Fl4Proofs.P3
 
 noncomputable section
 
-theorem MdbLike.refl (c : capability.Cap) : MdbLike c c := ⟨rfl, rfl, rfl⟩
+theorem MdbLike.refl (c : capability.Cap) : MdbLike c c := ⟨rfl, rfl, rfl, rfl⟩
 
 theorem shape_kind {c' c : capability.Cap} (h : shape c' = shape c) :
     isBadged c' = isBadged c ∧ isUt c' = isUt c ∧ isZb c' = isZb c ∧ isFrame c' = isFrame c ∧
@@ -35,7 +35,7 @@ theorem MdbLike.capSim {c' c : capability.Cap} (h : MdbLike c' c) : CapSim c' c 
 theorem MdbLike.isPF {a' a b' b : capability.Cap} (ha : MdbLike a' a) (hb : MdbLike b' b) (r f : Bool) :
     isPF r a' b' f = isPF r a b f := by
   unfold Fl4Proofs.P3.isPF
-  rw [ha.srl, hb.srr, (shape_kind ha.1).1, ha.2.2, hb.2.2]
+  rw [ha.srl, hb.srr, (shape_kind ha.1).1, ha.2.2.1, hb.2.2.1]
 
 theorem KFoot.ksub {σ σ' : Fl4Spec.State Unit} (h : KFoot σ σ') : KSub σ σ' := by
   intro o
@@ -143,8 +143,8 @@ theorem Recap.carry {m m' : U64 → U64} {σ σ' : Fl4Spec.State Unit} {G : MdbG
       rw [hnx y hy'] at hn hs hbd hb0 ⊢
       have hn' := hnx' y hy hn
       rw [(shape_kind (hlk y hy').1).1] at hb
-      rw [(hlk y hy').2.2, (hlk _ (hsl _ hn')).2.2] at hbd
-      rw [(hlk _ (hsl _ hn')).2.2] at hb0
+      rw [(hlk y hy').2.2.1, (hlk _ (hsl _ hn')).2.2.1] at hbd
+      rw [(hlk _ (hsl _ hn')).2.2.1] at hb0
       rw [hsr y _ hy hn'] at hs
       rw [hfb _ (hsl _ hn')]; exact hI.badges y hy hn hb hs hbd hb0
     · rw [(shape_kind (hlk a (hsl a ha)).1).2.1] at hu; rw [hrv a (hsl a ha)]; exact hI.utrev a ha hu

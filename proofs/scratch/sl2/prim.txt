@@ -1,0 +1,1 @@
+setObject setSimpleKo threadSet archThreadSet asUser setMrs setCap retypeRegion retypeRegionWith deleteObjects doMachineOp doExtendedOp getObject setThreadState setThreadStateAct optionUpdateThread capInsert setUntypedCapAsFull updateSchedContext updateSkObjRef tcbNtfnDequeue tcbNtfnAppend reorderNtfn schedContextUnbindNtfn schedContextMaybeUnbindNtfn

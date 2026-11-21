@@ -34,6 +34,7 @@ Not covered here (the rest of `do_ipc_transfer` at `J`): a faulted sender
 into the receiver's CNode slot, IpcGrantX's `do_ipc_transfer_grant`).
 -/
 import Fl4Proofs.P3.XTopJointReadRegs
+import Fl4Proofs.P3.BufJ
 open Aeneas Aeneas.Std Result
 
 namespace Fl4Proofs.P3
@@ -272,8 +273,6 @@ into the receiver's buffer, each by `JAtZ.userWrJ` (the word apart from `H`'s
 objects and inside the receiver's frame, `JAtZ.bufWord`; `BufPlaced` [J]);
 the sender's word read through the endpoint relation's buffer words. -/
 theorem copyMrsJ_loop1 {σ1 : Fl4Spec.State Unit}
-    (hZ : ∀ (Z' : XSets) s' a' σ', Z'.th = Z.th → XTopAt (L := L) AR Z' s' a' σ' →
-      Endp.IpcBufCapOK σ' ∧ Vs.BufPlaced (L := L) Z'.N Z'.C Z'.B Z'.c s' σ')
     {rcv : U64} (hrT : Z.th rcv = some .tcb) {x1 : Fl4Spec.Tcb} (hk1 : σ1.kheap rcv.bv = some (.tcb x1))
     {rp sp : Fl4Spec.Word} (hq : Endp.ipcBufOf true x1 = some rp) {sw rw : U64} (hmr : Endp.BufMap Z.B rw rp)
     (hrw : rw.bv = rp) (hms : Endp.BufMap Z.B sw sp) (n i0 : U64) (hn : n.val ≤ 120)
@@ -305,7 +304,7 @@ theorem copyMrsJ_loop1 {σ1 : Fl4Spec.State Unit}
       set um' := Endp.copyBufMem σ1.machineState.underlyingMemory sp rp (List.range' 5 (i.val - 4)) with hum'
       have hwr := hmr i1 (by omega)
       have hws := hms i1 (by omega)
-      obtain ⟨hOK', hBP'⟩ := hZ (Z.mv Z.G V') _ _ _ rfl J'.xtop
+      obtain ⟨hOK', -, hBP'⟩ := J'.xferH
       have hvb : (L.mem s' (Endp.fl4BufA sw i1)).bv = Endp.loadWordAt um' (Endp.bufAddr sp i1.val) :=
         (J'.xtop.irelK J'.ks J'.buf).1.toE.buf _ hws
       obtain ⟨hAp, hObj⟩ := J'.bufWord hOK' hrT hk1 hq i1.val (by omega) (b := Endp.fl4BufA rw i1)
@@ -338,8 +337,6 @@ and the badge (`JAtZ.regWrJ`). The spec's outcome is EpBufSpec's
 `doIpcTransfer_recvBuf`, its receive slots by `get_receive_slot_top` at the
 `J` state after the copy. -/
 theorem JAtZ.xferBufJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ)
-    (hZ : ∀ (Z' : XSets) s' a' σ', Z'.th = Z.th → XTopAt (L := L) AR Z' s' a' σ' →
-      Endp.IpcBufCapOK σ' ∧ Endp.BufCover Z'.T Z'.B σ' ∧ Vs.BufPlaced (L := L) Z'.N Z'.C Z'.B Z'.c s' σ')
     {snd rcv : U64} (hs : snd ∈ Z.T) (hr : rcv ∈ Z.T) (hne : snd ≠ rcv) {xs xr : Fl4Spec.Tcb}
     (hks : σ.kheap snd.bv = some (.tcb xs)) (hkr : σ.kheap rcv.bv = some (.tcb xr)) (hf : xs.tcbFault = none)
     {rp : Fl4Spec.ObjRef} (hrb : Endp.ipcBufOf true xr = some rp) (epo : Option Fl4Spec.ObjRef) (ep badge : U64)
@@ -356,10 +353,7 @@ theorem JAtZ.xferBufJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ)
   have hxs := hI.1.toE.at_tcb hs hks
   obtain ⟨Tr, Cq, hJ⟩ := J.jpl
   have thT : ∀ t ∈ Z.T, Z.th t = some .tcb := fun t ht => (hJ.tcb t).2 (J.zH.1 t ht)
-  obtain ⟨hOK, hBC, -⟩ := hZ Z s a σ rfl J.xtop
-  have hZ' : ∀ (Z' : XSets) s' a' σ', Z'.th = Z.th → XTopAt (L := L) AR Z' s' a' σ' →
-      Endp.IpcBufCapOK σ' ∧ Vs.BufPlaced (L := L) Z'.N Z'.C Z'.B Z'.c s' σ' :=
-    fun Z' s' a' σ' h1 h2 => ⟨(hZ Z' s' a' σ' h1 h2).1, (hZ Z' s' a' σ' h1 h2).2.2⟩
+  obtain ⟨hOK, hBC, -⟩ := J.xferH
   have hEP := J.xtop.fin.1.2.ep
   have hwmi : (L.mem s (regA snd layout.reg.MSG_INFO)).bv =
       xs.tcbArch.tcbContext.userRegs Fl4Spec.msg_info_register := by
@@ -437,7 +431,7 @@ theorem JAtZ.xferBufJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ)
     · simp only [hsw0', ↓reduceIte]
       have hk1 : (Notif.updK σ rcv.bv (.tcb x1)).kheap rcv.bv = some (.tcb x1) := by simp [Notif.updK]
       have hq1 : Endp.ipcBufOf true x1 = some rp := by rw [hx1, Endp.ipcBufOf_copyRegs]; exact hrb
-      refine WP.spec_mono (copyMrsJ_loop1 (Z := Z.mv Z.G V1) (fun Z' s' a' σ' h => hZ' Z' s' a' σ' h) (thT rcv hr)
+      refine WP.spec_mono (copyMrsJ_loop1 (Z := Z.mv Z.G V1) (thT rcv hr)
         hk1 hq1 hmr hrwv hms tag.length i hle hi J1) ?_
       rintro ⟨n2, s2⟩ ⟨hn2, V2, J2⟩
       refine ⟨Endp.setUm (Notif.updK σ rcv.bv (.tcb x1)) (Endp.copyBufMem σ.machineState.underlyingMemory sp rp
@@ -507,8 +501,6 @@ set_option maxHeartbeats 8000000 in
 looked up**: `JAtZ.xferRegsJ` or `JAtZ.xferBufJ` by the receiver's buffer;
 the spec's outcome changes only the receiver's TCB, in its user context. -/
 theorem JAtZ.xferJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ)
-    (hZ : ∀ (Z' : XSets) s' a' σ', Z'.th = Z.th → XTopAt (L := L) AR Z' s' a' σ' →
-      Endp.IpcBufCapOK σ' ∧ Endp.BufCover Z'.T Z'.B σ' ∧ Vs.BufPlaced (L := L) Z'.N Z'.C Z'.B Z'.c s' σ')
     {snd rcv : U64} (hs : snd ∈ Z.T) (hr : rcv ∈ Z.T) (hne : snd ≠ rcv) {xs xr : Fl4Spec.Tcb}
     (hks : σ.kheap snd.bv = some (.tcb xs)) (hkr : σ.kheap rcv.bv = some (.tcb xr)) (hf : xs.tcbFault = none)
     (epo : Option Fl4Spec.ObjRef) (ep badge : U64) (grant : Bool)
@@ -521,14 +513,14 @@ theorem JAtZ.xferJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ)
       ∃ V, JAtZ (L := L) arI AR (Z.mv Z.G V) H Cs Ac Lst D s' a σ' ⦄ := by
   cases hrb : Endp.ipcBufOf true xr with
   | none =>
-    refine WP.spec_mono (J.xferRegsJ (hZ Z s a σ rfl J.xtop).1 hs hr hne hks hkr hf hrb epo ep badge grant hcaps) ?_
+    refine WP.spec_mono (J.xferRegsJ (J.xferH).1 hs hr hne hks hkr hf hrb epo ep badge grant hcaps) ?_
     rintro s' ⟨h1, V, J'⟩
     refine ⟨_, h1, fun p hp => by simp [Notif.updK, hp], ⟨Endp.xferTcb xr xs badge.bv,
       (by simp only [Notif.updK_kheap, Function.update_self]), ?_⟩, V, J'⟩
     simp only [Endp.xferTcb]
     rw [Endp.copyRegsTcb_other]
     rfl
-  | some rp => exact J.xferBufJ hZ hs hr hne hks hkr hf hrb epo ep badge grant hcaps
+  | some rp => exact J.xferBufJ hs hr hne hks hkr hf hrb epo ep badge grant hcaps
 
 end
 

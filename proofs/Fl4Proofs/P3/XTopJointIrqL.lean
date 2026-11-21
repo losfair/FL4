@@ -79,7 +79,7 @@ theorem IrqSteps.jat [Fl4Proofs.P1.PlainStore st] (hAM : ARMask arI AR) {s : S} 
     (hsg : SpecGlob σ) (hP0 : PPR0 σ) (hLv : LiveDN (L := L) Z.th H Cs Z.G s σ) {s' : S} {a' : A}
     {σ' : Fl4Spec.State Unit} (h : IrqSteps (L := L) arI Z.th s ar σ s' a' σ') : JAt (L := L) arI AR s' a' σ' := by
   rcases h with h | ⟨ct, s2, σ1, sl, p, b, w, r, s3, a3, σ3, hct, hs2, hst, -, hA, -, hk, hd, hm, h2⟩
-  · exact Steps.jat arI hAM (jStepHyps arI) h rfl J
+  · exact Steps.jat arI hAM (jStepHyps arI) h rfl J (J.zNoBlk hsg)
   have hW := WJL.restart arI J hni hsg hP0 hLv hct s2 σ1 hs2 hst
   have hDS2 : DState (L := L) Z.th s2 σ1 Z.G := by
     obtain ⟨⟨V, Ac2, Lst2, D2, J2, -⟩, -⟩ := hW
@@ -93,8 +93,8 @@ theorem IrqSteps.jat [Fl4Proofs.P1.PlainStore st] (hAM : ARMask arI AR) {s : S} 
   have e := (Det.detAt_capDeleteOne_ntfn hg).eq hm4 hm
   have e2 : σ4 = σ3 := congrArg Prod.snd e
   subst e2
-  obtain ⟨⟨V4, Ac4, Lst4, D4, J4, -⟩, -⟩ := hW4
-  exact Steps.jat arI hAM (jStepHyps arI) h2 (Z := Z.mv G4 V4) rfl J4
+  obtain ⟨⟨V4, Ac4, Lst4, D4, J4, -, -, hsg4, -⟩, -⟩ := hW4
+  exact Steps.jat arI hAM (jStepHyps arI) h2 (Z := Z.mv G4 V4) rfl J4 (J4.zNoBlk hsg4)
 
 set_option maxHeartbeats 4000000 in
 /-- **An IRQ handler cap, `JAt` after** (module docstring). -/

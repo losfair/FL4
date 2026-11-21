@@ -1,0 +1,2 @@
+setObject setSimpleKo threadSet archThreadSet asUser setMrs setCap retypeRegion retypeRegionWith deleteObjects doMachineOp doExtendedOp getObject setThreadState optionUpdateThread updateSkObjRef tcbNtfnDequeue
+ decodeCopyRegisters decodeReadRegisters decodeWriteRegisters

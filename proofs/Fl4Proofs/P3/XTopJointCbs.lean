@@ -467,6 +467,7 @@ theorem JAtZ.cancelBadgedJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {e 
       exact ⟨h1, by rw [r2]; exact h2, by rw [r1]; exact h3⟩
     · exact hf.elim
   have hDbg := J.kw_dbg hfoot
+  have hKd := J.kw_dbgKeep hfoot
   have hS3 : SchedRel st Z.N Z.T Z.C Z.c s3 σ3 := hI3.2.2.1
   have hAI3 : ActIdle σ3 := by
     rcases hact with e' | e'
@@ -498,8 +499,8 @@ theorem JAtZ.cancelBadgedJ (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {e 
       hAI3, B3, F.isorted J.isorted, hrun3, hblk⟩
   have hC0 := JCs.same J hF.1 F.ksz
   have hC : JCs (L := L) (Z.mv Z.G V') s3 σ3 := ⟨hC0.del, hC0.ut, hC0.finM, hC0.sfree⟩
-  exact ⟨σ3, Z.vs, hm3, J.cs_frameI hks hX3 hw (fun b hb => Ipc.CnW.oobj J.xtop.fin.1.1.1 hb) F.sk.arch (fun q ao h => F.othF h (fun _ e => by cases e) (fun _ _ e => by cases e) (fun _ e => by cases e)
-      (fun _ e => by cases e)) F.szKeep hF.1 F.kback F.ipcFr hC R, hF.1, hks⟩
+  exact ⟨σ3, Z.vs, hm3, J.cs_frameI hks hX3 hw (fun b hb => Ipc.CnW.oobj J.xtop.fin.1.1.1 hb) (fun b hb => J.cnW_nv hb) F.sk.arch (fun q ao h => F.othF h (fun _ e => by cases e) (fun _ _ e => by cases e) (fun _ e => by cases e)
+      (fun _ e => by cases e)) F.szKeep hF.1 F.kback F.ipcFr hC R hKd F.sk.orig (J.idleW_keep hS3 F.sk.idle F.sk.isc).1 J.zD, hF.1, hks⟩
 
 end
 
@@ -551,8 +552,7 @@ theorem cn_cancel_topJ (hAM : ARMask arI AR) (hJ : JStepHyps (L := L) arI AR Z.t
       simp only [Set.mem_singleton_iff, Prod.mk.injEq, true_and] at this
       simpa using this.symm
     -- the caller's restart at `J`
-    obtain ⟨G1, V1, Ac1, Lst1, D1, J1⟩ := (stepClosed_jat arI hAM hJ).restart s a' σ ct x s2 hcur hk htcb hrn hs2
-      Z H Cs Ac Lst D rfl J
+    obtain ⟨Ac1, Lst1, J1⟩ := J.restartSJ hJ hcur hk htcb hrn hs2
     rw [← hσ1] at J1
     by_cases hb : b = 0#u64
     · subst hb
@@ -573,9 +573,9 @@ theorem cn_cancel_topJ (hAM : ARMask arI AR) (hJ : JStepHyps (L := L) arI AR Z.t
             (absCap (.Endpoint p 0#u64 true true true true)))).run σ1).1 := by rw [hrun0]; rfl
       exact Or.inr ⟨_, DecOut.of_eq (run_liftME_ok hrun), σ1, hst, (.ok [], σ1),
         mem_bindE_ok hx (Set.mem_singleton _), ⟨_, _, Or.inl ⟨rfl, rfl⟩, J1.xtop.rel.1, J1.xtop.rel.2.1,
-          J1.xtop.rel.2.2.1, J1.xtop.rel.2.2.2.1, J1.xtop.rel.2.2.2.2.1⟩, ⟨_, H, Cs, Ac1, Lst1, D1, J1⟩⟩
+          J1.xtop.rel.2.2.1, J1.xtop.rel.2.2.2.1, J1.xtop.rel.2.2.2.2.1⟩, ⟨_, H, Cs, Ac1, Lst1, D, J1⟩⟩
     · have hcb := h1 hb
-      have he : p ∈ (Z.mv G1 V1).E := hE p b sl hsl hcV
+      have he : p ∈ Z.E := hE p b sl hsl hcV
       have hpre : EpQPre σ1 p.bv := by rw [hσ1]; exact epQPre_restart hk (hQ _) hsw
       have h := J1.cancelBadgedJ b he hpre
       rw [hcb, WP.spec_ok] at h
@@ -593,7 +593,7 @@ theorem cn_cancel_topJ (hAM : ARMask arI AR) (hJ : JStepHyps (L := L) arI AR Z.t
         exact mem_liftE (x := ((), σ3)) hm3
       exact Or.inr ⟨_, DecOut.of_eq (run_liftME_ok hrun), σ1, hst, (.ok [], σ3),
         mem_bindE_ok hx (Set.mem_singleton _), ⟨_, _, Or.inl ⟨rfl, rfl⟩, J3.xtop.rel.1, J3.xtop.rel.2.1,
-          J3.xtop.rel.2.2.1, J3.xtop.rel.2.2.2.1, J3.xtop.rel.2.2.2.2.1⟩, ⟨_, H, Cs, Ac1, Lst1, D1, J3⟩⟩
+          J3.xtop.rel.2.2.1, J3.xtop.rel.2.2.2.1, J3.xtop.rel.2.2.2.2.1⟩, ⟨_, H, Cs, Ac1, Lst1, D, J3⟩⟩
 
 set_option maxHeartbeats 4000000 in
 /-- **The CNode CancelBadgedSends label at `JAt`** (as

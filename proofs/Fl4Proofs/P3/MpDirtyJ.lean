@@ -388,12 +388,11 @@ theorem decode_invocation_asid_controlJD (s : S) (ar : A) (σ : Fl4Spec.State Un
         rw [e] at ho; cases ho
       rw [regionSet_iff' p o 12 (by decide) hfit] at h0
       omega
-    have hDLd : DestLive Zd.th (L.mem s1) (L.ksb s1) pd := by
-      rcases hDL0 with ⟨y', r, gs, g, hy', hc⟩ | h
-      · have hy'G : y' ∈ Z.G.chains.flatten := (hCR.2.2.1.members y').2 ⟨hy', _, capAt_capV _ _, by rw [hc]; simp⟩
-        exact Or.inl ⟨y', r, gs, g, isSlot_restrict_off hPl hN hy' (by rw [h2sb]; exact hns y' hy'G),
-          by rw [hSS1.capV hy']; exact hc⟩
-      · exact Or.inr (fun k hk => by rw [hk1]; exact h k (restrictTh_some hk).1)
+    have hDLd : DestCap Zd.th (L.mem s1) pd := by
+      obtain ⟨y', r, gs, g, hy', hc⟩ := DestCap.of_cnRef hCn ⟨y, hext.1 y h4, capV_of_capAt h7⟩
+      have hy'G : y' ∈ Z.G.chains.flatten := (hCR.2.2.1.members y').2 ⟨hy', _, capAt_capV _ _, by rw [hc]; simp⟩
+      exact ⟨y', r, gs, g, isSlot_restrict_off hPl hN hy' (by rw [h2sb]; exact hns y' hy'G),
+        by rw [hSS1.capV hy']; exact hc⟩
     exact ⟨_, _, Cs, Ac1, Lst1, D1, Jd.mpStepJ hh hTh hE.2.1 Ad hspecd hppd hidx hcap1 hnchd hpdd hld hnull1 hDLd hX'
       ⟨hks1, hcpu1', hW⟩ hzero hMs hkp hkh hcdt horig hsrc hdst hdstb hRg.p0 hcap' (hDI Jd.del) hU'⟩
   have hD := decode_invocation_asid_controlXP arI Z.th hPl s ar σ Z.G hCR hFI J.ut hMO vsMpHyps_top hX.fin.1

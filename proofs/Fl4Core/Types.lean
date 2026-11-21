@@ -286,7 +286,7 @@ def obj.Reply := Std.U64
 def obj.Ep := Std.U64
 
 /-- [fl4_core::vspace::FrameCap]
-    Source: 'crates/fl4-core/src/arch/x86_64/vspace.rs', lines 445:0-454:1 -/
+    Source: 'crates/fl4-core/src/arch/x86_64/vspace.rs', lines 449:0-458:1 -/
 structure vspace.FrameCap where
   ptr : Std.U64
   size : capability.FrameSize
@@ -308,7 +308,7 @@ def ept.slot.closure (S : Type _) := Unit
 def ept.root.closure (S : Type _) := Unit
 
 /-- [fl4_core::capability::Rights]
-    Source: 'crates/fl4-core/src/capability.rs', lines 271:0-276:1
+    Source: 'crates/fl4-core/src/capability.rs', lines 272:0-277:1
     Visibility: public -/
 structure capability.Rights where
   write : Bool
@@ -317,13 +317,13 @@ structure capability.Rights where
   grant_reply : Bool
 
 /-- [fl4_core::vspace::VRoot]
-    Source: 'crates/fl4-core/src/arch/x86_64/vspace.rs', lines 507:0-510:1 -/
+    Source: 'crates/fl4-core/src/arch/x86_64/vspace.rs', lines 511:0-514:1 -/
 structure vspace.VRoot where
   pml4 : Std.U64
   asid : Std.U64
 
 /-- [fl4_core::vspace::TableCap]
-    Source: 'crates/fl4-core/src/arch/x86_64/vspace.rs', lines 735:0-743:1 -/
+    Source: 'crates/fl4-core/src/arch/x86_64/vspace.rs', lines 739:0-747:1 -/
 structure vspace.TableCap where
   map_lbl : Std.U64
   unmap_lbl : Std.U64

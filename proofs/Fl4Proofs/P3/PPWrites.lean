@@ -49,18 +49,19 @@ theorem pp_writes (hA : P0.ArchTotal ar) (s : S) (a : A)
     have ip := hA.irq_pending
     have sf := sporadic.sufficient.ok (st := st) hA
     have hS : P0.StoreTotal st := L.total
+    refine WP.spec_bind (ip a1) ?_
+    rintro ⟨irq, a2⟩ -
+    try dsimp only
     step*
     all_goals
       refine WP.spec_bind (Pₘ := fun _ => True) (by split <;> first | exact sf _ _ _ _ | exact (WP.spec_ok _).2 trivial)
         fun ok1 _ => ?_
       split
+      · exact (WP.spec_ok _).2 W
       · refine WP.spec_bind (P0.sched.is_cur_domain_expired.p0 st _ hS) fun b1 _ => ?_
         split
         · exact (WP.spec_ok _).2 W
-        · refine WP.spec_bind (ip _) ?_
-          rintro ⟨b2, a2⟩ -
-          cases b2 <;> simp <;> exact W
-      · exact (WP.spec_ok _).2 W
+        · split <;> exact (WP.spec_ok _).2 W
   · exact (WP.spec_ok _).2 W1
 
 end

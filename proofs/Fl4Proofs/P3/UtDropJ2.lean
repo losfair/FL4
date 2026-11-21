@@ -137,6 +137,34 @@ variable {S : Type} {st : machine.Store S} [L : P1.LawfulStore st] {A : Type} {a
 variable {AR : A → Fl4Spec.Cr3 → Prop} {Z : XSets} {H : P1.Heap} {Cs Ac : Set U64}
   {Lst : U64 → List U64} {D : Set U64} {s : S} {a : A} {σ : Fl4Spec.State Unit}
 
+/-- **`DbgWFL` at fewer TCBs, the memory kept** (KENTRY-PLAN g2j): every
+list member is still a TCB, as the list heads and the members' `DEBUG_NEXT`
+words name TCBs of the smaller set or null (P1's `DbgTz` after). -/
+theorem DbgWFL.restrictT {T T' Cs : Set U64} {m hd : U64 → U64} {lst : U64 → List U64}
+    (hW : DbgWFL T Cs m hd lst) (hTT : T' ⊆ T) (hdn : ∀ y ∈ T', P1.Tz T' (m (P1.dnA y)))
+    (hdh : ∀ c ∈ Cs, P1.Tz T' (m (hd c))) : DbgWFL T' Cs m hd lst := by
+  have hmem : ∀ c ∈ Cs, ∀ i (hi : i < (lst c).length), (lst c)[i] ∈ T' := by
+    intro c hc i
+    induction i with
+    | zero =>
+      intro hi
+      have h0 : (lst c)[0] ≠ 0#u64 := fun e => hW.zero c hc (by rw [← e]; exact List.getElem_mem hi)
+      rcases hdh c hc with e | e
+      · rw [hW.head c hc, headD_getElem0 _ hi] at e; exact absurd e h0
+      · rw [hW.head c hc, headD_getElem0 _ hi] at e; exact e
+    | succ i ih =>
+      intro hi
+      have hi' : i < (lst c).length := by omega
+      have h0 : (lst c)[i + 1] ≠ 0#u64 := fun e => hW.zero c hc (by rw [← e]; exact List.getElem_mem hi)
+      have e := hW.next c hc _ (List.getElem_mem hi')
+      rw [nextIn_getElem (hW.nodup c hc) hi] at e
+      rcases hdn _ (ih hi') with e' | e'
+      · rw [e] at e'; exact absurd e' h0
+      · rw [e] at e'; exact e'
+  exact ⟨hW.head, hW.next, hW.prev, hW.nodup, hW.zero, fun c hc x hx => ⟨by
+      obtain ⟨i, hi, rfl⟩ := List.mem_iff_getElem.1 hx
+      exact hmem c hc i hi, (hW.mem c hc x hx).2⟩, fun y hy hn => hW.off y (hTT hy) hn⟩
+
 /-- `DeadP` at a smaller heap. -/
 theorem DeadP.drop {R : U64 → Prop} {q : U64} (h : DeadP (L := L) H s q) : DeadP (L := L) (H.drop R) s q := by
   obtain ⟨h1, h2, h3, h4, h5⟩ := h
@@ -859,9 +887,24 @@ theorem JAtZ.dropA (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ)
     · omega
     · exact ⟨h1, by omega⟩
   have hbf := J.dropBuf hsb hfit hx hcx hSO hIn hnd hp8 hD
+  -- `LiveDN` after (KENTRY-PLAN g2j): the same memory and ghost tree, the typed
+  -- heap and `H` restricted; the debug lists' members kept (P1's `DbgTz` after)
+  have hLvD : LiveDN (L := L) (restrictTh Z.th p.val (p.val + 2 ^ sb.val))
+      (H.drop (P1.RegionD H p.val (p.val + 2 ^ sb.val))) Cs Z.G s σ' := by
+    obtain ⟨hL, ⟨lst, hDW⟩, hN⟩ := J.live
+    have hIU : ∀ y, InUse (L.mem s) σ' y → InUse (L.mem s) σ y := fun y hu => by
+      unfold InUse at hu ⊢; rw [horig] at hu; exact hu
+    refine ⟨⟨fun q i hqi hu => hL.slots q i hqi.of_restrict (hIU _ hu),
+      fun n hn hni => hL.dbg n hn (by rw [← hD.idle]; exact hni),
+      fun y hy p' zt n hz i hpi hni hu => hL.zslots y (IsSlot.of_restrict hy) p' zt n hz i hpi.of_restrict hni
+        (hIU _ hu),
+      fun y hy p' zt n hz hzt => DeadP.drop (hL.zdead y (IsSlot.of_restrict hy) p' zt n hz hzt)⟩,
+      ⟨lst, hDW.restrictT (fun y hy => (P1.Heap.mem_tcbs_drop.1 hy).1) hblk.2.2.1.2.2.tm.dn hblk.2.2.1.2.2.tm.dh⟩,
+      fun sl hA h => by rw [horig]; exact hN sl hA.of_restrict h⟩
   exact ⟨hX, hcall, hrf, hrr, hyl, hmcp, hbuf, hks, hthT, hthk, hip, hrp, hap, hnk, hnB, hjpl, hcov, hobj, hzH, hsf,
     hhs, hscC, hjc, hkn, hdel, J.ut, hbd, hfin, hutc, hnsc, hinv, hcu, hown, hoff, hact, hc0, hbsa, hsv, hiso, hsl',
-    hcr, hblk, hiL, hvc, hbf.1, hbf.2.1, hbf.2.2⟩
+    hcr, hblk, hiL, hvc, hbf.1, hbf.2.1, hbf.2.2, ⟨fun y hy => J.ext.nat y (IsSlot.of_restrict hy), fun t ht => J.ext.vw t (restrictTh_some ht).1⟩,
+    hLvD, fun q hq => J.zD q (by obtain ⟨y, hy, zt, n, hz, h65⟩ := hq; exact ⟨y, IsSlot.of_restrict hy, zt, n, hz, h65⟩)⟩
 
 /-- `JAtZ.dropA` at a used region (the untyped reset's drop, `fi ≠ 0`). -/
 theorem JAtZ.drop (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ)

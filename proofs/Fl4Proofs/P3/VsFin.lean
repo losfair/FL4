@@ -77,7 +77,7 @@ theorem fin_after {th : TypedHeap} {s s' : S} {σ σ' : Fl4Spec.State Unit} {G :
   have hx := hA.isSlot
   have hcv : capV (L.mem s') (cslotAddr sl) = c := by rw [hSS.capV hx]; exact capV_of_capAt hc
   obtain ⟨hCR', hFI'⟩ := crel_after hCR hFI hc hSt' (P3.SlotsValid.of_caps hCR.2.1 (fun y hy => hSS.capAt hy))
-    (SlotFoot.of_same hSS _) (by rw [hcv]; exact ⟨rfl, rfl, rfl⟩) hK
+    (SlotFoot.of_same hSS _) (by rw [hcv]; exact ⟨rfl, rfl, rfl, rfl⟩) hK
   exact ⟨⟨hCR', hD.of_same hSS, hFI'⟩, hcv, fun y hy _ => Or.inl (hSS.capV hy),
     MdbStep.of_same hCR.2.2.1 hSS⟩
 

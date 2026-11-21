@@ -13,8 +13,11 @@ P3 (DESIGN.md §9), CSpace and TCB: **ReadFPU and WriteFPU at `XTop`**
   frame's words copied into the TCB's FPU image (`XTopAt.tcbWrF`), then
   `fpu_sanitise`, `fpu_reload` (the arch relation kept: `ARIface` [P]).
 * `fpuHypX_read`: ReadFPU's work at `XTop`, from the user-frame write
-  (`FpuFrameXHyp` [W]): the spec's machine state is any, so the obligation
-  is `XTopAt` after FL4's writes of the frame's words at some machine state.
+  (`FpuFrameXHyp` [W]): the spec's step (`Fl4Spec.fl4FpuToFrame`) changes
+  only the user memory, inside the frame's 2696 bytes, so the
+  obligation is `XTopAt` after FL4's writes of the frame's words at a state
+  whose user memory agrees with the old one outside those bytes
+  (`fpuToFrame_mem`, `fpu_store_other`).
 -/
 import Fl4Proofs.P3.XTopTcbBp
 import Fl4Proofs.P3.XTopReply
@@ -531,36 +534,65 @@ theorem off_pass {α : Type} (E K : Result α) (y0 z : U64)
   have h4 : ¬ d < fl4_abi.consts.FPU_STATE_SIZE := by scalar_tac
   simp only [h4, ↓reduceIte]
 
+/-- An X64 `storeWord` at the word `w` at byte offset `k` (`k + 8 ≤ 2696`)
+from `F` leaves the bytes outside ReadFPU's 2696 bytes at `F`. -/
+theorem fpu_store_other (um : Fl4Spec.Word → Fl4Spec.Word8) (F : Fl4Spec.Word) (w : U64) (k : Nat)
+    (hk : k + 8 ≤ 2696) (hw : w.val = (F.toNat + k) % 2 ^ 64) (v a : Fl4Spec.Word)
+    (ha : 2696 ≤ (a - F).toNat) : Endp.storeMem um w.bv v a = um a := by
+  refine Endp.storeMem_other um _ v a fun y hy e => ?_
+  subst e
+  have h1 : w.bv.toNat = w.val := rfl
+  have h2 := F.isLt
+  have h3 := w.bv.isLt
+  rw [BitVec.toNat_sub, BitVec.toNat_add, h1, hw] at ha
+  simp only [Nat.reducePow] at ha h2 h3
+  omega
+
 /-- **The user frame's words written by ReadFPU at `XTop`** [W] (with [J]:
-the frame's words lie outside the kernel's objects, and the spec's machine
-state, any, chosen to match the IPC-buffer words): FL4's copy of the TCB's
-FPU image into the frame keeps `XTopAt` at some machine state. -/
+the frame's words lie outside the kernel's objects): FL4's copy of the
+TCB's FPU image into the frame keeps `XTopAt` at the spec state whose user
+memory is some `um` agreeing with the old one outside the 2696 bytes at the
+frame (`Fl4Spec.fl4FpuToFrame`'s outcomes). -/
 def FpuFrameXHyp (AR : A → Fl4Spec.Cr3 → Prop) (Z : XSets) (p frame : U64) : Prop :=
   ∀ (s : S) (a : A) (σ : Fl4Spec.State Unit), XTopAt (L := L) AR Z s a σ →
     tcb.copy_words st s (core.num.U64.wrapping_add p layout.tcb.FPU) frame 337#u64 ⦃ s' =>
-      ∃ ms, XTopAt (L := L) AR Z s' a { σ with machineState := ms } ⦄
+      ∃ um : Fl4Spec.Word → Fl4Spec.Word8,
+        (∀ a : Fl4Spec.Word, 2696 ≤ (a - frame.bv).toNat → um a = σ.machineState.underlyingMemory a) ∧
+        XTopAt (L := L) AR Z s' a (Endp.setUm σ um) ⦄
 
-/-- **`FpuFrameXHyp` from the frame's words being user words** [J] (`UserW`;
-`BufPlaced` [J]): each word written either an IPC-buffer word (the spec's
-memory stored as FL4's, `bufw_inv`) or none (`XTopAt.userWr`). -/
+/-- **`FpuFrameXHyp` from the frame's words being IPC-buffer words** [J]
+(the words of a spec data page, each `(w, w)` in `B`: JointAt's
+`FrameCover`; `BufPlaced` [J]): each word written by `bufw_inv`, the spec's
+memory stored as FL4's at the same address. -/
 theorem fpuFrameX_of {AR : A → Fl4Spec.Cr3 → Prop} {Z : XSets} (p frame : U64)
     (hUW : ∀ (s : S) (a : A) (σ : Fl4Spec.State Unit), XTopAt (L := L) AR Z s a σ →
       (∀ i : U64, i.val < 337 →
-        UserW (L := L) Z s σ (core.num.U64.wrapping_add frame (core.num.U64.wrapping_mul i 8#u64))) ∧
+        (core.num.U64.wrapping_add frame (core.num.U64.wrapping_mul i 8#u64),
+          (core.num.U64.wrapping_add frame (core.num.U64.wrapping_mul i 8#u64)).bv) ∈ Z.B) ∧
       BufPlaced (L := L) Z.N Z.C Z.B Z.c s σ) :
     FpuFrameXHyp (L := L) AR Z p frame := by
   intro s a σ hX
-  refine copy_words_inv (fun s' => ∃ ms, XTopAt (L := L) AR Z s' a { σ with machineState := ms }) s _ frame _
-    ⟨σ.machineState, hX⟩ ?_
-  rintro s2 i ⟨ms, h2⟩ hi v
+  refine copy_words_inv (fun s' => ∃ um : Fl4Spec.Word → Fl4Spec.Word8,
+      (∀ a : Fl4Spec.Word, 2696 ≤ (a - frame.bv).toNat → um a = σ.machineState.underlyingMemory a) ∧
+      XTopAt (L := L) AR Z s' a (Endp.setUm σ um)) s _ frame _
+    ⟨σ.machineState.underlyingMemory, fun _ _ => rfl, hX⟩ ?_
+  rintro s2 i ⟨um, hag, h2⟩ hi v
   obtain ⟨hu, hBP⟩ := hUW _ _ _ h2
-  by_cases hB : ∃ wp ∈ Z.B, wp.1 = core.num.U64.wrapping_add frame (core.num.U64.wrapping_mul i 8#u64)
-  · obtain ⟨wp, hwp, e⟩ := hB
-    rw [← e]
-    have hI := bufw_inv (L := L) s2 a _ h2.toRInv hBP hwp v
-    exact ⟨_, h2.ofRInv hI (L.ksb_wr _ _ _) (Sched.SzKeep.of_kheap rfl)⟩
-  · push_neg at hB
-    exact ⟨ms, h2.userWr (hu i hi) hB v⟩
+  have hwB := hu i hi
+  have hI := bufw_inv (L := L) s2 a _ h2.toRInv hBP hwB v
+  have hiv : (core.num.U64.wrapping_add frame (core.num.U64.wrapping_mul i 8#u64)).val =
+      (frame.bv.toNat + 8 * i.val) % 2 ^ 64 := by
+    have : i.val < 337 := hi
+    have e : frame.bv.toNat = frame.val := rfl
+    have e8 : (8#u64 : U64).val = 8 := rfl
+    have hs : UScalar.size UScalarTy.U64 = 2 ^ 64 := by simp [UScalar.size_def, UScalarTy.numBits]
+    rw [e]
+    simp only [core.num.U64.wrapping_add_val_eq, core.num.U64.wrapping_mul_val_eq, e8, hs]
+    omega
+  refine ⟨Endp.storeMem um (core.num.U64.wrapping_add frame (core.num.U64.wrapping_mul i 8#u64)).bv v.bv,
+    fun b hb => ?_, h2.ofRInv hI (L.ksb_wr _ _ _) (Sched.SzKeep.of_kheap rfl)⟩
+  rw [fpu_store_other um frame.bv _ (8 * i.val) (by have : i.val < 337 := hi; omega) hiv v.bv b hb]
+  exact hag b hb
 
 set_option maxHeartbeats 8000000 in
 /-- **The FPU work at `XTop`** (`FpuHypX`): the restart, `fpu_flush`, the
@@ -643,13 +675,19 @@ theorem fpuHypX_of {AR : A → Fl4Spec.Cr3 → Prop} (hARI : ARKeep arI AR) {Z :
     refine WP.spec_bind (hARI.fpu_flush ar p _ hAR1) fun a1 ha1 => ?_
     simp only [hsz, hwd, bind_ok, lift, obj.Tcb.fpu_addr]
     refine WP.spec_bind (hFr rfl x ptr offset r sz m ep asid va hc ⟨hr1, hr3, hm, hlt, hrm⟩ s1 a1 σ1 (hX1.arch ha1)) ?_
-    rintro s2 ⟨ms, h2⟩
+    rintro s2 ⟨um, hag, h2⟩
     try simp only [↓reduceIte]
-    refine (WP.spec_ok _).2 ⟨rfl, { σ1 with machineState := ms }, ?_, ⟨Z, h2⟩⟩
+    refine (WP.spec_ok _).2 ⟨rfl, Endp.setUm σ1 um, ?_, ⟨Z, h2⟩⟩
     show _ ∈ ((Fl4Spec.NonDetE.liftE _).run σ1).1
-    refine mem_liftE (x := ([], { σ1 with machineState := ms })) ?_
-    refine mem_bind_nd (x := ((), { σ1 with machineState := ms })) ?_ (Set.mem_singleton_iff.2 rfl)
-    exact dmo_ex _ σ1 (mem_bind_nd (x := (ms, σ1.machineState)) ⟨trivial, rfl⟩ rfl)
+    refine mem_liftE (x := ([], Endp.setUm σ1 um)) ?_
+    refine mem_bind_nd (x := ((), Endp.setUm σ1 um)) ?_ (Set.mem_singleton_iff.2 rfl)
+    have hfb : (core.num.U64.wrapping_add ptr offset).bv = ptr.bv + offset.bv := by
+      apply BitVec.eq_of_toNat_eq
+      rw [BitVec.toNat_add]
+      show (core.num.U64.wrapping_add ptr offset).val = (ptr.val + offset.val) % 2 ^ 64
+      simp only [core.num.U64.wrapping_add_val_eq]
+      simp [U64.size, U64.numBits]
+    exact dmo_ex _ σ1 (fpuToFrame_mem _ σ1.machineState um fun b hb => hag b (by rw [hfb]; exact hb))
 
 set_option maxHeartbeats 4000000 in
 /-- **TcbXOpen3's ReadFPU and WriteFPU at `XTop`** (`toFrame` for ReadFPU):

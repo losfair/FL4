@@ -109,6 +109,8 @@ structure SchTailHyps (AR : A → Fl4Spec.Cr3 → Prop) (Z : XSets) (H : P1.Heap
   dead : ∀ q ∈ D, Sched.DeadP (L := L) H s' q
   blk : P1.BlkOK st (P1.Heap.tcbs H) Cs (P1.Heap.omega H) H (P1.Heap.frame H) (P1.Heap.replies H)
       (P1.Heap.scs H) (P1.Heap.ntfns H) (P1.Heap.scBits H) Ac' s'
+  /-- Every debug word kept (KENTRY-PLAN g2i: `JAtZ.live`'s frame). -/
+  dbgK : P1.DbgKeep st (P1.Heap.tcbs H) Cs s s'
 
 set_option maxHeartbeats 2000000 in
 /-- **`JAtZ` after FL4's `schedule`** from `JAtZ` after the TCB timers
@@ -139,7 +141,9 @@ theorem JAtZ.sch_tail {AR : A → Fl4Spec.Cr3 → Prop} {Z : XSets} {H : P1.Heap
       (J.idleW_keep hS' (ik_schedule σ ((), σ') (by rw [hsc]; exact Set.mem_singleton _)).1
         (ik_schedule σ ((), σ') (by rw [hsc]; exact Set.mem_singleton _)).2))
     (J.sch_kern hwT hK hS' hT.dbg hT.dwNe (J.sch_csc hwT hK hS' hI' hC' hT.dead).1) (J.sch_utc hwT hK hT.dbg) hN' hI' (Or.inr hC')
-    (Or.inl (curOwn_of_curInv hS' hI' hC')) hoff hA' hbsa (Or.inr hcr) hT.blk⟩
+    (Or.inl (curOwn_of_curInv hS' hI' hC')) hoff hA' hbsa (Or.inr hcr) hT.blk hT.dbgK
+    (J.idleW_keep hS' (ik_schedule σ ((), σ') (by rw [hsc]; exact Set.mem_singleton _)).1
+      (ik_schedule σ ((), σ') (by rw [hsc]; exact Set.mem_singleton _)).2).1 J.zD⟩
 
 /-- **The entry tail on `JAt`** with `hSchedRest` discharged (module
 docstring): `JAtZ` after the TCB timers (`hfireJ`, with `FireHypW`'s

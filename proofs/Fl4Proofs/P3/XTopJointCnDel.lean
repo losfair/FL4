@@ -11,9 +11,12 @@ supply).
 * `EJ.restart`: the caller's restart keeps `EJ` (`JStepHyps.restart`).
 * `TopPostDMXP`, `XCapP`: `TopPostDMX`, `XCap` with `XP` after a preempted
   invocation (`X` after any other); `XCap.toP` from `XCap` when `X → XP`.
-  `JAtPre`: `JAt`, or the post of a preempting preemption point from `JAt`
-  (the time updated, the current SC's budget possibly exhausted: the
-  caller's `mcs_preemption_point` charges it).
+  `JAtPre`: the post of a preempting preemption point from `JAt` with no
+  switch pending and a current thread other than the idle thread (the time
+  updated, the current SC's budget possibly exhausted: the caller's
+  `mcs_preemption_point` charges it). `TopPostDMX.toPN`/`XCap.toPN`/
+  `TopPostDMX.errP`: `XP` arbitrary when the outcome cannot be preempted
+  (SpecNoPre: no `PreInv` invocation decoded, or an error).
 * `cn_del_topJ`: a Delete's or Revoke's outcome at `EJ` (`EJP` if preempted)
   gives `TopPostDMXP` at `JAt`, `JAtPre`.
 * `decode_invocation_cnode_{revoke,delete}J`: the Revoke and Delete labels
@@ -28,6 +31,7 @@ import Fl4Proofs.P3.XTopJointPP
 import Fl4Proofs.P3.XTopJointPost
 import Fl4Proofs.P3.XTopJointCbs
 import Fl4Proofs.P3.XTopJointDelLive
+import Fl4Proofs.P3.SpecNoPre
 open Aeneas Aeneas.Std Result
 
 namespace Fl4Proofs.P3
@@ -65,7 +69,7 @@ theorem EJ.restart (hJ : JStepHyps (L := L) arI AR Z.th) {s : S} {ar : A} {σ : 
   obtain ⟨hX1, hSS, hk1⟩ := h
   obtain ⟨hkb, hkz⟩ := kback_ksz_upd (σ' := Notif.stsAct (Notif.updK σ ct.bv
     (.tcb { x with tcbState := .restart })) ct.bv) hk (by rw [stsAct_kheap]; rfl)
-  obtain ⟨Ac', Lst', D', R⟩ := hJ.restart s ar σ ct x s1 hcur hk htcb hrun hs1 Z H Cs Ac Lst D rfl J hX1
+  obtain ⟨Ac', Lst', J1⟩ := J.restartSJ hJ hcur hk htcb hrun hs1
   have hns1 : Vs.NoSwitch (Notif.stsAct (Notif.updK σ ct.bv (.tcb { x with tcbState := .restart })) ct.bv) := by
     intro u e
     unfold Notif.stsAct at e
@@ -74,8 +78,8 @@ theorem EJ.restart (hJ : JStepHyps (L := L) arI AR Z.th) {s : S} {ar : A} {σ : 
       | (have e2 : σ.schedulerAction = .switchThread u := e
          rw [hni.2] at e2; cases e2)
       | cases e
-  exact ⟨Z.vs, Ac', Lst', D', J.cs_frame hk1 hX1 hkb ((IpcFrKeep.of_updTcb (y := { x with tcbState := .restart }) hk rfl rfl).trans (IpcFrKeep.of_kheap (by rw [stsAct_kheap]))) (JCs.same J hSS hkz) R (Vs.VsSlotsT.of_eq fun y hy => hSS.capV hy), hk1, hns1, hsg1,
-    hP0.of_ppk (PPK.restart hk .restart)⟩
+  exact ⟨Z.vs, Ac', Lst', D, J1, hk1, hns1, hsg1,
+    hP0.of_ppk (PPK.restart hk .restart (Or.inl hcur.symm))⟩
 
 /-- **`PPR0` at the invocation's start**: at a zero consumed time, the
 current SC's head ready when active (`hRd0` [J], l4v `cur_sc_offset_ready 0`
@@ -85,8 +89,20 @@ pending (`Entered`), so the current thread is the current SC's only thread
 theorem JAtZ.ppr0_start {s : S} {ar : A} {σ : Fl4Spec.State Unit}
     (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s ar σ) (hni : Entered σ)
     (hRd0 : σ.consumedTime = 0 → ∀ y n, σ.kheap σ.curSc = some (.schedContext y n) → Fl4Spec.scActive y = true →
-      Fl4Spec.refillReady σ.curTime (Fl4Spec.refillHd y) = true) : PPR0 σ := by
-  intro h0
+      Fl4Spec.refillReady σ.curTime (Fl4Spec.refillHd y) = true)
+    (hnq : ∀ d p, σ.curThread ∉ σ.readyQueues d p) : PPR0 σ := by
+  refine ⟨⟨hni.1, fun u e => (by rw [hni.2] at e; cases e), fun xt hx => ?_, fun u xt hu hus => ?_, hnq⟩,
+    fun h0 => ?_⟩
+  · obtain ⟨xc, hkc, hsc, -⟩ := (J.curInv (by rw [hni.2]; exact fun h => by cases h)).tcb
+    have e : xt = xc := by rw [hkc] at hx; cases hx; rfl
+    subst e
+    exact ⟨Or.inl hsc, NotBlk.of_runnable (J.curRun.run hni _ hkc)⟩
+  · obtain ⟨xc, hkc, hsc, -⟩ := (J.curInv (by rw [hni.2]; exact fun h => by cases h)).tcb
+    obtain ⟨y, n, hy, hyt⟩ := J.inv.back u xt _ hu hus
+    obtain ⟨y', n', hy', hyt'⟩ := J.inv.back _ xc _ hkc hsc
+    rw [hy] at hy'; cases hy'
+    rw [hyt] at hyt'; cases hyt'
+    exact Or.inl rfl
   refine ⟨hRd0 h0, fun u xt hu hus hur => ?_⟩
   have hC := J.curInv (by rw [hni.2]; exact fun h => by cases h)
   obtain ⟨xc, hkc, hsc, -⟩ := hC.tcb
@@ -147,12 +163,123 @@ theorem XCap.toP {X XP : S → A → Fl4Spec.State Unit → Prop} {s : S} {ar : 
   · exact Or.inl (WP.spec_mono h fun _ hr => hr.toP hXP)
   · exact Or.inr h
 
-/-- **`JAt`, or the post of a preempting preemption point from `JAt`**: what
-a preempted invocation leaves (module docstring). -/
+/-- **The post of a preempting preemption point from `JAt`**, no switch
+pending and `PPR0` there (carried by the deletion and reset loops from
+`Entered`; kp11: all of it, for the release-queue fact at the hole): what a preempted invocation
+leaves (module docstring; kp10). -/
 def JAtPre (AR : A → Fl4Spec.Cr3 → Prop) (s : S) (a : A) (σ : Fl4Spec.State Unit) : Prop :=
-  JAt (L := L) arI AR s a σ ∨ ∃ (s0 : S) (a0 : A) (σ0 : Fl4Spec.State Unit), JAt (L := L) arI AR s0 a0 σ0 ∧
+  ∃ (s0 : S) (a0 : A) (σ0 : Fl4Spec.State Unit),
+    (JAt (L := L) arI AR s0 a0 σ0 ∧ Vs.NoSwitch σ0 ∧ PPR0 σ0) ∧
     sched.preemption_point st arI s0 a0 = ok (.Err .Preempted, s, a) ∧
     (.error (), σ) ∈ ((Fl4Spec.preemptionPoint (Z := Unit)).run σ0).1
+
+/-- **A `TopPostDMX` outcome other than `Preempted` is `TopPostDMXP` at any
+`XP`.** -/
+theorem TopPostDMX.toPne {X XP : S → A → Fl4Spec.State Unit → Prop} {σ : Fl4Spec.State Unit} {blk call don : Bool}
+    {m : Fl4Spec.SEMonad Unit Fl4Spec.Fl4Invocation} {s : S} {res : core.result.Result Unit error.Exc × S × A}
+    (h : TopPostDMX (L := L) X σ blk call don m s res) (hne : res.1 ≠ .Err .Preempted) :
+    TopPostDMXP (L := L) X XP σ blk call don m s res :=
+  have hI : ∀ s a σ, X s a σ → (if res.1 = .Err .Preempted then XP s a σ else X s a σ) := fun s a σ hx => by
+    rw [if_neg hne]; exact hx
+  match h with
+  | Or.inl ⟨e, h1, h2, h3, h4⟩ => Or.inl ⟨e, h1, h2, h3, hI _ _ _ h4⟩
+  | Or.inr ⟨inv, h1, σ1, h2, y, hy, h3, h4⟩ => Or.inr ⟨inv, h1, σ1, h2, y, hy, h3, hI _ _ _ h4⟩
+
+/-- **`TopPostDMX` gives `TopPostDMXP` at any `XP`** when no decoded
+invocation has a preemption point (SpecNoPre's `PreInv`): the outcome is
+not `Preempted` (`TopPostDMX.not_preempted`). -/
+theorem TopPostDMX.toPN {X XP : S → A → Fl4Spec.State Unit → Prop} {σ : Fl4Spec.State Unit} {blk call don : Bool}
+    {m : Fl4Spec.SEMonad Unit Fl4Spec.Fl4Invocation} {s : S} {res : core.result.Result Unit error.Exc × S × A}
+    (h : TopPostDMX (L := L) X σ blk call don m s res) (hnp : ∀ inv, DecOut m σ inv → ¬ NoPre.PreInv inv) :
+    TopPostDMXP (L := L) X XP σ blk call don m s res :=
+  TopPostDMX.toPne h (TopPostDMX.not_preempted (L := L) h hnp)
+
+/-- **An error outcome of `TopPostDMX` is `TopPostDMXP` at any `XP`**: no
+spec error is related to `Preempted` (`ErrRel.not_preempted`). -/
+theorem TopPostDMX.errP {X XP : S → A → Fl4Spec.State Unit → Prop} {σ : Fl4Spec.State Unit} {blk call don : Bool}
+    {m : Fl4Spec.SEMonad Unit Fl4Spec.Fl4Invocation} {s : S} {res : core.result.Result Unit error.Exc × S × A}
+    (h : ∃ e, res.1 = .Err e ∧ res.2.1 = s ∧ (∃ e', m.run σ = ({(.error e', σ)}, False) ∧ ErrRel e e') ∧
+      X res.2.1 res.2.2 σ) :
+    TopPostDMXP (L := L) X XP σ blk call don m s res := by
+  obtain ⟨e, h1, h2, ⟨e', h3, h3'⟩, h4⟩ := h
+  have hne : res.1 ≠ .Err .Preempted := by
+    rw [h1]; intro he; cases he; exact ErrRel.not_preempted h3'
+  exact Or.inl ⟨e, h1, h2, ⟨e', h3, h3'⟩, show (if res.1 = .Err .Preempted then XP res.2.1 res.2.2 σ else
+    X res.2.1 res.2.2 σ) by rw [if_neg hne]; exact h4⟩
+
+/-- **`XCap` gives `XCapP` at any `XP`** when the cap's spec decode yields
+no invocation with a preemption point (`TopPostDMX.toPN`). -/
+theorem XCap.toPN {X XP : S → A → Fl4Spec.State Unit → Prop} {s : S} {ar : A} {σ : Fl4Spec.State Unit}
+    {lbl length slot : U64} {c : capability.Cap} {blk call don fp : Bool} {buf : U64}
+    {extra : Aeneas.Std.Array obj.Slot 3#usize} {slbl : Fl4Spec.Data} {args : List Fl4Spec.Data}
+    {ci : Fl4Spec.CapRef} {sl : Fl4Spec.CslotPtr} {excaps : List (Fl4Spec.Cap × Fl4Spec.CslotPtr)}
+    {buffer : Option Fl4Spec.ObjRef} {ct : U64}
+    (h : XCap (L := L) arI X s ar σ lbl length slot c blk call don fp buf extra slbl args ci sl excaps buffer ct)
+    (hnp : ∀ inv, DecOut (specDec fp slbl args ci sl c excaps buffer) σ inv → ¬ NoPre.PreInv inv) :
+    XCapP (L := L) arI X XP s ar σ lbl length slot c blk call don fp buf extra slbl args ci sl excaps buffer ct := by
+  rcases h with h | h
+  · exact Or.inl (WP.spec_mono h fun _ hr => hr.toPN hnp)
+  · exact Or.inr h
+
+/-- **A cap other than a CNode, Untyped or Thread cap** decodes to no
+invocation with a preemption point (SpecNoPre's `decOut_noPre`). -/
+theorem specDec_noPre {fp : Bool} {slbl : Fl4Spec.Data} {args : List Fl4Spec.Data} {ci : Fl4Spec.CapRef}
+    {sl : Fl4Spec.CslotPtr} {c : capability.Cap} {excaps : List (Fl4Spec.Cap × Fl4Spec.CslotPtr)}
+    {buffer : Option Fl4Spec.ObjRef} {σ : Fl4Spec.State Unit}
+    (hc : ∀ p r gs g, c ≠ .CNode p r gs g) (hu : ∀ p sb fi dev, c ≠ .Untyped p sb fi dev) (ht : ∀ p, c ≠ .Thread p) :
+    ∀ inv, DecOut (specDec fp slbl args ci sl c excaps buffer) σ inv → ¬ NoPre.PreInv inv := by
+  intro inv h
+  refine NoPre.decOut_noPre ?_ ?_ ?_ h
+  all_goals cases c <;> first
+    | exact (hc _ _ _ _ rfl).elim | exact (hu _ _ _ _ rfl).elim | exact (ht _ rfl).elim | simp [absCap]
+
+/-- **A CNode cap at a label other than Revoke and Delete** decodes to no
+invocation with a preemption point (SpecNoPre's `dec_cnode_noPre`). -/
+theorem specDec_cnode_noPre {fp : Bool} {slbl : Fl4Spec.Data} {args : List Fl4Spec.Data} {ci : Fl4Spec.CapRef}
+    {sl : Fl4Spec.CslotPtr} {excaps : List (Fl4Spec.Cap × Fl4Spec.CslotPtr)}
+    {buffer : Option Fl4Spec.ObjRef} {σ : Fl4Spec.State Unit} {p r gs g : U64}
+    (hr : Fl4Spec.genInvocationType slbl ≠ .cnodeRevoke) (hd : Fl4Spec.genInvocationType slbl ≠ .cnodeDelete) :
+    ∀ inv, DecOut (specDec fp slbl args ci sl (.CNode p r gs g) excaps buffer) σ inv → ¬ NoPre.PreInv inv := by
+  intro inv h
+  have hO : NoPre.OkP (fun inv => ¬ NoPre.PreInv inv) (specDec fp slbl args ci sl (.CNode p r gs g) excaps buffer) := by
+    simp only [specDec, absCap, Fl4Spec.fl4DecodeInvocation, Fl4Spec.NonDetE.throwError]
+    split
+    · exact NoPre.okP_throw
+    · exact NoPre.okP_liftME' (NoPre.dec_cnode_noPre slbl args _ _ hr hd) fun _ h => h
+  exact hO σ _ h.1 inv rfl
+
+/-- **A Thread cap at a label other than the five installing ones** decodes
+to no invocation with a preemption point (SpecNoPre's `dec_thread_noPre`). -/
+theorem specDec_thread_noPre {fp : Bool} {slbl : Fl4Spec.Data} {args : List Fl4Spec.Data} {ci : Fl4Spec.CapRef}
+    {sl : Fl4Spec.CslotPtr} {excaps : List (Fl4Spec.Cap × Fl4Spec.CslotPtr)}
+    {buffer : Option Fl4Spec.ObjRef} {σ : Fl4Spec.State Unit} {p : U64}
+    (h1 : Fl4Spec.genInvocationType slbl ≠ .tcbConfigure) (h2 : Fl4Spec.genInvocationType slbl ≠ .tcbSetSchedParams)
+    (h3 : Fl4Spec.genInvocationType slbl ≠ .tcbSetTimeoutEndpoint)
+    (h4 : Fl4Spec.genInvocationType slbl ≠ .tcbSetIPCBuffer) (h5 : Fl4Spec.genInvocationType slbl ≠ .tcbSetSpace) :
+    ∀ inv, DecOut (specDec fp slbl args ci sl (.Thread p) excaps buffer) σ inv → ¬ NoPre.PreInv inv := by
+  intro inv h
+  have hO : NoPre.OkP (fun inv => ¬ NoPre.PreInv inv) (specDec fp slbl args ci sl (.Thread p) excaps buffer) := by
+    simp only [specDec, absCap, Fl4Spec.fl4DecodeInvocation, Fl4Spec.NonDetE.throwError]
+    split
+    · exact NoPre.okP_throw
+    · exact NoPre.dec_thread_noPre slbl args _ sl excaps buffer h1 h2 h3 h4 h5
+  exact hO σ _ h.1 inv rfl
+
+/-- A cap other than a CNode, Untyped or Thread cap (`True` by `trivial`
+for each concrete such cap). -/
+def NoPreKind : capability.Cap → Prop
+  | .CNode .. => False
+  | .Untyped .. => False
+  | .Thread _ => False
+  | _ => True
+
+/-- `specDec_noPre` from `NoPreKind`. -/
+theorem specDec_noPreK {fp : Bool} {slbl : Fl4Spec.Data} {args : List Fl4Spec.Data} {ci : Fl4Spec.CapRef}
+    {sl : Fl4Spec.CslotPtr} {c : capability.Cap} {excaps : List (Fl4Spec.Cap × Fl4Spec.CslotPtr)}
+    {buffer : Option Fl4Spec.ObjRef} {σ : Fl4Spec.State Unit} (hk : NoPreKind c) :
+    ∀ inv, DecOut (specDec fp slbl args ci sl c excaps buffer) σ inv → ¬ NoPre.PreInv inv :=
+  specDec_noPre (fun _ _ _ _ e => by subst e; exact hk) (fun _ _ _ _ e => by subst e; exact hk)
+    (fun _ e => by subst e; exact hk)
 
 set_option maxHeartbeats 4000000 in
 /-- **A Delete's or Revoke's outcome at `J`**: from `PInvPostW` at `EJ`
@@ -180,11 +307,11 @@ theorem cn_del_topJ {s : S} {ar : A} {σ : Fl4Spec.State Unit} (J : JAtZ (L := L
           hX'.rel.2.2.1, hX'.rel.2.2.2.1, hX'.rel.2.2.2.2.1⟩, ?_⟩
       simp only [reduceCtorEq, if_false]
       exact ⟨_, H, Cs, Ac', Lst', D', J'⟩
-    · obtain ⟨-, s0, a0, σ0, ⟨V, Ac', Lst', D', J0, -⟩, hpp, hspp, hDom, hMO⟩ := hE'
+    · obtain ⟨-, s0, a0, σ0, ⟨V, Ac', Lst', D', J0, -, hns0, -, hp00⟩, hpp, hspp, hDom, hMO⟩ := hE'
       refine Or.inr ⟨_, DecOut.of_eq (run_liftME_ok hrun), σ1, hst, (.error (), σ'),
         mem_bindE_err hx, ⟨Z.th, G', Or.inr ⟨rfl, rfl⟩, J.xtop.rel.1, hCR', hFI', hDom, hMO⟩, ?_⟩
       simp only [if_true]
-      exact Or.inr ⟨s0, a0, σ0, ⟨_, H, Cs, Ac', Lst', D', J0⟩, hpp, hspp⟩
+      exact ⟨s0, a0, σ0, ⟨⟨_, H, Cs, Ac', Lst', D', J0⟩, hns0, hp00⟩, hpp, hspp⟩
 
 set_option maxHeartbeats 4000000 in
 /-- **`XCap` at `JAt` at the Revoke label** (25): `cnode_revoke_refinesW` at

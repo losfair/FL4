@@ -844,11 +844,11 @@ theorem reg_entry {Ac : Set U64} {s : S} {t r v : U64} (h : EntryInv st T Cs Ω 
   rw [n.2.2, f.sc (L.curW s) h0.curT, f.csc]; exact hcsc
 
 /-- seL4 `handleUnknownSyscall`'s fault path (`unknown_syscall_fault`). -/
-theorem syscall.unknown_syscall_fault.entry (hA : P0.ArchTotal ar) (hNt : ∀ n ∈ Nt, H n = some .ntfn)
+theorem syscall.unknown_syscall_fault_old.entry (hA : P0.ArchTotal ar) (hNt : ∀ n ∈ Nt, H n = some .ntfn)
     (E : EntryHyps0 st ar T Cs Ω H Sg Rp Scs Nt Z U P3Ok) {Ac : Set U64} (s : S) (a : A) (n : U64)
     (h : EntryInv st T Cs Ω H Sg Rp Scs Nt Z Ac s) (hG : XG st T Cs Ω H Sg Scs Z P3Ok s) :
-    syscall.unknown_syscall_fault st ar s a n ⦃ s' _ => ∃ Ac', EntryInv st T Cs Ω H Sg Rp Scs Nt Z Ac' s' ⦄ := by
-  unfold syscall.unknown_syscall_fault
+    syscall.unknown_syscall_fault_old st ar s a n ⦃ s' _ => ∃ Ac', EntryInv st T Cs Ω H Sg Rp Scs Nt Z Ac' s' ⦄ := by
+  unfold syscall.unknown_syscall_fault_old
   refine WP.spec_bind (syscall.budget_ok.bxc hA E s a h hG) ?_
   rintro ⟨b, s1, a1⟩ ⟨h1, -, g1⟩
   try simp only [WP.uncurry'_pair]
@@ -887,13 +887,13 @@ theorem syscall.set_tls_base_self.entry (hA : P0.ArchTotal ar) (hNt : ∀ n ∈ 
     exact syscall.finish.entry hA hNt E s2 a1 h2
 
 /-- Native `handleUnknownSyscall`, excluding the new VMEnter transition. -/
-theorem syscall.handle_unknown_syscall.entry (hA : P0.ArchTotal ar) (hNt : ∀ n ∈ Nt, H n = some .ntfn)
+theorem syscall.handle_unknown_syscall_old.entry (hA : P0.ArchTotal ar) (hNt : ∀ n ∈ Nt, H n = some .ntfn)
     (E : EntryHyps0 st ar T Cs Ω H Sg Rp Scs Nt Z U P3Ok) {Ac : Set U64} (s : S) (a : A) (number : I64)
     (hNative : number ≠ fl4_abi.syscall.SysVMEnter) (he : EntAt st P3Ok s)
     (h : EntryInv st T Cs Ω H Sg Rp Scs Nt Z Ac s) :
-    syscall.handle_unknown_syscall st ar s a number ⦃ s' _ =>
+    syscall.handle_unknown_syscall_old st ar s a number ⦃ s' _ =>
       ∃ Ac', EntryInv st T Cs Ω H Sg Rp Scs Nt Z Ac' s' ⦄ := by
-  unfold syscall.handle_unknown_syscall
+  unfold syscall.handle_unknown_syscall_old
   step with sched.cur_thread.spec as ⟨t, et⟩
   simp only [fl4_abi.config.PRINTING, fl4_abi.config.DEBUG_BUILD, ↓reduceIte]
   split
@@ -918,16 +918,16 @@ theorem syscall.handle_unknown_syscall.entry (hA : P0.ArchTotal ar) (hNt : ∀ n
     split
     · exact syscall.set_tls_base_self.entry hA hNt E s1 a1 h1 hG1
     · step as ⟨i, _⟩
-      exact syscall.unknown_syscall_fault.entry hA hNt E s1 a1 i h1 hG1
+      exact syscall.unknown_syscall_fault_old.entry hA hNt E s1 a1 i h1 hG1
 
 /-- **Native `handle_syscall` keeps `EntryInv`**: the budget check at the entry, the
 dispatch (with `HCur` across the invocation, `HCur.step`), then `schedule`. -/
-theorem syscall.handle_syscall.entry (hA : P0.ArchTotal ar) (TX : TmoXG st ar) {Adm : PSets → Prop}
+theorem syscall.handle_syscall_old.entry (hA : P0.ArchTotal ar) (TX : TmoXG st ar) {Adm : PSets → Prop}
     (EH : ∀ σ, Adm σ → EHs st ar Adm Cs U P3Ok σ) (hσ : Adm ⟨T, Ω, H, Sg, Rp, Scs, Nt, Z⟩)
     {Ac : Set U64} (s : S) (a : A) (number : I64)
     (hNative : number ≠ fl4_abi.syscall.SysVMEnter) (hP : P3Ok s)
     (h : EntryInv st T Cs Ω H Sg Rp Scs Nt Z Ac s) :
-    syscall.handle_syscall st ar s a number ⦃ s' _ => ∃ σ', Adm σ' ∧ ∃ Ac', EntryInvs st Cs σ' Ac' s' ⦄ := by
+    syscall.handle_syscall_old st ar s a number ⦃ s' _ => ∃ σ', Adm σ' ∧ ∃ Ac', EntryInvs st Cs σ' Ac' s' ⦄ := by
   obtain ⟨E', hNt⟩ := EH _ hσ
   have E := E'.toEntryHyps0
   have W : ∀ {s : S} {a : A} {m : Result (S × A)},
@@ -935,7 +935,7 @@ theorem syscall.handle_syscall.entry (hA : P0.ArchTotal ar) (TX : TmoXG st ar) {
       m ⦃ s' _ => ∃ σ', Adm σ' ∧ ∃ Ac', EntryInvs st Cs σ' Ac' s' ⦄ := fun hm =>
     WP.spec_mono hm fun r hr => by obtain ⟨s', a'⟩ := r; obtain ⟨Ac', h'⟩ := hr; exact ⟨_, hσ, Ac', h'⟩
   have hcT : L.curW s ∈ T := h.1.choose_spec.choose_spec.curT
-  unfold syscall.handle_syscall
+  unfold syscall.handle_syscall_old
   step with sched.cur_thread.spec as ⟨t, et⟩
   have htT : t ∈ T := by rw [et]; exact hcT
   step with obj.Tcb.reg.spec as ⟨nx⟩
@@ -953,11 +953,11 @@ theorem syscall.handle_syscall.entry (hA : P0.ArchTotal ar) (TX : TmoXG st ar) {
   step as ⟨i2, _⟩
   split
   · step as ⟨i3, _⟩
-    exact W (s := s) (a := a) (syscall.unknown_syscall_fault.entry hA hNt E s1 a i3 h1 he1.xg)
+    exact W (s := s) (a := a) (syscall.unknown_syscall_fault_old.entry hA hNt E s1 a i3 h1 he1.xg)
   split
-  · exact W (s := s) (a := a) (syscall.handle_unknown_syscall.entry hA hNt E s1 a number hNative he1 h1)
+  · exact W (s := s) (a := a) (syscall.handle_unknown_syscall_old.entry hA hNt E s1 a number hNative he1 h1)
   split
-  · exact W (s := s) (a := a) (syscall.handle_unknown_syscall.entry hA hNt E s1 a number hNative he1 h1)
+  · exact W (s := s) (a := a) (syscall.handle_unknown_syscall_old.entry hA hNt E s1 a number hNative he1 h1)
   have hcA1 : L.cscW s1 ∈ Ac := h1.2.2.2.2.2.1
   have hN1 : NodePlaced st T s1 (L.cpu s1) :=
     (h1.1.choose_spec.choose_spec).nodes _ h1.1.choose_spec.choose_spec.cur
@@ -1009,11 +1009,11 @@ theorem kernel_entry.entry (hA : P0.ArchTotal ar) (TX : TmoXG st ar) {Adm : PSet
     (EH : ∀ σ, Adm σ → EHs st ar Adm Cs U P3Ok σ) (hσ : Adm ⟨T, Ω, H, Sg, Rp, Scs, Nt, Z⟩)
     {Ac : Set U64} (s : S) (a : A) (hP : P3Ok s)
     (h : EntryInv st T Cs Ω H Sg Rp Scs Nt Z Ac s) :
-    (∀ number : I64, number ≠ fl4_abi.syscall.SysVMEnter → syscall.handle_syscall st ar s a number ⦃ s' _ =>
+    (∀ number : I64, number ≠ fl4_abi.syscall.SysVMEnter → syscall.handle_syscall_old st ar s a number ⦃ s' _ =>
       ∃ σ', Adm σ' ∧ ∃ Ac', EntryInvs st Cs σ' Ac' s' ⦄) ∧
     (∀ irq : U64, syscall.handle_interrupt_entry st ar s a irq ⦃ s' _ =>
       ∃ σ', Adm σ' ∧ ∃ Ac', EntryInvs st Cs σ' Ac' s' ⦄) :=
-  ⟨fun number hNative => syscall.handle_syscall.entry hA TX EH hσ s a number hNative hP h,
+  ⟨fun number hNative => syscall.handle_syscall_old.entry hA TX EH hσ s a number hNative hP h,
    fun irq => WP.spec_mono (syscall.handle_interrupt_entry.entry hA TX (EH _ hσ).2 (EH _ hσ).1.toEntryHyps0 s a irq hP h)
      fun r hr => by obtain ⟨s', a'⟩ := r; obtain ⟨Ac', h'⟩ := hr; exact ⟨_, hσ, Ac', h'⟩⟩
 

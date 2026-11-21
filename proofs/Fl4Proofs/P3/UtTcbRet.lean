@@ -32,6 +32,7 @@ import Fl4Proofs.P3.UtTcbRest
 import Fl4Proofs.P3.UtTcbP1
 import Fl4Proofs.P3.UtTcbSets
 import Fl4Proofs.P3.UtTcbUtc
+import Fl4Proofs.P3.UtTcbLive
 open Aeneas Aeneas.Std Result
 
 namespace Fl4Proofs.P3
@@ -1142,6 +1143,212 @@ theorem JAtZ.utTcbBodyJ {s : S} {ar : A} {σ : Fl4Spec.State Unit} (J : JAtZ (L 
       res.2.1 σ' :=
     ⟨J.bok.keep hfk, J.fcov.ipcFr hfk, J.fcap.retype hE hM hM' (fun _ => UFr.keep hfk.page)
       (fun j _ => by rw [hcj]; simp [cjOf, newCapOf, hnt, Vs.FrIn])⟩
+  -- `LiveDN` and `zD` after (UtTcbLive's `ret_liveND`; KENTRY-PLAN g2j): the new
+  -- TCBs prepended to core 0's debug list (`TcbC`), their slots empty
+  have hTb : ∀ q, H q = some .tcb → q.val + 4096 ≤ Aw ∨ Aw + win.val * 2 ^ zOf nt.val us.val ≤ q.val :=
+    fun q hq => by
+      have := hU.free q .tcb ((hJp.tcb q).2 hq); simp only [objSize] at this; omega
+  have hinj : ∀ i j, i < win.val → j < win.val → bT Aw i = bT Aw j → i = j := fun i j hi hj e => by
+    have h1 := bT_v hi hfitW
+    have h2 := bT_v hj hfitW
+    rw [e] at h1; omega
+  have hnT : ∀ x ∈ newL Aw win.val, x ∉ P1.Heap.tcbs H := fun x hx hT => by
+    obtain ⟨j, hj, rfl⟩ := mem_newL.1 hx
+    have h1 := bT_v hj hfitW
+    have : (j + 1) * 4096 ≤ win.val * 4096 := Nat.mul_le_mul_right _ hj
+    rcases hTb _ hT with h | h <;> rw [h1] at h <;> (try rw [hk4] at h) <;> omega
+  have hTH' : P1.Heap.tcbs H' = P1.Heap.tcbs H ∪ {x | x ∈ newL Aw win.val} := by
+    ext q
+    simp only [P1.Heap.tcbs, Set.mem_union, Set.mem_setOf_eq, mem_newL]
+    rw [hout' q]
+    by_cases hn : NewAt Aw (2 ^ zOf nt.val us.val) win.val q ∧ (some HKind.tcb).isSome
+    · rw [if_pos hn]
+      obtain ⟨⟨j, hj, hq⟩, -⟩ := hn
+      exact ⟨fun _ => Or.inr ⟨j, hj, UScalar.eq_of_val_eq (by rw [bT_v hj hfitW, hq, hk4])⟩, fun _ => rfl⟩
+    · rw [if_neg hn]
+      have hnn : ¬ ∃ j, j < win.val ∧ q = bT Aw j := fun ⟨j, hj, e⟩ =>
+        hn ⟨⟨j, hj, by rw [e, bT_v hj hfitW, hk4]⟩, rfl⟩
+      simp only [hnn, or_false]
+      constructor
+      · intro h
+        split_ifs at h with h1
+        exact h
+      · intro h
+        rw [if_neg]
+        · exact h
+        rintro ⟨kd, hq, hm⟩
+        rw [h] at hq; cases hq
+        unfold MeetsR at hm
+        simp only [HKind.bits] at hm
+        have := hTb q h; omega
+  -- the debug words outside `DW` and `a2` kept
+  have hwinD : ∀ b : U64, Aw ≤ b.val → b.val < Aw + win.val * 4096 → ¬ P1.DbgW st (P1.Heap.tcbs H) Cs s b :=
+    fun b g1 g2 => J.notDbg' (fun q hq => by
+        have := hTb q hq; rw [hk4] at this; show b.val < q.val ∨ q.val + 4096 ≤ b.val; omega)
+      (fun c hc => by rcases k2 c hc with h | h <;> omega)
+  have hkeepW : ∀ b, P1.DbgW st (P1.Heap.tcbs H) Cs s b → b ≠ DW → b ≠ a2 → L.mem res.2.1 b = L.mem s b :=
+    fun b hb h1 h2 => hwT.2.2 b (P1.dbgW_aligned J.blk hb) (fun h => by
+      rcases h with h | ⟨g1, g2⟩ | h | h
+      · exact J.inSlot_notDbg h hb
+      · exact hwinD b g1 g2 hb
+      · exact h1 h
+      · exact h2 h)
+  obtain ⟨⟨Qb, Rb, hqb⟩, -⟩ := J.blk
+  have hTP : P1.TcbPlaced (P1.Heap.tcbs H) := hqb.tcbs
+  have hDA := dbgApart_of (L := L) (Cs := Cs) hTP (fun c hc => P1.TInv.nodes J.blk c hc)
+  obtain ⟨hLv0, ⟨lst, hDW0⟩, -⟩ := J.live
+  have hc00 : (0#u64 : U64) ∈ Cs := J.kern.cs0
+  have hh0l : h0 = (lst 0#u64).headD 0#u64 := hDW0.head _ hc00
+  have hTe : Z.T = P1.Heap.tcbs H := J.tcbs_eq.1
+  have ha2 : a2 = DW ∨ (h0 ≠ 0#u64 ∧ a2 = P1.dpA h0) := by
+    by_cases hz : h0 = 0#u64
+    · left; show (if h0 = 0#u64 then DW else P1.dpA h0) = DW; rw [if_pos hz]
+    · right; exact ⟨hz, by show (if h0 = 0#u64 then DW else P1.dpA h0) = _; rw [if_neg hz]⟩
+  have hh0T'' : h0 ≠ 0#u64 → h0 ∈ P1.Heap.tcbs H := fun hne => by rw [← hTe]; exact hh0T hne
+  have hdnK : ∀ y ∈ P1.Heap.tcbs H, L.mem res.2.1 (P1.dnA y) = L.mem s (P1.dnA y) := fun y hy =>
+    hkeepW _ (Or.inl ⟨y, hy, Or.inl rfl⟩) (fun e => hDA.hd_dn 0#u64 hc00 y hy e.symm) (fun e => by
+      rcases ha2 with e2 | ⟨hne, e2⟩
+      · exact hDA.hd_dn 0#u64 hc00 y hy (by rw [e, e2, hDW])
+      · exact hDA.dn_dp y hy h0 (hh0T'' hne) (e.trans e2))
+  have hdpK : ∀ y ∈ P1.Heap.tcbs H, (lst 0#u64 = [] ∨ y ≠ (lst 0#u64).headD 0#u64) →
+      L.mem res.2.1 (P1.dpA y) = L.mem s (P1.dpA y) := fun y hy hyh =>
+    hkeepW _ (Or.inl ⟨y, hy, Or.inr rfl⟩) (fun e => hDA.hd_dp 0#u64 hc00 y hy e.symm) (fun e => by
+      rcases ha2 with e2 | ⟨hne, e2⟩
+      · exact hDA.hd_dp 0#u64 hc00 y hy (by rw [e, e2, hDW])
+      · have hy0 : y = h0 := hDA.dp_inj y hy h0 (hh0T'' hne) (e.trans e2)
+        rcases hyh with hl | hl
+        · rw [hh0l, hl] at hne; exact hne rfl
+        · exact hl (hy0.trans hh0l))
+  have hhdK : ∀ c ∈ Cs, c ≠ 0#u64 → L.mem res.2.1 (dbgHd (L := L) s c) = L.mem s (dbgHd (L := L) s c) :=
+    fun c hc hc0' => hkeepW _ (Or.inr ⟨c, hc, rfl⟩) (fun e => by
+        have h1 := P1.nodeAt_val (P1.TInv.nodes J.blk c hc) (off := layout.node.DEBUG_TCBS)
+          (by simp [layout.node.DEBUG_TCBS])
+        have h2 := P1.nodeAt_val (P1.TInv.nodes J.blk 0#u64 hc00) (off := layout.node.DEBUG_TCBS)
+          (by simp [layout.node.DEBUG_TCBS])
+        have e' : (L.nodeAt s c layout.node.DEBUG_TCBS).val = DW.val := congrArg UScalar.val e
+        rw [h1, hDW, h2] at e'
+        have hnb : ∀ c : U64, L.nodeBase s c = (L.ksb s).val + 13568 + c.val * 4288 := fun _ => rfl
+        rw [hnb, hnb] at e'
+        have h0v : (0#u64 : U64).val = 0 := rfl
+        rw [h0v] at e'
+        have hcv : c.val = 0 := by omega
+        exact hc0' (UScalar.eq_of_val_eq (by rw [hcv]; rfl)))
+      (fun e => by
+        rcases ha2 with e2 | ⟨hne, e2⟩
+        · rw [e2] at e
+          have h1 := P1.nodeAt_val (P1.TInv.nodes J.blk c hc) (off := layout.node.DEBUG_TCBS)
+            (by simp [layout.node.DEBUG_TCBS])
+          have h2 := P1.nodeAt_val (P1.TInv.nodes J.blk 0#u64 hc00) (off := layout.node.DEBUG_TCBS)
+            (by simp [layout.node.DEBUG_TCBS])
+          have e' : (L.nodeAt s c layout.node.DEBUG_TCBS).val = DW.val := congrArg UScalar.val e
+          rw [h1, hDW, h2] at e'
+          have hnb : ∀ c : U64, L.nodeBase s c = (L.ksb s).val + 13568 + c.val * 4288 := fun _ => rfl
+          rw [hnb, hnb] at e'
+          have h0v : (0#u64 : U64).val = 0 := rfl
+          rw [h0v] at e'
+          have hcv : c.val = 0 := by omega
+          exact hc0' (UScalar.eq_of_val_eq (by rw [hcv]; rfl))
+        · exact hDA.hd_dp c hc h0 (hh0T'' hne) (e.trans e2))
+  -- affinities: XTopAt's lists before and after
+  obtain ⟨Qa, Ra, hca, -⟩ := J.xtop.fin.1.1.1.lists
+  obtain ⟨Qb', Rb', hcb, -⟩ := hXT.fin.1.1.1.lists
+  have hDW1 : DbgWFL (P1.Heap.tcbs H ∪ {x | x ∈ newL Aw win.val}) Cs (L.mem res.2.1) (dbgHd (L := L) s)
+      (Function.update lst 0#u64 (newL Aw win.val ++ lst 0#u64)) := by
+    refine hDW0.prepend hc00 (newL Aw win.val) (nodup_newL hinj) hnT (fun h => ?_) ?_ hhdK (fun x hx => ?_)
+      (fun x hx => ?_) (fun x hx => ?_) hdnK hdpK (fun hne => ?_) (fun y hy => ?_)
+    · obtain ⟨j, hj, e⟩ := mem_newL.1 h
+      have := bT_v hj hfitW; rw [← e] at this; simp at this; omega
+    · show L.mem res.2.1 DW = _
+      rw [hDWres, headD_newL_append, if_neg (by have := hctx.window.1; omega)]
+    · obtain ⟨j, hj, rfl⟩ := mem_newL.1 hx
+      rw [nextIn_newL hinj _ hj, ← hh0l]
+      have := hTC.2.2.1 j hj
+      exact this
+    · obtain ⟨j, hj, rfl⟩ := mem_newL.1 hx
+      rw [prevA_newL hinj _ hj]
+      by_cases hj1 : j + 1 < win.val
+      · rw [if_pos hj1]; exact hTC.2.2.2.1 j hj1
+      · rw [if_neg hj1]; exact hTC.2.2.2.2.1 j (by omega)
+    · obtain ⟨j, hj, rfl⟩ := mem_newL.1 hx
+      have h1 := hcb.aff (bT Aw j) (Or.inr ⟨j, hj, by rw [bT_v hj hfitW, hk4]⟩)
+      rw [h1]; exact hc0
+    · have hh0 : h0 ≠ 0#u64 := by
+        rw [hh0l]; intro e
+        cases e2 : lst 0#u64 with
+        | nil => exact hne e2
+        | cons a r =>
+          rw [e2] at e; simp only [List.headD_cons] at e
+          exact hDW0.zero _ hc00 (by rw [e2, ← e]; exact List.mem_cons_self ..)
+      have hn0 : (lst 0#u64).headD 0#u64 ∉ newL Aw win.val := fun h => hnT _ h (by
+        rw [← hh0l]; exact hh0T'' hh0)
+      rw [prevA_newL_append hn0, if_neg (by have := hctx.window.1; omega), ← hh0l]
+      cases e2 : lst 0#u64 with
+      | nil => exact absurd e2 hne
+      | cons a r =>
+        have ha : a = h0 := by rw [hh0l, e2, List.headD_cons]
+        rw [← ha, show prevA (bT Aw 0) (a :: r) a = bT Aw 0 by simp [prevA], ha]
+        exact hTC.2.2.2.2.2.1 (by have := hctx.window.1; omega) hh0
+    · have h1 := hcb.aff y (Or.inl (by rw [hTe]; exact hy))
+      have h2 := hca.aff y (by rw [hTe]; exact hy)
+      rw [h1, h2]
+  have hDWres' : DbgWF (P1.Heap.tcbs H') Cs (L.mem res.2.1) (dbgHd (L := L) res.2.1) :=
+    ⟨Function.update lst 0#u64 (newL Aw win.val ++ lst 0#u64), by rw [hTH', dbgHd_of_ksb hksR]; exact hDW1⟩
+  -- the debug walk's TCBs after have thread caps
+  have hidS : σ'.idleThread = σ.idleThread := hC2.idle.trans hidB
+  have hdbgT : ∀ n, dbgNth (L.mem res.2.1) n (dbgHead (L := L) res.2.1) ≠ 0#u64 →
+      (dbgNth (L.mem res.2.1) n (dbgHead (L := L) res.2.1)).bv ≠ σ'.idleThread →
+      ∃ y ∈ G'.chains.flatten, capV (L.mem res.2.1) y = .Thread (dbgNth (L.mem res.2.1) n (dbgHead (L := L) res.2.1)) := by
+    intro n hn hni
+    have hDW2 : DbgWFL (P1.Heap.tcbs H ∪ {x | x ∈ newL Aw win.val}) Cs (L.mem res.2.1) (dbgHd (L := L) res.2.1)
+        (Function.update lst 0#u64 (newL Aw win.val ++ lst 0#u64)) := by rw [dbgHd_of_ksb hksR]; exact hDW1
+    have hm : dbgNth (L.mem res.2.1) n (dbgHead (L := L) res.2.1) ∈ newL Aw win.val ++ lst 0#u64 := by
+      have := (dbgNth_mem_wf hDW2 hc00 n).resolve_left hn
+      rw [Function.update_self] at this
+      exact this
+    rcases List.mem_append.1 hm with h | h
+    · obtain ⟨j, hj, e⟩ := mem_newL.1 h
+      refine ⟨dslot j, hE.newm j hj, ?_⟩
+      rw [hE.newc j hj, e, hcj, hk4]
+      simp [cjOf, newCapOf, hnt, bT]
+    · obtain ⟨i, hi, e⟩ := List.mem_iff_getElem.1 h
+      have hni0 : dbgNth (L.mem s) i (dbgHead (L := L) s) = (lst 0#u64)[i] := dbgNth_getElem_wf hDW0 hc00 i hi
+      have hx0 : (lst 0#u64)[i] ≠ 0#u64 := fun h0' => by
+        have hm := List.getElem_mem hi
+        rw [h0'] at hm
+        exact hDW0.zero 0#u64 hc00 hm
+      obtain ⟨y, hyG, hyc⟩ := hLv0.dbg i (by rw [hni0]; exact hx0) (by rw [hni0, e, ← hidS]; exact hni)
+      rw [hni0, e] at hyc
+      have hyS : IsSlot Z.th y := ((hM.members y).1 hyG).1
+      have hyx : y ≠ cslotAddr (pp.bv, idx) := fun h' => by rw [h', capV_of_capAt hcap] at hyc; cases hyc
+      have hyW : ∀ d ∈ windowSlots dest r off.val win.val, y ≠ cslotAddr d := fun d hd h' => by
+        rw [h', capV_of_capAt (hDn0 d hd)] at hyc; cases hyc
+      have hkeep := hcapK y hyS hyx hyW
+      refine ⟨y, (hM'.members y).2 ⟨hthM y hyS, _, capAt_capV _ _, by rw [hkeep, hyc]; exact fun h' => by cases h'⟩, ?_⟩
+      rw [hkeep, hyc]
+  have hnewZ : ∀ q ∈ ZTcb (L := L) Z.th s,
+      q ∈ {q | q ∈ D ∧ ¬ NewQ Aw (2 ^ zOf nt.val us.val) win.val cj q} :=
+    fun q hq => ⟨J.zD q hq, not_newQ_of_off hE.k1 (hTb q (J.zH.1 q (J.thT q (J.ztcb_tcb hq))))⟩
+  have hWd : ∀ sl ∈ windowSlots dest r off.val win.val, ∃ p r', sl.1 = p.bv ∧ Z.th p = some (.cnode r') ∧
+      sl.2.length = r' ∧ DestCap Z.th (L.mem s) p := fun sl hsl => by
+    obtain ⟨-, i, -, -, rfl⟩ := hslA sl hsl
+    obtain ⟨-, -, -, y, rr, gs, g, hy, hcy⟩ := hctx.cnode
+    exact ⟨dest, r, rfl, hctx.cnode.1, natToCref_length _ _ (by have := hctx.cnode.2.1; omega),
+      y, rr, gs, g, hy, capV_of_capAt hcy⟩
+  have hold : ∀ q kd, Z.th q = some kd → th' q = some kd := fun q kd h => hThX.mono hk0' hposZ h
+  have hNE : NewEmpty Z.th th' (L.mem res.2.1) σ' := fun q hq i hqi => by
+    refine ⟨newSlot_nullT hThX4 hk0 hP' hWZ4 hfitW hqi hq, fun x hx => ?_⟩
+    have hnA := not_absSlot_new hP' hold hq hqi hx
+    by_cases hxW : x ∈ windowSlots dest r off.val win.val
+    · exact absurd (hslA x hxW).1 hnA
+    rw [horgK x hxW]
+    cases ho : σ.isOriginalCap x
+    · rfl
+    · exact absurd (J.kern.orig x ho) hnA
+  obtain ⟨hLvN, hzDN⟩ := J.ret_liveND hXT rfl hold hNE hksR hDWres' hdbgT
+    (fun q hq => hjc'.dead q (hnewZ q hq)) hnewZ hE hcjZ
+    (windowSlots dest r off.val win.val) hWd hAs.isSlot hcapK (fun d hd => capV_of_capAt (hDn0 d hd))
+    (fun d hd => invokeUntyped_cdt_slots _ _ _ _ _ _ _ _ _ σ (.ok (), σ') (by rw [hrun]; rfl) rfl d hd)
+    horgK
   have JZ := J.add_frameT (Z' := { Z with th := th', G := G', T := Z.T ∪ winSet Aw (2 ^ zOf nt.val us.val) win.val })
     rfl rfl hwT.1 hXT hCs hJR hKs'
     (fun t0 ht0 => by
@@ -1149,6 +1356,20 @@ theorem JAtZ.utTcbBodyJ {s : S} {ar : A} {σ : Fl4Spec.State Unit} (J : JAtZ (L 
       · exact Or.inl (J.thT t0 h)
       · exact Or.inr h)
     (thk_grow hThX hksk J.thk) (DelBound.of_placed hP') hintL hIp' hnk' hcov' hobj' hzH' hset' hscC' hvc hbf
+    ⟨J.ext.nat.retype hE hM hM' (fun j _ => by rw [hcj]; exact Vs.nativeCap_newCapOf _ _ _ _), fun t0 ht0 => by
+      rcases hThX.casesI ht0 with h | ⟨⟨i, hi, hq⟩, -⟩
+      · exact J.ext.vkeep (J.vkeep_of hwT fun b hb u hu e => by
+          rcases hb with hb | hb
+          · exact J.inSlot_nv hb u hu e
+          · have hv := Sched.tVcpuA_val J.ip.e.tcb hu
+            rcases hWT b hb u hu with h' | h' | h' <;> rw [e, hv] at h' <;> omega) t0 h
+      · try simp only [hk4] at hq
+        have e : t0 = bT Aw i := UScalar.eq_of_val_eq (by rw [bT_v hi hfitW]; omega)
+        subst e
+        have hv : (tVcpuA (bT Aw i)).val = (bT Aw i).val + 3664 := Notif.tfield_val (hTB i hi) (by simp)
+        have a := (hTB i hi).align
+        exact winZero_vcpu hWZ4 hfitW hi _ (by show _ % 8 = 0; rw [hv]; omega) hv⟩
+    hLvN hzDN
   refine ⟨σ', hrun, hok, ⟨th', G', ?_⟩, ?_⟩
   · obtain ⟨hPl, hCR, hFI, hD, hMO, -, -⟩ := hX'.rel
     exact ⟨hPl, hCR, hFI, hD, hMO⟩

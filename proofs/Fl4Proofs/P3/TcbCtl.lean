@@ -88,7 +88,7 @@ theorem newCapOK_self {th : TypedHeap} {mem : U64 → U64} {σ : Fl4Spec.State U
   have hA : AbsSlot th sl := ⟨ps, h1, Or.inl hps⟩
   refine ⟨ps, _, hps, h1, rfl, ?_, hV.abs hA (capAt_capV _ _), decode_encWf (w0 := mem (cslotAddr sl))
     (w1 := mem (core.num.U64.wrapping_add (cslotAddr sl) 8#u64)) ?_, (fun h => by rw [hnf] at h; cases h),
-    rfl, Or.inl rfl, rfl, fun _ _ _ _ _ h => h, id⟩
+    rfl, Or.inl rfl, rfl, fun _ _ _ _ _ h => h, id, id⟩
   · rw [e]; exact hrel.1
   · have := capAt_capV mem (cslotAddr sl); unfold capAt at this; exact this
 
@@ -693,12 +693,13 @@ theorem tcb_set_ipc_refinesW [Fl4Proofs.P1.PlainStore st] (W : S → A → Fl4Sp
         obtain ⟨rfl, m0, ep0, a0, va0, hc0⟩ := derive_frame_inv (fun h => ⟨_, hnc e2 ⟨ps, hps1, Or.inl hps⟩ rfl h⟩) hr
         have hcvc : CapValid th (capability.Cap.Frame q sz rr false m false aa va) := hcv' th hcv0
         have hok : NewCapOK th (L.mem s1) (.Frame q sz rr false m false aa va) e2 := by
-          refine ⟨ps, _, hps, hps1, rfl, hwf', hcvc, hev', fun _ => frame_so_refl hcvc, ?_, ?_, ?_, ?_, ?_⟩
+          refine ⟨ps, _, hps, hps1, rfl, hwf', hcvc, hev', fun _ => frame_so_refl hcvc, ?_, ?_, ?_, ?_, ?_, ?_⟩
           · rw [hc1, hc0]; rfl
           · rw [hc1, hc0]; exact Or.inl rfl
           · rw [hc1, hc0]; rfl
           · rw [hc1]; exact derive_vcap hr
           · exact fun h => False.elim h
+          · exact fun _ => by simp [Vs.NativeCap]
         have hdec : (Fl4Spec.NonDetE.liftME Fl4Spec.Fl4Invocation.invokeTCB
             (Fl4Spec.decodeSetIpcBuffer (Z := Unit) ((y0 :: rest).map UScalar.bv) (.threadCap p.bv) ssl
               excaps)).run σ =
@@ -1045,13 +1046,14 @@ theorem roots_rel (th : TypedHeap) (hP : Placed th) (s : S) (σ : Fl4Spec.State 
         have hokc : NewCapOK th (L.mem s) c' ec.2 := by
           obtain ⟨q, r, gs, g, rfl⟩ := cnode_of_abs hcn'
           obtain ⟨gs0, g0, hc0⟩ := hcn _ _ _ _ rfl
-          refine ⟨psc, _, hpsc, hpsc1, rfl, hw', hcv' th hvc, he', fun h => (by cases h), ?_, ?_, ?_, ?_, ?_⟩ <;>
+          refine ⟨psc, _, hpsc, hpsc1, rfl, hw', hcv' th hvc, he', fun h => (by cases h), ?_, ?_, ?_, ?_, ?_, ?_⟩ <;>
             rw [hc0]
           · rfl
           · exact Or.inl rfl
           · rfl
           · exact fun _ _ _ _ _ _ => trivial
           · exact fun h => False.elim h
+          · exact fun _ => trivial
         cases rv with
         | Err e =>
           cases rv' with
@@ -1075,11 +1077,12 @@ theorem roots_rel (th : TypedHeap) (hP : Placed th) (s : S) (σ : Fl4Spec.State 
               have hokv : NewCapOK th (L.mem s) v' ev.2 := by
                 obtain ⟨q, aa, rfl⟩ := pml4_of_abs hvr
                 have hv0 := hpm _ _ _ rfl
-                refine ⟨psv, _, hpsv, hpsv1, rfl, hwv', hcvv' th hvv, hev', fun h => (by cases h), ?_, ?_, ?_, ?_, ?_⟩ <;>
+                refine ⟨psv, _, hpsv, hpsv1, rfl, hwv', hcvv' th hvv, hev', fun h => (by cases h), ?_, ?_, ?_, ?_, ?_, ?_⟩ <;>
                   rw [hv0]
                 · exact Or.inl rfl
                 · exact fun _ _ _ _ _ h => h
                 · exact fun h => False.elim h
+                · exact id
               exact ⟨_, rfl, Or.inl ⟨c', v', rfl, hcv, hokc, hokv⟩⟩
             · simp only [hvr, decide_false, Bool.false_eq_true, ↓reduceIte, error.illegal] at hcv ⊢
               exact ⟨_, rfl, Or.inr ⟨_, .illegalOperation, rfl, by rw [hcv]; exact ill _, Or.inl trivial⟩⟩
@@ -1433,8 +1436,8 @@ theorem buf_rel (th : TypedHeap) (s : S) (σ : Fl4Spec.State Unit) (G : MdbGhost
           exact ⟨⟨q, sz, rr, m, aa, va, rfl⟩, Vs.check_valid_ipc_buffer_al hrc'⟩
         · intro c sl h
           cases h
-          refine ⟨ps, _, hps, hps1, rfl, hwf', hcvc, hev', fun _ => frame_so_refl hcvc, ?_, ?_, ?_, ?_, ?_⟩ <;>
-            rw [hc0e] <;> first | rfl | exact Or.inl rfl | exact derive_vcap hr | exact fun h => False.elim h
+          refine ⟨ps, _, hps, hps1, rfl, hwf', hcvc, hev', fun _ => frame_so_refl hcvc, ?_, ?_, ?_, ?_, ?_, ?_⟩ <;>
+            rw [hc0e] <;> first | rfl | exact Or.inl rfl | exact derive_vcap hr | exact fun h => False.elim h | exact fun _ => by simp [Vs.NativeCap]
       · simp only [core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual,
           core.convert.FromSame.from, bind_tc_ok, bind_ok]
         exact ⟨_, rfl, Or.inr ⟨er, er', rfl, (run_bind_ok hr' _).trans (run_bind_error hck _), ErrRel.of_map hmer⟩⟩

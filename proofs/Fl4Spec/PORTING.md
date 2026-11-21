@@ -414,13 +414,23 @@ details.
   to l4v's decoder and invocation, unchanged.
   `fl4HandleInvocation` is `handle_invocation` (Syscall_A) with this
   dispatcher, unchanged otherwise.
+- **`Ext/Timer`: FL4's TCB timers** (l4h 0003, `TCBSetTimer`). At every
+  kernel exit FL4's `sched::schedule` first fires the expired TCB timers
+  (`sched::awaken` → `timer::fire`, at most 32 per entry): each signals its
+  thread's bound notification, if any, with the timer's badge, and sets the
+  reprogram flag. l4v has no such timers. The timer tree is not modelled (as
+  for `TCBSetTimer`), so `fl4Awaken` is nondeterministic: any finite
+  sequence (`fl4TimerFires`) of fired timers (`fl4TimerFire`: no signal or
+  one l4v `send_signal` (`fl4TimerSignal`), then `reprogram_timer := true`).
+  It does not fail. `Ext/Entry`'s `fl4CallKernel` runs it before `schedule`.
 - **`Ext/Entry`: the kernel entry with FL4's dispatcher.**
   `fl4HandleEvent rep` is `handle_event` (Syscall_A) with
   `handle_invocation` replaced by `fl4HandleInvocationR rep` (the
   substitution of `Ext/Invocation` and `Ext/ReplyError` one level up); its
   `match` on the syscall is `fl4HandleSyscall rep`, and the non-syscall
   events are l4v's (`fl4HandleEvent_other`, by `rfl`). `fl4CallKernel rep`
-  is `call_kernel` with `fl4HandleEvent rep`. `fl4KernelEntrySyscall rep c`
+  is `call_kernel` with `fl4HandleEvent rep` and `Ext/Timer`'s `fl4Awaken`
+  before `schedule`. `fl4KernelEntrySyscall rep c`
   is the syscall entry: the current thread's `FaultIP` register :=
   `NextIP - 2` (`fl4SyscallFaultIP`; the `syscall` instruction is two bytes),
   then `fl4CallKernel rep (.syscallEvent c)`. l4v's `call_kernel` has no
@@ -430,6 +440,18 @@ details.
   register matters because `activate_thread` restarts a `Restart` thread at
   `FaultIP` (`getRestartPC`). FL4's `TRAP_SYSCALLS` flag (l4h) and its
   debug/TLS syscalls (`handle_unknown_syscall`) have no branch here yet.
+- **`Ext/Virt*`: x86 virtualization** (VT-x and AMD-V, one spec with the
+  backend `virtKind` as a platform constant; design and proof plan in
+  `proofs/VIRT-PLAN.md`). `VirtBackend`: the backend and the
+  underspecified capability words; `VirtFields`: per-backend VCPU field
+  tables with readable / writable / guest-changed classes; `VirtSanitize`:
+  FL4's sanitize policy as pure functions; `VirtState`: the abstract VCPU
+  (`VcpuState`), the extension state `VirtExt` and `VState Z`, VCPU
+  initialisation, VMEnter staging and its report; `VirtEpt`: the guest
+  page-table entry format and walk; `VirtGuest`: the guest-execution
+  oracle `GuestStep` (l4v `do_user_op` style), the trusted layer's [P]
+  contract shapes and the P3x statement shape. The invocations follow in
+  later modules.
 - **Invocation label numbers** (a deliberate deviation from l4v). l4v's
   `invocation_type` numbers labels by the Haskell `Enum` of
   `invocation_label` (l4v's labels only, generic then arch). FL4's ABI

@@ -25,11 +25,13 @@ noncomputable section
 section
 variable {S : Type} {st : machine.Store S} [L : P1.LawfulStore st] {A : Type} {arI : machine.Arch A}
 
-/-- **Core 0's debug-list successor of the head covered by a cap** (the
-fact `JAtZ.dbgRemoveJ` reads, `JThreadFinHyps.utTcb`'s conclusion). -/
-abbrev DbgSuccCov (T : Set U64) (G : MdbGhost) (s : S) : Prop :=
+/-- **Core 0's debug-list successor of the head covered by a cap**, unless
+it is `w` (the idle word: the fact `JAtZ.dbgRemoveJI` reads,
+`JThreadFinHyps.utTcb`'s conclusion with the idle thread exempt). -/
+abbrev DbgSuccCov (T : Set U64) (G : MdbGhost) (w : U64) (s : S) : Prop :=
   L.mem s (L.nodeAt s 0#u64 layout.node.DEBUG_TCBS) ∈ T →
     L.mem s (P1.dnA (L.mem s (L.nodeAt s 0#u64 layout.node.DEBUG_TCBS))) ≠ 0#u64 →
+    L.mem s (P1.dnA (L.mem s (L.nodeAt s 0#u64 layout.node.DEBUG_TCBS))) ≠ w →
     Covered (L.mem s) G (L.mem s (P1.dnA (L.mem s (L.nodeAt s 0#u64 layout.node.DEBUG_TCBS)))).val
       ((L.mem s (P1.dnA (L.mem s (L.nodeAt s 0#u64 layout.node.DEBUG_TCBS)))).val + 1)
 
@@ -44,7 +46,7 @@ variable {AR : A → Fl4Spec.Cr3 → Prop} {Z : XSets} {H : P1.Heap} {Cs Ac : Se
 docstring). -/
 theorem JAtZ.dbgSuccCov_of_live (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ)
     (hL : LiveJ (L := L) Z.th H Z.G s σ) {s' : S} (f : FootH (st := st) H Cs (P1.EH H) s s') :
-    DbgSuccCov (L := L) Z.T Z.G s' := by
+    DbgSuccCov (L := L) Z.T Z.G (L.idleW s) s' := by
   have hTe : Z.T = P1.Heap.tcbs H := J.tcbs_eq.1
   have hK : P1.DbgKeep st (P1.Heap.tcbs H) Cs s s' := P1.Foot.dbgKeep J.blk (fun _ h => h) f
   have hcw := P1.footD_keeps_capw J.blk (le_refl _) f.d
@@ -55,13 +57,14 @@ theorem JAtZ.dbgSuccCov_of_live (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ
     rw [nodeAt_of_ksb hK.1]
     exact hK.2 _ (Or.inr ⟨0#u64, J.kern.cs0, rfl⟩)
   show dbgHead (L := L) s' ∈ Z.T → L.mem s' (P1.dnA (dbgHead (L := L) s')) ≠ 0#u64 →
+    L.mem s' (P1.dnA (dbgHead (L := L) s')) ≠ L.idleW s →
     Covered (L.mem s') Z.G (L.mem s' (P1.dnA (dbgHead (L := L) s'))).val
       ((L.mem s' (P1.dnA (dbgHead (L := L) s'))).val + 1)
   rw [hhd]
-  intro hT hn
+  intro hT hn hni
   have hdn : L.mem s' (P1.dnA (dbgHead (L := L) s)) = L.mem s (P1.dnA (dbgHead (L := L) s)) :=
     hK.2 _ (Or.inl ⟨_, by rw [← hTe]; exact hT, Or.inl rfl⟩)
-  rw [hdn] at hn ⊢
+  rw [hdn] at hn hni ⊢
   have h0 : dbgHead (L := L) s ≠ 0#u64 := by
     intro e
     have h1 := J.zH.1 _ hT
@@ -69,12 +72,109 @@ theorem JAtZ.dbgSuccCov_of_live (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ
     cases h1
   have e1 : dbgNth (L.mem s) 1 (dbgHead (L := L) s) = L.mem s (P1.dnA (dbgHead (L := L) s)) := by
     simp only [dbgNth, if_neg h0]
-  obtain ⟨y, hy, hT'⟩ := hL.dbg 1 (by rw [e1]; exact hn)
+  obtain ⟨y, hy, hT'⟩ := hL.dbg 1 (by rw [e1]; exact hn) (by rw [e1]; exact J.bv_ne_idleThread hni)
   rw [e1] at hT'
   obtain ⟨y', hy', h1, h2, h3, h4⟩ := J.thread_cover hy hT'
   have hys : IsSlot Z.th y' := ((J.xtop.rel.2.1.2.2.1.members y').1 hy').1
   rw [← hSS.capV hys] at h1 h2 h3 h4
   exact ⟨y', hy', h1, h2, h3, h4⟩
+
+set_option maxHeartbeats 4000000 in
+/-- **`debug_remove` at `J`, the idle successor exempt** (XTopJointFinThread's
+`JAtZ.dbgRemoveJ` with `hU` asked only for a successor other than the idle
+word, which `JCovD.idleOut` keeps off every RAM untyped region; the shape
+`LiveJ.dbg` gives, KENTRY-PLAN g2e): P1's `debug_remove.frame` at the current
+core alone (the thread's affinity, `SchedRel`), so the words written are
+`DbgWc`; `BlkOK` after (`debug_remove.blk`), core 0's new list head null or
+a TCB (P1's `TimerOK.dh`), outside every childless untyped cap's region:
+the old head by `UtCapP3.rst`, or the removed head's successor
+(`dbgRemove_head`), covered by `hU`, by `ut_free`. -/
+theorem JAtZ.dbgRemoveJI (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ)
+    (hU : L.mem s (L.nodeAt s 0#u64 layout.node.DEBUG_TCBS) ∈ Z.T →
+      L.mem s (P1.dnA (L.mem s (L.nodeAt s 0#u64 layout.node.DEBUG_TCBS))) ≠ 0#u64 →
+      L.mem s (P1.dnA (L.mem s (L.nodeAt s 0#u64 layout.node.DEBUG_TCBS))) ≠ L.idleW s →
+      Covered (L.mem s) Z.G (L.mem s (P1.dnA (L.mem s (L.nodeAt s 0#u64 layout.node.DEBUG_TCBS)))).val
+        ((L.mem s (P1.dnA (L.mem s (L.nodeAt s 0#u64 layout.node.DEBUG_TCBS)))).val + 1))
+    {t : U64} (ht : t ∈ Z.T) :
+    objects.debug_remove st s t ⦃ s' => JAtZ (L := L) arI AR Z H Cs Ac Lst D s' a σ ⦄ := by
+  obtain ⟨Q, R0, hc, -⟩ := J.xtop.fin.1.1.1.lists
+  have hTe : Z.T = P1.Heap.tcbs H := J.tcbs_eq.1
+  have htT : t ∈ P1.Heap.tcbs H := by rw [← hTe]; exact ht
+  have hcC : Z.c ∈ Cs := hc.cur ▸ J.kern.cpuCs
+  obtain ⟨⟨Q1, R1, h1q⟩, -, hX1, -, -⟩ := id J.blk
+  have hTm := hX1.2.2.tm
+  have hT : P1.TcbPlaced (P1.Heap.tcbs H) := by rw [← hTe]; exact hc.tcbs
+  have hN : ∀ c ∈ ({Z.c} : Set U64), P1.NodePlaced st (P1.Heap.tcbs H) s c := fun c hc' => by
+    rw [Set.mem_singleton_iff.1 hc']; exact P1.TInv.nodes J.blk Z.c hcC
+  have hD : P1.DbgTz st (P1.Heap.tcbs H) {Z.c} s :=
+    ⟨hTm.dn, hTm.dp, fun c hc' => by rw [Set.mem_singleton_iff.1 hc']; exact hTm.dh Z.c hcC⟩
+  have haf : L.mem s (P1.affA t) ∈ ({Z.c} : Set U64) := by rw [hc.aff t ht]; exact Set.mem_singleton _
+  have hNa : ∀ c ∈ Cs, P1.NodePlaced st (P1.Heap.tcbs H) s c := fun c hc' => P1.TInv.nodes J.blk c hc'
+  have hDa : P1.DbgTz st (P1.Heap.tcbs H) Cs s := ⟨hTm.dn, hTm.dp, hTm.dh⟩
+  have hafa : L.mem s (P1.affA t) ∈ Cs := by rw [hc.aff t ht]; exact hcC
+  refine WP.spec_mono (WP.spec_and (WP.spec_and (WP.spec_and (P1.objects.debug_remove.frame s t hT hN hD haf htT)
+    (P1.objects.debug_remove.blk s t J.blk htT)) (dbgRemove_head s t hT hNa hDa hafa htT J.kern.cs0))
+    (J.dbgRemove_live ht)) ?_
+  rintro s' ⟨⟨⟨⟨hw0, -⟩, hblk, -⟩, hhd0⟩, hdbgL, hDWL⟩
+  have hw : P1.WritesIn st s s' (DbgWc (L := L) Z.T Z.c s) := hw0.mono fun b hb => by
+    rcases hb with h | ⟨c, hc', e⟩
+    · left; rw [hTe]; exact h
+    · right; rw [Set.mem_singleton_iff.1 hc'] at e; exact e
+  have hks : L.ksb s' = L.ksb s := hw.1
+  obtain ⟨-, -, hX2, -, -⟩ := id hblk
+  have hdh := hX2.2.2.tm.dh 0#u64 J.kern.cs0
+  rw [P1.nodeAt_of_ksb hks] at hdh
+  obtain ⟨Tr, Cq, hJ⟩ := J.jpl
+  have hH := J.kern.heap
+  refine J.dbgw_step hw hblk ?_ ?_ hdbgL hDWL
+  · rcases hdh with h0 | hv
+    · exact Or.inl h0
+    · right
+      have hal := hH.align _ _ hv
+      have hfit := hH.fits _ _ hv
+      have e12 : (2 : Nat) ^ P1.HKind.bits .tcb = 4096 := rfl
+      rw [e12] at hal hfit
+      refine ⟨(hJ.tcb _).2 hv, show _ ∧ _ from ⟨?_, by omega⟩⟩
+      rw [← Nat.mod_mod_of_dvd _ (by norm_num : (32 : Nat) ∣ 4096), hal, Nat.zero_mod]
+  · intro sl p sb fi dev hsl hcap g h0 hf0
+    rcases hdh with e | hv
+    · rw [e]
+      rintro ⟨h1, -⟩
+      have hh := (J.utc sl p sb fi dev hsl hcap (devF_of_notDev (capV_of_capAt hcap) g)).high g
+      have h0' : (0#u64 : U64).val = 0 := rfl
+      have e64 : (2 : Nat) ^ 64 - 2 ^ 47 = 18446603336221196288 := by norm_num
+      rw [h0'] at h1
+      rw [e64] at hh
+      omega
+    · have U := J.utc sl p sb fi dev hsl hcap (devF_of_notDev (capV_of_capAt hcap) g)
+      rcases hhd0 with e | ⟨e1, e2⟩
+      · rw [e]; exact (U.rst g h0 hf0).2
+      · rw [e2]
+        by_cases hz : L.mem s (P1.dnA t) = 0#u64
+        · rw [hz]
+          rintro ⟨h1, -⟩
+          have hh := U.high g
+          have h0' : (0#u64 : U64).val = 0 := rfl
+          have e64 : (2 : Nat) ^ 64 - 2 ^ 47 = 18446603336221196288 := by norm_num
+          rw [h0'] at h1
+          rw [e64] at hh
+          omega
+        · by_cases hi : L.mem s (P1.dnA t) = L.idleW s
+          · -- the idle successor: outside every RAM untyped region (`JCovD.idleOut`)
+            obtain ⟨hP, ⟨-, -, hM, -, -⟩, -⟩ := J.xtop.rel
+            have hxm : cslotAddr sl ∈ Z.G.chains.flatten :=
+              (hM.members _).2 ⟨hsl.isSlot, _, hcap, fun h => by cases h⟩
+            have hfr := (J.jcov.idleOut _ hxm p sb fi
+              (by rw [capV_of_capAt hcap, devF_of_notDev (capV_of_capAt hcap) g]) _ (Or.inl hi)).1
+            omega
+          have hcov := hU (by rw [e1]; exact ht) (by rw [e1]; exact hz) (by rw [e1]; exact hi)
+          rw [e1] at hcov
+          obtain ⟨hP, ⟨-, -, hM, hC, hI⟩, -⟩ := J.xtop.rel
+          have hcv : capV (L.mem s) (cslotAddr sl) = .Untyped p sb fi dev := capV_of_capAt hcap
+          have hxm : cslotAddr sl ∈ Z.G.chains.flatten :=
+            (hM.members _).2 ⟨hsl.isSlot, _, hcap, fun h => by cases h⟩
+          have hfr := ut_free J.ut hI hxm hcv (nodesc_of_cdt hP hC hsl h0) (Nat.lt_succ_self _) hcov
+          omega
 
 set_option maxHeartbeats 16000000 in
 /-- **`JAtZ` across a final thread cap's finalisation, `utTcb` only after a
@@ -85,7 +185,7 @@ theorem JAtZ.finThreadJU (hAT : P0.ArchTotal arI) (hK : ARKeep arI AR)
     (hticks : Fl4Spec.maxTicksToUs = core.num.U64.MAX.bv ∧
       ∀ (a : A) (v : U64), arI.ticks_to_us a v ⦃ r => r.bv = Fl4Spec.ticksToUs v.bv ⦄)
     (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ)
-    (hU : ∀ s', FootH (st := st) H Cs (P1.EH H) s s' → DbgSuccCov (L := L) Z.T Z.G s')
+    (hU : ∀ s', FootH (st := st) H Cs (P1.EH H) s s' → DbgSuccCov (L := L) Z.T Z.G (L.idleW s) s')
     {p : U64} (hp : p ∈ Z.T)
     (hv0 : L.mem s (core.num.U64.wrapping_add p 3664#u64) = 0#u64) (hna : L.actionW s ≠ p) (hidle : L.idleW s ≠ p) :
     objects.finalise_cap st arI s a (.Thread p) true false ⦃ r => ∃ σ',
@@ -162,7 +262,12 @@ theorem JAtZ.finThreadJU (hAT : P0.ArchTotal arI) (hK : ARKeep arI AR)
     have f6 : FootH (st := st) H Cs (P1.EH H) s5 s6 := hb6.2
     simp only at ha6
     subst ha6
-    refine WP.spec_bind (J6.dbgRemoveJ (hU s6 ((f5.mono (Set.empty_subset _)).trans f6)) hp) ?_
+    have hi6 : L.idleW s6 = L.idleW s := by
+      have e6 : σ6.idleThread = σ5.idleThread :=
+        congrArg Prod.snd (Vs.gk_suspend' p.bv σ5 ((), σ6) (by rw [he6]; rfl))
+      exact P1.eq_of_bv ((J6.idleThread_bv).symm.trans (e6.trans (hi5.trans J.idleThread_bv)))
+    refine WP.spec_bind (J6.dbgRemoveJI (fun a b c => hU s6 ((f5.mono (Set.empty_subset _)).trans f6) a b
+      (by rw [← hi6]; exact c)) hp) ?_
     intro s7 J7
     refine WP.spec_bind (J7.fpuReleaseJ hK hp) ?_
     rintro a8 ⟨σ8, hm8, V8, J8⟩
@@ -262,7 +367,8 @@ theorem JAtZ.addDead (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {p : U64}
         · exact hd
         · exact J.jcov.dead q hq,
       J.jcov.ks, J.jcov.idleOut⟩
-    kern := { J.kern with } }
+    kern := { J.kern with }
+    zD := fun q hq => Set.mem_insert_of_mem p (J.zD q hq) }
 
 /-- **`finThreadJU` from `LiveJ` at the start** (`dbgSuccCov_of_live`). -/
 theorem JAtZ.finThreadJL (hAT : P0.ArchTotal arI) (hK : ARKeep arI AR)

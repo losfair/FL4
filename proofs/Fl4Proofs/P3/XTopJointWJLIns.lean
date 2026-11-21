@@ -125,16 +125,17 @@ theorem LiveDN.insT {G : MdbGhost} {V : XVs} {Ac : Set U64} {Lst : U64 → List 
     rw [hTc] at h1
     exact h1 (by simp [absCap, Fl4Spec.objRefs])
   have hL' : LiveJ (L := L) Z.th H G' s' σ' := by
-    refine ⟨fun q i hqi hu => ?_, fun k hk => ?_, fun y hy p zt k hz i hpi hki hu => ?_,
+    refine ⟨fun q i hqi hu => ?_, fun k hk hki => ?_, fun y hy p zt k hz i hpi hki hu => ?_,
       fun y hy p zt k hz hzt' => ?_⟩
     · by_cases hqx : slotOf q i = x
       · obtain ⟨rfl, -⟩ := slotOf_inj hP hqi htn (hqx.trans hxe)
-        exact ⟨yT, hyTG, by rw [hyTc, hTc]; rfl⟩
-      · obtain ⟨y, hy, hr⟩ := hL.slots q i hqi (hU _ ⟨q, i, hqi, rfl⟩ hqx hu)
-        obtain ⟨hyG, hyc⟩ := hkeep y (hmemS y hy) (hmemN y hy)
-        exact ⟨y, hyG, by rw [hyc]; exact hr⟩
-    · rw [hNt] at hk ⊢
-      obtain ⟨y, hy, hr⟩ := hL.dbg k hk
+        exact Or.inl ⟨yT, hyTG, by rw [hyTc, hTc]; rfl⟩
+      · rcases hL.slots q i hqi (hU _ ⟨q, i, hqi, rfl⟩ hqx hu) with ⟨y, hy, hr⟩ | hb
+        · obtain ⟨hyG, hyc⟩ := hkeep y (hmemS y hy) (hmemN y hy)
+          exact Or.inl ⟨y, hyG, by rw [hyc]; exact hr⟩
+        · exact Or.inr (by rw [hdk.1]; exact hb)
+    · rw [hNt] at hk hki ⊢
+      obtain ⟨y, hy, hr⟩ := hL.dbg k hk (by rw [← hcn.idle]; exact hki)
       obtain ⟨hyG, hyc⟩ := hkeep y (hmemS y hy) (hmemN y hy)
       exact ⟨y, hyG, by rw [hyc]; exact hr⟩
     · have hyx : y ≠ x := fun e => hnz p zt k (by rw [← e]; exact hz)

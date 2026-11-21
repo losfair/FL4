@@ -266,6 +266,18 @@ theorem JAtZ.rmX_tcb (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {b : U64}
     omega
   · exact (J.xtop.fin.1.1.1.scOut sc hsc x n hk b ho).2.2.1 y hy
 
+/-- **An `RmW` word is no TCB's VCPU word** (KENTRY-PLAN g2b). -/
+theorem JAtZ.rmW_nv (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {b : U64}
+    (hb : RmW (st := st) Z.T Z.N Z.C Z.R Z.c s σ b) : ∀ t ∈ Z.T, b ≠ tVcpuA t := by
+  have hS := J.xtop.fin.1.1.1
+  intro t ht
+  rcases hb with hb | hx
+  · exact FinW.nv hS hb t ht
+  · rintro rfl
+    obtain ⟨Q, R0, hc, -⟩ := hS.lists
+    have hv : (tVcpuA t).val = t.val + 3664 := tfield_val (hc.tcbs t ht) (K := 3664#u64) (by simp)
+    have := J.rmX_tcb hx t ht; omega
+
 /-- **The frame words an `RmW` step keeps** (`cnW_keeps`). -/
 theorem JAtZ.rmW_keeps (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) {s' : S}
     (hw : P1.WritesIn st s s' (RmW (st := st) Z.T Z.N Z.C Z.R Z.c s σ)) :
@@ -937,6 +949,7 @@ theorem JAtZ.replyRemoveJD (hT : P0.ArchTotal arI) (J : JAtZ (L := L) arI AR Z H
     exact ⟨Tr, Cq, hJ.same hF.1 (fun q y n _ hq => szk q.bv y n hq) hks (J.rmW_irq hw)
       (J.idleW_keep hIR.2.2.1 hidle' hisc').2⟩
   have hDbg := J.kw_dbg hfoot
+  have hKd := J.kw_dbgKeep hfoot
   have hao : ∀ p ao, σ.kheap p = some (.archObj ao) → σ'.kheap p = some (.archObj ao) := by
     intro p ao hp
     have h1 : p ≠ t.bv := by rintro rfl; rw [hk] at hp; cases hp
@@ -965,10 +978,10 @@ theorem JAtZ.replyRemoveJD (hT : P0.ArchTotal arI) (J : JAtZ (L := L) arI AR Z H
       have h1 : q ≠ t.bv := by rintro rfl; rw [kt'] at hq; cases hq
       have h2 : q ≠ r.bv := by rintro rfl; rw [kr'] at hq; cases hq
       rw [ko' q h1 h2] at hq; exact hq)
-  exact ⟨σ', Z.vs, Ac, Lst', D, hrm, J.cs_frameI hks hX3 hw (fun b hb => RmW.oobj J.xtop.fin.1.1.1 hb) harch hao szk hF.1 hkb
+  exact ⟨σ', Z.vs, Ac, Lst', D, hrm, J.cs_frameI hks hX3 hw (fun b hb => RmW.oobj J.xtop.fin.1.1.1 hb) (fun b hb => J.rmW_nv hb) harch hao szk hF.1 hkb
     ((IpcFrKeep.of_otk hK.kh).trans (IpcFrKeep.of_upd2 hk5t kt' rfl rfl hk5r kr'
       (IpcFrKeep.objFrK_other (fun _ e => by cases e) (fun _ e => by cases e) (fun _ e => by cases e)) ko'))
-    hC R, hF.1, hks, rfl, ⟨_, kt', rfl⟩, hact⟩
+    hC R hKd hCK.orig (J.idleW_keep hIR.2.2.1 hidle' hisc').1 J.zD, hF.1, hks, rfl, ⟨_, kt', rfl⟩, hact⟩
 
 /-- **`reply_remove` at `J`** (`replyRemoveJD` without the dead set kept and
 the thread's `Inactive` after). -/
