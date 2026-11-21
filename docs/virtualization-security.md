@@ -30,8 +30,10 @@ below. FL4 does not install firmware/microcode updates.
   expose it as well. With eIBRS and SMEP, native entries skip IBPB, as Linux
   does: eIBRS keeps user-mode training out of supervisor indirect and
   alternate return predictions, and SMEP keeps supervisor returns off the
-  user-mode targets of user RSB entries. ITS-affected parts without ITS_NO
-  keep it. VM exits keep IBPB. On GCE N4 the entry IBPB was half of a guest
+  user-mode targets of user RSB entries. ITS-affected parts keep it: ITS_NO
+  or BHI_CTRL (which no affected part has) rule ITS out, and otherwise the
+  model, on bare metal only, since a hypervisor may report a compatibility
+  model of an affected host (as Linux's `vulnerable_to_its`). VM exits keep IBPB. On GCE N4 the entry IBPB was half of a guest
   syscall round trip (1.97 to 1.00 us).
 * On compatible AMD family 19h CPUs, native entries use AutoIBRS for
   indirect calls and jumps, and the Zen 3/4 Safe RET thunk for returns.
@@ -94,7 +96,9 @@ them grows the image more than it saves.
 * Outside SEV/SEV-SNP the hypervisor is trusted: on Intel, MMIO stale data
   and RFDS are judged by the reported model, as on bare metal, when the
   immunity bits are missing (GCE N4 reports no RFDS_NO although RFDS affects
-  Atom cores only).
+  Atom cores only). RFDS_CLEAR without RFDS_NO still selects VERW on any
+  model: it is how a VMM asks for it. The MMIO list includes the
+  pre-RDCL_NO models a compatibility CPUID could present.
 * Zen 2's IBPB intrinsically has the branch-type behavior needed for SRSO.
   The bare-metal Zen 2 path also applies the Zenbleed software workaround
   unless the model/stepping has a known fixed microcode revision.

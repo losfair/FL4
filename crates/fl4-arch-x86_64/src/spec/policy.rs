@@ -186,7 +186,11 @@ fn intel_its(c: &Caps) -> bool {
 /// supervisor indirect-branch and alternate (RRSBA) return predictions,
 /// and SMEP keeps supervisor returns off the user RSB entries' user-mode
 /// targets. ITS-affected parts are excluded: their eIBRS can still let
-/// user training steer some kernel branches. BHI and PBRSB keep their own
+/// user training steer some kernel branches. As in Linux's
+/// `vulnerable_to_its`, ITS_NO or BHI_CTRL (which no ITS-affected part
+/// has) rules ITS out; otherwise the model does, but only on bare metal:
+/// a hypervisor may report a live-migration compatibility model of an
+/// affected host. BHI and PBRSB keep their own
 /// entry barriers. As on AMD, this is the user/kernel boundary only:
 /// VM exits keep IBPB.
 pub fn native_entry_without_ibpb(c: &Caps) -> bool {
@@ -200,7 +204,9 @@ pub fn native_entry_without_ibpb(c: &Caps) -> bool {
             c.smep
                 && c.leaf7_edx & (1 << 26) != 0
                 && c.arch & IBRS_ALL != 0
-                && (c.arch & ITS_NO != 0 || !intel_its(c))
+                && (c.arch & ITS_NO != 0
+                    || c.leaf7_2_edx & (1 << 4) != 0
+                    || !c.hypervisor && !intel_its(c))
         }
         Vendor::Other => false,
     }
@@ -333,26 +339,36 @@ pub fn select(c: &Caps) -> Result<Plan, Rejected> {
             // MMIO stale data and RFDS by the affected-model lists, on a
             // hypervisor too: outside SEV/SEV-SNP (AMD only) the hypervisor
             // is trusted, and so are the model it reports and the immunity
-            // bits it leaves out (GCE N4 reports no RFDS_NO).
+            // bits it leaves out (GCE N4 reports no RFDS_NO). RFDS_CLEAR
+            // without RFDS_NO is a VMM's explicit request for VERW, on any
+            // model (Intel's RFDS guidance; Linux `vulnerable_to_rfds`).
+            // The MMIO list includes the pre-RDCL_NO models, which only a
+            // hypervisor's compatibility CPUID can present with RDCL_NO.
             let mmio = c.arch & MMIO_NO != MMIO_NO
-                && (c.family == 6
-                        && matches!(
-                            c.model,
-                            0x55 | 0x8e
-                                | 0x9e
-                                | 0x6a
-                                | 0x6c
-                                | 0x7e
-                                | 0xa5
-                                | 0xa6
-                                | 0xa7
-                                | 0x8a
-                                | 0x86
-                                | 0x96
-                                | 0x9c
-                        ));
+                && c.family == 6
+                && matches!(
+                    c.model,
+                    0x3f | 0x4f
+                        | 0x56
+                        | 0x4e
+                        | 0x5e
+                        | 0x55
+                        | 0x8e
+                        | 0x9e
+                        | 0x6a
+                        | 0x6c
+                        | 0x7e
+                        | 0xa5
+                        | 0xa6
+                        | 0xa7
+                        | 0x8a
+                        | 0x86
+                        | 0x96
+                        | 0x9c
+                );
             let rfds = c.arch & RFDS_NO == 0
-                && (c.family == 6
+                && (c.arch & RFDS_CLEAR != 0
+                    || c.family == 6
                         && matches!(
                             c.model,
                             0x5c | 0x5f
@@ -524,15 +540,24 @@ mod tests {
         assert!(!native_entry_without_ibpb(&Caps { smep: false, ..c }));
         assert!(!native_entry_without_ibpb(&Caps { leaf7_edx: 1 << 27, ..c }));
         assert_ne!(select(&Caps { arch: c.arch & !IBRS_ALL, ..c }).unwrap().entry & IBPB, 0);
-        // ITS-affected parts keep it unless they report ITS_NO.
+        // ITS-affected parts (none has BHI_CTRL) keep it unless they
+        // report ITS_NO.
         c.model = 0x6a;
         c.stepping = 6;
+        c.leaf7_2_edx = 0;
         c.microcode = 0x0d000404;
         assert!(!native_entry_without_ibpb(&c));
         assert_ne!(select(&c).unwrap().entry & IBPB, 0);
         c.arch |= ITS_NO;
         assert!(native_entry_without_ibpb(&c));
         assert_eq!(select(&c).unwrap().entry & IBPB, 0);
+        // A hypervisor's model alone does not rule ITS out (it may be a
+        // compatibility model of an affected host); ITS_NO or BHI_CTRL do.
+        let vm = Caps { model: 0x55, stepping: 4, hypervisor: true, leaf7_2_edx: 0, arch: c.arch & !ITS_NO, ..c };
+        assert!(!native_entry_without_ibpb(&vm));
+        assert!(native_entry_without_ibpb(&Caps { hypervisor: false, ..vm }));
+        assert!(native_entry_without_ibpb(&Caps { leaf7_2_edx: 1 << 4, ..vm }));
+        assert!(native_entry_without_ibpb(&Caps { arch: vm.arch | ITS_NO, ..vm }));
         // GCE N4 (Emerald Rapids) as measured: no RFDS_NO, PBRSB_NO or
         // BHI_NO; BHI_DIS_S. A full plan, without buffer clearing.
         let n4 = Caps {
@@ -546,6 +571,22 @@ mod tests {
         };
         let p = select(&n4).unwrap();
         assert_eq!((p.entry, p.vmexit, p.buffers), (PBRSB | IBHF, IBPB | PBRSB | IBHF, false));
+    }
+
+    /// A VMM asks for VERW with RFDS_CLEAR (and no RFDS_NO) on any model,
+    /// and may present a pre-RDCL_NO MMIO-affected model with RDCL_NO.
+    #[test]
+    fn hypervisor_buffer_clearing_requests_are_honoured() {
+        let n4 = Caps { model: 0xcf, stepping: 2, hypervisor: true, arch: 0x0408_e16b, ..intel() };
+        assert!(!select(&n4).unwrap().buffers);
+        let p = select(&Caps { arch: n4.arch | RFDS_CLEAR, ..n4 }).unwrap();
+        assert!(p.buffers);
+        assert!(select(&Caps { arch: n4.arch | RFDS_CLEAR | RFDS_NO, ..n4 }).is_ok_and(|p| !p.buffers));
+        for model in [0x3f, 0x4f, 0x56, 0x4e, 0x5e] {
+            let c = Caps { model, arch: n4.arch & !MMIO_NO, ..n4 };
+            assert_eq!(select(&c), Err(Rejected::BufferMicrocode), "model {model:#x}");
+            assert!(select(&Caps { arch: c.arch | FB_CLEAR, ..c }).unwrap().buffers);
+        }
     }
 
     #[test]
