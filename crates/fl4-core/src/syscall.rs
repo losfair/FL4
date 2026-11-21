@@ -323,6 +323,34 @@ pub fn handle_syscall_general<S: Store, A: Arch>(s: &mut S, a: &mut A, number: i
     let _ = syscall(s, a, number, false);
 }
 
+/// The fast paths alone, for a core entering without the serial gate
+/// (fl4-sync `run_syscall`): true if one ran. Otherwise the state differs
+/// from the one at entry only by the `FAULT_IP` write and
+/// `update_timestamp`, which `handle_syscall` then repeats: the same write,
+/// and with one domain two timestamp updates leave what the later one alone
+/// would. The budget is checked first without charging it.
+///
+/// For ReplyRecv, `found` is what `fastpath::reply_caps` returned.
+pub fn handle_syscall_local<S: Store, A: Arch>(s: &mut S, a: &mut A, number: i64, found: (u64, u64)) -> bool {
+    let t = sched::cur_thread(s);
+    let trap = t.flags(s) & tcb_flag::TRAP_SYSCALLS != 0;
+    if crate::layout::NUM_DOMAINS != 1 || (!trap && number != sc::SysReplyRecv) {
+        return false;
+    }
+    let next = t.reg(s, reg::NEXT_IP);
+    t.set_reg(s, reg::FAULT_IP, next.wrapping_sub(syscall_insn_len!()));
+    sched::update_timestamp(s, a);
+    let csc = sched::cur_sc(s);
+    if !sporadic::sufficient(s, a, csc, sched::consumed(s)) {
+        return false;
+    }
+    if trap {
+        crate::fastpath::fault(s, a, t, trapped_syscall_number!(s, t, number))
+    } else {
+        crate::fastpath::reply_recv_found(s, a, t, found.0, found.1)
+    }
+}
+
 /// Returns whether a fast path ran.
 #[inline(always)]
 fn syscall<S: Store, A: Arch>(s: &mut S, a: &mut A, number: i64, fast: bool) -> bool {

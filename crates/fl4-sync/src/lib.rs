@@ -37,30 +37,54 @@ pub const DEEP_PROBE_SUCCESSORS: u64 = MAX_CPUS as u64 - 1;
 struct Policy {
     seen: AtomicU64,
     retry: AtomicU64,
+    /// Whether this core's last syscall outside the gate ran its fast path.
+    local_hit: AtomicU64,
 }
 
 // Read on every SMP entry; keep it off the ticket/owner cache line.
 #[repr(align(64))]
 struct Contention(AtomicU64);
 
-pub struct SerialGate {
-    /// Changed when a probe loses or a transaction waits for the gate.
-    contention: Contention,
-    policy: [Policy; MAX_CPUS],
-    next: AtomicU64,
+/// A value alone on its cache line.
+#[repr(align(64))]
+struct Line<T>(T);
+
+impl<T> core::ops::Deref for Line<T> {
+    type Target = T;
+    #[inline(always)]
+    fn deref(&self) -> &T {
+        &self.0
+    }
+}
+
+#[repr(C, align(64))]
+struct Head {
     serving: AtomicU64,
     /// 0: open; 1: closed, transactions may still be draining;
     /// 2: closed and the serving ticket has excluded transaction bodies.
     /// A successor that acquires `serving` can inherit state 2 while the
     /// gate remains closed. A failed opportunistic scan leaves state 1.
     closed: AtomicU64,
+}
+
+/// The ticket counters and the gate state, on separate cache lines: probes
+/// take tickets with a CAS on `next` while queued successors spin on
+/// `serving`, and the holder writes `owner` twice per entry.
+pub struct SerialGate {
+    /// Changed when a probe loses or a transaction waits for the gate.
+    contention: Contention,
+    policy: [Policy; MAX_CPUS],
+    next: Line<AtomicU64>,
+    /// `serving` and `closed`: a successor reads both as its turn comes.
+    head: Head,
+
     /// Cores running a transaction (0 or 1). Its store and the gate
     /// holder's store of `closed` are SeqCst, followed by a load of the
     /// other: a Dekker handshake, which needs the store-load order that
     /// x86 gives only to locked stores.
-    active: [AtomicU64; MAX_CPUS],
+    active: Line<[AtomicU64; MAX_CPUS]>,
     /// Core holding the gate, or u64::MAX.
-    owner: AtomicU64,
+    owner: Line<AtomicU64>,
 }
 
 impl SerialGate {
@@ -71,13 +95,13 @@ impl SerialGate {
                 Policy {
                     seen: AtomicU64::new(0),
                     retry: AtomicU64::new(0),
+                    local_hit: AtomicU64::new(1),
                 }
             }; MAX_CPUS],
-            next: AtomicU64::new(0),
-            serving: AtomicU64::new(0),
-            closed: AtomicU64::new(0),
-            active: [const { AtomicU64::new(0) }; MAX_CPUS],
-            owner: AtomicU64::new(u64::MAX),
+            next: Line(AtomicU64::new(0)),
+            head: Head { serving: AtomicU64::new(0), closed: AtomicU64::new(0) },
+            active: Line([const { AtomicU64::new(0) }; MAX_CPUS]),
+            owner: Line(AtomicU64::new(u64::MAX)),
         }
     }
 
@@ -86,7 +110,7 @@ impl SerialGate {
         let a = &self.active[cpu as usize];
         let mut notified = false;
         loop {
-            while m.a_load(&self.closed, Ordering::Acquire) != 0 {
+            while m.a_load(&self.head.closed, Ordering::Acquire) != 0 {
                 // Tell a successful probe to back off at its next entry,
                 // so a busy core cannot repeatedly barge ahead of STM.
                 if !notified {
@@ -104,11 +128,27 @@ impl SerialGate {
                 Ordering::SeqCst
             };
             m.a_store(a, 1, o);
-            if m.a_load(&self.closed, Ordering::SeqCst) == 0 {
+            if m.a_load(&self.head.closed, Ordering::SeqCst) == 0 {
                 return;
             }
             m.a_store(a, 0, Ordering::Release);
         }
+    }
+
+    /// `enter_tx` without waiting: false, with nothing changed, while the
+    /// gate is closed or closing.
+    #[inline(always)]
+    pub fn try_enter_tx<M: Mem>(&self, m: &M, cpu: u64) -> bool {
+        let a = &self.active[cpu as usize];
+        if m.a_load(&self.head.closed, Ordering::Acquire) != 0 {
+            return false;
+        }
+        m.a_store(a, 1, Ordering::SeqCst);
+        if m.a_load(&self.head.closed, Ordering::SeqCst) == 0 {
+            return true;
+        }
+        m.a_store(a, 0, Ordering::Release);
+        false
     }
 
     /// The transaction on `cpu` has committed or given up.
@@ -147,7 +187,7 @@ impl SerialGate {
         }
         let mut next = m.a_load(&self.next, Ordering::Relaxed);
         let queued = loop {
-            let ticket = m.a_load(&self.serving, Ordering::Acquire);
+            let ticket = m.a_load(&self.head.serving, Ordering::Acquire);
             if next.wrapping_sub(ticket) > successors {
                 m.a_add(&self.contention.0, 1, Ordering::Relaxed);
                 return false;
@@ -160,13 +200,13 @@ impl SerialGate {
             }
         };
         if queued {
-            while m.a_load(&self.serving, Ordering::Acquire) != next {
+            while m.a_load(&self.head.serving, Ordering::Acquire) != next {
                 wait();
                 core::hint::spin_loop();
             }
         }
-        if m.a_load(&self.closed, Ordering::Relaxed) != 2 {
-            m.a_store(&self.closed, 1, Ordering::SeqCst);
+        if m.a_load(&self.head.closed, Ordering::Relaxed) != 2 {
+            m.a_store(&self.head.closed, 1, Ordering::SeqCst);
             for (c, a) in self.active.iter().enumerate() {
                 if c as u64 != cpu
                     && !cfg!(feature = "mutant-gate-no-wait")
@@ -177,7 +217,7 @@ impl SerialGate {
                     return false;
                 }
             }
-            m.a_store(&self.closed, 2, Ordering::Relaxed);
+            m.a_store(&self.head.closed, 2, Ordering::Relaxed);
         }
         m.a_store(&self.owner, cpu, Ordering::Relaxed);
         true
@@ -188,12 +228,12 @@ impl SerialGate {
     /// predecessor's `serving` release orders the quiescence certificate.
     pub fn acquire<M: Mem>(&self, m: &M, cpu: u64, mut wait: impl FnMut()) {
         let ticket = m.a_add(&self.next, 1, Ordering::Relaxed);
-        while m.a_load(&self.serving, Ordering::Acquire) != ticket {
+        while m.a_load(&self.head.serving, Ordering::Acquire) != ticket {
             wait();
             core::hint::spin_loop();
         }
-        if m.a_load(&self.closed, Ordering::Relaxed) != 2 {
-            m.a_store(&self.closed, 1, Ordering::SeqCst);
+        if m.a_load(&self.head.closed, Ordering::Relaxed) != 2 {
+            m.a_store(&self.head.closed, 1, Ordering::SeqCst);
             for (c, a) in self.active.iter().enumerate() {
                 // (Mutation test: `mutant-gate-no-wait` does not wait.)
                 if c as u64 == cpu || cfg!(feature = "mutant-gate-no-wait") {
@@ -204,20 +244,32 @@ impl SerialGate {
                     core::hint::spin_loop();
                 }
             }
-            m.a_store(&self.closed, 2, Ordering::Relaxed);
+            m.a_store(&self.head.closed, 2, Ordering::Relaxed);
         }
         m.a_store(&self.owner, cpu, Ordering::Relaxed);
     }
 
     pub fn release<M: Mem>(&self, m: &M) {
         m.a_store(&self.owner, u64::MAX, Ordering::Relaxed);
-        let s = m.a_load(&self.serving, Ordering::Relaxed);
+        let s = m.a_load(&self.head.serving, Ordering::Relaxed);
         let next = s.wrapping_add(1);
         // Keep the gate closed if another serial entry is waiting.
         if m.a_load(&self.next, Ordering::Relaxed) == next {
-            m.a_store(&self.closed, 0, Ordering::Release);
+            m.a_store(&self.head.closed, 0, Ordering::Release);
         }
-        m.a_store(&self.serving, next, Ordering::Release);
+        m.a_store(&self.head.serving, next, Ordering::Release);
+    }
+
+    /// `release`, opening the gate even if another serial entry is waiting,
+    /// which then performs the whole handshake again. For an entry that
+    /// queued only because the gate was closed (`run_syscall`): queued
+    /// syscalls keeping the gate closed for each other would never let the
+    /// next ones run beside it.
+    pub fn release_open<M: Mem>(&self, m: &M) {
+        m.a_store(&self.owner, u64::MAX, Ordering::Relaxed);
+        let s = m.a_load(&self.head.serving, Ordering::Relaxed);
+        m.a_store(&self.head.closed, 0, Ordering::Release);
+        m.a_store(&self.head.serving, s.wrapping_add(1), Ordering::Release);
     }
 
     pub fn owner(&self) -> u64 {
@@ -251,6 +303,14 @@ pub trait EntryEnv {
     fn probe_successors(&self) -> u64 {
         PROBE_SUCCESSORS
     }
+    /// Transaction attempts before the serial gate. With none, entries
+    /// queue for the gate, and syscalls may also take `run_syscall`'s
+    /// local fast paths, which need that no transaction runs.
+    fn tx_attempts(&self) -> u32 {
+        TX_ATTEMPTS
+    }
+    /// When this entry gives up the gate, use `release_open`.
+    fn open_on_release(&self) {}
     /// The store, inside this core's transaction or direct.
     fn store(&self, tx: bool) -> Self::S;
     fn arch(&self) -> Self::A;
@@ -283,6 +343,8 @@ pub enum Count {
     Commit,
     Abort,
     Serial,
+    /// A syscall's fast path ran without the gate (`run_syscall`).
+    Local,
 }
 
 /// Transaction attempts before an entry runs under the serial gate (none
@@ -322,6 +384,159 @@ pub fn run_entry<E: EntryEnv>(
     ran
 }
 
+/// A syscall: on several cores with transactions off (`EntryEnv::
+/// tx_attempts`), first try its fast path without the serial gate
+/// (`fl4_core::syscall::handle_syscall_local`), then `run_entry`. Returns
+/// as `run_entry` does.
+///
+/// The fast paths write only memory of this core (its scheduler state, and
+/// threads and scheduling contexts on it, which they check before writing),
+/// the endpoint and reply object involved, and a receiver's IPC buffer.
+/// Every other kernel word they read changes only under the gate, and any
+/// write other cores' kernel entries make outside the gate is another such
+/// fast path. So: the core is active, like a transaction, which the gate
+/// drains; and the endpoint and the reply object, which threads on several
+/// cores may share, are locked in the version table, unused without
+/// transactions. A fast path that cannot take them, or declines, leaves the
+/// entry to `run_entry`. (IPC buffers are user memory: a frame shared by
+/// threads on two cores is the user's race, as on a single core.)
+///
+/// `local` runs `local_syscall` on the store it is given, or a faster
+/// equivalent of it (the kernel's specialized direct store); `body` returns
+/// whether a fast path ran (`fl4_core::syscall::handle_syscall_fast`).
+#[inline(always)]
+pub fn run_syscall<E: EntryEnv>(
+    env: &E,
+    gate: &SerialGate,
+    number: i64,
+    mut local: impl FnMut(&mut E::S, &mut E::A) -> bool,
+    mut body: impl FnMut(&mut E::S, &mut E::A) -> bool,
+) -> bool {
+    if !(env.multi() && env.tx_attempts() == 0 && !env.prefer_serial() && local_candidate(&env.store(false), number)) {
+        return run_entry(env, gate, false, |s, a| {
+            let _ = body(s, a);
+        });
+    }
+    match local_entry(env, gate, &mut local) {
+        Local::Done => return true,
+        Local::Stalled => return false,
+        Local::Closed | Local::Declined => {}
+    }
+    // Whether a fast path ran under the gate decides, as one beside it
+    // does, whether this core waits for the gate next time.
+    let fast = core::cell::Cell::new(false);
+    let ran = run_entry(env, gate, false, |s, a| fast.set(body(s, a)));
+    env.mem().a_store(&gate.policy[env.cpu() as usize].local_hit, fast.get() as u64, Ordering::Relaxed);
+    ran
+}
+
+/// `tx::try_lock_object`. (Mutation test: `mutant-local-no-lock` takes
+/// nothing.)
+#[inline(always)]
+fn lock_object<M: Mem>(m: &M, addr: u64, held: &mut fl4_store::tx::Held) -> bool {
+    cfg!(feature = "mutant-local-no-lock") || fl4_store::tx::try_lock_object(m, addr, held)
+}
+
+/// A syscall a fast path may take: a trapped one, or ReplyRecv. (Read
+/// without the gate: the current thread's flags change only while it is
+/// stalled, and `local_syscall` checks again.)
+#[inline(always)]
+fn local_candidate<S: fl4_core::machine::Store>(s: &S, number: i64) -> bool {
+    number == fl4_abi::syscall::SysReplyRecv
+        || fl4_core::sched::cur_thread(s).flags(s) & fl4_abi::consts::tcb_flag::TRAP_SYSCALLS != 0
+}
+
+enum Local {
+    Done,
+    Declined,
+    /// The gate stayed closed.
+    Closed,
+    Stalled,
+}
+
+#[inline(always)]
+fn local_entry<E: EntryEnv>(env: &E, gate: &SerialGate, local: &mut impl FnMut(&mut E::S, &mut E::A) -> bool) -> Local {
+    let cpu = env.cpu();
+    // While the gate is closed, wait for it to open, servicing remote
+    // calls, rather than take a ticket: queued syscalls would keep it closed
+    // for each other. But only after a fast path that ran: one that then
+    // declined would have waited for the gate twice.
+    let hit = &gate.policy[cpu as usize].local_hit;
+    // (Mutation test: `mutant-local-no-active` does not mark the core.)
+    while !cfg!(feature = "mutant-local-no-active") && !gate.try_enter_tx(env.mem(), cpu) {
+        if env.mem().a_load(hit, Ordering::Relaxed) == 0 {
+            return Local::Closed;
+        }
+        if env.service_remote() {
+            // A remote stall took this core's thread: no entry for it now.
+            return Local::Stalled;
+        }
+        core::hint::spin_loop();
+    }
+    let done = local(&mut env.store(false), &mut env.arch());
+    env.mem().a_store(hit, done as u64, Ordering::Relaxed);
+    if !cfg!(feature = "mutant-local-no-active") {
+        gate.leave_tx(env.mem(), cpu);
+    }
+    if done {
+        env.count(Count::Local);
+        env.entry_done();
+        Local::Done
+    } else {
+        Local::Declined
+    }
+}
+
+/// The fast path of a syscall made outside the gate (`run_syscall`), with
+/// its endpoint and reply object locked; true if it ran.
+#[inline(always)]
+pub fn local_syscall<S: fl4_core::machine::Store, A: fl4_core::machine::Arch, M: Mem>(s: &mut S, a: &mut A, m: &M, number: i64) -> bool {
+    use fl4_core::capability::Cap;
+    use fl4_core::layout::tcb as tl;
+    use fl4_core::obj::{Ep, Reply};
+    use fl4_store::tx;
+    let t = fl4_core::sched::cur_thread(s);
+    let mut held = tx::Held::new();
+    // The endpoint and reply object the fast path will use, each locked
+    // (`tx::try_lock_object`) before the fast path reads them again.
+    let mut found = (0, 0);
+    let ok = if t.flags(s) & fl4_abi::consts::tcb_flag::TRAP_SYSCALLS != 0 {
+        match t.slot(tl::SLOT_FAULT_HANDLER).cap(s) {
+            Cap::Endpoint { ptr, .. } => {
+                // (A receiver waiting is the fast path's first condition:
+                // without one, decline before touching anything.)
+                lock_object(m, ptr, &mut held) && Ep(ptr).state(s) == fl4_core::obj::EP_RECV && {
+                    let dest = fl4_core::obj::Tcb(Ep(ptr).head(s));
+                    let r = if dest.is_null() { 0 } else { dest.reply_obj(s) };
+                    r != 0 && lock_object(m, r, &mut held)
+                }
+            }
+            _ => false,
+        }
+    } else if number == fl4_abi::syscall::SysReplyRecv {
+        match fl4_core::fastpath::reply_caps(s, t) {
+            Some((r, ep)) => {
+                found = (r, ep);
+                lock_object(m, r, &mut held)
+                    // reply_remove would write the reply object below on
+                    // the call stack.
+                    && Reply(r).prev(s) == 0
+                    && {
+                        let u = fl4_core::obj::Tcb(Reply(r).tcb(s));
+                        !u.is_null() && u.state(s) == fl4_core::sched::TS_BLOCKED_ON_REPLY
+                    }
+                    && lock_object(m, ep, &mut held)
+            }
+            None => false,
+        }
+    } else {
+        false
+    };
+    let done = ok && fl4_core::syscall::handle_syscall_local(s, a, number, found);
+    tx::unlock_held(m, &mut held);
+    done
+}
+
 #[inline(always)]
 fn attempts<E: EntryEnv>(
     env: &E,
@@ -331,7 +546,7 @@ fn attempts<E: EntryEnv>(
 ) -> (bool, bool) {
     use fl4_store::tx;
     let cpu = env.cpu();
-    let max_attempts = if env.prefer_serial() { 0 } else { TX_ATTEMPTS };
+    let max_attempts = if env.prefer_serial() { 0 } else { env.tx_attempts() };
     let mut a = env.arch();
     if !env.multi() {
         body(&mut env.store(false), &mut a);
@@ -488,7 +703,7 @@ mod tests {
         use std::thread;
         let gate = Arc::new(SerialGate::new());
         gate.next.store(u64::MAX - 1, Ordering::Relaxed);
-        gate.serving.store(u64::MAX - 1, Ordering::Relaxed);
+        gate.head.serving.store(u64::MAX - 1, Ordering::Relaxed);
         // A mandatory entry is served before the opportunistic successor.
         gate.acquire(&Atomics, 0, || panic!("empty gate"));
         let order = Arc::new(Mutex::new(std::vec::Vec::new()));
@@ -519,7 +734,7 @@ mod tests {
         gate.release(&Atomics);
         for worker in workers { worker.join().unwrap(); }
         assert_eq!(*order.lock().unwrap(), (1..=successors).collect::<std::vec::Vec<_>>());
-        assert_eq!(gate.serving.load(Ordering::Acquire), successors - 1);
+        assert_eq!(gate.head.serving.load(Ordering::Acquire), successors - 1);
         gate.enter_tx(&Atomics, successors + 1, || panic!("successor stranded the gate"));
         gate.leave_tx(&Atomics, successors + 1);
     }

@@ -137,6 +137,8 @@ struct Conc {
     call_pending: AtomicU64,
     in_kernel: Vec<AtomicBool>,
     gate_held: Vec<AtomicBool>,
+    /// Release the gate with `release_open` (`EntryEnv::open_on_release`).
+    open_on_release: Vec<AtomicBool>,
     /// Cores that have run all their steps.
     out_of_steps: AtomicU64,
     /// Per core: reads its transaction made since it was doomed.
@@ -293,6 +295,7 @@ impl Conc {
             call_pending: AtomicU64::new(0),
             in_kernel: (0..n).map(|_| AtomicBool::new(false)).collect(),
             gate_held: (0..n).map(|_| AtomicBool::new(false)).collect(),
+            open_on_release: (0..n).map(|_| AtomicBool::new(false)).collect(),
             out_of_steps: AtomicU64::new(0),
             zombie: (0..n).map(|_| AtomicU64::new(0)).collect(),
             check: Mutex::new(Checker::default()),
@@ -1059,6 +1062,9 @@ impl fl4_sync::EntryEnv for SimEnv {
         c.held_used = false;
         c.held_irq.take()
     }
+    fn open_on_release(&self) {
+        self.conc.open_on_release[self.s.cpu as usize].store(true, Ordering::SeqCst);
+    }
     fn holding_gate(&self) {
         self.conc.gate_held[self.s.cpu as usize].store(true, Ordering::SeqCst);
         self.a.m.lock().unwrap().cores[self.s.cpu as usize].held_used = false;
@@ -1069,12 +1075,14 @@ impl fl4_sync::EntryEnv for SimEnv {
             fl4_sync::Count::Commit => st.0 += 1,
             fl4_sync::Count::Abort => st.1 += 1,
             fl4_sync::Count::Serial => st.2 += 1,
+            fl4_sync::Count::Local => st.3 += 1,
         }
     }
 }
 
-/// Transactions committed, aborted, and entries run serially.
-static STATS: Mutex<(u64, u64, u64)> = Mutex::new((0, 0, 0));
+/// Transactions committed, aborted, entries run serially, and syscalls
+/// whose fast path ran without the gate.
+static STATS: Mutex<(u64, u64, u64, u64)> = Mutex::new((0, 0, 0, 0));
 
 /// xorshift64*, seeded.
 #[derive(Clone, PartialEq, Debug)]
@@ -1129,11 +1137,11 @@ struct Sim {
     /// cores' transactions run).
     reset_ut: u64,
     reset_child: u64,
-    /// `--scenario guest`: an l4h vCPU, a handler thread waiting in
+    /// `--scenario guest`: l4h vCPUs, each a handler thread waiting in
     /// ReplyRecv on an endpoint and a thread with trapSyscalls faulting to
     /// it, both on one core: (handler, trapping thread, endpoint slot,
     /// handler's reply slot).
-    guest: Option<(Tcb, Tcb, u64, u64)>,
+    guest: Vec<(Tcb, Tcb, u64, u64)>,
     /// `first_untyped`'s last answer: (slot, size).
     big_ut: Cell<(u64, u64)>,
 }
@@ -1163,7 +1171,7 @@ impl Sim {
         }));
         let s = SimStore { mem: mem.clone(), ks_base, cpu: 0, tx: false, conc: None };
         let a = SimArch { m, mem, ks_base, cpu: 0, conc: None };
-        Sim { s, a, ncores, objs: Vec::new(), next_slot: 0, fault_ep: 0, reply: 0, focus: None, reset_ut: 0, reset_child: 0, guest: None, big_ut: Cell::new((0, 0)) }
+        Sim { s, a, ncores, objs: Vec::new(), next_slot: 0, fault_ep: 0, reply: 0, focus: None, reset_ut: 0, reset_child: 0, guest: Vec::new(), big_ut: Cell::new((0, 0)) }
     }
 
     /// Run the kernel part of an entry: directly, or (concurrent mode)
@@ -1343,32 +1351,73 @@ impl Sim {
         if FASTPATH_DIFF.load(Ordering::Relaxed) && self.s.conc.is_none() {
             return self.diff_syscall(number);
         }
-        self.enter(false, |s, a| syscall::handle_syscall(s, a, number));
+        self.enter_syscall(number);
     }
 
-    /// `--fastpath-diff` (serial runs): the syscall through the general
-    /// path, undone, then through `handle_syscall`; every word either wrote
-    /// and the machine state (time, RNG, deadlines, effects, address space)
-    /// must end the same.
+    /// A syscall's kernel entry, as the kernel makes it (fl4_sync::
+    /// run_syscall); serially, `handle_syscall`.
+    fn enter_syscall(&mut self, number: i64) {
+        let Some(conc) = self.s.conc.clone() else {
+            return syscall::handle_syscall(&mut self.s, &mut self.a, number);
+        };
+        let cpu = self.s.cpu as usize;
+        conc.in_kernel[cpu].store(true, Ordering::SeqCst);
+        let env = SimEnv { s: self.s.clone(), a: self.a.clone(), conc: conc.clone() };
+        let m = self.s.clone();
+        fl4_sync::run_syscall(&env, &GATE, number, |s, a| fl4_sync::local_syscall(s, a, &m, number), |s, a| syscall::handle_syscall_fast(s, a, number));
+        let open = conc.open_on_release[cpu].swap(false, Ordering::SeqCst);
+        if conc.gate_held[cpu].swap(false, Ordering::SeqCst) {
+            if open {
+                GATE.release_open(&self.s);
+            } else {
+                GATE.release(&self.s);
+            }
+        }
+        let stuck = self.a.m.lock().unwrap().cores[cpu].in_service;
+        assert!(stuck.is_none(), "liveness: core {cpu} left the kernel with interrupt {stuck:?} accepted and never acknowledged");
+        self.s.drain();
+        conc.in_kernel[cpu].store(false, Ordering::SeqCst);
+    }
+
+    /// `--fastpath-diff` (serial runs): the syscall through `handle_syscall`
+    /// (or the local fast path first), undone, then through the general
+    /// path; every word either wrote and the machine state (time, RNG,
+    /// deadlines, effects, address space) must end the same.
     fn diff_syscall(&mut self, number: i64) {
         let mem = self.s.mem.clone();
         let m0 = self.a.m.lock().unwrap().clone();
+        // Every other syscall as a core entering without the gate makes it
+        // (fl4_sync::run_syscall): the local fast path, then all of
+        // `handle_syscall` if it declined.
+        let local = FASTPATH_COUNTS.lock().unwrap().0 % 2 == 0;
+        let t = sched::cur_thread(&self.s);
+        let trap = t.flags(&self.s) & fl4_abi::consts::tcb_flag::TRAP_SYSCALLS != 0;
+        let found = fl4_core::fastpath::reply_caps(&self.s, t);
+        // As fl4_sync::local_syscall calls it (without the locks).
+        let try_local = local && (trap || (number == sc::SysReplyRecv && found.is_some()));
         mem.start_log();
-        syscall::handle_syscall_general(&mut self.s, &mut self.a, number);
-        let general = mem.take_log();
-        let m_general = self.a.m.lock().unwrap().clone();
+        let ran_local = try_local && syscall::handle_syscall_local(&mut self.s, &mut self.a, number, found.unwrap_or((0, 0)));
+        let fast = ran_local || syscall::handle_syscall_fast(&mut self.s, &mut self.a, number);
+        let fast_log = mem.take_log();
+        let m_fast = self.a.m.lock().unwrap().clone();
         let mut orig: HashMap<usize, u64> = HashMap::new();
         let mut want: HashMap<usize, u64> = HashMap::new();
-        for &(i, old) in &general {
+        for &(i, old) in &fast_log {
             orig.entry(i).or_insert(old);
             want.insert(i, mem.words[i].load(Ordering::Relaxed));
         }
-        for &(i, old) in general.iter().rev() {
+        for &(i, old) in fast_log.iter().rev() {
             mem.words[i].store(old, Ordering::Relaxed);
         }
         *self.a.m.lock().unwrap() = m0;
+        // A local attempt that declined read the clock once more. Here
+        // reading it moves simulated time and the RNG; the kernel's clock
+        // read changes nothing.
+        if try_local && !ran_local {
+            let _ = self.a.now();
+        }
         mem.start_log();
-        let fast = syscall::handle_syscall_fast(&mut self.s, &mut self.a, number);
+        syscall::handle_syscall_general(&mut self.s, &mut self.a, number);
         for (i, old) in mem.take_log() {
             orig.entry(i).or_insert(old);
         }
@@ -1380,13 +1429,13 @@ impl Sim {
         let mut bad: Vec<(u64, u64, u64, u64)> = orig
             .iter()
             .filter_map(|(&i, &o)| {
-                let g = *want.get(&i).unwrap_or(&o);
-                let f = mem.words[i].load(Ordering::Relaxed);
+                let f = *want.get(&i).unwrap_or(&o);
+                let g = mem.words[i].load(Ordering::Relaxed);
                 (g != f).then_some((PPTR_BASE + i as u64 * 8, o, g, f))
             })
             .collect();
         bad.sort();
-        let m_fast = self.a.m.lock().unwrap().clone();
+        let m_general = self.a.m.lock().unwrap().clone();
         if !bad.is_empty() || m_fast != m_general {
             for (a, o, g, f) in &bad {
                 println!("  {a:#x}: was {o:#x}, general {g:#x}, fast {f:#x}");
@@ -1394,7 +1443,7 @@ impl Sim {
             if m_fast != m_general {
                 println!("  machine: general {m_general:?}\n  fast    {m_fast:?}");
             }
-            panic!("fastpath: syscall {number} (fast path ran: {fast}) left {} words and the machine state {} from the general path's", bad.len(), if m_fast == m_general { "equal" } else { "different" });
+            panic!("fastpath: syscall {number} (fast path ran: {fast}, locally: {ran_local}) left {} words and the machine state {} from the general path's", bad.len(), if m_fast == m_general { "equal" } else { "different" });
         }
     }
 
@@ -1431,9 +1480,9 @@ impl Sim {
             (ot::Endpoint, 0, 4),
             (ot::Notification, 0, 4),
             (ot::Reply, 0, 4),
-            (ot::Tcb, 0, 6),
+            (ot::Tcb, 0, 8),
             // Room for 10 refills.
-            (ot::SchedContext, bits::MIN_SCHED_CONTEXT + 1, 6),
+            (ot::SchedContext, bits::MIN_SCHED_CONTEXT + 1, 8),
             (ot::CapTable, 4, 2),
             (ot::X86Page4K, 0, 4),
         ];
@@ -1485,25 +1534,41 @@ impl Sim {
         }
     }
 
-    /// `--scenario guest`: workers 1 and 5 (one core when there are 2 or 4,
-    /// priorities 101 and 102) become an l4h vCPU's user context, which
-    /// traps its syscalls to an endpoint, and its kernel thread, which
-    /// serves them with ReplyRecv there through its own reply object and
-    /// has a notification bound.
+    /// `--scenario guest`: on each core but the root task's, the first two
+    /// workers there become an l4h vCPU's user context, which traps its
+    /// syscalls to an endpoint, and (the one of higher priority) its kernel
+    /// thread, which serves them with ReplyRecv there through its own reply
+    /// object and has a notification bound.
     fn setup_guest(&mut self) {
         let tcbs = self.objs_of(|c| matches!(c, Cap::Thread { .. }));
         let eps = self.objs_of(|c| matches!(c, Cap::Endpoint { .. }));
         let replies = self.objs_of(|c| matches!(c, Cap::Reply { .. }));
         let ntfns = self.objs_of(|c| matches!(c, Cap::Notification { .. }));
-        let (u, k, ep, reply) = (tcbs[1], tcbs[5], eps[1], replies[1]);
-        self.invoke(0, u, label::TCBSetSpace, &[0, 0], &[ep, rs::InitThreadCNode, rs::InitThreadVSpace]);
-        self.after("guest fault endpoint");
-        self.invoke(0, u, label::TCBSetFlags, &[0, fl4_abi::consts::tcb_flag::TRAP_SYSCALLS], &[]);
-        self.after("guest trapSyscalls");
-        self.invoke(0, k, label::TCBBindNotification, &[], &[ntfns[1]]);
-        self.after("guest notification");
         let cap = |sim: &Sim, i: u64| Tcb(Slot::index(sim.root_cnode(), i).cap(&sim.s).ptr());
-        self.guest = Some((cap(self, k), cap(self, u), ep, reply));
+        // Half the runs share one endpoint among all the vCPUs, so fast
+        // paths on different cores meet on it.
+        let shared = self.a.m.lock().unwrap().rng.below(2) == 1;
+        for core in 1..self.ncores.max(2) {
+            let i = self.guest.len() + 1;
+            if i >= eps.len().min(replies.len()).min(ntfns.len()) {
+                break;
+            }
+            let on: Vec<u64> = (0..tcbs.len()).filter(|&k| k as u64 % self.ncores == core % self.ncores).map(|k| tcbs[k]).collect();
+            if on.len() < 2 {
+                continue;
+            }
+            let (a, b) = (on[0], on[1]);
+            let (k, u) = if cap(self, a).prio(&self.s) > cap(self, b).prio(&self.s) { (a, b) } else { (b, a) };
+            let (ep, reply) = (eps[if shared { 1 } else { i }], replies[i]);
+            self.invoke(0, u, label::TCBSetSpace, &[0, 0], &[ep, rs::InitThreadCNode, rs::InitThreadVSpace]);
+            self.after("guest fault endpoint");
+            self.invoke(0, u, label::TCBSetFlags, &[0, fl4_abi::consts::tcb_flag::TRAP_SYSCALLS], &[]);
+            self.after("guest trapSyscalls");
+            self.invoke(0, k, label::TCBBindNotification, &[], &[ntfns[i]]);
+            self.after("guest notification");
+            let g = (cap(self, k), cap(self, u), ep, reply);
+            self.guest.push(g);
+        }
     }
 
     fn sched_control(&self, core: u64) -> u64 {
@@ -1612,8 +1677,8 @@ impl Sim {
         if self.is_root(sched::cur_thread(&self.s)) {
             return self.root_turn(cpu);
         }
-        if let Some((k, u, ep, reply)) = self.guest {
-            let ct = sched::cur_thread(&self.s);
+        let ct = sched::cur_thread(&self.s);
+        if let Some(&(k, u, ep, reply)) = self.guest.iter().find(|g| g.0 == ct || g.1 == ct) {
             let (pick, n, len, lbl, mrs) = {
                 let mut g = self.a.m.lock().unwrap();
                 let r = &mut g.rng;
@@ -2000,12 +2065,16 @@ impl Sim {
     fn check_queues(&self, what: &str) {
         let s = &self.s;
         let rt = self.root_cnode();
+        // Threads found on endpoint and notification queues.
+        let mut queued = HashSet::new();
+        let mut objects = HashSet::new();
         for &o in &self.objs {
             let (ptr, want) = match Slot::index(rt, o).cap(s) {
                 Cap::Endpoint { ptr, .. } => (ptr, [sched::TS_BLOCKED_ON_SEND, sched::TS_BLOCKED_ON_RECV]),
                 Cap::Notification { ptr, .. } => (ptr, [sched::TS_BLOCKED_ON_NTFN, sched::TS_BLOCKED_ON_NTFN]),
                 _ => continue,
             };
+            objects.insert(ptr);
             let state = s.read(ptr + 8) & 3;
             let mut t = s.read(ptr);
             if state == 0 || (want[0] == sched::TS_BLOCKED_ON_NTFN && state != 1) {
@@ -2019,12 +2088,20 @@ impl Sim {
                 assert!(want.contains(&st), "{what}: thread {t:#x} queued on {ptr:#x} in state {st}");
                 assert_eq!(tt.block_obj(s), ptr, "{what}: thread {t:#x} on {ptr:#x}'s queue blocks on another object");
                 assert_eq!(tt.ep_prev(s), prev, "{what}: queue of {ptr:#x} badly linked");
+                queued.insert(t);
                 prev = t;
                 t = tt.ep_next(s);
                 n += 1;
                 assert!(n < 10_000, "{what}: queue of {ptr:#x} does not end");
             }
             assert_eq!(s.read(ptr + 8) & !3, prev, "{what}: queue of {ptr:#x} has a wrong tail");
+        }
+        // And the converse: a thread blocked on one of these is queued there.
+        for t in self.threads() {
+            let st = t.state(s);
+            if [sched::TS_BLOCKED_ON_SEND, sched::TS_BLOCKED_ON_RECV, sched::TS_BLOCKED_ON_NTFN].contains(&st) && objects.contains(&t.block_obj(s)) {
+                assert!(queued.contains(&t.0), "{what}: thread {:#x} blocks on {:#x} in state {st} but is not on its queue", t.0, t.block_obj(s));
+            }
         }
         for c in 0..self.ncores {
             let mut t = node_get(s, c, node::RELEASE_HEAD);
@@ -2216,7 +2293,7 @@ fn run_one(mut sim: Sim, seed: u64, ncores: u64, steps: u64, verbose: bool, conc
         }
         if verbose {
             let st = STATS.lock().unwrap();
-            println!("seed {seed}: {} transactions committed, {} aborted, {} serial entries", st.0, st.1, st.2);
+            println!("seed {seed}: {} transactions committed, {} aborted, {} serial entries, {} local fast paths", st.0, st.1, st.2, st.3);
             let k = conc.check.lock().unwrap();
             println!("seed {seed}: snapshot checker: {} reads checked, {} of unversioned words skipped", k.checked, k.skipped);
             if let Some(p) = &conc.baton.lock().unwrap().pct {

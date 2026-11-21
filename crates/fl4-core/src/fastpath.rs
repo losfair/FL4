@@ -154,6 +154,37 @@ pub fn fault<S: Store, A: Arch>(s: &mut S, a: &mut A, t: Tcb, number: u64) -> bo
 #[inline(always)]
 pub fn reply_recv<S: Store, A: Arch>(s: &mut S, a: &mut A) -> bool {
     let t = sched::cur_thread(s);
+    match reply_caps(s, t) {
+        Some((rptr, ep_ptr)) => reply_recv_found(s, a, t, rptr, ep_ptr),
+        None => false,
+    }
+}
+
+/// The objects of the current thread `t`'s ReplyRecv as the general path
+/// finds them: the reply object its reply cap names and the endpoint its
+/// capability register names, which it may receive on.
+#[inline(always)]
+pub fn reply_caps<S: Store>(s: &S, t: Tcb) -> Option<(u64, u64)> {
+    let root = t.slot(tl::SLOT_CTABLE).cap(s);
+    let rptr = match cspace::resolve_address_bits(s, root, t.reg(s, reg::REPLY), cspace::WORD_BITS) {
+        Ok(found) => match found.slot.cap(s) {
+            Cap::Reply { ptr, .. } => ptr,
+            _ => return None,
+        },
+        Err(_) => return None,
+    };
+    match cspace::resolve_address_bits(s, root, t.reg(s, reg::CAP), cspace::WORD_BITS) {
+        Ok(found) => match found.slot.cap(s) {
+            Cap::Endpoint { ptr, recv: true, .. } => Some((rptr, ptr)),
+            _ => None,
+        },
+        Err(_) => None,
+    }
+}
+
+/// `reply_recv` once `reply_caps` found `rptr` and `ep_ptr`.
+#[inline(always)]
+pub fn reply_recv_found<S: Store, A: Arch>(s: &mut S, a: &mut A, t: Tcb, rptr: u64, ep_ptr: u64) -> bool {
     if sched::action(s) != sched::ACTION_RESUME_CURRENT || !sched::is_schedulable(s, t) {
         return false;
     }
@@ -161,21 +192,6 @@ pub fn reply_recv<S: Store, A: Arch>(s: &mut S, a: &mut A) -> bool {
     if info.extra_caps != 0 || info.label != 0 {
         return false;
     }
-    let (rptr, grant) = match cspace::lookup_slot(s, t, t.reg(s, reg::REPLY)) {
-        Ok(found) => match found.slot.cap(s) {
-            Cap::Reply { ptr, grant } => (ptr, grant),
-            _ => return false,
-        },
-        Err(_) => return false,
-    };
-    let _ = grant;
-    let ep_ptr = match cspace::lookup_slot(s, t, t.reg(s, reg::CAP)) {
-        Ok(found) => match found.slot.cap(s) {
-            Cap::Endpoint { ptr, recv: true, .. } => ptr,
-            _ => return false,
-        },
-        Err(_) => return false,
-    };
     let r = Reply(rptr);
     let u = Tcb(r.tcb(s));
     if u.is_null() || u.state(s) != sched::TS_BLOCKED_ON_REPLY || u.fault_type(s) != ft::UnknownSyscall {

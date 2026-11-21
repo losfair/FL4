@@ -248,7 +248,11 @@ fn unlock() {
     let pc = percpu::get();
     if pc.gate_held.get() {
         pc.gate_held.set(false);
-        GATE.release(&Phys);
+        if pc.gate_open_on_release.replace(false) {
+            GATE.release_open(&Phys);
+        } else {
+            GATE.release(&Phys);
+        }
     }
 }
 
@@ -272,6 +276,14 @@ impl fl4_sync::EntryEnv for KernelEnv {
     }
     fn probe_successors(&self) -> u64 {
         fl4_sync::DEEP_PROBE_SUCCESSORS
+    }
+    /// No transactions on x86_64: entries queue for the gate, and guest
+    /// syscall fast paths run beside it (`fl4_sync::run_syscall`).
+    fn tx_attempts(&self) -> u32 {
+        0
+    }
+    fn open_on_release(&self) {
+        percpu::get().gate_open_on_release.set(true);
     }
     fn store(&self, tx: bool) -> PhysStore {
         PhysStore { frame_masks: (fl4_arch_x86_64::sev::mask(), 0), ks_base: unsafe { KS_BASE }, cpu: self.cpu(), tx }
@@ -338,6 +350,7 @@ impl fl4_sync::EntryEnv for KernelEnv {
             fl4_sync::Count::Serial => {
                 smp::SERIAL_ENTRIES.fetch_add(1, Relaxed);
             }
+            fl4_sync::Count::Local => {}
         }
     }
 }
@@ -533,13 +546,27 @@ extern "C" fn fl4_entry(f: &mut Frame) -> u64 {
         };
     // An interrupt is handled even if a stall cancelled the entry: it has
     // been accepted and needs its EOI.
-    run_entry(irq, serial, |s, a| {
+    let body = |s: &mut PhysStore, a: &mut PhysArch| {
         if s.tx {
             dispatch_entry(&mut s.specialize::<true>(), a, v, irq, f.rdx as i64, f.error, cr2, dr6);
         } else {
             dispatch_entry(&mut s.specialize::<false>(), a, v, irq, f.rdx as i64, f.error, cr2, dr6);
         }
-    });
+    };
+    if v == VEC_SYSCALL {
+        let number = f.rdx as i64;
+        let local = |s: &mut PhysStore, a: &mut PhysArch| fl4_sync::local_syscall(&mut s.specialize::<false>(), a, &Phys, number);
+        let syscall_body = |s: &mut PhysStore, a: &mut PhysArch| {
+            if s.tx {
+                dispatch_syscall_entry(&mut s.specialize::<true>(), a, number)
+            } else {
+                dispatch_syscall_entry(&mut s.specialize::<false>(), a, number)
+            }
+        };
+        fl4_sync::run_syscall(&KernelEnv { serial }, &GATE, number, local, syscall_body);
+    } else {
+        run_entry(irq, serial, body);
+    }
     exit()
 }
 
@@ -567,6 +594,18 @@ fn dispatch_entry<S: fl4_core::machine::Store>(
     if sched::cur_thread(s) == ct && ct.slot(tl::SLOT_VTABLE).cap(s) != vroot {
         fl4_core::vspace::set_vm_root(s, a, ct);
     }
+}
+
+/// `dispatch_entry` for a syscall: true if a fast path ran.
+#[inline(always)]
+fn dispatch_syscall_entry<S: fl4_core::machine::Store>(s: &mut S, a: &mut PhysArch, number: i64) -> bool {
+    let ct = sched::cur_thread(s);
+    let vroot = ct.slot(tl::SLOT_VTABLE).cap(s);
+    let fast = syscall::handle_syscall_fast(s, a, number);
+    if sched::cur_thread(s) == ct && ct.slot(tl::SLOT_VTABLE).cap(s) != vroot {
+        fl4_core::vspace::set_vm_root(s, a, ct);
+    }
+    fast
 }
 
 #[inline(always)]
