@@ -35,12 +35,17 @@ below. FL4 does not install firmware/microcode updates.
   model, on bare metal only, since a hypervisor may report a compatibility
   model of an affected host (as Linux's `vulnerable_to_its`). VM exits keep IBPB. On GCE N4 the entry IBPB was half of a guest
   syscall round trip (1.97 to 1.00 us).
-* On compatible AMD family 19h CPUs, native entries use AutoIBRS for
-  indirect calls and jumps, and the Zen 3/4 Safe RET thunk for returns.
-  This path requires AutoIBRS, SMEP, STIBP and dispatch-serializing LFENCE
-  on every online CPU. Native-only boots rejected
-  solely for buffer-clearing capability can still use Safe RET with STIBP
-  and one thread per physical core. Otherwise, AMD CPUs with AutoIBRS and
+* On AMD family 19h CPUs (Zen 3/4) with SMEP and STIBP, native entries use
+  the Zen 3/4 Safe RET thunk for returns, and AutoIBRS (Zen 4) or, without
+  it (Zen 3), retpolines for indirect calls and jumps: Linux's choice on
+  Zen 3 (Spectre v2: Retpolines; SRSO: Safe RET). On GCE N2D (Milan) the
+  IBPB it replaces cost about 2.4 us per guest syscall round trip, most of
+  it in the cold predictors it leaves. Bare metal makes LFENCE
+  dispatch-serializing itself; a guest relies on its hypervisor for it, as
+  its native-only entry guards already do. Native-only boots rejected for
+  VM support alone (buffer-clearing capability, nested LFENCE, SRSO
+  microcode) still use Safe RET, with STIBP and one thread per physical
+  core. Otherwise, AMD CPUs with AutoIBRS and
   SMEP that report SRSO_NO or SRSO_USER_KERNEL_NO (no SRSO across the
   user/kernel boundary) skip the native entry IBPB.
   Other native AMD entries retain IBPB
@@ -67,7 +72,13 @@ return in the hardware frame before resuming it. This follows the
 and its [interrupt recovery](https://www.amd.com/en/resources/product-security/bulletin/amd-sb-7061.html).
 
 The x86 kernel builds its Rust libraries from source with external return
-thunks, using the Rust toolchain's `rust-src` component.
+thunks and external retpoline thunks (`-Zretpoline-external-thunk`: every
+indirect call and jump goes through `__x86_indirect_thunk_r11`, and no
+jump tables are emitted), using the Rust toolchain's `rust-src` component.
+The indirect thunk starts as `JMP *%r11`; boots that use Safe RET without
+AutoIBRS change it into a short jump to the retpoline with the return
+thunk patch. The linked-image check rejects any other indirect branch
+outside the identity-mapped boot code.
 The linked-image check rejects unexpected plain returns. The image starts
 with a plain RET followed by INT3 in the thunk. On eligible boots the
 boot core changes the RET opcode into a short jump, using the INT3 byte
