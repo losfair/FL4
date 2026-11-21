@@ -3,9 +3,9 @@
 //!
 //! Every IOAPIC register access is two MMIO accesses (select, then the
 //! window), and `ROUTE` must match what the pins hold: both happen under
-//! `LOCK`, with interrupts off, since several cores may program or mask
-//! pins at once (a committed transaction's `Effect::Mask` runs outside the
-//! serial gate).
+//! `LOCK`, with interrupts off. Kernel entries program and mask pins under
+//! the serial gate (no local path does); `LOCK` keeps this module correct
+//! without relying on that.
 use core::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 pub const MAX_IOAPICS: usize = 8;

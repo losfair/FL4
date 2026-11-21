@@ -23,7 +23,7 @@ pub mod tcb {
     pub const FPU: u64 = 0x200;
     pub const FPU_SIZE: u64 = 2752;
     /// The x86 backend's lazy-FPU counter (fpu.rs), after the image. Only
-    /// the core running the thread writes it, outside transactions.
+    /// the core running the thread writes it.
     pub const FPU_USE: u64 = FPU + FPU_SIZE;
 
     const F: u64 = 0xd00;

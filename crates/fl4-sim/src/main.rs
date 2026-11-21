@@ -881,8 +881,8 @@ struct Sim {
     /// deleting and retyping there.
     focus: Option<(u64, u64)>,
     /// A small untyped the root task retypes a TCB from and deletes again,
-    /// so each retype resets it (`Store::clear_free`, in place while other
-    /// cores' transactions run).
+    /// so each retype resets it (`Store::clear_free`, while other cores
+    /// run local paths).
     reset_ut: u64,
     reset_child: u64,
     /// An IoPort cap for ports 0x60-0x6f, which the root task reads and

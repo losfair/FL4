@@ -261,7 +261,7 @@ impl Slot {
     }
     /// Set the link and both flags together, preserving the other bits.
     /// Insertion and movement know all three fields: avoid three separate
-    /// read/modify/write operations through the transactional store.
+    /// read/modify/write operations.
     pub fn set_next_flags<S: Store>(self, s: &mut S, n: Slot, revocable: bool, first_badged: bool) {
         let w = self.next_word(s) & !(MDB_PTR_MASK | MDB_REVOCABLE | MDB_FIRST_BADGED);
         let r = if revocable { MDB_REVOCABLE } else { 0 };

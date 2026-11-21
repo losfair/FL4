@@ -14,8 +14,8 @@ pub trait Store {
     fn frame_masks(&self) -> (u64, u64) { (0, 0) }
     /// Read the aligned word at `addr`.
     fn read(&self, addr: u64) -> u64;
-    /// Read two adjacent words. A store may validate them together when
-    /// they share a version stripe; the default works for any word alignment.
+    /// Read two adjacent words. A store may read them together; the
+    /// default works for any word alignment.
     fn read_pair(&self, addr: u64) -> (u64, u64) {
         (self.read(addr), self.read(addr.wrapping_add(8)))
     }
@@ -24,9 +24,7 @@ pub trait Store {
     /// Zero `len` bytes at `addr`; both are multiples of 8.
     fn zero(&mut self, addr: u64, len: u64);
     /// Zero `len` bytes at `addr` that no live object occupies: memory of
-    /// an untyped region with no children (DESIGN.md §7). The effect is
-    /// that of `zero`; the runtime may clear the memory in place instead of
-    /// through the transaction, since no other core depends on it.
+    /// an untyped region with no children. The effect is that of `zero`.
     fn clear_free(&mut self, addr: u64, len: u64);
     /// Base address of the kernel's global state (see `layout::ks`).
     fn ks_base(&self) -> u64;

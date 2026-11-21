@@ -287,7 +287,7 @@ pub fn exit() -> ! {
         // (the empty table, where it faults), not on the deleted tables.
         // That reads the thread's cap, the ASID table and a pool, which a
         // serial entry on another core may be deleting (and the memory
-        // reused) unless this core holds the gate: after a transaction, or
+        // reused) unless this core holds the gate: after a local path, or
         // from the idle loop, it does not. Taking it may cancel the entry
         // (a stall): start over with whatever thread is current then.
         if pc.vspace_stale.get() && smp::multi() && !pc.gate_held.get() {

@@ -380,8 +380,8 @@ extern "C" fn fl4_entry(f: &mut Frame) -> u64 {
                 // taken. A remote call cannot be left unserviced here: it
                 // is made only under the serial gate, which this core
                 // holds, or which no core holds while this core runs a
-                // transaction (SerialGate drains them first; a transaction
-                // that needs a remote call goes serial), and the VCPU exit
+                // local path (SerialGate drains them first; local paths
+                // make no remote calls), and the VCPU exit
                 // path services remote calls right after its poll. Taken
                 // here, REMOTE_CALL_VECTOR needs only its EOI (handle_ipi).
                 if v <= VEC_IRQ_MAX {
@@ -597,8 +597,8 @@ pub fn exit() -> ! {
                 unlock();
                 let vector = fl4_arch_x86_64::vm::run(s, v, ct.0, root);
                 let irq = if vector == 0x100 {
-                    // This poll is outside the transaction runner; it
-                    // must not leave a held IRQ for the next kernel entry.
+                    // This poll is outside run_entry; it must not leave
+                    // a held IRQ for the next kernel entry.
                     percpu::get().polled_irq.set(percpu::NO_IRQ);
                     percpu::get().polling.set(true);
                     cpu::enable_interrupts_briefly();
@@ -626,7 +626,7 @@ pub fn exit() -> ! {
         // (the kernel's tables, where it faults), not on the deleted ones.
         // That reads the thread's cap, the ASID table and a pool, which a
         // serial entry on another core may be deleting (and the memory
-        // reused) unless this core holds the gate: after a transaction, or
+        // reused) unless this core holds the gate: after a local path, or
         // from the idle loop, it does not.
         if percpu::get().vspace_stale.get() && smp::multi() && !percpu::get().gate_held.get() {
             lock();

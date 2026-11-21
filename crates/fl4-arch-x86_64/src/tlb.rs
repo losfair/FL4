@@ -162,8 +162,8 @@ pub fn switch(cr3: u64, asid: u64) {
 ///
 /// With the skim window and PCIDs the flush cannot wait for the exit: the
 /// slot already records the ASID and generation as flushed, and another
-/// switch before the exit (an interrupt's entry after a transaction's
-/// effects, a deleted ASID's caller going on to another thread) replaces
+/// switch before the exit (an interrupt's entry, a deleted ASID's caller
+/// going on to another thread) replaces
 /// the exit's CR3 value. A later switch back would then keep the stale
 /// entries. INVPCID is there whenever both are on (`init`). Without PCIDs
 /// every CR3 load flushes, so the exit's load is enough.
@@ -360,8 +360,8 @@ mod tests {
 
     /// Another core unmaps a page of ASID A (bumping its generation) while
     /// this core holds A's entries in a PCID but runs something else. This
-    /// core switches to A, then to B before any exit (an interrupt after a
-    /// transaction's effects), exits on B, and later switches back to A:
+    /// core switches to A, then to B before any exit (an interrupt's
+    /// entry), exits on B, and later switches back to A:
     /// A must not run on its old entries.
     #[test]
     fn a_switch_replaced_before_the_exit_still_flushes() {

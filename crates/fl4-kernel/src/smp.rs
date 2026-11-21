@@ -59,7 +59,7 @@ fn wait_us(us: u64) {
 }
 
 // Every per-core array the cores index by `percpu::cpu_index` without a
-// bounds check (the transaction runtime's states, the serial gate's slots)
+// bounds check (the serial gate's active flags and policy slots)
 // and every core bit mask (u64) covers each core `start_aps` may start.
 const _: () = assert!(
     percpu::MAX_CPUS <= fl4_sync::MAX_CPUS && percpu::MAX_CPUS <= 64
