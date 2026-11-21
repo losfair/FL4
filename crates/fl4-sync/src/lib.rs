@@ -53,11 +53,12 @@ pub struct SerialGate {
     next: Line<AtomicU64>,
     /// `serving` and `closed`: a successor reads both as its turn comes.
     head: Head,
-    /// Cores running a local path (0 or 1). Its store and the gate
+    /// Cores running a local path (0 or 1), each on its own cache line:
+    /// every local path writes its core's twice. Its store and the gate
     /// holder's store of `closed` are SeqCst, followed by a load of the
     /// other: a Dekker handshake, which needs the store-load order that
     /// x86 gives only to locked stores.
-    active: Line<[AtomicU64; MAX_CPUS]>,
+    active: [Line<AtomicU64>; MAX_CPUS],
     /// Core holding the gate, or u64::MAX.
     owner: Line<AtomicU64>,
 }
@@ -68,7 +69,7 @@ impl SerialGate {
             policy: [const { Policy { local_hit: AtomicU64::new(1) } }; MAX_CPUS],
             next: Line(AtomicU64::new(0)),
             head: Head { serving: AtomicU64::new(0), closed: AtomicU64::new(0) },
-            active: Line([const { AtomicU64::new(0) }; MAX_CPUS]),
+            active: [const { Line(AtomicU64::new(0)) }; MAX_CPUS],
             owner: Line(AtomicU64::new(u64::MAX)),
         }
     }
@@ -77,7 +78,7 @@ impl SerialGate {
     /// changed, while the gate is closed or closing.
     #[inline(always)]
     pub fn try_enter_local<M: Mem>(&self, m: &M, cpu: u64) -> bool {
-        let a = &self.active[cpu as usize];
+        let a = &*self.active[cpu as usize];
         if m.a_load(&self.head.closed, Ordering::Acquire) != 0 {
             return false;
         }
@@ -115,7 +116,7 @@ impl SerialGate {
                 if c as u64 == cpu || cfg!(feature = "mutant-gate-no-wait") {
                     continue;
                 }
-                while m.a_load(a, Ordering::SeqCst) != 0 {
+                while m.a_load(&a.0, Ordering::SeqCst) != 0 {
                     wait();
                     core::hint::spin_loop();
                 }
@@ -162,13 +163,6 @@ pub trait EntryEnv {
     fn mem(&self) -> &Self::M;
     /// Service a remote call; true if it stalled this core's thread.
     fn service_remote(&self) -> bool;
-    /// The entry has completed (it will not run again).
-    fn entry_done(&self);
-    /// An interrupt this entry accepted that the run which took effect did
-    /// not handle, now forgotten: a stall cancelled the entry. It is still
-    /// in service and needs an entry of its own, or it blocks every
-    /// interrupt of its priority and below (GitHub issue #6).
-    fn unhandled_irq(&self) -> Option<u64>;
     /// This core now holds the serial gate (released when it leaves the
     /// kernel).
     fn holding_gate(&self);
@@ -183,10 +177,9 @@ pub enum Count {
 }
 
 /// Run the kernel's part of an entry (DESIGN.md §7): directly on one core;
-/// otherwise under the serial gate. An interrupt the entry accepted but did
-/// not handle gets an entry of its own afterwards (`unhandled_irq`).
-/// Returns false when a stall cancelled a non-interrupt entry before it
-/// ran.
+/// otherwise under the serial gate. Returns false when a stall cancelled a
+/// non-interrupt entry before it ran (it accepted no interrupt then: it
+/// polls for them only in its body).
 #[inline(always)]
 pub fn run_entry<E: EntryEnv>(
     env: &E,
@@ -194,14 +187,7 @@ pub fn run_entry<E: EntryEnv>(
     irq: bool,
     mut body: impl FnMut(&mut E::S, &mut E::A),
 ) -> bool {
-    let ran = serial(env, gate, irq, &mut body);
-    while let Some(v) = env.unhandled_irq() {
-        // This core still holds the gate, if it took it (until it leaves
-        // the kernel), so the interrupt's entry runs directly too.
-        fl4_core::syscall::handle_interrupt_entry(&mut env.store(), &mut env.arch(), v);
-        env.entry_done();
-    }
-    ran
+    serial(env, gate, irq, &mut body)
 }
 
 /// A syscall: on several cores, first try its local path beside the serial
@@ -329,22 +315,32 @@ fn local_entry<E: EntryEnv>(env: &E, gate: &SerialGate, local: &mut impl FnMut(&
     }
     if done {
         env.count(Count::Local);
-        env.entry_done();
         Local::Done
     } else {
         Local::Declined
     }
 }
 
-/// The fast path of a syscall made outside the gate (`run_syscall`), with
-/// its endpoint and reply object locked; true if it ran.
+/// The local path of a syscall made outside the gate (`run_syscall`), with
+/// its endpoint and reply object locked; true if it ran. `observe` sees
+/// the objects it holds, as (address, bytes), once it holds them and
+/// before it writes anything: the simulator's footprint oracle (DESIGN.md
+/// §10); a no-op in the kernels.
 #[inline(always)]
-pub fn local_syscall<S: fl4_core::machine::Store, A: fl4_core::machine::Arch, M: Mem>(s: &mut S, a: &mut A, m: &M, number: i64) -> bool {
+pub fn local_syscall<S: fl4_core::machine::Store, A: fl4_core::machine::Arch, M: Mem>(
+    s: &mut S,
+    a: &mut A,
+    m: &M,
+    number: i64,
+    observe: impl FnOnce(&S, &[(u64, u64)]),
+) -> bool {
     use fl4_core::capability::Cap;
     use fl4_core::layout::tcb as tl;
     use fl4_core::obj::{Ep, Reply};
     let t = fl4_core::sched::cur_thread(s);
     let mut held = lock::Held::new();
+    // What `held` holds, for `observe`: endpoints 16 bytes, replies 32.
+    let mut held_objects = [(0, 0); 2];
     // The endpoint and reply object the fast path will use, each locked
     // (`lock::try_lock_object`) before the fast path reads them again.
     let mut found = (0, 0);
@@ -356,6 +352,7 @@ pub fn local_syscall<S: fl4_core::machine::Store, A: fl4_core::machine::Arch, M:
                 lock_object(m, ptr, &mut held) && Ep(ptr).state(s) == fl4_core::obj::EP_RECV && {
                     let dest = fl4_core::obj::Tcb(Ep(ptr).head(s));
                     let r = if dest.is_null() { 0 } else { dest.reply_obj(s) };
+                    held_objects = [(ptr, 16), (r, 32)];
                     r != 0 && lock_object(m, r, &mut held)
                 }
             }
@@ -365,6 +362,7 @@ pub fn local_syscall<S: fl4_core::machine::Store, A: fl4_core::machine::Arch, M:
         match fl4_core::fastpath::reply_caps(s, t) {
             Some((r, ep)) => {
                 found = (r, ep);
+                held_objects = [(r, 32), (ep, 16)];
                 lock_object(m, r, &mut held)
                     // reply_remove would write the reply objects next to
                     // it on the call stack, which are not locked.
@@ -381,37 +379,15 @@ pub fn local_syscall<S: fl4_core::machine::Store, A: fl4_core::machine::Arch, M:
     } else {
         // An I/O port access writes only the caller and this core's
         // state: nothing to lock.
+        observe(s, &[]);
         return fl4_core::syscall::handle_ioport_local(s, a, number);
     };
-    let done = ok && fl4_core::syscall::handle_syscall_local(s, a, number, found);
+    let done = ok && {
+        observe(s, &held_objects);
+        fl4_core::syscall::handle_syscall_local(s, a, number, found)
+    };
     lock::unlock_held(m, &mut held);
     done
-}
-
-/// The objects `local_syscall` locks for this syscall of the current
-/// thread, as (address, bytes): the fault endpoint and its receiver's reply
-/// object for a trapped syscall, the reply object and the endpoint for
-/// ReplyRecv. For the simulator's footprint oracle (DESIGN.md §10). Reads
-/// only.
-pub fn local_objects<S: fl4_core::machine::Store>(s: &S, number: i64) -> [(u64, u64); 2] {
-    use fl4_core::capability::Cap;
-    use fl4_core::layout::tcb as tl;
-    use fl4_core::obj::{Ep, Tcb};
-    const EP: u64 = 16;
-    const REPLY: u64 = 32;
-    let t = fl4_core::sched::cur_thread(s);
-    if t.flags(s) & fl4_abi::consts::tcb_flag::TRAP_SYSCALLS != 0 {
-        if let Cap::Endpoint { ptr, .. } = t.slot(tl::SLOT_FAULT_HANDLER).cap(s) {
-            let dest = Tcb(Ep(ptr).head(s));
-            let r = if dest.is_null() { 0 } else { dest.reply_obj(s) };
-            return [(ptr, EP), (r, REPLY)];
-        }
-    } else if number == fl4_abi::syscall::SysReplyRecv {
-        if let Some((r, ep)) = fl4_core::fastpath::reply_caps(s, t) {
-            return [(r, REPLY), (ep, EP)];
-        }
-    }
-    [(0, 0), (0, 0)]
 }
 
 #[inline(always)]
@@ -419,7 +395,6 @@ fn serial<E: EntryEnv>(env: &E, gate: &SerialGate, irq: bool, body: &mut impl Fn
     let mut a = env.arch();
     if !env.multi() {
         body(&mut env.store(), &mut a);
-        env.entry_done();
         return true;
     }
     let mut stalled = false;
@@ -434,7 +409,6 @@ fn serial<E: EntryEnv>(env: &E, gate: &SerialGate, irq: bool, body: &mut impl Fn
         return false;
     }
     body(&mut env.store(), &mut a);
-    env.entry_done();
     true
 }
 

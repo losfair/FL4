@@ -79,18 +79,8 @@ impl Arch for PhysArch {
     fn irq_pending(&mut self) -> bool {
         gic::pending()
     }
-    /// An interrupt accepted here is kept until the entry completes, so an
-    /// entry a stall cancels still gets it handled (`unhandled_irq`).
     fn take_pending_irq(&mut self) -> u64 {
-        let pc = percpu::get();
-        if pc.held_irq.get() != percpu::NO_IRQ {
-            pc.held_used.set(true);
-            return pc.held_irq.get();
-        }
-        let v = poll_irq();
-        pc.held_irq.set(if v == fl4_core::syscall::NO_IRQ { percpu::NO_IRQ } else { v });
-        pc.held_used.set(pc.held_irq.get() != percpu::NO_IRQ);
-        v
+        poll_irq()
     }
     fn mask_irq(&mut self, irq: u64, m: bool) {
         if gic::remote(irq::id(irq), irq::core(irq)) {
@@ -189,33 +179,4 @@ impl Arch for PhysArch {
         }
         crate::cpu::halt_forever()
     }
-}
-
-/// Print how kernel entries ran (debug builds).
-pub fn print_stats() {
-    use core::sync::atomic::Ordering::Relaxed;
-    let put = |s: &[u8]| {
-        for &b in s {
-            serial::putc(b);
-        }
-    };
-    let num = |v: u64| {
-        let mut buf = [0u8; 20];
-        let mut i = 20;
-        let mut v = v;
-        loop {
-            i -= 1;
-            buf[i] = b'0' + (v % 10) as u8;
-            v /= 10;
-            if v == 0 {
-                break;
-            }
-        }
-        for &b in &buf[i..] {
-            serial::putc(b);
-        }
-    };
-    put(b"FL4: ");
-    num(smp::SERIAL_ENTRIES.load(Relaxed));
-    put(b" serial entries\n");
 }

@@ -17,9 +17,11 @@ pub trait Mem {
     fn a_store(&self, a: &AtomicU64, v: u64, o: Ordering) {
         a.store(v, o)
     }
+    /// A strong compare-and-swap: a lock attempt that fails spuriously
+    /// (LL/SC without LSE) would send a local path to the gate.
     #[inline(always)]
     fn a_cas(&self, a: &AtomicU64, old: u64, new: u64, ok: Ordering, err: Ordering) -> Result<u64, u64> {
-        a.compare_exchange_weak(old, new, ok, err)
+        a.compare_exchange(old, new, ok, err)
     }
     #[inline(always)]
     fn a_add(&self, a: &AtomicU64, v: u64, o: Ordering) -> u64 {

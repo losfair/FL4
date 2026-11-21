@@ -43,11 +43,6 @@ pub struct PerCpu {
     pub gate_held: Cell<bool>,
     /// The deadline the timer is armed for (TSC ticks; 0 = none).
     pub armed: Cell<u64>,
-    /// An interrupt accepted during the current entry, handled by an entry
-    /// of its own if a stall cancels this one (`unhandled_irq`).
-    pub held_irq: Cell<u64>,
-    /// The current run of the entry was given `held_irq`.
-    pub held_used: Cell<bool>,
     /// Initialized locally before enabling virtualization.
     pub spec_plan: Cell<Option<crate::spec::policy::Plan>>,
     pub spec_rejected: Cell<Option<crate::spec::policy::Rejected>>,
@@ -71,8 +66,6 @@ impl PerCpu {
             pcids: [const { Cell::new(crate::tlb::Slot::EMPTY) }; crate::tlb::SLOTS],
             gate_held: Cell::new(false),
             armed: Cell::new(0),
-            held_irq: Cell::new(NO_IRQ),
-            held_used: Cell::new(false),
             spec_plan: Cell::new(None),
             spec_rejected: Cell::new(None),
         }

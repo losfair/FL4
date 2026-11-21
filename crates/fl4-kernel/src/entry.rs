@@ -222,6 +222,10 @@ fn service_remote() -> bool {
         let mut s = store();
         let mut a = PhysArch;
         fl4_core::smp::stall(&mut s, &mut a);
+        // The stall puts the stalled thread back in its queue, which may
+        // be another core's if the caller moved it: that core is owed a
+        // reschedule IPI, and this core is not in an entry that sends it.
+        fl4_core::smp::send_pending(&mut s, &mut a);
     })
 }
 
@@ -277,24 +281,9 @@ impl fl4_sync::EntryEnv for KernelEnv {
         service_remote()
     }
     #[inline(always)]
-    fn entry_done(&self) {
-        let pc = percpu::get();
-        if pc.held_used.get() {
-            pc.held_irq.set(percpu::NO_IRQ);
-        }
-        pc.held_used.set(false);
-    }
-    fn unhandled_irq(&self) -> Option<u64> {
-        let pc = percpu::get();
-        let v = pc.held_irq.replace(percpu::NO_IRQ);
-        pc.held_used.set(false);
-        (v != percpu::NO_IRQ).then_some(v)
-    }
-    #[inline(always)]
     fn holding_gate(&self) {
         let pc = percpu::get();
         pc.gate_held.set(true);
-        pc.held_used.set(false);
     }
     fn count(&self, what: fl4_sync::Count) {
         // These counters are exposed only by debug diagnostics. In a
@@ -489,11 +478,11 @@ extern "C" fn fl4_entry(f: &mut Frame) -> u64 {
     // An interrupt is handled even if a stall cancelled the entry: it has
     // been accepted and needs its EOI.
     let body = |s: &mut PhysStore, a: &mut PhysArch| {
-        dispatch_entry(s, a, v, irq, f.rdx as i64, f.error, cr2, dr6);
+        dispatch_entry(s, a, v, irq, f.error, cr2, dr6);
     };
     if v == VEC_SYSCALL {
         let number = f.rdx as i64;
-        let local = |s: &mut PhysStore, a: &mut PhysArch| fl4_sync::local_syscall(s, a, &Phys, number);
+        let local = |s: &mut PhysStore, a: &mut PhysArch| fl4_sync::local_syscall(s, a, &Phys, number, |_, _| {});
         let syscall_body = |s: &mut PhysStore, a: &mut PhysArch| dispatch_syscall_entry(s, a, number);
         fl4_sync::run_syscall(&KernelEnv, &GATE, number, local, syscall_body);
     } else {
@@ -508,7 +497,6 @@ fn dispatch_entry<S: fl4_core::machine::Store>(
     a: &mut PhysArch,
     v: u64,
     irq: bool,
-    number: i64,
     error: u64,
     cr2: u64,
     dr6: u64,
@@ -522,7 +510,7 @@ fn dispatch_entry<S: fl4_core::machine::Store>(
     // not switch threads, switch to its new root here, in the entry.
     let ct = sched::cur_thread(s);
     let vroot = ct.slot(tl::SLOT_VTABLE).cap(s);
-    dispatch_handler(s, a, v, irq, number, error, cr2, dr6);
+    dispatch_handler(s, a, v, irq, error, cr2, dr6);
     if sched::cur_thread(s) == ct && ct.slot(tl::SLOT_VTABLE).cap(s) != vroot {
         fl4_core::vspace::set_vm_root(s, a, ct);
     }
@@ -547,14 +535,12 @@ fn dispatch_handler<S: fl4_core::machine::Store>(
     a: &mut PhysArch,
     v: u64,
     irq: bool,
-    number: i64,
     error: u64,
     cr2: u64,
     dr6: u64,
 ) {
-    if v == VEC_SYSCALL {
-        syscall::handle_syscall(s, a, number);
-    } else if irq {
+    // Syscalls go through `dispatch_syscall_entry` (fl4_sync::run_syscall).
+    if irq {
         syscall::handle_interrupt_entry(s, a, v - VEC_IRQ_MIN);
     } else if v == 14 {
         syscall::handle_vm_fault(s, a, cr2, error);

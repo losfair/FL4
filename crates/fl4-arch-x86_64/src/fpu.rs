@@ -584,11 +584,6 @@ fn owner_core(t: u64) -> Option<usize> {
     (0..percpu::MAX_CPUS).find(|&c| percpu::fpu_owner(c) == t)
 }
 
-/// Whether some core's registers hold `t`'s FPU state.
-pub fn is_live(t: u64) -> bool {
-    owner_core(t).is_some()
-}
-
 /// The remote call `flush` makes for state live on core `owner`, if any,
 /// when it runs on core `me`.
 ///

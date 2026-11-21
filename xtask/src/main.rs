@@ -655,12 +655,6 @@ fn sel4test_build(o: &Opts, fl4test: bool) -> PathBuf {
         name += "-";
         name.extend(r.chars().filter(|c| c.is_ascii_alphanumeric()));
     }
-    // FL4_SERIAL_GATE=1: the test-only build where every entry takes the
-    // serial gate.
-    let serial_gate = env::var_os("FL4_SERIAL_GATE").is_some();
-    if serial_gate {
-        name += "-serialgate";
-    }
     let b = ws.join(&name);
     if !b.join("build.ninja").exists() {
         fs::create_dir_all(&b).unwrap();
@@ -684,9 +678,6 @@ fn sel4test_build(o: &Opts, fl4test: bool) -> PathBuf {
             c.arg(format!("-DNUM_NODES={}", o.smp));
         }
         c.arg(format!("-DLibSel4TestPrinterRegex={}", only.clone().unwrap_or_else(|| SEL4TEST_REGEX.into())));
-        if serial_gate {
-            c.arg("-DFL4_SERIAL_GATE=ON");
-        }
         if upstream() {
             // seL4 refuses to boot without PCIDs or FSGSBASE unless built
             // without them; kvm-reduced has neither.
@@ -973,7 +964,7 @@ fn sim(o: &Opts) {
 }
 
 /// Mutation testing (DESIGN.md §10): each known-broken runtime must fail
-/// seeds of a 100-seed concurrent campaign with an l4h vCPU's syscall
+/// seeds of a 100-seed (or 400-seed) concurrent campaign with an l4h vCPU's syscall
 /// pattern on every core (the local paths beside the gate) under at least
 /// one of the schedulers (random, PCT, random on the x86-TSO store-buffer
 /// model); the catch rate of each is reported.
@@ -983,17 +974,20 @@ fn mutants() {
     for m in ["mutant-gate-no-wait", "mutant-gate-release", "mutant-local-no-active", "mutant-local-no-lock"] {
         let dir = r.join("target").join(m);
         run(Command::new("cargo").current_dir(&r).args(["build", "--quiet", "--release", "-p", "fl4-sim", "--features", m, "--target-dir"]).arg(&dir));
+        // The weakened handshake shows only under TSO, on about 2% of
+        // seeds: 400 make a miss unlikely (about 0.1%).
+        let seeds = if m == "mutant-gate-release" { 400 } else { 100 };
         let mut caught = false;
         for sched in [&["--conc"][..], &["--conc", "--pct", "3"][..], &["--tso"][..]] {
             let out = Command::new(dir.join("release/fl4-sim"))
-                .args(["--seeds", "100", "--cores", "4", "--steps", "20000", "--scenario", "guest", "--timeout", "60", "--no-shrink"])
+                .args(["--seeds", &seeds.to_string(), "--cores", "4", "--steps", "20000", "--scenario", "guest", "--timeout", "60", "--no-shrink"])
                 .args(sched)
                 .output()
                 .unwrap();
             let text = String::from_utf8_lossy(&out.stdout);
             let failed = text.lines().filter(|l| l.contains("failed:") && l.starts_with("fl4-sim: seed")).count();
             let name = sched[1..].first().map_or(if sched[0] == "--tso" { "TSO" } else { "random" }, |_| "PCT");
-            eprintln!("xtask: {m} ({name}): {failed}/100 seeds fail");
+            eprintln!("xtask: {m} ({name}): {failed}/{seeds} seeds fail");
             caught |= failed > 0;
         }
         ok &= caught;

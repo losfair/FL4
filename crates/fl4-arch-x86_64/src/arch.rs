@@ -70,21 +70,13 @@ impl Arch for PhysArch {
     fn irq_pending(&mut self) -> bool {
         irq_requested()
     }
-    /// An interrupt accepted here is kept until the entry completes, so an
-    /// entry a stall cancels still gets it handled (`unhandled_irq`).
     fn take_pending_irq(&mut self) -> u64 {
         let pc = percpu::get();
-        if pc.held_irq.get() != percpu::NO_IRQ {
-            pc.held_used.set(true);
-            return pc.held_irq.get();
-        }
         pc.polled_irq.set(percpu::NO_IRQ);
         pc.polling.set(true);
         cpu::enable_interrupts_briefly();
         let pc = percpu::get();
         pc.polling.set(false);
-        pc.held_irq.set(pc.polled_irq.get());
-        pc.held_used.set(pc.held_irq.get() != percpu::NO_IRQ);
         pc.polled_irq.get()
     }
     fn mask_irq(&mut self, irq: u64, mask: bool) {

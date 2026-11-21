@@ -567,10 +567,6 @@ struct Core {
     deadline: u64,
     /// Pending IRQs (bit = irq number, up to 191).
     pending: [u64; 3],
-    /// An interrupt taken during the current entry, and whether the
-    /// current run of the entry was given it.
-    held_irq: Option<u64>,
-    held_used: bool,
     /// The interrupt the local APIC has accepted and not yet seen an EOI
     /// for. Until then it blocks interrupts of its priority class and
     /// below, the timer and IPIs among them (GitHub issue #6).
@@ -598,6 +594,15 @@ struct SimArch {
 }
 
 impl SimArch {
+    /// The footprint oracle's half for Arch (DESIGN.md §10): an operation
+    /// no local path may make, since it concerns other cores, the
+    /// hardware's shared state, or another thread's FPU state.
+    fn gate_only(&self, what: &str) {
+        if let Some(c) = &self.conc {
+            assert!(c.footprint[self.cpu as usize].lock().unwrap().is_none(), "footprint: core {}'s local path called {what}", self.cpu);
+        }
+    }
+
     fn raise(&self, cpu: u64, irq: u64) {
         let mut m = self.m.lock().unwrap();
         m.cores[cpu as usize].pending[(irq / 64) as usize] |= 1 << (irq % 64);
@@ -654,39 +659,45 @@ impl Arch for SimArch {
         m.cores[self.cpu as usize].pending.iter().any(|w| *w != 0)
     }
     fn take_pending_irq(&mut self) -> u64 {
+        self.gate_only("take_pending_irq");
         let mut m = self.m.lock().unwrap();
         let c = &mut m.cores[self.cpu as usize];
-        if let Some(i) = c.held_irq {
-            c.held_used = true;
-            return i;
-        }
         for w in 0..3 {
             if c.pending[w] != 0 {
                 let b = c.pending[w].trailing_zeros() as u64;
                 c.pending[w] &= !(1 << b);
                 let i = w as u64 * 64 + b;
-                c.held_irq = Some(i);
-                c.held_used = true;
                 c.in_service = Some(i);
                 return i;
             }
         }
         syscall::NO_IRQ
     }
-    fn mask_irq(&mut self, _irq: u64, _mask: bool) {}
+    fn mask_irq(&mut self, _irq: u64, _mask: bool) {
+        self.gate_only("mask_irq");
+    }
     fn ack_irq(&mut self, _irq: u64) {
+        self.gate_only("ack_irq");
         self.apply(Effect::Ack);
     }
     fn set_vspace(&mut self, root: u64, asid: u64) {
         self.m.lock().unwrap().cores[self.cpu as usize].vspace = (root, asid);
     }
-    fn invalidate_page(&mut self, _asid: u64, _vaddr: u64) {}
-    fn invalidate_asid(&mut self, _asid: u64) {}
-    fn invalidate_page_structures(&mut self, _asid: u64) {}
+    fn invalidate_page(&mut self, _asid: u64, _vaddr: u64) {
+        self.gate_only("invalidate_page");
+    }
+    fn invalidate_asid(&mut self, _asid: u64) {
+        self.gate_only("invalidate_asid");
+    }
+    fn invalidate_page_structures(&mut self, _asid: u64) {
+        self.gate_only("invalidate_page_structures");
+    }
     fn ioapic_map(&mut self, _i: u64, _p: u64, _l: u64, _q: u64, _v: u64) -> bool {
+        self.gate_only("ioapic_map");
         true
     }
     fn ioapic_map_remapped(&mut self, _i: u64, _p: u64, _l: u64, _q: u64, _v: u64, _h: u64) -> bool {
+        self.gate_only("ioapic_map_remapped");
         true
     }
     fn num_ioapics(&self) -> u64 {
@@ -701,11 +712,20 @@ impl Arch for SimArch {
     fn port_out(&mut self, port: u64, size: u64, v: u64) {
         self.apply(Effect::PortOut(port, size, v));
     }
-    fn fpu_flush(&mut self, _tcb: u64) {}
-    fn fpu_sanitise(&mut self, _tcb: u64) {}
-    fn fpu_reload(&mut self, _tcb: u64) {}
-    fn fpu_release(&mut self, _tcb: u64) {}
+    fn fpu_flush(&mut self, _tcb: u64) {
+        self.gate_only("fpu_flush");
+    }
+    fn fpu_sanitise(&mut self, _tcb: u64) {
+        self.gate_only("fpu_sanitise");
+    }
+    fn fpu_reload(&mut self, _tcb: u64) {
+        self.gate_only("fpu_reload");
+    }
+    fn fpu_release(&mut self, _tcb: u64) {
+        self.gate_only("fpu_release");
+    }
     fn remote_stall(&mut self, cpu: u64) {
+        self.gate_only("remote_stall");
         match &self.conc {
             // Entries run one at a time: the target services the stall at
             // once, on the gate holder's behalf.
@@ -713,6 +733,7 @@ impl Arch for SimArch {
                 let mut s = SimStore { mem: self.mem.clone(), ks_base: self.ks_base, cpu, conc: None };
                 let mut a = SimArch { cpu, ..self.clone() };
                 fl4_core::smp::stall(&mut s, &mut a);
+                fl4_core::smp::send_pending(&mut s, &mut a);
             }
             Some(c) => {
                 // Ask the target and wait until it has serviced the stall.
@@ -724,6 +745,7 @@ impl Arch for SimArch {
         }
     }
     fn send_reschedule(&mut self, mask: u64) {
+        self.gate_only("send_reschedule");
         self.apply(Effect::Reschedule(mask));
     }
     fn putc(&mut self, c: u64) {
@@ -759,6 +781,9 @@ impl SimEnv {
         let mut s = self.s.clone();
         let mut a = self.a.clone();
         fl4_core::smp::stall(&mut s, &mut a);
+        // As the kernels' `service_remote`: the stalled thread may be
+        // queued on another core, which is owed a reschedule IPI.
+        fl4_core::smp::send_pending(&mut s, &mut a);
         // The acknowledgement is a locked instruction: it drains.
         s.drain();
         self.conc.call_pending.fetch_and(!me, Ordering::SeqCst);
@@ -791,23 +816,8 @@ impl fl4_sync::EntryEnv for SimEnv {
         self.conc.spin(self.s.cpu);
         r
     }
-    fn entry_done(&self) {
-        let mut m = self.a.m.lock().unwrap();
-        let c = &mut m.cores[self.s.cpu as usize];
-        if c.held_used {
-            c.held_irq = None;
-        }
-        c.held_used = false;
-    }
-    fn unhandled_irq(&self) -> Option<u64> {
-        let mut m = self.a.m.lock().unwrap();
-        let c = &mut m.cores[self.s.cpu as usize];
-        c.held_used = false;
-        c.held_irq.take()
-    }
     fn holding_gate(&self) {
         self.conc.gate_held[self.s.cpu as usize].store(true, Ordering::SeqCst);
-        self.a.m.lock().unwrap().cores[self.s.cpu as usize].held_used = false;
     }
     fn count(&self, what: fl4_sync::Count) {
         let mut st = STATS.lock().unwrap();
@@ -820,6 +830,55 @@ impl fl4_sync::EntryEnv for SimEnv {
 
 /// Entries run under the gate, and syscalls whose local path ran beside it.
 static STATS: Mutex<(u64, u64)> = Mutex::new((0, 0));
+
+/// The footprint oracle (DESIGN.md §10): the memory a local path beside
+/// the gate on core `cpu` may write, as (address, bytes): the core's
+/// node state, threads on the core and their IPC buffers, scheduling
+/// contexts on the core, and the objects it holds (`locked`, endpoints
+/// 16 bytes long), with the queue links of the threads queued on a
+/// locked endpoint, which belong to the queue. Read without scheduling
+/// points, once the path holds its locks (`fl4_sync::local_syscall`'s
+/// `observe`).
+fn footprint(s: &SimStore, ncores: u64, cpu: u64, locked: &[(u64, u64)]) -> Vec<(u64, u64)> {
+    let s = SimStore { conc: None, ..s.clone() };
+    let mut v = vec![(fl4_core::obj::node_base(&s, cpu), node::SIZE)];
+    for &(o, n) in locked.iter().filter(|o| o.0 != 0) {
+        v.push((o, n));
+        if n == 16 {
+            let mut t = s.read(o);
+            let mut fuel = 10_000;
+            while t != 0 && fuel > 0 {
+                // EP_NEXT and EP_PREV, adjacent.
+                v.push((t + tl::EP_NEXT, 16));
+                t = Tcb(t).ep_next(&s);
+                fuel -= 1;
+            }
+        }
+    }
+    let mut scs = vec![node_get(&s, cpu, node::CUR_SC), node_get(&s, cpu, node::IDLE_SC)];
+    for c in 0..ncores {
+        let mut t = node_get(&s, c, node::DEBUG_TCBS);
+        while t != 0 {
+            let tt = Tcb(t);
+            scs.push(tt.sc(&s));
+            if tt.affinity(&s) == cpu {
+                v.push((t, 1 << fl4_abi::consts::bits::TCB));
+                let buf = fl4_core::msg::lookup_ipc_buffer(&s, true, tt);
+                if buf != 0 {
+                    v.push((buf, 1 << fl4_abi::consts::bits::IPC_BUFFER));
+                }
+            }
+            t = tt.debug_next(&s);
+        }
+    }
+    for sc in scs {
+        let c = fl4_core::obj::Sc(sc);
+        if sc != 0 && c.cpu(&s) == cpu {
+            v.push((sc, fl4_core::layout::sc::REFILLS + c.refill_max(&s) * fl4_core::layout::sc::REFILL_SIZE));
+        }
+    }
+    v
+}
 
 /// The footprint oracle: every word the local path for syscall `number`
 /// on core `cpu` wrote lies in `allowed` (`Sim::footprint`).
@@ -1116,15 +1175,19 @@ impl Sim {
         conc.in_kernel[cpu].store(true, Ordering::SeqCst);
         let env = SimEnv { s: self.s.clone(), a: self.a.clone(), conc: conc.clone() };
         let m = self.s.clone();
-        let me: &Sim = self;
-        // The local path, under the footprint oracle: its core is active,
-        // so nothing the oracle reads changes meanwhile.
+        let ncores = self.ncores;
+        // The local path, under the footprint oracle. The footprint is
+        // read once the path holds its locks: its core is active and its
+        // objects locked, so nothing it reads changes meanwhile.
         let local = |s: &mut SimStore, a: &mut SimArch| {
-            let allowed = me.footprint(cpu as u64, fl4_sync::local_objects(s, number));
+            let mut allowed = None;
             *conc.footprint[cpu].lock().unwrap() = Some(Vec::new());
-            let ran = fl4_sync::local_syscall(s, a, &m, number);
+            let ran = fl4_sync::local_syscall(s, a, &m, number, |s, held| allowed = Some(footprint(s, ncores, cpu as u64, held)));
             let writes = conc.footprint[cpu].lock().unwrap().take().unwrap();
-            check_footprint(cpu as u64, number, &allowed, writes.into_iter());
+            match &allowed {
+                Some(allowed) => check_footprint(cpu as u64, number, allowed, writes.into_iter()),
+                None => assert!(writes.is_empty(), "footprint: core {cpu}'s local path for syscall {number} wrote {:#x} without its locks", writes[0]),
+            }
             ran
         };
         fl4_sync::run_syscall(&env, &GATE, number, local, |s, a| syscall::handle_syscall_fast(s, a, number));
@@ -1150,24 +1213,25 @@ impl Sim {
         let local = FASTPATH_COUNTS.lock().unwrap().0 % 2 == 0;
         let t = sched::cur_thread(&self.s);
         let trap = t.flags(&self.s) & fl4_abi::consts::tcb_flag::TRAP_SYSCALLS != 0;
-        let found = fl4_core::fastpath::reply_caps(&self.s, t);
-        // As fl4_sync::local_syscall calls it (without the locks).
+        // The syscalls fl4_sync::run_syscall tries a local path for.
         let port = !trap
             && (number == sc::SysCall || number == sc::SysSend)
             && fl4_core::ioport::is_port_label(fl4_core::msg::msg_info(&self.s, t).label);
-        let try_local = local && (trap || (number == sc::SysReplyRecv && found.is_some()) || port);
-        let allowed = if try_local { self.footprint(self.s.cpu, fl4_sync::local_objects(&self.s, number)) } else { Vec::new() };
+        let try_local = local && (trap || number == sc::SysReplyRecv || port);
+        let cpu = self.s.cpu;
+        let ncores = self.ncores;
+        let time0 = node_get(&self.s, cpu, node::CUR_TIME);
+        let mut allowed = None;
+        let locks = SimStore { conc: None, ..self.s.clone() };
         mem.start_log();
         let ran_local = try_local
-            && if port {
-                syscall::handle_ioport_local(&mut self.s, &mut self.a, number)
-            } else {
-                syscall::handle_syscall_local(&mut self.s, &mut self.a, number, found.unwrap_or((0, 0)))
-            };
+            && fl4_sync::local_syscall(&mut self.s, &mut self.a, &locks, number, |s, held| allowed = Some(footprint(s, ncores, cpu, held)));
+        // A local attempt that declined after reading the clock.
+        let read_clock = try_local && !ran_local && node_get(&self.s, cpu, node::CUR_TIME) != time0;
         let fast = ran_local || syscall::handle_syscall_fast(&mut self.s, &mut self.a, number);
         let fast_log = mem.take_log();
         if ran_local {
-            check_footprint(self.s.cpu, number, &allowed, fast_log.iter().map(|&(i, _)| PPTR_BASE + i as u64 * 8));
+            check_footprint(cpu, number, allowed.as_ref().unwrap(), fast_log.iter().map(|&(i, _)| PPTR_BASE + i as u64 * 8));
         }
         let m_fast = self.a.m.lock().unwrap().clone();
         let mut orig: HashMap<usize, u64> = HashMap::new();
@@ -1183,7 +1247,7 @@ impl Sim {
         // A local attempt that declined read the clock once more. Here
         // reading it moves simulated time and the RNG; the kernel's clock
         // read changes nothing.
-        if try_local && !ran_local {
+        if read_clock {
             let _ = self.a.now();
         }
         mem.start_log();
@@ -1215,54 +1279,6 @@ impl Sim {
             }
             panic!("fastpath: syscall {number} (fast path ran: {fast}, locally: {ran_local}) left {} words and the machine state {} from the general path's", bad.len(), if m_fast == m_general { "equal" } else { "different" });
         }
-    }
-
-    /// The footprint oracle (DESIGN.md §10): the memory a local path beside
-    /// the gate on core `cpu` may write, as (address, bytes): the core's
-    /// node state, threads on the core and their IPC buffers, scheduling
-    /// contexts on the core, and the objects it locked (`locked`, endpoints
-    /// 16 bytes long), with the queue links of the threads queued on a
-    /// locked endpoint, which belong to the queue. Read without scheduling
-    /// points.
-    fn footprint(&self, cpu: u64, locked: [(u64, u64); 2]) -> Vec<(u64, u64)> {
-        let s = SimStore { conc: None, ..self.s.clone() };
-        let mut v = vec![(fl4_core::obj::node_base(&s, cpu), node::SIZE)];
-        for &(o, n) in locked.iter().filter(|o| o.0 != 0) {
-            v.push((o, n));
-            if n == 16 {
-                let mut t = s.read(o);
-                let mut fuel = 10_000;
-                while t != 0 && fuel > 0 {
-                    // EP_NEXT and EP_PREV, adjacent.
-                    v.push((t + tl::EP_NEXT, 16));
-                    t = Tcb(t).ep_next(&s);
-                    fuel -= 1;
-                }
-            }
-        }
-        let mut scs = vec![node_get(&s, cpu, node::CUR_SC), node_get(&s, cpu, node::IDLE_SC)];
-        for c in 0..self.ncores {
-            let mut t = node_get(&s, c, node::DEBUG_TCBS);
-            while t != 0 {
-                let tt = Tcb(t);
-                scs.push(tt.sc(&s));
-                if tt.affinity(&s) == cpu {
-                    v.push((t, 1 << fl4_abi::consts::bits::TCB));
-                    let buf = fl4_core::msg::lookup_ipc_buffer(&s, true, tt);
-                    if buf != 0 {
-                        v.push((buf, 1 << fl4_abi::consts::bits::PAGE));
-                    }
-                }
-                t = tt.debug_next(&s);
-            }
-        }
-        for sc in scs {
-            let c = fl4_core::obj::Sc(sc);
-            if sc != 0 && c.cpu(&s) == cpu {
-                v.push((sc, fl4_core::layout::sc::REFILLS + c.refill_max(&s) * fl4_core::layout::sc::REFILL_SIZE));
-            }
-        }
-        v
     }
 
     /// Message words beyond the registers go in the IPC buffer.

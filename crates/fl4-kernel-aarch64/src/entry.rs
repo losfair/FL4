@@ -45,6 +45,10 @@ fn service_remote() -> bool {
         let mut s = store();
         let mut a = PhysArch;
         fl4_core::smp::stall(&mut s, &mut a);
+        // The stall puts the stalled thread back in its queue, which may
+        // be another core's if the caller moved it: that core is owed a
+        // reschedule IPI, and this core is not in an entry that sends it.
+        fl4_core::smp::send_pending(&mut s, &mut a);
     })
 }
 
@@ -95,35 +99,9 @@ impl fl4_sync::EntryEnv for KernelEnv {
     fn service_remote(&self) -> bool {
         service_remote()
     }
-    fn entry_done(&self) {
-        let pc = percpu::get();
-        if pc.held_used.get() {
-            pc.held_irq.set(percpu::NO_IRQ);
-        }
-        pc.held_used.set(false);
-    }
-    fn unhandled_irq(&self) -> Option<u64> {
-        let pc = percpu::get();
-        let v = pc.held_irq.replace(percpu::NO_IRQ);
-        pc.held_used.set(false);
-        (v != percpu::NO_IRQ).then_some(v)
-    }
     fn holding_gate(&self) {
         let pc = percpu::get();
         pc.gate_held.set(true);
-        pc.held_used.set(false);
-    }
-    fn count(&self, what: fl4_sync::Count) {
-        if !fl4_abi::config::DEBUG_BUILD {
-            return;
-        }
-        use core::sync::atomic::Ordering::Relaxed;
-        match what {
-            fl4_sync::Count::Serial => {
-                smp::SERIAL_ENTRIES.fetch_add(1, Relaxed);
-            }
-            fl4_sync::Count::Local => {}
-        }
     }
 }
 
@@ -209,11 +187,11 @@ extern "C" fn fl4_entry(kind: u64, esr: u64, far: u64) -> ! {
     if ec == EC_SVC64 {
         // The local paths beside the serial gate (fl4_sync::run_syscall),
         // as on x86_64.
-        let local = |s: &mut PhysStore, a: &mut PhysArch| fl4_sync::local_syscall(s, a, &Phys, number);
+        let local = |s: &mut PhysStore, a: &mut PhysArch| fl4_sync::local_syscall(s, a, &Phys, number, |_, _| {});
         let body = |s: &mut PhysStore, a: &mut PhysArch| dispatch_syscall(s, a, number);
         fl4_sync::run_syscall(&KernelEnv, &GATE, number, local, body);
     } else {
-        run_entry(false, |s, a| dispatch(s, a, ec, esr, far, elr, number));
+        run_entry(false, |s, a| dispatch(s, a, ec, esr, far, elr));
     }
     exit()
 }
@@ -232,7 +210,7 @@ fn dispatch_syscall<S: Store>(s: &mut S, a: &mut PhysArch, number: i64) -> bool 
 }
 
 #[inline(always)]
-fn dispatch<S: Store>(s: &mut S, a: &mut PhysArch, ec: u64, esr: u64, far: u64, elr: u64, number: i64) {
+fn dispatch<S: Store>(s: &mut S, a: &mut PhysArch, ec: u64, esr: u64, far: u64, elr: u64) {
     // As on x86_64 (fl4-kernel entry.rs `dispatch_entry`): l4v's
     // ThreadControlCaps (TCB_SetSpace, _Configure) installs a running
     // thread's new VSpace root without switching to it. When the current
@@ -241,16 +219,16 @@ fn dispatch<S: Store>(s: &mut S, a: &mut PhysArch, ec: u64, esr: u64, far: u64, 
     // on in the address space it gave up.
     let ct = sched::cur_thread(s);
     let vroot = ct.slot(tl::SLOT_VTABLE).cap(s);
-    dispatch_handler(s, a, ec, esr, far, elr, number);
+    dispatch_handler(s, a, ec, esr, far, elr);
     if sched::cur_thread(s) == ct && ct.slot(tl::SLOT_VTABLE).cap(s) != vroot {
         fl4_core::vspace::set_vm_root(s, a, ct);
     }
 }
 
 #[inline(always)]
-fn dispatch_handler<S: Store>(s: &mut S, a: &mut PhysArch, ec: u64, esr: u64, far: u64, elr: u64, number: i64) {
+fn dispatch_handler<S: Store>(s: &mut S, a: &mut PhysArch, ec: u64, esr: u64, far: u64, elr: u64) {
+    // Syscalls go through `dispatch_syscall` (fl4_sync::run_syscall).
     match ec {
-        EC_SVC64 => syscall::handle_syscall(s, a, number),
         EC_DABT_LOW => syscall::handle_vm_fault(s, a, far, esr),
         EC_IABT_LOW => syscall::handle_vm_fault(s, a, elr, esr),
         _ => {
