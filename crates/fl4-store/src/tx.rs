@@ -541,6 +541,54 @@ pub fn clear_free<M: Mem>(cpu: u64, m: &M, addr: u64, len: u64) {
     }
 }
 
+/// For an entry that runs outside both the serial gate and transactions
+/// (fl4-sync `local_syscall`), while no transaction can run: take the lock
+/// bit of a table entry chosen by hashing `addr`, without waiting. True if
+/// it was free, which `held` then records. Versions do not change: no
+/// transaction reads them meanwhile. A lock among such entries only, and
+/// not of the object's own stripe, so objects next to each other (a guest's
+/// per-vCPU endpoints) use different cache lines. Two objects sharing an
+/// entry only make the second attempt fail.
+pub fn try_lock_object<M: Mem>(m: &M, addr: u64, held: &mut Held) -> bool {
+    let e = ((addr >> STRIPE_BITS).wrapping_mul(0x9e37_79b9_7f4a_7c15) >> (64 - TABLE_BITS)) as usize;
+    let v = m.a_load(&TABLE[e].0, Ordering::Relaxed);
+    if held.n == MAX_HELD || v & 1 != 0 || m.a_cas(&TABLE[e].0, v, v | 1, Ordering::Acquire, Ordering::Relaxed).is_err() {
+        return false;
+    }
+    held.e[held.n] = (e, v);
+    held.n += 1;
+    true
+}
+
+/// Release what `try_lock_object` took.
+pub fn unlock_held<M: Mem>(m: &M, held: &mut Held) {
+    while held.n > 0 {
+        held.n -= 1;
+        let (e, v) = held.e[held.n];
+        m.a_store(&TABLE[e].0, v, Ordering::Release);
+    }
+}
+
+pub const MAX_HELD: usize = 4;
+
+/// Table entries `try_lock_object` holds, with their versions.
+pub struct Held {
+    e: [(usize, u64); MAX_HELD],
+    n: usize,
+}
+
+impl Held {
+    pub const fn new() -> Held {
+        Held { e: [(0, 0); MAX_HELD], n: 0 }
+    }
+}
+
+impl Default for Held {
+    fn default() -> Held {
+        Held::new()
+    }
+}
+
 /// Lock table entry `e`; returns the version it had.
 fn lock<M: Mem>(m: &M, e: usize) -> u64 {
     loop {

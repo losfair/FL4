@@ -145,6 +145,7 @@ impl fl4_sync::EntryEnv for KernelEnv {
             fl4_sync::Count::Serial => {
                 smp::SERIAL_ENTRIES.fetch_add(1, Relaxed);
             }
+            fl4_sync::Count::Local => {}
         }
     }
 }

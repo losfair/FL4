@@ -617,7 +617,7 @@ fn schedule_choose_new_thread<S: Store, A: Arch>(s: &mut S, a: &mut A) {
 }
 
 #[inline(always)]
-fn switch_sched_context<S: Store, A: Arch>(s: &mut S, a: &mut A) {
+pub fn switch_sched_context<S: Store, A: Arch>(s: &mut S, a: &mut A) {
     let ct = cur_thread(s);
     let tsc = Sc(ct.sc(s));
     if cur_sc(s) != tsc {

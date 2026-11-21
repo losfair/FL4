@@ -144,6 +144,7 @@ fn set_asid_table<S: Store>(s: &mut S, high: u64, pool: u64) {
 }
 
 /// seL4 `findVSpaceForASID`: the PML4 assigned to `asid`.
+#[inline(always)]
 pub fn find_asid<S: Store>(s: &S, asid: u64) -> Result<u64, LookupFault> {
     let pool = asid_table(s, asid >> ASID_LOW_BITS);
     if pool == 0 {
@@ -155,6 +156,8 @@ pub fn find_asid<S: Store>(s: &S, asid: u64) -> Result<u64, LookupFault> {
     }
     Ok(root)
 }
+
+#[inline(always)]
 
 pub fn find_vspace_for_asid<S: Store>(s: &S, asid: u64) -> Result<u64, LookupFault> {
     let root = find_asid(s, asid)?;

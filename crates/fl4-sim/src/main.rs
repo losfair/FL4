@@ -13,7 +13,7 @@
 //! host CPU at a time.
 //!
 //! Usage: fl4-sim [--seeds N] [--first S] [--cores C] [--steps K] [--conc]
-//!        [--pct D] [--tso] [--scenario ep|ntfn] [--suite] [--jobs J]
+//!        [--pct D] [--tso] [--scenario ep|ntfn|guest] [--fastpath-diff] [--suite] [--jobs J]
 
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -47,6 +47,10 @@ struct Memory {
     dirty: Vec<AtomicBool>,
     dirty_list: Mutex<Vec<u64>>,
     watch: Mutex<SlotWatch>,
+    /// `--fastpath-diff`: while logging, each store's word index and the
+    /// value it replaced, oldest first.
+    undo: Mutex<Option<Vec<(usize, u64)>>>,
+    logging: AtomicBool,
 }
 
 /// What the slot oracles saw at their last check (`Sim::slots_to_check`):
@@ -84,6 +88,10 @@ impl Memory {
     }
     fn set(&self, addr: u64, v: u64) {
         let i = self.index(addr);
+        if self.logging.load(Ordering::Relaxed) {
+            let old = self.words[i].load(Ordering::Relaxed);
+            self.undo.lock().unwrap().as_mut().unwrap().push((i, old));
+        }
         self.words[i].store(v, Ordering::Relaxed);
         let line = &self.dirty[i / 4];
         if !line.load(Ordering::Relaxed) {
@@ -97,6 +105,16 @@ impl Memory {
         let i = self.index(addr);
         self.index(addr + (n - 1) * 8);
         &self.words[i..i + n as usize]
+    }
+
+    fn start_log(&self) {
+        *self.undo.lock().unwrap() = Some(Vec::new());
+        self.logging.store(true, Ordering::Relaxed);
+    }
+
+    fn take_log(&self) -> Vec<(usize, u64)> {
+        self.logging.store(false, Ordering::Relaxed);
+        self.undo.lock().unwrap().take().unwrap()
     }
 
     /// The 32-byte lines written since the last call.
@@ -119,6 +137,8 @@ struct Conc {
     call_pending: AtomicU64,
     in_kernel: Vec<AtomicBool>,
     gate_held: Vec<AtomicBool>,
+    /// Release the gate with `release_open` (`EntryEnv::open_on_release`).
+    open_on_release: Vec<AtomicBool>,
     /// Cores that have run all their steps.
     out_of_steps: AtomicU64,
     /// Per core: reads its transaction made since it was doomed.
@@ -238,6 +258,12 @@ const ZOMBIE_LIMIT: u64 = 1_000_000;
 /// 1/K, as a conflict with another core's commit does, so the rest of the
 /// entry runs on zeros.
 static DOOM_READS: AtomicU64 = AtomicU64::new(0);
+/// `--fastpath-diff`: run each serial syscall both through the general
+/// path and through `handle_syscall` from the same state, and require the
+/// same memory and machine state (fl4_core::fastpath). Counts: syscalls
+/// checked, and those a fast path ran.
+static FASTPATH_DIFF: AtomicBool = AtomicBool::new(false);
+static FASTPATH_COUNTS: Mutex<(u64, u64)> = Mutex::new((0, 0));
 /// `--probe-successors`: the queue bound for gate probes (0: the default,
 /// `fl4_sync::PROBE_SUCCESSORS`; the x86_64 kernel uses a deeper one).
 static PROBE: AtomicU64 = AtomicU64::new(0);
@@ -269,6 +295,7 @@ impl Conc {
             call_pending: AtomicU64::new(0),
             in_kernel: (0..n).map(|_| AtomicBool::new(false)).collect(),
             gate_held: (0..n).map(|_| AtomicBool::new(false)).collect(),
+            open_on_release: (0..n).map(|_| AtomicBool::new(false)).collect(),
             out_of_steps: AtomicU64::new(0),
             zombie: (0..n).map(|_| AtomicU64::new(0)).collect(),
             check: Mutex::new(Checker::default()),
@@ -690,7 +717,7 @@ impl Store for SimStore {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Debug)]
 enum Effect {
     Deadline(u64),
     Reschedule(u64),
@@ -700,8 +727,10 @@ enum Effect {
 }
 
 /// Per-core machine state.
-#[derive(Default, Clone)]
+#[derive(Default, Clone, PartialEq, Debug)]
 struct Core {
+    /// The address space last loaded (`Arch::set_vspace`): root and ASID.
+    vspace: (u64, u64),
     deadline: u64,
     /// Pending IRQs (bit = irq number, up to 191).
     pending: [u64; 3],
@@ -718,6 +747,7 @@ struct Core {
     in_service: Option<u64>,
 }
 
+#[derive(Clone, PartialEq, Debug)]
 struct Machine {
     now: u64,
     cores: Vec<Core>,
@@ -834,7 +864,9 @@ impl Arch for SimArch {
             self.apply(Effect::Ack);
         }
     }
-    fn set_vspace(&mut self, _root: u64, _asid: u64) {}
+    fn set_vspace(&mut self, root: u64, asid: u64) {
+        self.m.lock().unwrap().cores[self.cpu as usize].vspace = (root, asid);
+    }
     fn invalidate_page(&mut self, _asid: u64, _vaddr: u64) {}
     fn invalidate_asid(&mut self, _asid: u64) {}
     fn invalidate_page_structures(&mut self, _asid: u64) {}
@@ -1030,6 +1062,9 @@ impl fl4_sync::EntryEnv for SimEnv {
         c.held_used = false;
         c.held_irq.take()
     }
+    fn open_on_release(&self) {
+        self.conc.open_on_release[self.s.cpu as usize].store(true, Ordering::SeqCst);
+    }
     fn holding_gate(&self) {
         self.conc.gate_held[self.s.cpu as usize].store(true, Ordering::SeqCst);
         self.a.m.lock().unwrap().cores[self.s.cpu as usize].held_used = false;
@@ -1040,15 +1075,17 @@ impl fl4_sync::EntryEnv for SimEnv {
             fl4_sync::Count::Commit => st.0 += 1,
             fl4_sync::Count::Abort => st.1 += 1,
             fl4_sync::Count::Serial => st.2 += 1,
+            fl4_sync::Count::Local => st.3 += 1,
         }
     }
 }
 
-/// Transactions committed, aborted, and entries run serially.
-static STATS: Mutex<(u64, u64, u64)> = Mutex::new((0, 0, 0));
+/// Transactions committed, aborted, entries run serially, and syscalls
+/// whose fast path ran without the gate.
+static STATS: Mutex<(u64, u64, u64, u64)> = Mutex::new((0, 0, 0, 0));
 
 /// xorshift64*, seeded.
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Debug)]
 struct Rng(u64);
 
 /// The workload's RNG state for `seed`.
@@ -1100,6 +1137,11 @@ struct Sim {
     /// cores' transactions run).
     reset_ut: u64,
     reset_child: u64,
+    /// `--scenario guest`: l4h vCPUs, each a handler thread waiting in
+    /// ReplyRecv on an endpoint and a thread with trapSyscalls faulting to
+    /// it, both on one core: (handler, trapping thread, endpoint slot,
+    /// handler's reply slot).
+    guest: Vec<(Tcb, Tcb, u64, u64)>,
     /// `first_untyped`'s last answer: (slot, size).
     big_ut: Cell<(u64, u64)>,
 }
@@ -1115,6 +1157,8 @@ impl Sim {
             dirty: zeroed_flags((MEM_BYTES / 32) as usize),
             dirty_list: Mutex::new(Vec::new()),
             watch: Mutex::new(SlotWatch::default()),
+            undo: Mutex::new(None),
+            logging: AtomicBool::new(false),
         });
         let image = MEM_BYTES - IMAGE_BYTES;
         let ks_base = pptr(image);
@@ -1127,7 +1171,7 @@ impl Sim {
         }));
         let s = SimStore { mem: mem.clone(), ks_base, cpu: 0, tx: false, conc: None };
         let a = SimArch { m, mem, ks_base, cpu: 0, conc: None };
-        Sim { s, a, ncores, objs: Vec::new(), next_slot: 0, fault_ep: 0, reply: 0, focus: None, reset_ut: 0, reset_child: 0, big_ut: Cell::new((0, 0)) }
+        Sim { s, a, ncores, objs: Vec::new(), next_slot: 0, fault_ep: 0, reply: 0, focus: None, reset_ut: 0, reset_child: 0, guest: Vec::new(), big_ut: Cell::new((0, 0)) }
     }
 
     /// Run the kernel part of an entry: directly, or (concurrent mode)
@@ -1304,7 +1348,103 @@ impl Sim {
         t.set_reg(&mut self.s, reg::RDX, number as u64);
         let ip = t.reg(&self.s, reg::NEXT_IP);
         t.set_reg(&mut self.s, reg::NEXT_IP, ip.wrapping_add(2));
-        self.enter(false, |s, a| syscall::handle_syscall(s, a, number));
+        if FASTPATH_DIFF.load(Ordering::Relaxed) && self.s.conc.is_none() {
+            return self.diff_syscall(number);
+        }
+        self.enter_syscall(number);
+    }
+
+    /// A syscall's kernel entry, as the kernel makes it (fl4_sync::
+    /// run_syscall); serially, `handle_syscall`.
+    fn enter_syscall(&mut self, number: i64) {
+        let Some(conc) = self.s.conc.clone() else {
+            return syscall::handle_syscall(&mut self.s, &mut self.a, number);
+        };
+        let cpu = self.s.cpu as usize;
+        conc.in_kernel[cpu].store(true, Ordering::SeqCst);
+        let env = SimEnv { s: self.s.clone(), a: self.a.clone(), conc: conc.clone() };
+        let m = self.s.clone();
+        fl4_sync::run_syscall(&env, &GATE, number, |s, a| fl4_sync::local_syscall(s, a, &m, number), |s, a| syscall::handle_syscall_fast(s, a, number));
+        let open = conc.open_on_release[cpu].swap(false, Ordering::SeqCst);
+        if conc.gate_held[cpu].swap(false, Ordering::SeqCst) {
+            if open {
+                GATE.release_open(&self.s);
+            } else {
+                GATE.release(&self.s);
+            }
+        }
+        let stuck = self.a.m.lock().unwrap().cores[cpu].in_service;
+        assert!(stuck.is_none(), "liveness: core {cpu} left the kernel with interrupt {stuck:?} accepted and never acknowledged");
+        self.s.drain();
+        conc.in_kernel[cpu].store(false, Ordering::SeqCst);
+    }
+
+    /// `--fastpath-diff` (serial runs): the syscall through `handle_syscall`
+    /// (or the local fast path first), undone, then through the general
+    /// path; every word either wrote and the machine state (time, RNG,
+    /// deadlines, effects, address space) must end the same.
+    fn diff_syscall(&mut self, number: i64) {
+        let mem = self.s.mem.clone();
+        let m0 = self.a.m.lock().unwrap().clone();
+        // Every other syscall as a core entering without the gate makes it
+        // (fl4_sync::run_syscall): the local fast path, then all of
+        // `handle_syscall` if it declined.
+        let local = FASTPATH_COUNTS.lock().unwrap().0 % 2 == 0;
+        let t = sched::cur_thread(&self.s);
+        let trap = t.flags(&self.s) & fl4_abi::consts::tcb_flag::TRAP_SYSCALLS != 0;
+        let found = fl4_core::fastpath::reply_caps(&self.s, t);
+        // As fl4_sync::local_syscall calls it (without the locks).
+        let try_local = local && (trap || (number == sc::SysReplyRecv && found.is_some()));
+        mem.start_log();
+        let ran_local = try_local && syscall::handle_syscall_local(&mut self.s, &mut self.a, number, found.unwrap_or((0, 0)));
+        let fast = ran_local || syscall::handle_syscall_fast(&mut self.s, &mut self.a, number);
+        let fast_log = mem.take_log();
+        let m_fast = self.a.m.lock().unwrap().clone();
+        let mut orig: HashMap<usize, u64> = HashMap::new();
+        let mut want: HashMap<usize, u64> = HashMap::new();
+        for &(i, old) in &fast_log {
+            orig.entry(i).or_insert(old);
+            want.insert(i, mem.words[i].load(Ordering::Relaxed));
+        }
+        for &(i, old) in fast_log.iter().rev() {
+            mem.words[i].store(old, Ordering::Relaxed);
+        }
+        *self.a.m.lock().unwrap() = m0;
+        // A local attempt that declined read the clock once more. Here
+        // reading it moves simulated time and the RNG; the kernel's clock
+        // read changes nothing.
+        if try_local && !ran_local {
+            let _ = self.a.now();
+        }
+        mem.start_log();
+        syscall::handle_syscall_general(&mut self.s, &mut self.a, number);
+        for (i, old) in mem.take_log() {
+            orig.entry(i).or_insert(old);
+        }
+        {
+            let mut c = FASTPATH_COUNTS.lock().unwrap();
+            c.0 += 1;
+            c.1 += fast as u64;
+        }
+        let mut bad: Vec<(u64, u64, u64, u64)> = orig
+            .iter()
+            .filter_map(|(&i, &o)| {
+                let f = *want.get(&i).unwrap_or(&o);
+                let g = mem.words[i].load(Ordering::Relaxed);
+                (g != f).then_some((PPTR_BASE + i as u64 * 8, o, g, f))
+            })
+            .collect();
+        bad.sort();
+        let m_general = self.a.m.lock().unwrap().clone();
+        if !bad.is_empty() || m_fast != m_general {
+            for (a, o, g, f) in &bad {
+                println!("  {a:#x}: was {o:#x}, general {g:#x}, fast {f:#x}");
+            }
+            if m_fast != m_general {
+                println!("  machine: general {m_general:?}\n  fast    {m_fast:?}");
+            }
+            panic!("fastpath: syscall {number} (fast path ran: {fast}, locally: {ran_local}) left {} words and the machine state {} from the general path's", bad.len(), if m_fast == m_general { "equal" } else { "different" });
+        }
     }
 
     /// Message words beyond the registers go in the IPC buffer.
@@ -1340,9 +1480,9 @@ impl Sim {
             (ot::Endpoint, 0, 4),
             (ot::Notification, 0, 4),
             (ot::Reply, 0, 4),
-            (ot::Tcb, 0, 6),
+            (ot::Tcb, 0, 8),
             // Room for 10 refills.
-            (ot::SchedContext, bits::MIN_SCHED_CONTEXT + 1, 6),
+            (ot::SchedContext, bits::MIN_SCHED_CONTEXT + 1, 8),
             (ot::CapTable, 4, 2),
             (ot::X86Page4K, 0, 4),
         ];
@@ -1391,6 +1531,43 @@ impl Sim {
             }
             self.invoke(0, t, label::TCBResume, &[], &[]);
             self.after("resume");
+        }
+    }
+
+    /// `--scenario guest`: on each core but the root task's, the first two
+    /// workers there become an l4h vCPU's user context, which traps its
+    /// syscalls to an endpoint, and (the one of higher priority) its kernel
+    /// thread, which serves them with ReplyRecv there through its own reply
+    /// object and has a notification bound.
+    fn setup_guest(&mut self) {
+        let tcbs = self.objs_of(|c| matches!(c, Cap::Thread { .. }));
+        let eps = self.objs_of(|c| matches!(c, Cap::Endpoint { .. }));
+        let replies = self.objs_of(|c| matches!(c, Cap::Reply { .. }));
+        let ntfns = self.objs_of(|c| matches!(c, Cap::Notification { .. }));
+        let cap = |sim: &Sim, i: u64| Tcb(Slot::index(sim.root_cnode(), i).cap(&sim.s).ptr());
+        // Half the runs share one endpoint among all the vCPUs, so fast
+        // paths on different cores meet on it.
+        let shared = self.a.m.lock().unwrap().rng.below(2) == 1;
+        for core in 1..self.ncores.max(2) {
+            let i = self.guest.len() + 1;
+            if i >= eps.len().min(replies.len()).min(ntfns.len()) {
+                break;
+            }
+            let on: Vec<u64> = (0..tcbs.len()).filter(|&k| k as u64 % self.ncores == core % self.ncores).map(|k| tcbs[k]).collect();
+            if on.len() < 2 {
+                continue;
+            }
+            let (a, b) = (on[0], on[1]);
+            let (k, u) = if cap(self, a).prio(&self.s) > cap(self, b).prio(&self.s) { (a, b) } else { (b, a) };
+            let (ep, reply) = (eps[if shared { 1 } else { i }], replies[i]);
+            self.invoke(0, u, label::TCBSetSpace, &[0, 0], &[ep, rs::InitThreadCNode, rs::InitThreadVSpace]);
+            self.after("guest fault endpoint");
+            self.invoke(0, u, label::TCBSetFlags, &[0, fl4_abi::consts::tcb_flag::TRAP_SYSCALLS], &[]);
+            self.after("guest trapSyscalls");
+            self.invoke(0, k, label::TCBBindNotification, &[], &[ntfns[i]]);
+            self.after("guest notification");
+            let g = (cap(self, k), cap(self, u), ep, reply);
+            self.guest.push(g);
         }
     }
 
@@ -1499,6 +1676,24 @@ impl Sim {
         self.on(cpu);
         if self.is_root(sched::cur_thread(&self.s)) {
             return self.root_turn(cpu);
+        }
+        let ct = sched::cur_thread(&self.s);
+        if let Some(&(k, u, ep, reply)) = self.guest.iter().find(|g| g.0 == ct || g.1 == ct) {
+            let (pick, n, len, lbl, mrs) = {
+                let mut g = self.a.m.lock().unwrap();
+                let r = &mut g.rng;
+                let lens = [0, 18, 4, 1, r.below(20)];
+                (r.below(10), r.below(400) as i64, lens[r.below(5) as usize], if r.below(20) == 0 { 1 } else { 0 }, [r.next(), r.below(16), r.next(), r.below(1 << 20)])
+            };
+            if ct == k && pick < 9 {
+                // Answer the last fault (the label restarts it) and wait.
+                ct.set_reg(&mut self.s, reg::REPLY, reply);
+                return self.syscall(cpu, sc::SysReplyRecv, ep, (lbl << 12) | len, mrs);
+            }
+            if ct == u && pick < 9 {
+                // Any number: with trapSyscalls each one faults.
+                return self.syscall(cpu, n - 200, 0, len, mrs);
+            }
         }
         let mut guard = self.a.m.lock().unwrap();
         let rng = &mut guard.rng;
@@ -1870,12 +2065,16 @@ impl Sim {
     fn check_queues(&self, what: &str) {
         let s = &self.s;
         let rt = self.root_cnode();
+        // Threads found on endpoint and notification queues.
+        let mut queued = HashSet::new();
+        let mut objects = HashSet::new();
         for &o in &self.objs {
             let (ptr, want) = match Slot::index(rt, o).cap(s) {
                 Cap::Endpoint { ptr, .. } => (ptr, [sched::TS_BLOCKED_ON_SEND, sched::TS_BLOCKED_ON_RECV]),
                 Cap::Notification { ptr, .. } => (ptr, [sched::TS_BLOCKED_ON_NTFN, sched::TS_BLOCKED_ON_NTFN]),
                 _ => continue,
             };
+            objects.insert(ptr);
             let state = s.read(ptr + 8) & 3;
             let mut t = s.read(ptr);
             if state == 0 || (want[0] == sched::TS_BLOCKED_ON_NTFN && state != 1) {
@@ -1889,12 +2088,20 @@ impl Sim {
                 assert!(want.contains(&st), "{what}: thread {t:#x} queued on {ptr:#x} in state {st}");
                 assert_eq!(tt.block_obj(s), ptr, "{what}: thread {t:#x} on {ptr:#x}'s queue blocks on another object");
                 assert_eq!(tt.ep_prev(s), prev, "{what}: queue of {ptr:#x} badly linked");
+                queued.insert(t);
                 prev = t;
                 t = tt.ep_next(s);
                 n += 1;
                 assert!(n < 10_000, "{what}: queue of {ptr:#x} does not end");
             }
             assert_eq!(s.read(ptr + 8) & !3, prev, "{what}: queue of {ptr:#x} has a wrong tail");
+        }
+        // And the converse: a thread blocked on one of these is queued there.
+        for t in self.threads() {
+            let st = t.state(s);
+            if [sched::TS_BLOCKED_ON_SEND, sched::TS_BLOCKED_ON_RECV, sched::TS_BLOCKED_ON_NTFN].contains(&st) && objects.contains(&t.block_obj(s)) {
+                assert!(queued.contains(&t.0), "{what}: thread {:#x} blocks on {:#x} in state {st} but is not on its queue", t.0, t.block_obj(s));
+            }
         }
         for c in 0..self.ncores {
             let mut t = node_get(s, c, node::RELEASE_HEAD);
@@ -2006,6 +2213,10 @@ fn run_one(mut sim: Sim, seed: u64, ncores: u64, steps: u64, verbose: bool, conc
         // An endpoint other than the workers' fault endpoint.
         Some("ep") => sim.objs_of(|c| matches!(c, Cap::Endpoint { .. })).get(1).map(|&s| (s, ot::Endpoint)),
         Some("ntfn") => sim.objs_of(|c| matches!(c, Cap::Notification { .. })).first().map(|&s| (s, ot::Notification)),
+        Some("guest") => {
+            sim.setup_guest();
+            None
+        }
         Some(other) => panic!("unknown scenario {other}"),
         None => None,
     };
@@ -2082,7 +2293,7 @@ fn run_one(mut sim: Sim, seed: u64, ncores: u64, steps: u64, verbose: bool, conc
         }
         if verbose {
             let st = STATS.lock().unwrap();
-            println!("seed {seed}: {} transactions committed, {} aborted, {} serial entries", st.0, st.1, st.2);
+            println!("seed {seed}: {} transactions committed, {} aborted, {} serial entries, {} local fast paths", st.0, st.1, st.2, st.3);
             let k = conc.check.lock().unwrap();
             println!("seed {seed}: snapshot checker: {} reads checked, {} of unversioned words skipped", k.checked, k.skipped);
             if let Some(p) = &conc.baton.lock().unwrap().pct {
@@ -2100,6 +2311,10 @@ fn run_one(mut sim: Sim, seed: u64, ncores: u64, steps: u64, verbose: bool, conc
     }
     if verbose {
         println!("seed {seed} at the end: {}", sim.summary());
+    }
+    if FASTPATH_DIFF.load(Ordering::Relaxed) {
+        let c = FASTPATH_COUNTS.lock().unwrap();
+        println!("seed {seed}: fastpath diff: {} syscalls checked, {} through a fast path", c.0, c.1);
     }
 }
 
@@ -2119,6 +2334,8 @@ struct Run {
     doom: u64,
     /// `--probe-successors`, 0 for the default.
     probe: u64,
+    /// `--fastpath-diff`.
+    diff: bool,
 }
 
 /// How a run ended.
@@ -2161,6 +2378,9 @@ impl Run {
             v.push("--probe-successors".into());
             v.push(self.probe.to_string());
         }
+        if self.diff {
+            v.push("--fastpath-diff".into());
+        }
         v
     }
 
@@ -2189,6 +2409,7 @@ impl Run {
             let sim = bases.iter().find(|b| b.ncores == self.cores).cloned().unwrap_or_else(|| booted(self.cores));
             DOOM_READS.store(self.doom, Ordering::Relaxed);
             PROBE.store(self.probe, Ordering::Relaxed);
+            FASTPATH_DIFF.store(self.diff, Ordering::Relaxed);
             run_one(sim, self.seed, self.cores, self.steps, VERBOSE.load(Ordering::Relaxed), self.conc || self.tso || self.switches.is_some(), self.pct, self.tso, self.switches.clone(), self.scenario.as_deref());
             let _ = std::io::stdout().flush();
             unsafe { libc::_exit(0) };
@@ -2218,7 +2439,7 @@ impl Run {
 
     fn line(&self) -> String {
         format!(
-            "{} {} {} {} {}{}{}{}",
+            "{} {} {} {} {}{}{}{}{}",
             self.seed,
             self.cores,
             self.steps,
@@ -2226,19 +2447,21 @@ impl Run {
             self.pct.map_or("random".to_string(), |d| format!("pct{d}")),
             self.scenario.as_ref().map_or(String::new(), |s| format!(" {s}")),
             if self.doom != 0 { format!(" doom{}", self.doom) } else { String::new() },
-            if self.probe != 0 { format!(" probe{}", self.probe) } else { String::new() }
+            if self.probe != 0 { format!(" probe{}", self.probe) } else { String::new() },
+            if self.diff { " diff" } else { "" }
         )
     }
 
     fn parse(l: &str) -> Option<Run> {
         let f: Vec<&str> = l.split_whitespace().collect();
-        if f.len() < 5 || f.len() > 8 || l.starts_with('#') {
+        if f.len() < 5 || f.len() > 9 || l.starts_with('#') {
             return None;
         }
         // After the five fields: a scenario name, `doomK`, `probeN`.
         let doom = f[5..].iter().find_map(|t| t.strip_prefix("doom")?.parse().ok()).unwrap_or(0);
         let probe = f[5..].iter().find_map(|t| t.strip_prefix("probe")?.parse().ok()).unwrap_or(0);
-        let scenario = f[5..].iter().find(|t| !t.starts_with("doom") && !t.starts_with("probe")).map(|s| s.to_string());
+        let diff = f[5..].iter().any(|t| *t == "diff");
+        let scenario = f[5..].iter().find(|t| !t.starts_with("doom") && !t.starts_with("probe") && **t != "diff").map(|s| s.to_string());
         Some(Run {
             seed: f[0].parse().ok()?,
             cores: f[1].parse().ok()?,
@@ -2250,6 +2473,7 @@ impl Run {
             switches: None,
             doom,
             probe,
+            diff,
         })
     }
 }
@@ -2335,7 +2559,7 @@ struct Search {
 
 impl Search {
     fn run(&self, switches: Vec<u64>) -> Run {
-        Run { seed: self.seed, cores: self.cores, steps: self.steps, conc: true, pct: None, tso: false, scenario: None, switches: Some(switches), doom: 0, probe: 0 }
+        Run { seed: self.seed, cores: self.cores, steps: self.steps, conc: true, pct: None, tso: false, scenario: None, switches: Some(switches), doom: 0, probe: 0, diff: false }
     }
 
     /// The scheduling points of the unpreempted schedule, from its run.
@@ -2415,12 +2639,13 @@ struct Campaign {
     scenario: Option<String>,
     doom: u64,
     probe: u64,
+    diff: bool,
 }
 
 impl Campaign {
     fn runs(&self) -> Vec<Run> {
         (self.first..self.first + self.seeds)
-            .map(|seed| Run { seed, cores: self.cores, steps: self.steps, conc: self.conc || self.tso, pct: self.pct, tso: self.tso, scenario: self.scenario.clone(), switches: None, doom: self.doom, probe: self.probe })
+            .map(|seed| Run { seed, cores: self.cores, steps: self.steps, conc: self.conc || self.tso, pct: self.pct, tso: self.tso, scenario: self.scenario.clone(), switches: None, doom: self.doom, probe: self.probe, diff: self.diff })
             .collect()
     }
 
@@ -2448,6 +2673,7 @@ impl Campaign {
             + &self.scenario.as_ref().map_or(String::new(), |s| format!(", scenario {s}"))
             + &if self.doom != 0 { format!(", 1/{} of reads doom the transaction", self.doom) } else { String::new() }
             + &if self.probe != 0 { format!(", probes queue behind up to {} cores", self.probe) } else { String::new() }
+            + if self.diff { ", fast paths checked against the general path" } else { "" }
             + if cfg!(feature = "serial-gate") { ", every entry under the serial gate" } else { "" };
         println!("fl4-sim: {} seeds, {} cores, {} steps each, {mode}{extra}: {failed} failed", self.seeds, self.cores, self.steps);
         failed
@@ -2488,6 +2714,7 @@ fn main() {
     let tso = args.iter().any(|a| a == "--tso");
     DOOM_READS.store(opt("--doom-reads", 0), Ordering::Relaxed);
     PROBE.store(opt("--probe-successors", 0), Ordering::Relaxed);
+    FASTPATH_DIFF.store(args.iter().any(|a| a == "--fastpath-diff"), Ordering::Relaxed);
     if let Some(i) = args.iter().position(|a| a == "--one") {
         let seed = args[i + 1].parse().unwrap();
         TRACE.store(args.iter().any(|a| a == "--trace"), Ordering::Relaxed);
@@ -2523,7 +2750,7 @@ fn main() {
     // run. Otherwise the one campaign the options describe.
     let suite = args.iter().any(|a| a == "--suite");
     let doom = opt("--doom-reads", 0);
-    let c = |steps, conc, pct, tso, scenario: Option<&str>, seeds| Campaign { seeds, first, cores, steps, conc, pct, tso, scenario: scenario.map(String::from), doom: 0, probe: 0 };
+    let c = |steps, conc, pct, tso, scenario: Option<&str>, seeds| Campaign { seeds, first, cores, steps, conc, pct, tso, scenario: scenario.map(String::from), doom: 0, probe: 0, diff: false };
     let quarter = (seeds / 4).max(1);
     let campaigns = if suite {
         vec![
@@ -2545,9 +2772,17 @@ fn main() {
             // number of other cores (fl4_sync::DEEP_PROBE_SUCCESSORS).
             Campaign { probe: fl4_sync::DEEP_PROBE_SUCCESSORS, ..c(8000, true, None, false, None, quarter) },
             Campaign { probe: fl4_sync::DEEP_PROBE_SUCCESSORS, ..c(8000, false, None, true, None, quarter) },
+            // The syscall fast paths (fl4_core::fastpath): each serial
+            // syscall also run through the general path from the same
+            // state, with an l4h vCPU's trap and reply pattern and without;
+            // and the pattern among transactions.
+            Campaign { diff: true, ..c(20000, false, None, false, Some("guest"), quarter) },
+            Campaign { diff: true, ..c(20000, false, None, false, None, quarter) },
+            c(8000, true, None, false, Some("guest"), quarter),
+            c(8000, false, None, true, Some("guest"), quarter),
         ]
     } else {
-        vec![Campaign { doom, probe: opt("--probe-successors", 0), ..c(steps, conc, pct, tso, scenario.as_deref(), seeds) }]
+        vec![Campaign { doom, probe: opt("--probe-successors", 0), diff: args.iter().any(|a| a == "--fastpath-diff"), ..c(steps, conc, pct, tso, scenario.as_deref(), seeds) }]
     };
     // Every schedule with one preemption at a runtime atomic, for small
     // two-core scenarios.

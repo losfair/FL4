@@ -40,6 +40,7 @@ pub mod domain;
 pub mod endpoint;
 pub mod ept;
 pub mod error;
+pub mod fastpath;
 pub mod faults;
 pub mod interrupt;
 pub mod ioport;

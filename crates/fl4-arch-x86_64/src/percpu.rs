@@ -41,6 +41,8 @@ pub struct PerCpu {
     pub pcids: [Cell<crate::tlb::Slot>; crate::tlb::SLOTS],
     /// This core holds the serial gate.
     pub gate_held: Cell<bool>,
+    /// Release the gate with `release_open` (fl4_sync::EntryEnv::open_on_release).
+    pub gate_open_on_release: Cell<bool>,
     /// The deadline the timer is armed for (TSC ticks; 0 = none).
     pub armed: Cell<u64>,
     /// A transaction runs on this core (Arch effects are queued).
@@ -75,6 +77,7 @@ impl PerCpu {
             exit_cr3: Cell::new(0),
             pcids: [const { Cell::new(crate::tlb::Slot::EMPTY) }; crate::tlb::SLOTS],
             gate_held: Cell::new(false),
+            gate_open_on_release: Cell::new(false),
             armed: Cell::new(0),
             tx: Cell::new(false),
             effects: [const { Cell::new(crate::arch::Effect::Ack) }; crate::arch::MAX_EFFECTS],

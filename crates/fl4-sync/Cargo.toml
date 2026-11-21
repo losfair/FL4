@@ -6,6 +6,7 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+fl4-abi = { path = "../fl4-abi" }
 fl4-core = { path = "../fl4-core" }
 fl4-store = { path = "../fl4-store" }
 
@@ -16,3 +17,7 @@ serial-gate = []
 # Mutation testing only (DESIGN.md §10).
 mutant-gate-no-wait = []
 mutant-gate-release = []
+# The syscall fast paths beside the gate (run_syscall) without marking the
+# core active, or without locking the endpoint and reply object.
+mutant-local-no-active = []
+mutant-local-no-lock = []

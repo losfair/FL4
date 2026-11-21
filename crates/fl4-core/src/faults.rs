@@ -21,6 +21,7 @@ pub fn clear_fault<S: Store>(s: &mut S, t: Tcb) {
 }
 
 /// Store `f` as the thread's fault (and the lookup failure of a cap fault).
+#[inline(always)]
 pub fn set_fault<S: Store>(s: &mut S, t: Tcb, f: Fault) {
     let (ty, w0, w1, w2) = match f {
         Fault::Null => (ft::NullFault, 0, 0, 0),
@@ -111,6 +112,8 @@ fn set_mrs_lookup_failure<S: Store>(s: &mut S, receiver: Tcb, buf: u64, lf: Look
 pub fn set_mrs_lookup_failure_at<S: Store>(s: &mut S, receiver: Tcb, buf: u64, lf: LookupFault, offset: u64) -> u64 {
     set_mrs_lookup_failure(s, receiver, buf, lf, offset)
 }
+
+#[inline(always)]
 
 fn copy_mrs_fault<S: Store>(s: &mut S, sender: Tcb, receiver: Tcb, regs_list: &[u64], buf: u64) {
     let mut i: usize = 0;
