@@ -330,9 +330,12 @@ pub fn select(c: &Caps) -> Result<Plan, Rejected> {
                 return Err(Rejected::ItsMicrocode);
             }
             let mds = c.arch & MDS_NO == 0;
+            // MMIO stale data and RFDS by the affected-model lists, on a
+            // hypervisor too: outside SEV/SEV-SNP (AMD only) the hypervisor
+            // is trusted, and so are the model it reports and the immunity
+            // bits it leaves out (GCE N4 reports no RFDS_NO).
             let mmio = c.arch & MMIO_NO != MMIO_NO
-                && (c.hypervisor
-                    || c.family == 6
+                && (c.family == 6
                         && matches!(
                             c.model,
                             0x55 | 0x8e
@@ -349,8 +352,7 @@ pub fn select(c: &Caps) -> Result<Plan, Rejected> {
                                 | 0x9c
                         ));
             let rfds = c.arch & RFDS_NO == 0
-                && (c.hypervisor
-                    || c.family == 6
+                && (c.family == 6
                         && matches!(
                             c.model,
                             0x5c | 0x5f
@@ -531,9 +533,19 @@ mod tests {
         c.arch |= ITS_NO;
         assert!(native_entry_without_ibpb(&c));
         assert_eq!(select(&c).unwrap().entry & IBPB, 0);
-        // Emerald Rapids (GCE N4) as an L1 guest.
-        let n4 = Caps { model: 0xcf, stepping: 2, hypervisor: true, ..intel() };
-        assert_eq!(select(&n4).unwrap().entry & IBPB, 0);
+        // GCE N4 (Emerald Rapids) as measured: no RFDS_NO, PBRSB_NO or
+        // BHI_NO; BHI_DIS_S. A full plan, without buffer clearing.
+        let n4 = Caps {
+            model: 0xcf,
+            stepping: 2,
+            hypervisor: true,
+            arch: 0x0408_e16b,
+            leaf7_edx: 0xafc1_4410,
+            rtm: true,
+            ..intel()
+        };
+        let p = select(&n4).unwrap();
+        assert_eq!((p.entry, p.vmexit, p.buffers), (PBRSB | IBHF, IBPB | PBRSB | IBHF, false));
     }
 
     #[test]
@@ -607,9 +619,9 @@ mod tests {
             for family in [0x12, 0x13] {
                 c.family = family;
                 assert!(!select(&c).unwrap().buffers);
+                // A (trusted) hypervisor's model is used as reported.
                 c.hypervisor = true;
-                // Nested CPUs still require explicit immunity or clearing.
-                assert_eq!(select(&c), Err(Rejected::BufferMicrocode));
+                assert!(!select(&c).unwrap().buffers);
                 c.hypervisor = false;
             }
         }
