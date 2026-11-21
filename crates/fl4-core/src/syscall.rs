@@ -363,7 +363,8 @@ pub fn handle_syscall_local<S: Store, A: Arch>(s: &mut S, a: &mut A, number: i64
 pub fn handle_ioport_local<S: Store, A: Arch>(s: &mut S, a: &mut A, number: i64) -> bool {
     let t = sched::cur_thread(s);
     let info = msg::msg_info(s, t);
-    if t.flags(s) & tcb_flag::TRAP_SYSCALLS != 0
+    if crate::layout::NUM_DOMAINS != 1
+        || t.flags(s) & tcb_flag::TRAP_SYSCALLS != 0
         || (number != sc::SysCall && number != sc::SysSend)
         || !ioport::is_port_label(info.label)
     {
@@ -375,8 +376,7 @@ pub fn handle_ioport_local<S: Store, A: Arch>(s: &mut S, a: &mut A, number: i64)
     sched::update_timestamp(s, a);
     let cptr = t.reg(s, reg::CAP);
     let csc = sched::cur_sc(s);
-    if crate::layout::NUM_DOMAINS != 1
-        || sched::action(s) != sched::ACTION_RESUME_CURRENT
+    if sched::action(s) != sched::ACTION_RESUME_CURRENT
         || t.yield_to(s) != 0
         || info.extra_caps != 0
         || !ioport::invocation_ok(s, t, cptr, info)

@@ -248,11 +248,7 @@ fn unlock() {
     let pc = percpu::get();
     if pc.gate_held.get() {
         pc.gate_held.set(false);
-        if pc.gate_open_on_release.replace(false) {
-            GATE.release_open(&Phys);
-        } else {
-            GATE.release(&Phys);
-        }
+        GATE.release(&Phys);
     }
 }
 
@@ -274,16 +270,10 @@ impl fl4_sync::EntryEnv for KernelEnv {
     fn prefer_serial(&self) -> bool {
         self.serial
     }
-    fn probe_successors(&self) -> u64 {
-        fl4_sync::DEEP_PROBE_SUCCESSORS
-    }
     /// No transactions on x86_64: entries queue for the gate, and guest
     /// syscall fast paths run beside it (`fl4_sync::run_syscall`).
     fn tx_attempts(&self) -> u32 {
         0
-    }
-    fn open_on_release(&self) {
-        percpu::get().gate_open_on_release.set(true);
     }
     fn store(&self, tx: bool) -> PhysStore {
         PhysStore { frame_masks: (fl4_arch_x86_64::sev::mask(), 0), ks_base: unsafe { KS_BASE }, cpu: self.cpu(), tx }

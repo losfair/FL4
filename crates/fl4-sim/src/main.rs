@@ -137,8 +137,6 @@ struct Conc {
     call_pending: AtomicU64,
     in_kernel: Vec<AtomicBool>,
     gate_held: Vec<AtomicBool>,
-    /// Release the gate with `release_open` (`EntryEnv::open_on_release`).
-    open_on_release: Vec<AtomicBool>,
     /// Cores that have run all their steps.
     out_of_steps: AtomicU64,
     /// Per core: reads its transaction made since it was doomed.
@@ -295,7 +293,6 @@ impl Conc {
             call_pending: AtomicU64::new(0),
             in_kernel: (0..n).map(|_| AtomicBool::new(false)).collect(),
             gate_held: (0..n).map(|_| AtomicBool::new(false)).collect(),
-            open_on_release: (0..n).map(|_| AtomicBool::new(false)).collect(),
             out_of_steps: AtomicU64::new(0),
             zombie: (0..n).map(|_| AtomicU64::new(0)).collect(),
             check: Mutex::new(Checker::default()),
@@ -1072,9 +1069,6 @@ impl fl4_sync::EntryEnv for SimEnv {
         c.held_used = false;
         c.held_irq.take()
     }
-    fn open_on_release(&self) {
-        self.conc.open_on_release[self.s.cpu as usize].store(true, Ordering::SeqCst);
-    }
     fn holding_gate(&self) {
         self.conc.gate_held[self.s.cpu as usize].store(true, Ordering::SeqCst);
         self.a.m.lock().unwrap().cores[self.s.cpu as usize].held_used = false;
@@ -1379,13 +1373,8 @@ impl Sim {
         let env = SimEnv { s: self.s.clone(), a: self.a.clone(), conc: conc.clone() };
         let m = self.s.clone();
         fl4_sync::run_syscall(&env, &GATE, number, |s, a| fl4_sync::local_syscall(s, a, &m, number), |s, a| syscall::handle_syscall_fast(s, a, number));
-        let open = conc.open_on_release[cpu].swap(false, Ordering::SeqCst);
         if conc.gate_held[cpu].swap(false, Ordering::SeqCst) {
-            if open {
-                GATE.release_open(&self.s);
-            } else {
-                GATE.release(&self.s);
-            }
+            GATE.release(&self.s);
         }
         let stuck = self.a.m.lock().unwrap().cores[cpu].in_service;
         assert!(stuck.is_none(), "liveness: core {cpu} left the kernel with interrupt {stuck:?} accepted and never acknowledged");

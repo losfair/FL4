@@ -218,7 +218,8 @@ pub fn reply_recv_found<S: Store, A: Arch>(s: &mut S, a: &mut A, t: Tcb, rptr: u
         return false;
     }
     // schedule(): the action is `u`, and `t`, blocked, is not schedulable.
-    let fastfail = t == sched::idle_thread(s) || u.prio(s) < t.prio(s);
+    // (An if, not `||`: see ioport::decode.)
+    let fastfail = if t == sched::idle_thread(s) || u.prio(s) < t.prio(s) { true } else { false };
     if fastfail && !sched::is_highest_prio(s, sched::cur_domain(s), u.prio(s)) {
         return false;
     }

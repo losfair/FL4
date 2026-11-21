@@ -185,18 +185,19 @@ impl SerialGate {
             m.a_store(&p.retry, remaining - 1, Ordering::Relaxed);
             return false;
         }
-        let mut next = m.a_load(&self.next, Ordering::Relaxed);
-        let queued = loop {
+        let (next, queued) = loop {
+            // `serving` first: the ticket it names was taken, from `next`,
+            // before it was served, so `next` read after it is no smaller.
             let ticket = m.a_load(&self.head.serving, Ordering::Acquire);
+            let next = m.a_load(&self.next, Ordering::Relaxed);
             if next.wrapping_sub(ticket) > successors {
                 m.a_add(&self.contention.0, 1, Ordering::Relaxed);
                 return false;
             }
             // Another prober took this ticket: the queue moved, which
             // is progress; try for the next one.
-            match m.a_cas(&self.next, next, next.wrapping_add(1), Ordering::Relaxed, Ordering::Relaxed) {
-                Ok(_) => break next != ticket,
-                Err(n) => next = n,
+            if m.a_cas(&self.next, next, next.wrapping_add(1), Ordering::Relaxed, Ordering::Relaxed).is_ok() {
+                break (next, next != ticket);
             }
         };
         if queued {
@@ -260,18 +261,6 @@ impl SerialGate {
         m.a_store(&self.head.serving, next, Ordering::Release);
     }
 
-    /// `release`, opening the gate even if another serial entry is waiting,
-    /// which then performs the whole handshake again. For an entry that
-    /// queued only because the gate was closed (`run_syscall`): queued
-    /// syscalls keeping the gate closed for each other would never let the
-    /// next ones run beside it.
-    pub fn release_open<M: Mem>(&self, m: &M) {
-        m.a_store(&self.owner, u64::MAX, Ordering::Relaxed);
-        let s = m.a_load(&self.head.serving, Ordering::Relaxed);
-        m.a_store(&self.head.closed, 0, Ordering::Release);
-        m.a_store(&self.head.serving, s.wrapping_add(1), Ordering::Release);
-    }
-
     pub fn owner(&self) -> u64 {
         self.owner.load(Ordering::Relaxed)
     }
@@ -309,8 +298,6 @@ pub trait EntryEnv {
     fn tx_attempts(&self) -> u32 {
         TX_ATTEMPTS
     }
-    /// When this entry gives up the gate, use `release_open`.
-    fn open_on_release(&self) {}
     /// The store, inside this core's transaction or direct.
     fn store(&self, tx: bool) -> Self::S;
     fn arch(&self) -> Self::A;
@@ -412,7 +399,8 @@ pub fn run_syscall<E: EntryEnv>(
     mut local: impl FnMut(&mut E::S, &mut E::A) -> bool,
     mut body: impl FnMut(&mut E::S, &mut E::A) -> bool,
 ) -> bool {
-    if !(env.multi() && env.tx_attempts() == 0 && !env.prefer_serial() && local_candidate(&env.store(false), number)) {
+    let candidate = local_candidate(&env.store(false), number);
+    if !(env.multi() && env.tx_attempts() == 0 && !env.prefer_serial() && candidate != Candidate::No) {
         return run_entry(env, gate, false, |s, a| {
             let _ = body(s, a);
         });
@@ -423,10 +411,13 @@ pub fn run_syscall<E: EntryEnv>(
         Local::Closed | Local::Declined => {}
     }
     // Whether a fast path ran under the gate decides, as one beside it
-    // does, whether this core waits for the gate next time.
+    // does, whether this core waits for the gate next time. An I/O port
+    // access has no fast path under the gate, and one declined beside it
+    // (a timer due, the budget spent) would usually run there next time.
     let fast = core::cell::Cell::new(false);
     let ran = run_entry(env, gate, false, |s, a| fast.set(body(s, a)));
-    env.mem().a_store(&gate.policy[env.cpu() as usize].local_hit, fast.get() as u64, Ordering::Relaxed);
+    let hit = fast.get() || candidate == Candidate::Port;
+    env.mem().a_store(&gate.policy[env.cpu() as usize].local_hit, hit as u64, Ordering::Relaxed);
     ran
 }
 
@@ -441,14 +432,32 @@ fn lock_object<M: Mem>(m: &M, addr: u64, held: &mut fl4_store::tx::Held) -> bool
 /// without the gate: the current thread's flags change only while it is
 /// stalled, and `local_syscall` checks again.)
 #[inline(always)]
-fn local_candidate<S: fl4_core::machine::Store>(s: &S, number: i64) -> bool {
+fn local_candidate<S: fl4_core::machine::Store>(s: &S, number: i64) -> Candidate {
     let t = fl4_core::sched::cur_thread(s);
-    number == fl4_abi::syscall::SysReplyRecv
-        || t.flags(s) & fl4_abi::consts::tcb_flag::TRAP_SYSCALLS != 0
+    if number == fl4_abi::syscall::SysReplyRecv || t.flags(s) & fl4_abi::consts::tcb_flag::TRAP_SYSCALLS != 0 {
+        Candidate::Fast
+    } else if (number == fl4_abi::syscall::SysCall || number == fl4_abi::syscall::SysSend)
         // An I/O port access by its label alone (a register).
-        || ((number == fl4_abi::syscall::SysCall || number == fl4_abi::syscall::SysSend)
-            && fl4_core::ioport::is_port_label(fl4_core::msg::msg_info(s, t).label))
+        && fl4_core::ioport::is_port_label(fl4_core::msg::msg_info(s, t).label)
+    {
+        Candidate::Port
+    } else {
+        Candidate::No
+    }
 }
+
+#[derive(PartialEq, Clone, Copy)]
+enum Candidate {
+    No,
+    /// A guest syscall's fault or reply (`fastpath`).
+    Fast,
+    /// An I/O port access (`handle_ioport_local`).
+    Port,
+}
+
+/// How long `local_entry` waits for a closed gate to open: some tens of
+/// microseconds, several serial entries.
+const LOCAL_WAIT_SPINS: u32 = 1024;
 
 enum Local {
     Done,
@@ -465,12 +474,18 @@ fn local_entry<E: EntryEnv>(env: &E, gate: &SerialGate, local: &mut impl FnMut(&
     // calls, rather than take a ticket: queued syscalls would keep it closed
     // for each other. But only after a fast path that ran: one that then
     // declined would have waited for the gate twice.
+    // The wait is bounded: serial entries queued back to back keep the
+    // gate closed (`release`), and this core would wait out of FIFO order,
+    // without its interrupts, for as long as they come; after
+    // `LOCAL_WAIT_SPINS` it takes a ticket.
     let hit = &gate.policy[cpu as usize].local_hit;
+    let mut spins = 0;
     // (Mutation test: `mutant-local-no-active` does not mark the core.)
     while !cfg!(feature = "mutant-local-no-active") && !gate.try_enter_tx(env.mem(), cpu) {
-        if env.mem().a_load(hit, Ordering::Relaxed) == 0 {
+        if env.mem().a_load(hit, Ordering::Relaxed) == 0 || spins == LOCAL_WAIT_SPINS {
             return Local::Closed;
         }
+        spins += 1;
         if env.service_remote() {
             // A remote stall took this core's thread: no entry for it now.
             return Local::Stalled;
@@ -522,9 +537,10 @@ pub fn local_syscall<S: fl4_core::machine::Store, A: fl4_core::machine::Arch, M:
             Some((r, ep)) => {
                 found = (r, ep);
                 lock_object(m, r, &mut held)
-                    // reply_remove would write the reply object below on
-                    // the call stack.
+                    // reply_remove would write the reply objects next to
+                    // it on the call stack, which are not locked.
                     && Reply(r).prev(s) == 0
+                    && Reply(r).next(s) == 0
                     && {
                         let u = fl4_core::obj::Tcb(Reply(r).tcb(s));
                         !u.is_null() && u.state(s) == fl4_core::sched::TS_BLOCKED_ON_REPLY
