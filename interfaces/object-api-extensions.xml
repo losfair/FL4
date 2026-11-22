@@ -33,7 +33,7 @@
                 (op | rights &lt;&lt; 2 | attributes &lt;&lt; 6 | vaddr, cptr A, cptr B), CPtrs at depth 64 in
                 the invoked CNode. Ops: 1 copies frame cap A into empty slot B and maps it, 2 remaps
                 frame cap A, 3 deletes frame cap A. Extra cap 0 is the PML4. Stops at the first
-                failing entry; the reply is (entries done, seL4_Error of the failing one or 0). The kernel may run fewer entries than asked with no error (FL4 runs a batch beside its serial gate up to an entry it cannot run there): send the rest again.
+                failing entry; the reply is (entries done, seL4_Error of the failing one or 0).
             </description>
             <param dir="in" name="count" type="seL4_Word" description="Number of entries"/>
         </method>

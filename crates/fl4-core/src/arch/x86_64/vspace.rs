@@ -632,29 +632,13 @@ pub fn decode_frame_batch<S: Store, A: Arch>(s: &mut S, a: &mut A, length: u64, 
             }
         }
     }
-    frame_batch_reply(s, done, err);
-    Ok(())
-}
-
-/// One FrameBatch entry, as `decode_frame_batch` runs it: 0, or the error
-/// code that stops the batch (`localinv::batch_entry_plan`).
-pub fn frame_batch_entry<S: Store, A: Arch>(s: &mut S, a: &mut A, cnode: Cap, ex: &[Slot; 3], w0: u64, c1: u64, c2: u64) -> u64 {
-    match frame_batch_one(s, a, cnode, ex, w0, c1, c2) {
-        Ok(()) => 0,
-        Err(Exc::Sys(e)) => e.code(),
-        Err(_) => fl4_abi::consts::error::IllegalOperation,
-    }
-}
-
-/// `decode_frame_batch`'s reply: (entries done, error code or 0).
-pub fn frame_batch_reply<S: Store>(s: &mut S, done: u64, err: u64) {
-    let ct = sched::cur_thread(s);
     let rbuf = msg::lookup_ipc_buffer(s, true, ct);
     ct.set_reg(s, crate::layout::reg::BADGE, 0);
     msg::set_mr(s, ct, rbuf, 0, done);
     let len = msg::set_mr(s, ct, rbuf, 1, err);
     msg::set_msg_info(s, ct, MessageInfo::new(0, 0, 0, len));
     sched::set_thread_state(s, ct, sched::TS_RUNNING);
+    Ok(())
 }
 
 fn frame_batch_one<S: Store, A: Arch>(s: &mut S, a: &mut A, cnode: Cap, ex: &[Slot; 3], w0: u64, c1: u64, c2: u64) -> KResult<()> {
@@ -663,25 +647,6 @@ fn frame_batch_one<S: Store, A: Arch>(s: &mut S, a: &mut A, cnode: Cap, ex: &[Sl
         let dest = cspace::lookup_target_slot(s, cnode, c2, 64)?;
         cdt::ensure_empty_slot(s, dest)?;
         let src = cspace::lookup_source_slot(s, cnode, c1, 64)?;
-        frame_batch_slots(s, a, ex, w0, src, dest)
-    } else if op == 2 {
-        let slot = cspace::lookup_source_slot(s, cnode, c1, 64)?;
-        frame_batch_slots(s, a, ex, w0, slot, Slot(0))
-    } else if op == 3 {
-        let slot = cspace::lookup_target_slot(s, cnode, c1, 64)?;
-        frame_batch_slots(s, a, ex, w0, slot, Slot(0))
-    } else {
-        illegal()
-    }
-}
-
-/// A FrameBatch entry once its slots are looked up: `first` is cap A's
-/// slot, `second` the empty slot B of a copy-and-map (whose emptiness the
-/// caller checked).
-fn frame_batch_slots<S: Store, A: Arch>(s: &mut S, a: &mut A, ex: &[Slot; 3], w0: u64, first: Slot, second: Slot) -> KResult<()> {
-    let op = w0 & 3;
-    if op == 1 {
-        let (src, dest) = (first, second);
         let src_cap = src.cap(s);
         if as_frame(src_cap).is_none() {
             return invalid_cap(0);
@@ -695,24 +660,16 @@ fn frame_batch_slots<S: Store, A: Arch>(s: &mut S, a: &mut A, ex: &[Slot; 3], w0
         }
         r
     } else if op == 2 {
-        batch_map(s, a, first, ex, w0)
+        let slot = cspace::lookup_source_slot(s, cnode, c1, 64)?;
+        batch_map(s, a, slot, ex, w0)
     } else if op == 3 {
-        if as_frame(first.cap(s)).is_none() {
+        let slot = cspace::lookup_target_slot(s, cnode, c1, 64)?;
+        if as_frame(slot.cap(s)).is_none() {
             return illegal();
         }
-        cdt::delete(s, a, first, true)
+        cdt::delete(s, a, slot, true)
     } else {
         illegal()
-    }
-}
-
-/// `frame_batch_entry` with the slots its plan looked up
-/// (`localinv::batch_entry_plan`, whose locks keep them as they were).
-pub fn frame_batch_entry_slots<S: Store, A: Arch>(s: &mut S, a: &mut A, ex: &[Slot; 3], w0: u64, first: Slot, second: Slot) -> u64 {
-    match frame_batch_slots(s, a, ex, w0, first, second) {
-        Ok(()) => 0,
-        Err(Exc::Sys(e)) => e.code(),
-        Err(_) => fl4_abi::consts::error::IllegalOperation,
     }
 }
 
