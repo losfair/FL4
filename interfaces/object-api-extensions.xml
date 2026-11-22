@@ -41,8 +41,9 @@
                 leaves neither. Remap, two words (CPtr, vaddr): map the frame capability, which is
                 unmapped or already maps vaddr in this address space. Delete, one word (CPtr): delete
                 the frame capability; an empty slot is no error. With the defer flag, a deleted
-                frame mapped in this address space is unmapped without its own invalidation, and the
-                call invalidates the address space once, before it returns. Extra capability 0 is the
+                frame mapped in this address space (other than a device frame) is unmapped without
+                its own invalidation, and the call invalidates the address space once, before it
+                returns. Extra capability 0 is the
                 CNode the CPtrs are looked up in; extra capability 1, if given, is the destination
                 CNode of copies. The entries run in order and the call stops at the first that
                 fails; a Call's reply is (entries done, the seL4_Error of the failing entry or 0).

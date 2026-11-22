@@ -676,12 +676,17 @@ fn decode_frame_batch<S: Store, A: Arch>(s: &mut S, a: &mut A, length: u64, ptr:
         Some(x) => x.cap(s),
         None => return truncated(),
     };
-    let dest_cnode = match extra(ex, 1) {
-        Some(x) => x.cap(s),
-        None => cnode,
-    };
-    if !matches!(cnode, Cap::CNode { .. }) || !matches!(dest_cnode, Cap::CNode { .. }) {
+    // Extra cap i is argument i + 1, as in decode_page_map. Only a copy
+    // uses a destination CNode.
+    if !matches!(cnode, Cap::CNode { .. }) {
         return invalid_cap(1);
+    }
+    let dest_cnode = match extra(ex, 1) {
+        Some(x) if op == fb::COPY_MAP => x.cap(s),
+        _ => cnode,
+    };
+    if !matches!(dest_cnode, Cap::CNode { .. }) {
+        return invalid_cap(2);
     }
     let b = Batch {
         root,
@@ -771,22 +776,23 @@ fn frame_batch_entry<S: Store, A: Arch>(s: &mut S, a: &mut A, b: &Batch, w0: u64
             None => return illegal(),
         };
         // A mapping in this address space: clear it now and leave the
-        // invalidation to the batch's end. Any other goes as usual.
-        if b.defer_delete && f.mapped && !f.is_ept && f.asid == b.asid {
-            unmap_page_unflushed(s, f.size, f.asid, f.vaddr, f.ptr);
+        // invalidation to the batch's end. Any other goes as usual, and so
+        // does a device frame's: its final deletion retires shared DMA
+        // memory (retire_dma_frame), which needs every core's TLB free of
+        // the mapping first, as unmap_page leaves it.
+        if b.defer_delete && f.mapped && !f.is_ept && !f.is_device && f.asid == b.asid {
+            if unmap_page_unflushed(s, b.root, f.size, f.vaddr, f.ptr) {
+                *deferred = true;
+            }
             slot.set_cap(s, Cap::Frame { ptr: f.ptr, size: f.size, rights: f.rights, is_device: f.is_device, mapped: false, is_ept: false, asid: 0, vaddr: 0 });
-            *deferred = true;
         }
         cdt::delete(s, a, slot, true)
     }
 }
 
-/// `unmap_page` without its invalidation, which the caller makes.
-fn unmap_page_unflushed<S: Store>(s: &mut S, size: FrameSize, asid: u64, vaddr: u64, pptr: u64) {
-    let root = match find_vspace_for_asid(s, asid) {
-        Ok(r) => r,
-        Err(_) => return,
-    };
+/// `unmap_page` in the address space `root`, without its invalidation,
+/// which the caller makes: whether it cleared an entry.
+fn unmap_page_unflushed<S: Store>(s: &mut S, root: u64, size: FrameSize, vaddr: u64, pptr: u64) -> bool {
     let pa = layout::paddr(pptr);
     let slot = match size {
         FrameSize::Small => lookup_pt_slot(s, root, vaddr),
@@ -795,14 +801,15 @@ fn unmap_page_unflushed<S: Store>(s: &mut S, size: FrameSize, asid: u64, vaddr: 
     };
     let slot = match slot {
         Ok(x) => x,
-        Err(_) => return,
+        Err(_) => return false,
     };
     let e = s.read(slot);
     let large = !matches!(size, FrameSize::Small);
     if e & P_PRESENT == 0 || (large && e & P_PS == 0) || frame_gpa(s, frame_base(e, size)) != pa {
-        return;
+        return false;
     }
     s.write(slot, 0);
+    true
 }
 
 /// `decode_page_map` for a FrameBatch entry: the frame in `slot` at
