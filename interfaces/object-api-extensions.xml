@@ -25,22 +25,29 @@
             <error name="seL4_FailedLookup" description="The destination CNode could not be resolved."/>
         </method>
     </interface>
-    <interface name="seL4_CNode" manual_name="CNode" cap_description="CNode capability.">
-        <method id="CNodeFrameBatch" name="FrameBatch" manual_name="Frame Batch">
-            <brief>PROTOTYPE (x86_64): copy-and-map, remap and delete frame caps in one call.</brief>
+    <interface name="seL4_X64_PML4" manual_name="PML4" cap_description="Capability to the VSpace root (PML4) being operated on.">
+        <method id="X86PML4FrameBatch" name="FrameBatch" manual_name="Frame Batch">
+            <condition><not><config var="CONFIG_ARCH_AARCH64"/></not></condition>
+            <brief>Copy-and-map, remap or delete frame capabilities in this address space, many in one call.</brief>
             <description>
-                Message word 0 is the number of entries (at most 39); each entry is three words
-                (op | rights &lt;&lt; 2 | attributes &lt;&lt; 6 | vaddr, cptr A, cptr B), CPtrs at depth 64 in
-                the invoked CNode. Bits 0-1 are the op, 2-5 the seL4_CapRights mask for the mapping,
-                6-10 the VM attributes (seL4_X86_DeferFlush included); bit 11 is reserved (zero) and
-                bits 12-63 are the page-aligned vaddr. Ops: 1 copies frame cap A into empty slot B
-                with A's full rights and maps it (the rights mask applies to the mapping only, as in
-                seL4_X86_Page_Map), 2 remaps frame cap A, 3 deletes frame cap A (an empty slot is no
-                error, as for seL4_CNode_Delete). A copy-and-map is all or nothing. Extra cap 0 is
-                the PML4. Stops at the first failing entry; a Call's reply is (entries done,
-                seL4_Error of the failing one or 0).
+                The header (message word 0) is op (bits 0-1: 1 copy-and-map, 2 remap, 3 delete), the
+                number of entries (bits 8-15), the depth of every CPtr (bits 16-22, 1 to 64), the
+                seL4_CapRights mask the mappings get (bits 24-27), the seL4_CapRights mask a copy
+                keeps (bits 28-31), the VM attributes, seL4_X86_DeferFlush included (bits 32-36), and
+                the flag that defers the TLB invalidation of deletes (bit 40); the other bits are
+                reserved (zero). The entries follow, all of the header's op. Copy-and-map, three
+                words (source CPtr, destination CPtr, vaddr): copy the frame capability, masked with
+                the copy rights, into the empty destination slot and map it at vaddr; a failure
+                leaves neither. Remap, two words (CPtr, vaddr): map the frame capability, which is
+                unmapped or already maps vaddr in this address space. Delete, one word (CPtr): delete
+                the frame capability; an empty slot is no error. With the defer flag, a deleted
+                frame mapped in this address space is unmapped without its own invalidation, and the
+                call invalidates the address space once, before it returns. Extra capability 0 is the
+                CNode the CPtrs are looked up in; extra capability 1, if given, is the destination
+                CNode of copies. The entries run in order and the call stops at the first that
+                fails; a Call's reply is (entries done, the seL4_Error of the failing entry or 0).
             </description>
-            <param dir="in" name="count" type="seL4_Word" description="Number of entries"/>
+            <param dir="in" name="header" type="seL4_Word" description="Op, count, depth, rights, attributes and flags"/>
         </method>
     </interface>
 </api>

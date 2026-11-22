@@ -599,28 +599,111 @@ fn decode_page_map<S: Store, A: Arch>(s: &mut S, a: &mut A, length: u64, slot: S
     Ok(())
 }
 
-/// PROTOTYPE: entries per CNode FrameBatch ((MSG_MAX_LENGTH - 1) / 3).
-pub const FRAME_BATCH_MAX: u64 = 39;
+/// FL4 extension X86PML4FrameBatch (interfaces/object-api-extensions.xml):
+/// frame ops of one kind on the invoked address space, many in one call.
+pub mod frame_batch {
+    pub const COPY_MAP: u64 = 1;
+    pub const REMAP: u64 = 2;
+    pub const DELETE: u64 = 3;
+    /// Header fields (word 0): op, count, CPtr depth, the rights the
+    /// mappings get, the rights a copy keeps, VM attributes, flags.
+    pub const OP: u64 = 0x3;
+    pub const COUNT_SHIFT: u64 = 8;
+    pub const DEPTH_SHIFT: u64 = 16;
+    pub const MAP_RIGHTS_SHIFT: u64 = 24;
+    pub const CAP_RIGHTS_SHIFT: u64 = 28;
+    pub const ATTR_SHIFT: u64 = 32;
+    /// Deletes clear their mappings without invalidating each, and the
+    /// batch invalidates the address space once at its end.
+    pub const DEFER_DELETE_FLUSH: u64 = 1 << 40;
+    pub const DEFINED: u64 = OP | (0xff << COUNT_SHIFT) | (0x7f << DEPTH_SHIFT) | (0xf << MAP_RIGHTS_SHIFT)
+        | (0xf << CAP_RIGHTS_SHIFT) | (0x1f << ATTR_SHIFT) | DEFER_DELETE_FLUSH;
+    /// Words per entry of each op.
+    pub fn entry_words(op: u64) -> u64 {
+        if op == COPY_MAP {
+            3
+        } else if op == REMAP {
+            2
+        } else if op == DELETE {
+            1
+        } else {
+            0
+        }
+    }
+}
 
-/// PROTOTYPE: CNode FrameBatch (interfaces/object-api-extensions.xml).
-/// Replies (entries done, error code of the failing entry or 0).
-pub fn decode_frame_batch<S: Store, A: Arch>(s: &mut S, a: &mut A, length: u64, cnode: Cap, call: bool, buf: u64, ex: &[Slot; 3]) -> KResult<()> {
+/// The header and caps a FrameBatch runs with.
+#[derive(Clone, Copy)]
+struct Batch {
+    root: u64,
+    asid: u64,
+    op: u64,
+    depth: u64,
+    map_rights: u64,
+    cap_rights: u64,
+    attr: u64,
+    defer_delete: bool,
+    cnode: Cap,
+    dest_cnode: Cap,
+}
+
+/// X86PML4FrameBatch on the PML4 `ptr` (`mapped`, `asid`). Runs the
+/// entries in order and stops at the first that fails; a Call's reply is
+/// (entries done, error code of the failing one or 0).
+#[allow(clippy::too_many_arguments)]
+fn decode_frame_batch<S: Store, A: Arch>(s: &mut S, a: &mut A, length: u64, ptr: u64, mapped: bool, asid: u64, call: bool, buf: u64, ex: &[Slot; 3]) -> KResult<()> {
+    use frame_batch as fb;
     let ct = sched::cur_thread(s);
+    if !mapped {
+        return invalid_cap(0);
+    }
+    let root = check_vspace(s, Cap::Pml4 { ptr, mapped, asid }).map_err(|_| Exc::Sys(SysError::InvalidCapability { arg: 0 }))?.0;
     if length < 1 {
         return truncated();
     }
-    let n = msg::syscall_arg(s, ct, buf, 0);
-    if n > FRAME_BATCH_MAX || length < 1 + 3 * n {
+    let hdr = msg::syscall_arg(s, ct, buf, 0);
+    let op = hdr & fb::OP;
+    let n = (hdr >> fb::COUNT_SHIFT) & 0xff;
+    let depth = (hdr >> fb::DEPTH_SHIFT) & 0x7f;
+    let words = fb::entry_words(op);
+    if hdr & !fb::DEFINED != 0 || words == 0 || depth == 0 || depth > 64 {
+        return invalid_arg(0);
+    }
+    if length < 1 + words * n {
         return truncated();
     }
+    let cnode = match extra(ex, 0) {
+        Some(x) => x.cap(s),
+        None => return truncated(),
+    };
+    let dest_cnode = match extra(ex, 1) {
+        Some(x) => x.cap(s),
+        None => cnode,
+    };
+    if !matches!(cnode, Cap::CNode { .. }) || !matches!(dest_cnode, Cap::CNode { .. }) {
+        return invalid_cap(1);
+    }
+    let b = Batch {
+        root,
+        asid,
+        op,
+        depth,
+        map_rights: (hdr >> fb::MAP_RIGHTS_SHIFT) & 0xf,
+        cap_rights: (hdr >> fb::CAP_RIGHTS_SHIFT) & 0xf,
+        attr: (hdr >> fb::ATTR_SHIFT) & 0x1f,
+        defer_delete: hdr & fb::DEFER_DELETE_FLUSH != 0,
+        cnode,
+        dest_cnode,
+    };
     let mut done = 0;
     let mut err = 0;
+    let mut deferred = false;
     while done < n {
-        let i = 1 + 3 * done;
+        let i = 1 + words * done;
         let w0 = msg::syscall_arg(s, ct, buf, i);
-        let c1 = msg::syscall_arg(s, ct, buf, i + 1);
-        let c2 = msg::syscall_arg(s, ct, buf, i + 2);
-        match frame_batch_one(s, a, cnode, ex, w0, c1, c2) {
+        let w1 = if words > 1 { msg::syscall_arg(s, ct, buf, i + 1) } else { 0 };
+        let w2 = if words > 2 { msg::syscall_arg(s, ct, buf, i + 2) } else { 0 };
+        match frame_batch_entry(s, a, &b, w0, w1, w2, &mut deferred) {
             Ok(()) => done += 1,
             Err(Exc::Sys(e)) => {
                 err = e.code();
@@ -631,6 +714,11 @@ pub fn decode_frame_batch<S: Store, A: Arch>(s: &mut S, a: &mut A, length: u64, 
                 break;
             }
         }
+    }
+    // The deletes' mappings are gone from the tables: drop them from every
+    // core's TLB before the caller learns they are.
+    if deferred {
+        a.invalidate_asid(asid);
     }
     // A Send gets no reply, and its registers stay as they were (`reply1`).
     if call {
@@ -644,69 +732,90 @@ pub fn decode_frame_batch<S: Store, A: Arch>(s: &mut S, a: &mut A, length: u64, 
     Ok(())
 }
 
-fn frame_batch_one<S: Store, A: Arch>(s: &mut S, a: &mut A, cnode: Cap, ex: &[Slot; 3], w0: u64, c1: u64, c2: u64) -> KResult<()> {
-    let op = w0 & 3;
-    // Bit 11 is reserved.
-    if w0 & (1 << 11) != 0 {
-        return invalid_arg(0);
-    }
-    if op == 1 {
-        let dest = cspace::lookup_target_slot(s, cnode, c2, 64)?;
+/// One FrameBatch entry. COPY_MAP (source, destination, vaddr): copy the
+/// frame cap with the batch's cap rights into the empty destination slot
+/// and map it, all or nothing. REMAP (slot, vaddr). DELETE (slot): an
+/// empty slot is no error, as for CNode_Delete.
+#[allow(clippy::too_many_arguments)]
+fn frame_batch_entry<S: Store, A: Arch>(s: &mut S, a: &mut A, b: &Batch, w0: u64, w1: u64, w2: u64, deferred: &mut bool) -> KResult<()> {
+    use frame_batch as fb;
+    if b.op == fb::COPY_MAP {
+        let dest = cspace::lookup_target_slot(s, b.dest_cnode, w1, b.depth)?;
         cdt::ensure_empty_slot(s, dest)?;
-        let src = cspace::lookup_source_slot(s, cnode, c1, 64)?;
+        let src = cspace::lookup_source_slot(s, b.cnode, w0, b.depth)?;
         let src_cap = src.cap(s);
         if as_frame(src_cap).is_none() {
             return invalid_cap(0);
         }
-        let new_cap = crate::objects::derive_cap(s, src, src_cap)?;
+        // As CNode_Copy: the rights mask, then the derivation.
+        let masked = crate::capability::mask_cap_rights(Rights::from_word(b.cap_rights), src_cap);
+        let new_cap = crate::objects::derive_cap(s, src, masked)?;
         cdt::insert_with_cap(s, new_cap, src_cap, src, dest);
-        let r = batch_map(s, a, dest, ex, w0);
+        let r = batch_map(s, a, dest, b, w2);
         if r.is_err() {
-            // The entry is all or nothing: drop the unmapped copy.
+            // All or nothing: drop the unmapped copy.
             let _ = cdt::delete(s, a, dest, true);
         }
         r
-    } else if op == 2 {
-        let slot = cspace::lookup_source_slot(s, cnode, c1, 64)?;
-        batch_map(s, a, slot, ex, w0)
-    } else if op == 3 {
-        let slot = cspace::lookup_target_slot(s, cnode, c1, 64)?;
+    } else if b.op == fb::REMAP {
+        let slot = cspace::lookup_source_slot(s, b.cnode, w0, b.depth)?;
+        batch_map(s, a, slot, b, w1)
+    } else {
+        let slot = cspace::lookup_target_slot(s, b.cnode, w0, b.depth)?;
         let c = slot.cap(s);
-        // As CNode_Delete, an empty slot is no error.
         if c.is_null() {
             return Ok(());
         }
-        if as_frame(c).is_none() {
-            return illegal();
+        let f = match as_frame(c) {
+            Some(f) => f,
+            None => return illegal(),
+        };
+        // A mapping in this address space: clear it now and leave the
+        // invalidation to the batch's end. Any other goes as usual.
+        if b.defer_delete && f.mapped && !f.is_ept && f.asid == b.asid {
+            unmap_page_unflushed(s, f.size, f.asid, f.vaddr, f.ptr);
+            slot.set_cap(s, Cap::Frame { ptr: f.ptr, size: f.size, rights: f.rights, is_device: f.is_device, mapped: false, is_ept: false, asid: 0, vaddr: 0 });
+            *deferred = true;
         }
         cdt::delete(s, a, slot, true)
-    } else {
-        illegal()
     }
 }
 
-/// `decode_page_map`, with its arguments from a FrameBatch entry.
-fn batch_map<S: Store, A: Arch>(s: &mut S, a: &mut A, slot: Slot, ex: &[Slot; 3], w0: u64) -> KResult<()> {
+/// `unmap_page` without its invalidation, which the caller makes.
+fn unmap_page_unflushed<S: Store>(s: &mut S, size: FrameSize, asid: u64, vaddr: u64, pptr: u64) {
+    let root = match find_vspace_for_asid(s, asid) {
+        Ok(r) => r,
+        Err(_) => return,
+    };
+    let pa = layout::paddr(pptr);
+    let slot = match size {
+        FrameSize::Small => lookup_pt_slot(s, root, vaddr),
+        FrameSize::Large => lookup_pd_slot(s, root, vaddr),
+        FrameSize::Huge => lookup_pdpt_slot(s, root, vaddr),
+    };
+    let slot = match slot {
+        Ok(x) => x,
+        Err(_) => return,
+    };
+    let e = s.read(slot);
+    let large = !matches!(size, FrameSize::Small);
+    if e & P_PRESENT == 0 || (large && e & P_PS == 0) || frame_gpa(s, frame_base(e, size)) != pa {
+        return;
+    }
+    s.write(slot, 0);
+}
+
+/// `decode_page_map` for a FrameBatch entry: the frame in `slot` at
+/// `vaddr` in the batch's address space, with its map rights and
+/// attributes.
+fn batch_map<S: Store, A: Arch>(s: &mut S, a: &mut A, slot: Slot, b: &Batch, vaddr: u64) -> KResult<()> {
     let f = match as_frame(slot.cap(s)) {
         Some(f) if !(f.mapped && f.is_ept) => f,
         _ => return invalid_cap(0),
     };
-    let vslot = match extra(ex, 0) {
-        Some(x) => x,
-        None => return truncated(),
-    };
-    let vaddr = w0 & !0xfff;
-    let rights_mask = (w0 >> 2) & 0xf;
-    let raw_attr = (w0 >> 6) & 0x1f;
-    let defer = raw_attr & vm_attr::DEFER_FLUSH != 0;
-    let attr = raw_attr & !vm_attr::DEFER_FLUSH;
-    let vcap = vslot.cap(s);
-    let vr = match mapped_root(vcap) {
-        Some(r) => r,
-        None => return invalid_cap(1),
-    };
-    let root = vr.pml4;
-    let asid = vr.asid;
+    let defer = b.attr & vm_attr::DEFER_FLUSH != 0;
+    let attr = b.attr & !vm_attr::DEFER_FLUSH;
+    let (root, asid) = (b.root, b.asid);
     if f.mapped && f.asid != 0 {
         if f.asid != asid {
             return invalid_cap(1);
@@ -720,8 +829,7 @@ fn batch_map<S: Store, A: Arch>(s: &mut S, a: &mut A, slot: Slot, ex: &[Slot; 3]
             return invalid_arg(0);
         }
     }
-    check_vspace(s, vcap)?;
-    let vm = mask_vm_rights(f.rights, Rights::from_word(rights_mask));
+    let vm = mask_vm_rights(f.rights, Rights::from_word(b.map_rights));
     if vaddr & (1u64 << (f.size.bits() & 63)).wrapping_sub(1) != 0 {
         return Err(Exc::Sys(SysError::AlignmentError));
     }
@@ -1056,6 +1164,8 @@ pub fn decode<S: Store, A: Arch>(
                 sched::set_thread_state(s, ct, sched::TS_RESTART);
                 a.invalidate_asid(asid);
                 Ok(())
+            } else if lbl == label::X86PML4FrameBatch {
+                decode_frame_batch(s, a, length, ptr, mapped, asid, call, buf, ex)
             } else {
                 illegal()
             }
