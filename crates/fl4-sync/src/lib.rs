@@ -343,8 +343,9 @@ fn local_candidate<S: fl4_core::machine::Store>(s: &S, number: i64) -> Candidate
     {
         Candidate::Port
     } else if number == fl4_abi::syscall::SysCall
-        // A frame-cap invocation, by its label alone.
-        && fl4_core::localinv::is_local_label(fl4_core::msg::msg_info(s, t).label)
+        // A frame-cap invocation or FrameBatch, by its label alone.
+        && (fl4_core::localinv::is_local_label(fl4_core::msg::msg_info(s, t).label)
+            || fl4_core::localinv::is_frame_batch_label(fl4_core::msg::msg_info(s, t).label))
     {
         Candidate::Invocation
     } else {
@@ -446,6 +447,58 @@ fn local_invocation<S: fl4_core::machine::Store, A: fl4_core::machine::Arch, M: 
     done
 }
 
+/// A CNode FrameBatch beside the gate: its entries one by one, each with
+/// its own plan locked (`fl4_core::localinv::batch_entry_plan`) and checked
+/// again, run with the words its plan was made from. It stops short at an
+/// entry it cannot run here, replying with the entries done and no error:
+/// the caller sends the rest again (which, if this one cannot run the
+/// first, the gate runs). Declines, having written only `FAULT_IP` and the
+/// timestamp, if it ran none. (Not observed by the simulator's footprint
+/// oracle, which generates no FrameBatch.)
+#[cfg(target_arch = "x86_64")]
+#[inline(always)]
+fn local_frame_batch<S: fl4_core::machine::Store, A: fl4_core::machine::Arch, M: Mem>(s: &mut S, a: &mut A, m: &M, number: i64) -> bool {
+    let b = match fl4_core::syscall::frame_batch_local_begin(s, a, number) {
+        Some(b) => b,
+        None => return false,
+    };
+    let mut done = 0;
+    let mut err = 0;
+    while done < b.n {
+        let (w0, c1, c2) = b.entry(s, done);
+        let p = match fl4_core::localinv::batch_entry_plan(s, b.cnode, b.extra, w0, c1, c2) {
+            Some(p) => p,
+            None => break,
+        };
+        let mut held = lock::Held::new();
+        let mut ok = true;
+        for i in 0..p.n {
+            ok = ok && lock_object(m, p.locks[i], &mut held);
+        }
+        if !ok || !p.still_holds(s) {
+            lock::unlock_held(m, &mut held);
+            break;
+        }
+        // Its plan's slots, which its locks keep as they were.
+        err = fl4_core::vspace::frame_batch_entry_slots(s, a, &b.extra, w0, p.first, p.second);
+        lock::unlock_held(m, &mut held);
+        if err != 0 {
+            break;
+        }
+        done += 1;
+    }
+    if done == 0 && err == 0 {
+        return false;
+    }
+    fl4_core::syscall::frame_batch_local_finish(s, a, done, err);
+    true
+}
+
+#[cfg(not(target_arch = "x86_64"))]
+fn local_frame_batch<S: fl4_core::machine::Store, A: fl4_core::machine::Arch, M: Mem>(_s: &mut S, _a: &mut A, _m: &M, _number: i64) -> bool {
+    false
+}
+
 /// The local path of a syscall made outside the gate (`run_syscall`), with
 /// its endpoint and reply object locked; true if it ran. `observe` sees
 /// the objects it holds, as (address, bytes), once it holds them and
@@ -505,6 +558,10 @@ pub fn local_syscall<S: fl4_core::machine::Store, A: fl4_core::machine::Arch, M:
         && fl4_core::localinv::is_local_label(fl4_core::msg::msg_info(s, t).label)
     {
         return local_invocation(s, a, m, number, observe);
+    } else if number == fl4_abi::syscall::SysCall
+        && fl4_core::localinv::is_frame_batch_label(fl4_core::msg::msg_info(s, t).label)
+    {
+        return local_frame_batch(s, a, m, number);
     } else {
         // An I/O port access writes only the caller and this core's
         // state: nothing to lock.

@@ -599,6 +599,171 @@ fn decode_page_map<S: Store, A: Arch>(s: &mut S, a: &mut A, length: u64, slot: S
     Ok(())
 }
 
+/// PROTOTYPE: entries per CNode FrameBatch ((MSG_MAX_LENGTH - 1) / 3).
+pub const FRAME_BATCH_MAX: u64 = 39;
+
+/// PROTOTYPE: CNode FrameBatch (interfaces/object-api-extensions.xml).
+/// Replies (entries done, error code of the failing entry or 0).
+pub fn decode_frame_batch<S: Store, A: Arch>(s: &mut S, a: &mut A, length: u64, cnode: Cap, buf: u64, ex: &[Slot; 3]) -> KResult<()> {
+    let ct = sched::cur_thread(s);
+    if length < 1 {
+        return truncated();
+    }
+    let n = msg::syscall_arg(s, ct, buf, 0);
+    if n > FRAME_BATCH_MAX || length < 1 + 3 * n {
+        return truncated();
+    }
+    let mut done = 0;
+    let mut err = 0;
+    while done < n {
+        let i = 1 + 3 * done;
+        let w0 = msg::syscall_arg(s, ct, buf, i);
+        let c1 = msg::syscall_arg(s, ct, buf, i + 1);
+        let c2 = msg::syscall_arg(s, ct, buf, i + 2);
+        match frame_batch_one(s, a, cnode, ex, w0, c1, c2) {
+            Ok(()) => done += 1,
+            Err(Exc::Sys(e)) => {
+                err = e.code();
+                break;
+            }
+            Err(_) => {
+                err = fl4_abi::consts::error::IllegalOperation;
+                break;
+            }
+        }
+    }
+    frame_batch_reply(s, done, err);
+    Ok(())
+}
+
+/// One FrameBatch entry, as `decode_frame_batch` runs it: 0, or the error
+/// code that stops the batch (`localinv::batch_entry_plan`).
+pub fn frame_batch_entry<S: Store, A: Arch>(s: &mut S, a: &mut A, cnode: Cap, ex: &[Slot; 3], w0: u64, c1: u64, c2: u64) -> u64 {
+    match frame_batch_one(s, a, cnode, ex, w0, c1, c2) {
+        Ok(()) => 0,
+        Err(Exc::Sys(e)) => e.code(),
+        Err(_) => fl4_abi::consts::error::IllegalOperation,
+    }
+}
+
+/// `decode_frame_batch`'s reply: (entries done, error code or 0).
+pub fn frame_batch_reply<S: Store>(s: &mut S, done: u64, err: u64) {
+    let ct = sched::cur_thread(s);
+    let rbuf = msg::lookup_ipc_buffer(s, true, ct);
+    ct.set_reg(s, crate::layout::reg::BADGE, 0);
+    msg::set_mr(s, ct, rbuf, 0, done);
+    let len = msg::set_mr(s, ct, rbuf, 1, err);
+    msg::set_msg_info(s, ct, MessageInfo::new(0, 0, 0, len));
+    sched::set_thread_state(s, ct, sched::TS_RUNNING);
+}
+
+fn frame_batch_one<S: Store, A: Arch>(s: &mut S, a: &mut A, cnode: Cap, ex: &[Slot; 3], w0: u64, c1: u64, c2: u64) -> KResult<()> {
+    let op = w0 & 3;
+    if op == 1 {
+        let dest = cspace::lookup_target_slot(s, cnode, c2, 64)?;
+        cdt::ensure_empty_slot(s, dest)?;
+        let src = cspace::lookup_source_slot(s, cnode, c1, 64)?;
+        frame_batch_slots(s, a, ex, w0, src, dest)
+    } else if op == 2 {
+        let slot = cspace::lookup_source_slot(s, cnode, c1, 64)?;
+        frame_batch_slots(s, a, ex, w0, slot, Slot(0))
+    } else if op == 3 {
+        let slot = cspace::lookup_target_slot(s, cnode, c1, 64)?;
+        frame_batch_slots(s, a, ex, w0, slot, Slot(0))
+    } else {
+        illegal()
+    }
+}
+
+/// A FrameBatch entry once its slots are looked up: `first` is cap A's
+/// slot, `second` the empty slot B of a copy-and-map (whose emptiness the
+/// caller checked).
+fn frame_batch_slots<S: Store, A: Arch>(s: &mut S, a: &mut A, ex: &[Slot; 3], w0: u64, first: Slot, second: Slot) -> KResult<()> {
+    let op = w0 & 3;
+    if op == 1 {
+        let (src, dest) = (first, second);
+        let src_cap = src.cap(s);
+        if as_frame(src_cap).is_none() {
+            return invalid_cap(0);
+        }
+        let new_cap = crate::objects::derive_cap(s, src, src_cap)?;
+        cdt::insert_with_cap(s, new_cap, src_cap, src, dest);
+        let r = batch_map(s, a, dest, ex, w0);
+        if r.is_err() {
+            // The entry is all or nothing: drop the unmapped copy.
+            let _ = cdt::delete(s, a, dest, true);
+        }
+        r
+    } else if op == 2 {
+        batch_map(s, a, first, ex, w0)
+    } else if op == 3 {
+        if as_frame(first.cap(s)).is_none() {
+            return illegal();
+        }
+        cdt::delete(s, a, first, true)
+    } else {
+        illegal()
+    }
+}
+
+/// `frame_batch_entry` with the slots its plan looked up
+/// (`localinv::batch_entry_plan`, whose locks keep them as they were).
+pub fn frame_batch_entry_slots<S: Store, A: Arch>(s: &mut S, a: &mut A, ex: &[Slot; 3], w0: u64, first: Slot, second: Slot) -> u64 {
+    match frame_batch_slots(s, a, ex, w0, first, second) {
+        Ok(()) => 0,
+        Err(Exc::Sys(e)) => e.code(),
+        Err(_) => fl4_abi::consts::error::IllegalOperation,
+    }
+}
+
+/// `decode_page_map`, with its arguments from a FrameBatch entry.
+fn batch_map<S: Store, A: Arch>(s: &mut S, a: &mut A, slot: Slot, ex: &[Slot; 3], w0: u64) -> KResult<()> {
+    let f = match as_frame(slot.cap(s)) {
+        Some(f) if !(f.mapped && f.is_ept) => f,
+        _ => return invalid_cap(0),
+    };
+    let vslot = match extra(ex, 0) {
+        Some(x) => x,
+        None => return truncated(),
+    };
+    let vaddr = w0 & !0xfff;
+    let rights_mask = (w0 >> 2) & 0xf;
+    let raw_attr = (w0 >> 6) & 0x1f;
+    let defer = raw_attr & vm_attr::DEFER_FLUSH != 0;
+    let attr = raw_attr & !vm_attr::DEFER_FLUSH;
+    let vcap = vslot.cap(s);
+    let vr = match mapped_root(vcap) {
+        Some(r) => r,
+        None => return invalid_cap(1),
+    };
+    let root = vr.pml4;
+    let asid = vr.asid;
+    if f.mapped && f.asid != 0 {
+        if f.asid != asid {
+            return invalid_cap(1);
+        }
+        if f.vaddr != vaddr {
+            return invalid_arg(0);
+        }
+    } else {
+        let vtop = vaddr.wrapping_add(1u64 << (f.size.bits() & 63));
+        if vaddr > USER_TOP || vtop > USER_TOP {
+            return invalid_arg(0);
+        }
+    }
+    check_vspace(s, vcap)?;
+    let vm = mask_vm_rights(f.rights, Rights::from_word(rights_mask));
+    if vaddr & (1u64 << (f.size.bits() & 63)).wrapping_sub(1) != 0 {
+        return Err(Exc::Sys(SysError::AlignmentError));
+    }
+    let large = !matches!(f.size, FrameSize::Small);
+    let e_addr = page_entry_slot(s, root, vaddr, f.size)?;
+    let e = make_user_page(s, frame_address(s, a, f), attr, vm, large);
+    slot.set_cap(s, Cap::Frame { ptr: f.ptr, size: f.size, rights: f.rights, is_device: f.is_device, mapped: true, is_ept: false, asid, vaddr });
+    write_mapping(s, a, e_addr, e, asid, vaddr, defer);
+    Ok(())
+}
+
 /// The entry that maps a frame of `size` at `vaddr`. A large or huge
 /// frame cannot replace a table there.
 fn page_entry_slot<S: Store>(s: &S, root: u64, vaddr: u64, size: FrameSize) -> KResult<u64> {

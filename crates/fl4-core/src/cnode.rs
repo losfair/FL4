@@ -17,6 +17,10 @@ fn missing_source<T>(depth: u64, source: bool) -> KResult<T> {
 }
 
 pub fn decode<S: Store, A: Arch>(s: &mut S, a: &mut A, lbl: u64, length: u64, cap: Cap, buf: u64, extra: &[Slot; 3]) -> KResult<()> {
+    #[cfg(not(feature = "aarch64"))]
+    if lbl == label::CNodeFrameBatch {
+        return crate::vspace::decode_frame_batch(s, a, length, cap, buf, extra);
+    }
     if lbl < label::CNodeRevoke || lbl > label::CNodeRotate {
         return illegal();
     }
