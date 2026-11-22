@@ -102,6 +102,8 @@ pub fn start_aps(apic_ids: &[u32], f: Features) -> usize {
         }
         true
     }, &mut aps);
+    // Cores 0..=n: the boot core and the indices `select` handed out.
+    crate::entry::GATE.set_cores(n + 1);
     let entry = fl4_ap_main as *const () as u64;
     crate::ap_order::bring_up(&aps[..n], snp_guest, |c, _| {
         crate::snp::prepare_ap(c, percpu::stack_top(c), entry);

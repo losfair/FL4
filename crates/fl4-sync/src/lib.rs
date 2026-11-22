@@ -77,6 +77,8 @@ pub struct SerialGate {
     active: [Line<AtomicU64>; MAX_CPUS],
     /// Core holding the gate, or u64::MAX.
     owner: Line<AtomicU64>,
+    /// How many of `active` the gate holder drains (`set_cores`).
+    cores: AtomicU64,
 }
 
 impl SerialGate {
@@ -87,7 +89,16 @@ impl SerialGate {
             head: Head { serving: AtomicU64::new(0), closed: AtomicU64::new(0) },
             active: [const { Line(AtomicU64::new(0)) }; MAX_CPUS],
             owner: Line(AtomicU64::new(u64::MAX)),
+            cores: AtomicU64::new(MAX_CPUS as u64),
         }
+    }
+
+    /// Only cores 0..n will ever run an entry: the gate holder drains
+    /// those cores' flags, not all `MAX_CPUS`. Set at boot, before any of
+    /// them is started.
+    pub fn set_cores(&self, n: usize) {
+        assert!(n >= 1 && n <= MAX_CPUS);
+        self.cores.store(n as u64, Ordering::Relaxed);
     }
 
     /// Mark core `cpu` active for a local path: false, with nothing
@@ -127,7 +138,8 @@ impl SerialGate {
         }
         if m.a_load(&self.head.closed, Ordering::Relaxed) != 2 {
             m.a_store(&self.head.closed, 1, Ordering::SeqCst);
-            for (c, a) in self.active.iter().enumerate() {
+            let cores = self.cores.load(Ordering::Relaxed) as usize;
+            for (c, a) in self.active[..cores].iter().enumerate() {
                 // (Mutation test: `mutant-gate-no-wait` does not wait.)
                 if c as u64 == cpu || cfg!(feature = "mutant-gate-no-wait") {
                     continue;

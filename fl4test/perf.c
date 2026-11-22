@@ -64,10 +64,12 @@ static int test_ipc_scaling(env_t env)
 {
     int n = env->cores;
     for (int k = 1; k <= n; k++) {
-        helper_thread_t servers[n], clients[n];
-        vka_object_t replies[n];
-        seL4_CPtr done[n];
-        struct span spans[n];
+        /* Static: a helper_thread_t per core overflows the test's stack
+         * on many cores. */
+        static helper_thread_t servers[CONFIG_MAX_NUM_NODES], clients[CONFIG_MAX_NUM_NODES];
+        static vka_object_t replies[CONFIG_MAX_NUM_NODES];
+        static seL4_CPtr done[CONFIG_MAX_NUM_NODES];
+        static struct span spans[CONFIG_MAX_NUM_NODES];
         for (int i = 0; i < k; i++) {
             seL4_CPtr ep = vka_alloc_endpoint_leaky(&env->vka);
             test_error_eq(vka_alloc_reply(&env->vka, &replies[i]), 0);
@@ -209,8 +211,9 @@ static int test_kernel_scaling(env_t env)
             if (kind == W_XIPC && k < 2) {
                 continue;
             }
-            helper_thread_t workers[k], servers[k];
-            struct kwork w[k];
+            /* Static, as in test_ipc_scaling. */
+            static helper_thread_t workers[CONFIG_MAX_NUM_NODES], servers[CONFIG_MAX_NUM_NODES];
+            static struct kwork w[CONFIG_MAX_NUM_NODES];
             int nserv = 0;
             for (int i = 0; i < k; i++) {
                 memset(&w[i], 0, sizeof(w[i]));

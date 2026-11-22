@@ -52,6 +52,14 @@ pub fn multi() -> bool {
     num_online() > 1
 }
 
+/// Run `f` on each core in `mask`, lowest first.
+fn each(mut mask: u64, mut f: impl FnMut(usize)) {
+    while mask != 0 {
+        f(mask.trailing_zeros() as usize);
+        mask &= mask - 1;
+    }
+}
+
 fn ipi(c: usize, vector: u32) {
     // Fixed delivery, physical destination, assert.
     apic::send_ipi(percpu::apic_id(c), vector | (1 << 14));
@@ -69,11 +77,7 @@ pub fn remote_call(kind: u64, arg0: u64, arg1: u64, mask: u64) {
     CALL.arg0.store(arg0, Ordering::Relaxed);
     CALL.arg1.store(arg1, Ordering::Relaxed);
     CALL.pending.store(targets, Ordering::Release);
-    for c in 0..percpu::MAX_CPUS {
-        if targets & (1 << c) != 0 {
-            ipi(c, REMOTE_CALL_VECTOR);
-        }
-    }
+    each(targets, |c| ipi(c, REMOTE_CALL_VECTOR));
     while CALL.pending.load(Ordering::Acquire) != 0 {
         core::hint::spin_loop();
     }
@@ -109,10 +113,6 @@ pub fn service(stall: impl FnOnce()) -> bool {
 pub fn reschedule(mask: u64) {
     let me = 1u64 << percpu::cpu_index();
     let targets = mask & !me & online_mask();
-    for c in 0..percpu::MAX_CPUS {
-        if targets & (1 << c) != 0 {
-            ipi(c, RESCHEDULE_VECTOR);
-        }
-    }
+    each(targets, |c| ipi(c, RESCHEDULE_VECTOR));
 }
 

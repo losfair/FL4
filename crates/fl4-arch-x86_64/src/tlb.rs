@@ -275,12 +275,14 @@ pub fn remote_invalidate_asid(asid: u64) {
 
 /// Other cores whose current address space is `asid`.
 fn cores_on(asid: u64) -> u64 {
-    let me = percpu::cpu_index();
+    let mut others = crate::smp::online_mask() & !(1u64 << percpu::cpu_index());
     let mut m = 0;
-    for c in 0..percpu::MAX_CPUS {
-        if c != me && crate::smp::online_mask() & (1 << c) != 0 && percpu::current_asid(c) == asid {
+    while others != 0 {
+        let c = others.trailing_zeros();
+        if percpu::current_asid(c as usize) == asid {
             m |= 1 << c;
         }
+        others &= others - 1;
     }
     m
 }

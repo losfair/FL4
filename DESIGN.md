@@ -109,7 +109,7 @@ There are three profiles, **debug**, **release** and **bench**. Debug turns on `
 Two settings stay, because user programs are compiled against them. FL4 reads them from the same generated configuration as libsel4:
 
 - `KernelRootCNodeSizeBits`, the size of the root task's CNode (seL4's default is 12; sel4test uses 13, l4h 19).
-- `KernelMaxNumNodes` as an upper bound. FL4 starts min(cores found, this value, 16) cores, so a program sized for N cores never sees more than N. The core's logical state supports up to 64 nodes; the current x86 per-core storage and the serial gate support 16.
+- `KernelMaxNumNodes` as an upper bound. FL4 starts min(cores found, this value, 64) cores on x86_64 and min(cores found, this value, 16) on AArch64, so a program sized for N cores never sees more than N. The core's logical state, its core masks (`u64`) and the serial gate support 64 nodes; the AArch64 per-core storage and banked IRQ layout support 16. The gate holder drains only the cores the boot started (`SerialGate::set_cores`).
 
 ### Boot command line
 

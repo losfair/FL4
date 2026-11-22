@@ -142,6 +142,8 @@ pub fn start_aps(mpidrs: &[u64], ttbr1: u64) -> usize {
     } else {
         max = max.min(gic_layout::V2_INTERFACES);
     }
+    // Started cores take indices below `max`.
+    crate::entry::GATE.set_cores(max);
     let entry_pa = paging::image_pa(unsafe { &_ap_start as *const u8 as u64 });
     let params_pa = paging::image_pa(unsafe { &fl4_ap_params as *const u8 as u64 });
     let params = pptr(params_pa) as *mut u64;

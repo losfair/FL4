@@ -3,7 +3,7 @@ use core::cell::{Cell, UnsafeCell};
 use core::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 
 /// Cores the backend has room for.
-pub const MAX_CPUS: usize = 16;
+pub const MAX_CPUS: usize = 64;
 pub const KSTACK_SIZE: usize = 64 * 1024;
 pub const NO_IRQ: u64 = u64::MAX;
 
@@ -183,8 +183,8 @@ pub fn stack_top(cpu: usize) -> u64 {
 mod tests {
     use super::*;
 
-    const KS: u64 = 0xffff_ffff_8040_0000;
-    const SKIM: u64 = 0xffff_ffff_8030_0000;
+    const KS: u64 = 0xffff_ffff_8060_0000;
+    const SKIM: u64 = 0xffff_ffff_8020_0000;
     const STRIDE: u64 = 0x8000;
 
     #[test]

@@ -48,9 +48,11 @@ static int up_ipc28_client_fn(seL4_CPtr ep, volatile int *state)
 static int test_sched_donation_cross_core(env_t env)
 {
     seL4_CPtr ep = vka_alloc_endpoint_leaky(&env->vka);
-    helper_thread_t clients[env->cores - 1];
+    /* Static: a helper_thread_t per core overflows the test's stack on
+     * many cores. */
+    static helper_thread_t clients[CONFIG_MAX_NUM_NODES];
     helper_thread_t server;
-    volatile int states[env->cores - 1];
+    static volatile int states[CONFIG_MAX_NUM_NODES];
     volatile seL4_Word server_state = 0;
 
     create_helper_thread(env, &server);
