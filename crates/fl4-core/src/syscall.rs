@@ -395,6 +395,67 @@ pub fn handle_ioport_local<S: Store, A: Arch>(s: &mut S, a: &mut A, number: i64)
     true
 }
 
+/// A frame-cap invocation (`localinv`) run beside the serial gate with its
+/// plan's words locked: the general path's own decode, as
+/// `handle_invocation` runs it, on the plan's invoked slot and extra caps,
+/// once the plan resolves again to the same words and, as for an I/O port
+/// access, no reschedule is pending or due on this core and budget is
+/// left. The decode then writes only the caller, the locked words and this
+/// core's state, and neither faults nor blocks (a frame cap's deletion
+/// finishes in its first round, before any preemption point). Returns
+/// false, having written only `FAULT_IP` and the timestamp, which the
+/// general path repeats, otherwise.
+pub fn handle_invocation_local<S: Store, A: Arch>(s: &mut S, a: &mut A, number: i64, p: &crate::localinv::Plan) -> bool {
+    let t = sched::cur_thread(s);
+    let info = msg::msg_info(s, t);
+    if crate::layout::NUM_DOMAINS != 1
+        || t.flags(s) & tcb_flag::TRAP_SYSCALLS != 0
+        || number != sc::SysCall
+        || !crate::localinv::is_local_label(info.label)
+    {
+        return false;
+    }
+    let next = t.reg(s, reg::NEXT_IP);
+    t.set_reg(s, reg::FAULT_IP, next.wrapping_sub(syscall_insn_len!()));
+    sched::update_timestamp(s, a);
+    let csc = sched::cur_sc(s);
+    if sched::action(s) != sched::ACTION_RESUME_CURRENT
+        || t.yield_to(s) != 0
+        || !sporadic::sufficient(s, a, csc, sched::consumed(s))
+        || !crate::fastpath::schedulable_here(s, t)
+    {
+        return false;
+    }
+    if !p.still_holds(s) {
+        return false;
+    }
+    // `handle_invocation`'s decode and reply, on the plan's slots.
+    let buf = msg::lookup_ipc_buffer(s, false, t);
+    let mut length = info.length;
+    if length > msg::N_MSG_REGISTERS && buf == 0 {
+        length = msg::N_MSG_REGISTERS;
+    }
+    let cap = p.slot.cap(s);
+    let r = match decode_invocation(s, a, info.label, length, p.slot, cap, true, true, true, false, buf, &p.extra) {
+        Err(Exc::Preempted) => Err(Exc::Preempted),
+        Err(Exc::Sys(e)) => {
+            reply_error(s, t, e);
+            Ok(())
+        }
+        Err(_) => Ok(()),
+        Ok(()) => {
+            if t.state(s) == sched::TS_RESTART {
+                msg::reply_success_empty(s, t);
+                sched::set_thread_state(s, t, sched::TS_RUNNING);
+            }
+            Ok(())
+        }
+    };
+    after_invocation(s, a, r);
+    finish(s, a);
+    true
+}
+
 /// Returns whether a fast path ran.
 #[inline(always)]
 fn syscall<S: Store, A: Arch>(s: &mut S, a: &mut A, number: i64, fast: bool) -> bool {

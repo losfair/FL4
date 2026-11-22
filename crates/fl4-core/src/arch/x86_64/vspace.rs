@@ -239,6 +239,12 @@ fn frame_base(e: u64, size: FrameSize) -> u64 {
     }
 }
 
+/// The leaf entry a small page at `vaddr` in `root` uses, if its paging
+/// structures exist (`localinv`, which locks it).
+pub fn small_page_entry<S: Store>(s: &S, root: u64, vaddr: u64) -> Option<u64> {
+    lookup_pt_slot(s, root, vaddr).ok()
+}
+
 /// seL4 `unmapPage`.
 pub fn unmap_page<S: Store, A: Arch>(s: &mut S, a: &mut A, size: FrameSize, asid: u64, vaddr: u64, pptr: u64) {
     let root = match find_vspace_for_asid(s, asid) {

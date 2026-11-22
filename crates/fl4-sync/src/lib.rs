@@ -260,7 +260,7 @@ pub fn run_syscall<E: EntryEnv>(
     // (a timer due, the budget spent) would usually run there next time.
     let fast = core::cell::Cell::new(false);
     let ran = run_entry(env, gate, false, |s, a| fast.set(body(s, a)));
-    let hit = fast.get() || candidate == Candidate::Port;
+    let hit = fast.get() || candidate == Candidate::Port || candidate == Candidate::Invocation;
     env.mem().a_store(&gate.policy[env.cpu() as usize].local_hit, hit as u64, Ordering::Relaxed);
     ran
 }
@@ -285,6 +285,11 @@ fn local_candidate<S: fl4_core::machine::Store>(s: &S, number: i64) -> Candidate
         && fl4_core::ioport::is_port_label(fl4_core::msg::msg_info(s, t).label)
     {
         Candidate::Port
+    } else if number == fl4_abi::syscall::SysCall
+        // A frame-cap invocation, by its label alone.
+        && fl4_core::localinv::is_local_label(fl4_core::msg::msg_info(s, t).label)
+    {
+        Candidate::Invocation
     } else {
         Candidate::No
     }
@@ -297,6 +302,8 @@ enum Candidate {
     Fast,
     /// An I/O port access (`handle_ioport_local`).
     Port,
+    /// A frame-cap invocation (`handle_invocation_local`).
+    Invocation,
 }
 
 /// How long `local_entry` waits for a closed gate to open: some tens of
@@ -347,6 +354,39 @@ fn local_entry<E: EntryEnv>(env: &E, gate: &SerialGate, local: &mut impl FnMut(&
     } else {
         Local::Declined
     }
+}
+
+const _: () = assert!(fl4_core::localinv::MAX_LOCKS <= lock::MAX_HELD);
+
+/// A frame-cap invocation beside the gate (`fl4_core::localinv`): lock
+/// the words its plan names (capability slots, 32 bytes, and at most one
+/// page-table entry, 8), then run it, which checks the plan again.
+#[inline(always)]
+fn local_invocation<S: fl4_core::machine::Store, A: fl4_core::machine::Arch, M: Mem>(
+    s: &mut S,
+    a: &mut A,
+    m: &M,
+    number: i64,
+    observe: impl FnOnce(&S, &[(u64, u64)]),
+) -> bool {
+    use fl4_core::localinv::MAX_LOCKS;
+    let p = match fl4_core::localinv::plan(s, number) {
+        Some(p) => p,
+        None => return false,
+    };
+    let mut held = lock::Held::new();
+    let mut objects = [(0, 0); MAX_LOCKS];
+    let mut ok = true;
+    for i in 0..p.n {
+        objects[i] = (p.locks[i], if i == p.pte { 8 } else { 32 });
+        ok = ok && lock_object(m, p.locks[i], &mut held);
+    }
+    let done = ok && {
+        observe(s, &objects[..p.n]);
+        fl4_core::syscall::handle_invocation_local(s, a, number, &p)
+    };
+    lock::unlock_held(m, &mut held);
+    done
 }
 
 /// The local path of a syscall made outside the gate (`run_syscall`), with
@@ -404,6 +444,10 @@ pub fn local_syscall<S: fl4_core::machine::Store, A: fl4_core::machine::Arch, M:
             }
             None => false,
         }
+    } else if number == fl4_abi::syscall::SysCall
+        && fl4_core::localinv::is_local_label(fl4_core::msg::msg_info(s, t).label)
+    {
+        return local_invocation(s, a, m, number, observe);
     } else {
         // An I/O port access writes only the caller and this core's
         // state: nothing to lock.

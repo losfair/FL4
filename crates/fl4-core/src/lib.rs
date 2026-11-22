@@ -76,6 +76,7 @@ pub mod interrupt;
 pub mod ioport;
 pub mod ipc;
 pub mod layout;
+pub mod localinv;
 pub mod machine;
 pub mod msg;
 pub mod msginfo;

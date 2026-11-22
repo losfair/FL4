@@ -1,7 +1,18 @@
 //! Cross-core requests: remote calls (stall, TLB invalidation, FPU state)
-//! and reschedule IPIs. A remote call is made with the serial gate held;
-//! targets service it in their interrupt handler or while spinning on the
-//! gate (fl4-kernel), and the caller waits for every acknowledgement.
+//! and reschedule IPIs. A remote call is made with the serial gate held,
+//! or, for a TLB invalidation, by a local path beside it (fl4-sync's frame
+//! invocations); `CALL_LOCK` gives one of them the mailbox at a time.
+//! Targets service it in their interrupt handler or while spinning (on the
+//! gate, on `CALL_LOCK`; fl4-kernel), and the caller waits for every
+//! acknowledgement.
+//!
+//! The gate holder never waits for `CALL_LOCK`: it makes calls only in its
+//! body, after the local paths drained, and none starts until it leaves.
+//! So only local paths contend for it, and they make only TLB
+//! invalidations; a stall, which only the gate holder makes, cannot reach
+//! a core spinning for it. Every core a caller waits for is in user code,
+//! idle, or in the kernel heading for a loop that services calls (local
+//! paths wait only here), so the wait ends.
 use crate::{apic, percpu};
 use core::sync::atomic::{AtomicU64, Ordering};
 use fl4_core::layout::irq;
@@ -33,6 +44,8 @@ struct Call {
 }
 
 static CALL: Call = Call { kind: AtomicU64::new(0), arg0: AtomicU64::new(0), arg1: AtomicU64::new(0), pending: AtomicU64::new(0) };
+/// 1 while a core uses `CALL` (module comment).
+static CALL_LOCK: AtomicU64 = AtomicU64::new(0);
 
 pub fn set_online(c: usize) {
     ONLINE.fetch_or(1 << c, Ordering::AcqRel);
@@ -66,12 +79,21 @@ fn ipi(c: usize, vector: u32) {
 }
 
 /// Make the cores in `mask` (other than this one) run a remote call, and
-/// wait until all have. The caller holds the serial gate.
+/// wait until all have. The caller holds the serial gate, or is a local
+/// path making a TLB invalidation (module comment).
 pub fn remote_call(kind: u64, arg0: u64, arg1: u64, mask: u64) {
     let me = 1u64 << percpu::cpu_index();
     let targets = mask & !me & online_mask();
     if targets == 0 {
         return;
+    }
+    while CALL_LOCK.load(Ordering::Relaxed) != 0
+        || CALL_LOCK.compare_exchange(0, 1, Ordering::Acquire, Ordering::Relaxed).is_err()
+    {
+        // Another local path's invalidation, which may be waiting for
+        // this core. No stall can come here (module comment).
+        service(|| debug_assert!(false, "stall while waiting for CALL_LOCK"));
+        core::hint::spin_loop();
     }
     CALL.kind.store(kind, Ordering::Relaxed);
     CALL.arg0.store(arg0, Ordering::Relaxed);
@@ -81,6 +103,7 @@ pub fn remote_call(kind: u64, arg0: u64, arg1: u64, mask: u64) {
     while CALL.pending.load(Ordering::Acquire) != 0 {
         core::hint::spin_loop();
     }
+    CALL_LOCK.store(0, Ordering::Release);
 }
 
 /// Service a remote call addressed to this core, if there is one. A stall

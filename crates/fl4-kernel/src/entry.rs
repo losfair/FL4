@@ -382,11 +382,11 @@ extern "C" fn fl4_entry(f: &mut Frame) -> u64 {
                 // take_pending_irq or the VCPU exit path polled an interrupt:
                 // record it and go back with interrupts off so only one is
                 // taken. A remote call cannot be left unserviced here: it
-                // is made only under the serial gate, which this core
-                // holds, or which no core holds while this core runs a
-                // local path (SerialGate drains them first; local paths
-                // make no remote calls), and the VCPU exit
-                // path services remote calls right after its poll. Taken
+                // is made under the serial gate, which this core holds, or
+                // by a local path, which runs only while no core holds it
+                // (SerialGate drains them first) and so while no core
+                // polls in an entry body; and the VCPU exit path services
+                // remote calls right after its poll. Taken
                 // here, REMOTE_CALL_VECTOR needs only its EOI (handle_ipi).
                 if v <= VEC_IRQ_MAX {
                     pc.polled_irq.set(v - VEC_IRQ_MIN);
