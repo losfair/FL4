@@ -132,6 +132,22 @@ pub fn service(stall: impl FnOnce()) -> bool {
     stalled
 }
 
+/// `service` for a remote call that is no stall, from user mode before the
+/// thread's registers are saved: false, with the call left pending, if it
+/// is a stall (which needs the kernel entry). A call addressed to this
+/// core cannot change while it is pending: the caller waits for it.
+pub fn service_unless_stall() -> bool {
+    let me = 1u64 << percpu::cpu_index();
+    if CALL.pending.load(Ordering::Acquire) & me == 0 {
+        return true;
+    }
+    if CALL.kind.load(Ordering::Relaxed) == CALL_STALL {
+        return false;
+    }
+    let _ = service(|| debug_assert!(false, "stall in service_unless_stall"));
+    true
+}
+
 /// Send reschedule IPIs to the cores in `mask` other than this one.
 pub fn reschedule(mask: u64) {
     let me = 1u64 << percpu::cpu_index();

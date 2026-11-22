@@ -44,7 +44,9 @@ static TABLE: [Lock; LOCKS] = [const { Lock(AtomicU64::new(0)) }; LOCKS];
 /// sharing one only make the second attempt fail.
 #[inline(always)]
 fn index(addr: u64) -> usize {
-    ((addr >> 4).wrapping_mul(0x9e37_79b9_7f4a_7c15) >> (64 - LOCK_BITS)) as usize
+    // 8-byte granularity: neighbouring page-table entries (8 bytes) use
+    // different locks, as do endpoints (16) and slots and replies (32).
+    ((addr >> 3).wrapping_mul(0x9e37_79b9_7f4a_7c15) >> (64 - LOCK_BITS)) as usize
 }
 
 /// Take the lock of the object at `addr` without waiting. True if it was
@@ -110,6 +112,16 @@ mod tests {
         unlock_held(&Atomics, &mut h2);
         assert!(try_lock_object(&Atomics, a, &mut h1));
         unlock_held(&Atomics, &mut h1);
+    }
+
+    #[test]
+    fn neighbouring_page_table_entries_use_different_locks() {
+        let mut seen = [false; LOCKS];
+        for i in 0..512u64 {
+            let e = index(0x80_0000 + 8 * i);
+            assert!(!seen[e], "entry {i}");
+            seen[e] = true;
+        }
     }
 
     #[test]

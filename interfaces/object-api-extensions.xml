@@ -31,9 +31,14 @@
             <description>
                 Message word 0 is the number of entries (at most 39); each entry is three words
                 (op | rights &lt;&lt; 2 | attributes &lt;&lt; 6 | vaddr, cptr A, cptr B), CPtrs at depth 64 in
-                the invoked CNode. Ops: 1 copies frame cap A into empty slot B and maps it, 2 remaps
-                frame cap A, 3 deletes frame cap A. Extra cap 0 is the PML4. Stops at the first
-                failing entry; the reply is (entries done, seL4_Error of the failing one or 0).
+                the invoked CNode. Bits 0-1 are the op, 2-5 the seL4_CapRights mask for the mapping,
+                6-10 the VM attributes (seL4_X86_DeferFlush included); bit 11 is reserved (zero) and
+                bits 12-63 are the page-aligned vaddr. Ops: 1 copies frame cap A into empty slot B
+                with A's full rights and maps it (the rights mask applies to the mapping only, as in
+                seL4_X86_Page_Map), 2 remaps frame cap A, 3 deletes frame cap A (an empty slot is no
+                error, as for seL4_CNode_Delete). A copy-and-map is all or nothing. Extra cap 0 is
+                the PML4. Stops at the first failing entry; a Call's reply is (entries done,
+                seL4_Error of the failing one or 0).
             </description>
             <param dir="in" name="count" type="seL4_Word" description="Number of entries"/>
         </method>

@@ -133,6 +133,10 @@ fn decode_invocation<S: Store, A: Arch>(
             if first_phase {
                 return Err(Exc::Sys(SysError::InvalidCapability { arg: 0 }));
             }
+            #[cfg(not(feature = "aarch64"))]
+            if lbl == fl4_abi::label::CNodeFrameBatch {
+                return vspace::decode_frame_batch(s, a, length, cap, call, buf, extra);
+            }
             cnode::decode(s, a, lbl, length, cap, buf, extra)
         }
         Cap::Untyped { .. } => untyped::decode(s, a, lbl, length, slot, cap, buf, extra),

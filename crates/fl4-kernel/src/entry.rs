@@ -438,6 +438,15 @@ extern "C" fn fl4_entry(f: &mut Frame) -> u64 {
     if apic::ack_stray(v) {
         return resume_user();
     }
+    // A remote call that is no stall (a TLB or FPU request, as local paths
+    // on other cores make) needs no kernel entry unless it left the
+    // address space this core runs stale: service it, acknowledge it and
+    // go back. A kernel entry would take the serial gate, which drains
+    // every core's local paths, only to acknowledge it.
+    if v == smp::REMOTE_CALL_VECTOR as u64 && smp::service_unless_stall() && !percpu::get().vspace_stale.get() {
+        apic::eoi();
+        return resume_user();
+    }
     // #NM on the lazy FPU path (fpu.rs): load the thread's FPU state and
     // let it retry the instruction. A thread with the FPU disabled gets
     // the fault instead.
@@ -500,8 +509,9 @@ extern "C" fn fl4_entry(f: &mut Frame) -> u64 {
         let local = |s: &mut PhysStore, a: &mut PhysArch| fl4_sync::local_syscall(s, a, &Phys, number, |_, _| {});
         let syscall_body = |s: &mut PhysStore, a: &mut PhysArch| dispatch_syscall_entry(s, a, number);
         fl4_sync::run_syscall(&KernelEnv, &GATE, number, local, syscall_body);
-    } else if v == 14 && f.cs & 3 != 0 {
-        // A user page fault: its fast path may run beside the gate.
+    } else if v == 14 {
+        // A user page fault (kernel-mode ones went to kernel_fault above):
+        // its fast path may run beside the gate.
         let error = f.error;
         let local = |s: &mut PhysStore, a: &mut PhysArch| fl4_sync::local_vm_fault(s, a, &Phys, cr2, error, |_, _| {});
         fl4_sync::run_vm_fault(&KernelEnv, &GATE, local, body);

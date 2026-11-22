@@ -6,10 +6,11 @@
 //!
 //! `plan` resolves, without locks, the kernel words the general path of
 //! the invocation may write besides the caller and this core: capability
-//! slots and one page-table entry. The runtime locks them
-//! (`fl4_store::lock`), and `syscall::handle_invocation_local` resolves the
-//! plan again under the locks, runs the general decode only if it is the
-//! same, and declines otherwise.
+//! slots and one page-table entry. It reads each word of those slots it
+//! decides from once and records the value (`Plan::read`). The runtime
+//! locks them (`fl4_store::lock`), and `syscall::handle_invocation_local`
+//! runs the general decode only if every recorded word still holds its
+//! value (`Plan::still_holds`), and declines otherwise.
 //!
 //! What may change outside the gate is exactly what these paths write:
 //! the cap words of an empty slot (Copy, Mint) or of a frame-cap slot (Map,
@@ -51,11 +52,12 @@ pub struct Plan {
     /// the rest of what it read changes only under the gate.
     seen: [(u64, u64); MAX_LOCKS],
     nseen: usize,
+    ok_words: bool,
 }
 
 impl Plan {
     fn new(slot: Slot, extra: ExtraCaps) -> Plan {
-        Plan { slot, extra, locks: [0; MAX_LOCKS], n: 0, pte: MAX_LOCKS, seen: [(0, 0); MAX_LOCKS], nseen: 0 }
+        Plan { slot, extra, locks: [0; MAX_LOCKS], n: 0, pte: MAX_LOCKS, seen: [(0, 0); MAX_LOCKS], nseen: 0, ok_words: true }
     }
 
     fn add(&mut self, addr: u64) -> bool {
@@ -75,12 +77,27 @@ impl Plan {
         self.add(addr)
     }
 
-    /// Record word `addr` (in a slot the plan locks) as read.
-    fn saw<S: Store>(&mut self, s: &S, addr: u64) {
-        if self.nseen < MAX_LOCKS {
-            self.seen[self.nseen] = (addr, s.read(addr));
-            self.nseen += 1;
+    /// Read word `addr` of a slot the plan will lock, once: the plan
+    /// decides from the value returned, and `still_holds` checks that very
+    /// value under the locks. (Reading it again later could see a value
+    /// another core's local path wrote since the decision.) Past
+    /// `MAX_LOCKS` words, which no plan needs, the plan is refused.
+    fn read<S: Store>(&mut self, s: &S, addr: u64) -> u64 {
+        if self.nseen >= MAX_LOCKS {
+            self.ok_words = false;
+            return 0;
         }
+        let v = s.read(addr);
+        self.seen[self.nseen] = (addr, v);
+        self.nseen += 1;
+        v
+    }
+
+    /// The cap in `slot`, from words read once (`read`).
+    fn read_cap<S: Store>(&mut self, s: &S, slot: Slot) -> Cap {
+        let w0 = self.read(s, slot.0.wrapping_add(cte::CAP0));
+        let w1 = self.read(s, slot.0.wrapping_add(cte::CAP1));
+        Cap::decode(w0, w1)
     }
 
     /// With the plan's words locked: the words it was read from still hold
@@ -99,7 +116,7 @@ impl Plan {
 }
 
 fn some_if(ok: bool, p: Plan) -> Option<Plan> {
-    if ok {
+    if ok && p.ok_words {
         Some(p)
     } else {
         None
@@ -167,15 +184,14 @@ pub fn plan_with<S: Store>(s: &S, t: Tcb, lbl: u64, slot: Slot, extra: ExtraCaps
         }
         let dest = cspace::lookup_target_slot(s, cap, reg_arg(s, t, 0), reg_arg(s, t, 1)).ok()?;
         let src = cspace::lookup_source_slot(s, extra[0].cap(s), reg_arg(s, t, 2), reg_arg(s, t, 3)).ok()?;
-        if !matches!(src.cap(s), Cap::Frame { is_ept: false, .. }) || !dest.cap(s).is_null() {
+        // An empty destination (its type tag, in the first word), the
+        // source cap, and the source's CDT link, which names the third slot.
+        let dest_w0 = p.read(s, dest.0.wrapping_add(cte::CAP0));
+        let src_cap = p.read_cap(s, src);
+        let next = Slot::next_of_word(p.read(s, src.0.wrapping_add(cte::NEXT)));
+        if !matches!(src_cap, Cap::Frame { is_ept: false, .. }) || !Cap::decode(dest_w0, 0).is_null() {
             return None;
         }
-        let next = src.next(s);
-        // The source cap decides the copy and its CDT link the third slot.
-        p.saw(s, dest.0.wrapping_add(cte::CAP0));
-        p.saw(s, src.0.wrapping_add(cte::CAP0));
-        p.saw(s, src.0.wrapping_add(cte::CAP1));
-        p.saw(s, src.0.wrapping_add(cte::NEXT));
         let ok = p.add(dest.0) && p.add(src.0) && p.add(next.0);
         some_if(ok, p)
     } else if lbl == label::CNodeDelete {
@@ -183,16 +199,14 @@ pub fn plan_with<S: Store>(s: &S, t: Tcb, lbl: u64, slot: Slot, extra: ExtraCaps
             return None;
         }
         let dest = cspace::lookup_target_slot(s, cap, reg_arg(s, t, 0), reg_arg(s, t, 1)).ok()?;
-        let c = dest.cap(s);
+        // The cap decides the page-table entry; its links the other slots.
+        let c = p.read_cap(s, dest);
+        let prev = Slot(p.read(s, dest.0.wrapping_add(cte::PREV)));
+        let next = Slot::next_of_word(p.read(s, dest.0.wrapping_add(cte::NEXT)));
         if !small_ram_frame(c) {
             return None;
         }
-        // The cap decides the page-table entry; its links the other slots.
-        p.saw(s, dest.0.wrapping_add(cte::CAP0));
-        p.saw(s, dest.0.wrapping_add(cte::CAP1));
-        p.saw(s, dest.0.wrapping_add(cte::PREV));
-        p.saw(s, dest.0.wrapping_add(cte::NEXT));
-        if !(p.add(dest.0) && p.add(dest.prev(s).0) && p.add(dest.next(s).0)) {
+        if !(p.add(dest.0) && p.add(prev.0) && p.add(next.0)) {
             return None;
         }
         match c {
@@ -203,13 +217,15 @@ pub fn plan_with<S: Store>(s: &S, t: Tcb, lbl: u64, slot: Slot, extra: ExtraCaps
                         let ok = p.add_pte(e);
                         some_if(ok, p)
                     }
-                    None => Some(p),
+                    None => some_if(true, p),
                 }
             }
-            _ => Some(p),
+            _ => some_if(true, p),
         }
     } else if is_page_map(lbl) {
-        if !small_ram_frame(cap) || extra[0].is_null() {
+        // The frame cap, read once (`cap` above is not recorded).
+        let frame = p.read_cap(s, slot);
+        if !small_ram_frame(frame) || extra[0].is_null() {
             return None;
         }
         let root = match extra[0].cap(s) {
@@ -217,8 +233,6 @@ pub fn plan_with<S: Store>(s: &S, t: Tcb, lbl: u64, slot: Slot, extra: ExtraCaps
             _ => return None,
         };
         let e = page_entry(s, root, reg_arg(s, t, 0))?;
-        p.saw(s, slot.0.wrapping_add(cte::CAP0));
-        p.saw(s, slot.0.wrapping_add(cte::CAP1));
         let ok = p.add(slot.0) && p.add_pte(e);
         some_if(ok, p)
     } else {
@@ -232,8 +246,13 @@ fn small_page_entry<S: Store>(s: &S, asid: u64, vaddr: u64) -> Option<u64> {
     page_entry(s, root, vaddr)
 }
 
+/// Only user addresses: a map above USER_TOP fails in the decode, and a
+/// plan for one would walk (and lock) the kernel's half of the tables.
 #[cfg(not(feature = "aarch64"))]
 fn page_entry<S: Store>(s: &S, root: u64, vaddr: u64) -> Option<u64> {
+    if vaddr > fl4_abi::consts::USER_TOP {
+        return None;
+    }
     crate::vspace::small_page_entry(s, root, vaddr)
 }
 

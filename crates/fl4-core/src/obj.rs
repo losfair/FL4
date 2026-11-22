@@ -255,6 +255,11 @@ impl Slot {
     pub fn next<S: Store>(self, s: &S) -> Slot {
         Slot(sext48(self.next_word(s)))
     }
+    /// The slot a NEXT word names, as `next` reads it (`localinv`, which
+    /// decides from words it read once).
+    pub fn next_of_word(w: u64) -> Slot {
+        Slot(sext48(w))
+    }
     pub fn set_next<S: Store>(self, s: &mut S, n: Slot) {
         let w = self.next_word(s);
         s.write(self.0.wrapping_add(layout::cte::NEXT), (w & !MDB_PTR_MASK) | (n.0 & MDB_PTR_MASK));

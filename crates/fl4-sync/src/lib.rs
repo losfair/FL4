@@ -260,7 +260,10 @@ pub fn run_syscall<E: EntryEnv>(
     // (a timer due, the budget spent) would usually run there next time.
     let fast = core::cell::Cell::new(false);
     let ran = run_entry(env, gate, false, |s, a| fast.set(body(s, a)));
-    let hit = fast.get() || candidate == Candidate::Port || candidate == Candidate::Invocation;
+    // An invocation candidate is so by its label alone: one that ran here
+    // may be no frame cap's (a TCB's CNode_Delete), whose local attempt
+    // will decline again, so it does not wait next time.
+    let hit = fast.get() || candidate == Candidate::Port;
     env.mem().a_store(&gate.policy[env.cpu() as usize].local_hit, hit as u64, Ordering::Relaxed);
     ran
 }
@@ -275,14 +278,21 @@ pub fn run_vm_fault<E: EntryEnv>(
     mut local: impl FnMut(&mut E::S, &mut E::A) -> bool,
     mut body: impl FnMut(&mut E::S, &mut E::A),
 ) -> bool {
-    if env.multi() {
-        match local_entry(env, gate, &mut local) {
-            Local::Done => return true,
-            Local::Stalled => return false,
-            Local::Closed | Local::Declined => {}
-        }
+    if !env.multi() {
+        return run_entry(env, gate, false, |s, a| body(s, a));
     }
-    run_entry(env, gate, false, |s, a| body(s, a))
+    match local_entry(env, gate, &mut local) {
+        Local::Done => return true,
+        Local::Stalled => return false,
+        Local::Closed | Local::Declined => {}
+    }
+    let ran = run_entry(env, gate, false, |s, a| body(s, a));
+    // As for an I/O port access: the general path has no VM-fault fast
+    // path, and a fault that declined beside the gate (its handler not
+    // waiting yet) usually runs there next time, so the next one waits
+    // for a closed gate rather than take a ticket.
+    env.mem().a_store(&gate.policy[env.cpu() as usize].local_hit, 1, Ordering::Relaxed);
+    ran
 }
 
 /// The local path of a VM fault (`fl4_core::syscall::handle_vm_fault_local`)

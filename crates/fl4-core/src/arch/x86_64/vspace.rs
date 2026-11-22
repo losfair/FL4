@@ -604,7 +604,7 @@ pub const FRAME_BATCH_MAX: u64 = 39;
 
 /// PROTOTYPE: CNode FrameBatch (interfaces/object-api-extensions.xml).
 /// Replies (entries done, error code of the failing entry or 0).
-pub fn decode_frame_batch<S: Store, A: Arch>(s: &mut S, a: &mut A, length: u64, cnode: Cap, buf: u64, ex: &[Slot; 3]) -> KResult<()> {
+pub fn decode_frame_batch<S: Store, A: Arch>(s: &mut S, a: &mut A, length: u64, cnode: Cap, call: bool, buf: u64, ex: &[Slot; 3]) -> KResult<()> {
     let ct = sched::cur_thread(s);
     if length < 1 {
         return truncated();
@@ -632,17 +632,24 @@ pub fn decode_frame_batch<S: Store, A: Arch>(s: &mut S, a: &mut A, length: u64, 
             }
         }
     }
-    let rbuf = msg::lookup_ipc_buffer(s, true, ct);
-    ct.set_reg(s, crate::layout::reg::BADGE, 0);
-    msg::set_mr(s, ct, rbuf, 0, done);
-    let len = msg::set_mr(s, ct, rbuf, 1, err);
-    msg::set_msg_info(s, ct, MessageInfo::new(0, 0, 0, len));
+    // A Send gets no reply, and its registers stay as they were (`reply1`).
+    if call {
+        let rbuf = msg::lookup_ipc_buffer(s, true, ct);
+        ct.set_reg(s, crate::layout::reg::BADGE, 0);
+        msg::set_mr(s, ct, rbuf, 0, done);
+        let len = msg::set_mr(s, ct, rbuf, 1, err);
+        msg::set_msg_info(s, ct, MessageInfo::new(0, 0, 0, len));
+    }
     sched::set_thread_state(s, ct, sched::TS_RUNNING);
     Ok(())
 }
 
 fn frame_batch_one<S: Store, A: Arch>(s: &mut S, a: &mut A, cnode: Cap, ex: &[Slot; 3], w0: u64, c1: u64, c2: u64) -> KResult<()> {
     let op = w0 & 3;
+    // Bit 11 is reserved.
+    if w0 & (1 << 11) != 0 {
+        return invalid_arg(0);
+    }
     if op == 1 {
         let dest = cspace::lookup_target_slot(s, cnode, c2, 64)?;
         cdt::ensure_empty_slot(s, dest)?;
@@ -664,7 +671,12 @@ fn frame_batch_one<S: Store, A: Arch>(s: &mut S, a: &mut A, cnode: Cap, ex: &[Sl
         batch_map(s, a, slot, ex, w0)
     } else if op == 3 {
         let slot = cspace::lookup_target_slot(s, cnode, c1, 64)?;
-        if as_frame(slot.cap(s)).is_none() {
+        let c = slot.cap(s);
+        // As CNode_Delete, an empty slot is no error.
+        if c.is_null() {
+            return Ok(());
+        }
+        if as_frame(c).is_none() {
             return illegal();
         }
         cdt::delete(s, a, slot, true)
@@ -712,6 +724,10 @@ fn batch_map<S: Store, A: Arch>(s: &mut S, a: &mut A, slot: Slot, ex: &[Slot; 3]
     let vm = mask_vm_rights(f.rights, Rights::from_word(rights_mask));
     if vaddr & (1u64 << (f.size.bits() & 63)).wrapping_sub(1) != 0 {
         return Err(Exc::Sys(SysError::AlignmentError));
+    }
+    // As decode_page_map: no 1 GiB entry on a CPU without 1 GiB pages.
+    if matches!(f.size, FrameSize::Huge) && !huge_pages(s) {
+        return illegal();
     }
     let large = !matches!(f.size, FrameSize::Small);
     let e_addr = page_entry_slot(s, root, vaddr, f.size)?;
