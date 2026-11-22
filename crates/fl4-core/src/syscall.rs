@@ -352,6 +352,43 @@ pub fn handle_syscall_local<S: Store, A: Arch>(s: &mut S, a: &mut A, number: i64
     }
 }
 
+/// A VM fault of the current thread beside the serial gate (fl4-sync
+/// `run_vm_fault`): `handle_vm_fault` when its fast path
+/// (`fastpath_vm::vm_fault`) runs, after `budget_ok`'s timestamp update
+/// with the budget checked without charging it, as `handle_syscall_local`
+/// does. Otherwise the state differs from the one at entry only by the
+/// timestamp, which the general path's update then supersedes.
+pub fn handle_vm_fault_local<S: Store, A: Arch>(s: &mut S, a: &mut A, addr: u64, code: u64) -> bool {
+    if crate::layout::NUM_DOMAINS != 1 {
+        return false;
+    }
+    sched::update_timestamp(s, a);
+    let csc = sched::cur_sc(s);
+    if !sporadic::sufficient(s, a, csc, sched::consumed(s)) {
+        return false;
+    }
+    let t = sched::cur_thread(s);
+    let instruction = instruction_fault!(code);
+    crate::fastpath_vm::vm_fault(s, a, t, vspace::vm_fault(addr, code, instruction))
+}
+
+/// `handle_syscall_local` for a ReplyRecv that answers a VM fault
+/// (`fastpath_vm::reply_recv_vm_found`); `found` as there.
+pub fn handle_reply_recv_vm_local<S: Store, A: Arch>(s: &mut S, a: &mut A, found: (u64, u64)) -> bool {
+    let t = sched::cur_thread(s);
+    if crate::layout::NUM_DOMAINS != 1 || t.flags(s) & tcb_flag::TRAP_SYSCALLS != 0 {
+        return false;
+    }
+    let next = t.reg(s, reg::NEXT_IP);
+    t.set_reg(s, reg::FAULT_IP, next.wrapping_sub(syscall_insn_len!()));
+    sched::update_timestamp(s, a);
+    let csc = sched::cur_sc(s);
+    if !sporadic::sufficient(s, a, csc, sched::consumed(s)) {
+        return false;
+    }
+    crate::fastpath_vm::reply_recv_vm_found(s, a, t, found.0, found.1)
+}
+
 /// An I/O port invocation (`SysCall` or `SysSend` on an IoPort cap) run
 /// beside the serial gate (fl4_sync::run_syscall): the general path's own
 /// code, `syscall` through `finish`, once reads show that it writes only

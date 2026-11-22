@@ -71,6 +71,7 @@ pub mod domain;
 pub mod endpoint;
 pub mod error;
 pub mod fastpath;
+pub mod fastpath_vm;
 pub mod faults;
 pub mod interrupt;
 pub mod ioport;

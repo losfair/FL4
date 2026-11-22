@@ -500,6 +500,11 @@ extern "C" fn fl4_entry(f: &mut Frame) -> u64 {
         let local = |s: &mut PhysStore, a: &mut PhysArch| fl4_sync::local_syscall(s, a, &Phys, number, |_, _| {});
         let syscall_body = |s: &mut PhysStore, a: &mut PhysArch| dispatch_syscall_entry(s, a, number);
         fl4_sync::run_syscall(&KernelEnv, &GATE, number, local, syscall_body);
+    } else if v == 14 && f.cs & 3 != 0 {
+        // A user page fault: its fast path may run beside the gate.
+        let error = f.error;
+        let local = |s: &mut PhysStore, a: &mut PhysArch| fl4_sync::local_vm_fault(s, a, &Phys, cr2, error, |_, _| {});
+        fl4_sync::run_vm_fault(&KernelEnv, &GATE, local, body);
     } else {
         run_entry(irq, body);
     }

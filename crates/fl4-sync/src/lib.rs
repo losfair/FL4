@@ -265,6 +265,63 @@ pub fn run_syscall<E: EntryEnv>(
     ran
 }
 
+/// A VM fault from user code: on several cores, first try its fast path
+/// beside the serial gate (`local_vm_fault`), then `run_entry`. Returns as
+/// `run_entry` does. `local` runs `local_vm_fault` on the store it is given.
+#[inline(always)]
+pub fn run_vm_fault<E: EntryEnv>(
+    env: &E,
+    gate: &SerialGate,
+    mut local: impl FnMut(&mut E::S, &mut E::A) -> bool,
+    mut body: impl FnMut(&mut E::S, &mut E::A),
+) -> bool {
+    if env.multi() {
+        match local_entry(env, gate, &mut local) {
+            Local::Done => return true,
+            Local::Stalled => return false,
+            Local::Closed | Local::Declined => {}
+        }
+    }
+    run_entry(env, gate, false, |s, a| body(s, a))
+}
+
+/// The local path of a VM fault (`fl4_core::syscall::handle_vm_fault_local`)
+/// with its fault endpoint and the waiting handler's reply object locked,
+/// as for a trapped syscall's fault in `local_syscall`; true if it ran.
+#[inline(always)]
+pub fn local_vm_fault<S: fl4_core::machine::Store, A: fl4_core::machine::Arch, M: Mem>(
+    s: &mut S,
+    a: &mut A,
+    m: &M,
+    addr: u64,
+    code: u64,
+    observe: impl FnOnce(&S, &[(u64, u64)]),
+) -> bool {
+    use fl4_core::capability::Cap;
+    use fl4_core::layout::tcb as tl;
+    use fl4_core::obj::Ep;
+    let t = fl4_core::sched::cur_thread(s);
+    let mut held = lock::Held::new();
+    let mut held_objects = [(0, 0); 2];
+    let ok = match t.slot(tl::SLOT_FAULT_HANDLER).cap(s) {
+        Cap::Endpoint { ptr, .. } => {
+            lock_object(m, ptr, &mut held) && Ep(ptr).state(s) == fl4_core::obj::EP_RECV && {
+                let dest = fl4_core::obj::Tcb(Ep(ptr).head(s));
+                let r = if dest.is_null() { 0 } else { dest.reply_obj(s) };
+                held_objects = [(ptr, 16), (r, 32)];
+                r != 0 && lock_object(m, r, &mut held)
+            }
+        }
+        _ => false,
+    };
+    let done = ok && {
+        observe(s, &held_objects);
+        fl4_core::syscall::handle_vm_fault_local(s, a, addr, code)
+    };
+    lock::unlock_held(m, &mut held);
+    done
+}
+
 /// `lock::try_lock_object`. (Mutation test: `mutant-local-no-lock` takes
 /// nothing.)
 #[inline(always)]
@@ -456,7 +513,17 @@ pub fn local_syscall<S: fl4_core::machine::Store, A: fl4_core::machine::Arch, M:
     };
     let done = ok && {
         observe(s, &held_objects);
-        fl4_core::syscall::handle_syscall_local(s, a, number, found)
+        // A reply to a VM fault takes `fastpath_vm`'s path, any other
+        // `fastpath`'s: one or the other, so the entry's prefix runs once.
+        // (`found` is set for a ReplyRecv only, not for a trapped thread's
+        // syscall with that number.)
+        if found.0 != 0
+            && fl4_core::obj::Tcb(Reply(found.0).tcb(s)).fault_type(s) == fl4_abi::consts::fault::VMFault
+        {
+            fl4_core::syscall::handle_reply_recv_vm_local(s, a, found)
+        } else {
+            fl4_core::syscall::handle_syscall_local(s, a, number, found)
+        }
     };
     lock::unlock_held(m, &mut held);
     done

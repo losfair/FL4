@@ -62,7 +62,7 @@ pub(crate) fn schedulable_here<S: Store>(s: &S, to: Tcb) -> bool {
 /// The rest of `schedule()` and `activate_thread()` once it has chosen
 /// `to`: switch to it and its scheduling context.
 #[inline(always)]
-fn switch_to<S: Store, A: Arch>(s: &mut S, a: &mut A, to: Tcb) {
+pub(crate) fn switch_to<S: Store, A: Arch>(s: &mut S, a: &mut A, to: Tcb) {
     crate::vspace::set_vm_root(s, a, to);
     sched::set_cur_thread(s, to);
     sched::set_action(s, sched::ACTION_RESUME_CURRENT);
