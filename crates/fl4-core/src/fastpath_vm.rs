@@ -7,7 +7,8 @@
 //! the proved fast paths stay as they are. They run only beside the serial
 //! gate (fl4-sync); under it a page fault takes the general path.
 //!
-//! Not yet proved; fl4-sim checks them as it does `fastpath`.
+//! Not yet proved, and not yet exercised by fl4-sim, which generates no
+//! VM faults (neither `--fastpath-diff` nor the footprint oracle sees them).
 
 use crate::capability::Cap;
 use crate::error::Fault;

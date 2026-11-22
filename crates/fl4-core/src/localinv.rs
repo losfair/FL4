@@ -24,6 +24,9 @@
 //! from the caller's saved registers; extra caps are looked up once, here,
 //! and the decode uses those slots, so a change to the caller's IPC buffer
 //! in between cannot move a write onto an unlocked word. x86_64 only.
+//!
+//! Not yet exercised by fl4-sim, which generates no frame-cap copies,
+//! maps or deletes.
 
 use crate::capability::{Cap, FrameSize};
 use crate::cspace;
