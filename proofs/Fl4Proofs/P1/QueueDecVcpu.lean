@@ -257,6 +257,10 @@ theorem vcpu.msr_addr.off (v f : U64) (amd : Bool) :
   · simp only [lift, bind_ok]
     exact (WP.spec_ok _).2 fun x e => ⟨vcpu.XCR0, by simp [vcpu.XCR0], by simp [vcpu.XCR0], by cases e; rfl⟩
   split
+  · simp only [lift, bind_ok]
+    exact (WP.spec_ok _).2 fun x e =>
+      ⟨vcpu.VM_IBPB_DEFER, by simp [vcpu.VM_IBPB_DEFER], by simp [vcpu.VM_IBPB_DEFER], by cases e; rfl⟩
+  split
   · unfold vcpu.svm_msr
     split
     all_goals first

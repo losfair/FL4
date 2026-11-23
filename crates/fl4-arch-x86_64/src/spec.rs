@@ -339,6 +339,35 @@ pub fn commit_vm(vm_enabled: bool) {
 pub(crate) fn vmexit() -> Option<u32> {
     percpu::get().spec_plan.get().map(|p| p.vmexit)
 }
+
+/// Whether a VM exit's IBPB waits for the core's next switch to another
+/// address space (`tlb::switch`) instead of running at the exit.  The
+/// kernel's own indirect branches are already out of the guest's reach
+/// (Automatic IBRS, or IBRS always on), as Linux relies on to skip the
+/// IBPB at every VM exit; what is left is the user-mode VMM, which on l4h
+/// is the guest's own monitor (an HVM VM's l4h-hvm, a dom0's KVM), whose
+/// address space holds nothing of another domain's.  Linux's vmscape IBPB
+/// before a return to the VMM protects QEMU's host address space; here
+/// every address space after the guest's is another domain's, and gets
+/// the IBPB first.  SMT siblings are isolated by STIBP or parked.
+pub(crate) fn vm_ibpb_deferred() -> bool {
+    percpu::get()
+        .spec_plan
+        .get()
+        .is_some_and(|p| p.vmexit & policy::IBPB != 0 && (p.auto_ibrs || p.spec_ctrl & 1 != 0))
+}
+
+/// The IBPB a deferred VM exit owes, before the core runs address space
+/// `cr3` (with its PCID tag): unless it is the guest's own.
+#[inline(always)]
+pub(crate) fn vm_ibpb_before(cr3: u64) {
+    let pc = percpu::get();
+    let g = pc.guest_bp.get();
+    if g != 0 && g != cr3 {
+        crate::cpu::wrmsr(0x49, 1);
+        pc.guest_bp.set(0);
+    }
+}
 pub fn skim() -> bool {
     SKIM.load(Ordering::Relaxed)
 }

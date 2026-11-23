@@ -685,6 +685,11 @@ pub fn run<S: Store>(s: &mut S, v: u64, tcb: u64, root: u64) -> u64 {
         host_rsp: local().vmx.get(HOST_RSP).unwrap_or(0),
         speculation: spec::vmexit().expect("VM backend without speculation protection") as u64,
     };
+    // The exit's IBPB at the next switch to another address space.
+    if vcpu::get(s, v, vcpu::VM_IBPB_DEFER) != 0 && spec::vm_ibpb_deferred() {
+        run.speculation &= !(spec::policy::IBPB as u64);
+        percpu::get().guest_bp.set(percpu::get().cr3.get());
+    }
     for i in 0..15 {
         run.regs[i] = vcpu::get(s, v, vcpu::REGS + i as u64 * 8);
     }

@@ -587,12 +587,14 @@ def msrFmask : Word := 0xc000_0084
 def msrKernelGsBase : Word := 0xc000_0102
 def msrCr2 : Word := 0xffff_ffff
 def msrXcr0 : Word := 0xffff_fffe
+/-- Whether the VCPU's exits may defer their IBPB (FL4 `vcpu::MSR_VM_IBPB_DEFER`). -/
+def msrVmIbpbDefer : Word := 0xffff_fffd
 /-- `IA32_VMX_MISC`: ReadMSR answers `vcpu_capability(0x485)` on VMX and 0
 on SVM; it is not VCPU state. -/
 def msrVmxMisc : Word := 0x485
 
 /-- The MSR fields of a VCPU (FL4 `vcpu::msr_addr`; both backends). -/
-def vcpuMsrs : List Word := [msrStar, msrLstar, msrCstar, msrFmask, msrKernelGsBase, msrCr2, msrXcr0]
+def vcpuMsrs : List Word := [msrStar, msrLstar, msrCstar, msrFmask, msrKernelGsBase, msrCr2, msrXcr0, msrVmIbpbDefer]
 
 /-- The single place of a field's value (module docstring): on SVM the
 MSRs but XCR0 are VMCB words and the VMCB's RAX is GPR 0. -/

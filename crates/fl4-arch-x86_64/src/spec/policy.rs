@@ -424,7 +424,8 @@ pub fn select(c: &Caps) -> Result<Plan, Rejected> {
                 return Err(Rejected::BufferMicrocode);
             }
             p.buffers = mds || mmio || rfds;
-            // VM exits keep IBPB: it also protects the userspace VMM.
+            // VM exits keep IBPB: it also protects the userspace VMM (a VCPU's
+            // holder may defer it, spec::vm_ibpb_deferred).
             if native_entry_without_ibpb(c) {
                 p.entry &= !IBPB;
             }
@@ -456,7 +457,8 @@ pub fn select(c: &Caps) -> Result<Plan, Rejected> {
                     p.vmexit |= RSB;
                 }
             }
-            // VM exits keep IBPB: it also protects the userspace VMM.
+            // VM exits keep IBPB: it also protects the userspace VMM (a VCPU's
+            // holder may defer it, spec::vm_ibpb_deferred).
             if native_entry_without_ibpb(c) {
                 p.entry &= !IBPB;
             }

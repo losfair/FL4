@@ -42,6 +42,10 @@ pub struct PerCpu {
     /// them on every entry) and `exit_cr3` is what the exit to user code
     /// loads.
     pub cr3: Cell<u64>,
+    /// The address space (CR3 and PCID tag, as `cr3`) whose VCPU last
+    /// ran a guest here without the IBPB of its exit, which waits for
+    /// the switch to another one (`spec::vm_ibpb_deferred`); 0 for none.
+    pub guest_bp: Cell<u64>,
     pub exit_cr3: Cell<u64>,
     /// The ASIDs this core's PCIDs hold (tlb.rs).
     pub pcids: [Cell<crate::tlb::Slot>; crate::tlb::SLOTS],
@@ -69,6 +73,7 @@ impl PerCpu {
             dr_disarmed: Cell::new(false),
             check_user_trap: Cell::new(false),
             cr3: Cell::new(0),
+            guest_bp: Cell::new(0),
             exit_cr3: Cell::new(0),
             pcids: [const { Cell::new(crate::tlb::Slot::EMPTY) }; crate::tlb::SLOTS],
             gate_held: Cell::new(false),

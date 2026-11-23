@@ -129,6 +129,7 @@ fn holds(asid: u64) -> bool {
 pub fn switch(cr3: u64, asid: u64) {
     let pc = percpu::get();
     let t = tag(asid);
+    crate::spec::vm_ibpb_before(cr3 | t);
     if pc.cr3.get() == cr3 | t && percpu::current_asid(percpu::cpu_index()) == asid {
         // Still current: invalidations of it reached this core by IPI.
         return;

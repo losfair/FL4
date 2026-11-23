@@ -387,6 +387,30 @@ fn svm_guests_cannot_enable_broadcast_tlb_invalidation() {
     }
 }
 
+/// The deferred exit IBPB is the VCPU holder's choice (WriteMSR of
+/// MSR_VM_IBPB_DEFER, 0 or 1), off after retype, on both backends; and a
+/// guest may have CR4.PKE.
+#[test]
+fn vm_ibpb_defer_is_the_holders_choice() {
+    for backend in [1, 2] {
+        let (mut s, mut a, t, v) = fixture(backend);
+        assert_eq!(vcpu::get(&s, v, vcpu::VM_IBPB_DEFER), 0, "off after retype");
+        for (val, ok) in [(1, true), (0, true), (2, false), (u64::MAX, false), (1, true)] {
+            t.set_reg(&mut s, reg::R10, vcpu::MSR_VM_IBPB_DEFER);
+            t.set_reg(&mut s, reg::R8, val);
+            let r = vcpu::decode(&mut s, &mut a, label::X86VCPUWriteMSR, 2, v, true, 0, &[Slot(0); 3]);
+            assert_eq!(r.is_ok(), ok, "backend {backend}, {val:#x}");
+        }
+        assert_eq!(vcpu::get(&s, v, vcpu::VM_IBPB_DEFER), 1, "a refused value leaves it");
+        t.set_reg(&mut s, reg::R10, vcpu::MSR_VM_IBPB_DEFER);
+        vcpu::decode(&mut s, &mut a, label::X86VCPUReadMSR, 1, v, true, 0, &[Slot(0); 3]).ok().unwrap();
+        assert_eq!(t.reg(&s, reg::R10), 1, "ReadMSR");
+    }
+    assert_ne!(vcpu::CR4_ALLOWED & (1 << 22), 0, "CR4.PKE");
+    let a = Machine { backend: 2, ..Default::default() };
+    assert_ne!(vcpu::sanitize_vmcb(&a, 0x548, 0, 1 << 22).ok().unwrap() & (1 << 22), 0);
+}
+
 #[test]
 fn xcr0_groups_and_canonical_width_match_hardware_rules() {
     for x in [0, 4, 5, 0x21, 0x81, 0xe3, 0x20001, 0x40001] {
