@@ -69,6 +69,25 @@ pub fn lock() -> bool {
     !stalled.get()
 }
 
+/// Before `exit` takes the serial gate after an entry that ran without it
+/// (a local path): the current thread's entry is over, so a remote stall
+/// serviced while waiting must resume it where it now continues. The stall
+/// (`fl4_core::smp::stall`) makes a running thread restart at `FAULT_IP`,
+/// which is right for an entry it cancels before it ran; here `FAULT_IP`
+/// is still that of the thread's last kernel entry. For a thread a local
+/// path has just woken from `ReplyRecv` or `Recv`, that is the syscall
+/// instruction, which would run again with the received badge in the
+/// capability register (l4h issue 227: a cap fault in its receive phase
+/// on the badge). Only this core changes the thread's context until the
+/// stall is acknowledged.
+#[inline(always)]
+fn settle_resume_point(s: &mut PhysStore, ct: Tcb) {
+    if ct.state(s) == sched::TS_RUNNING && ct.0 != node_get(s, s.cur_cpu(), node::IDLE_THREAD) {
+        let ip = ct.reg(s, reg::NEXT_IP);
+        ct.set_reg(s, reg::FAULT_IP, ip);
+    }
+}
+
 fn unlock() {
     let pc = percpu::get();
     if pc.gate_held.get() {
@@ -463,8 +482,10 @@ pub fn exit() -> ! {
         // That reads the thread's cap, the ASID table and a pool, which a
         // serial entry on another core may be deleting (and the memory
         // reused) unless this core holds the gate: after a local path, or
-        // from the idle loop, it does not. Taking it may cancel the entry
-        // (a stall): start over with whatever thread is current then.
+        // from the idle loop, it does not. A stall while taking it moves
+        // the thread off this core (its entry has already run, so it
+        // resumes where it continues: `settle_resume_point`): start over
+        // with whatever thread is current then.
         //
         // So does a thread running a VM (`ARMVCPURun`): before its guest
         // runs, `vcpu::check` reads its bound notification, which other
@@ -476,6 +497,7 @@ pub fn exit() -> ! {
             && !pc.gate_held.get()
             && (pc.vspace_stale.get() || ct.state(s) == sched::TS_RUNNING_VM)
         {
+            settle_resume_point(s, ct);
             lock();
             continue;
         }

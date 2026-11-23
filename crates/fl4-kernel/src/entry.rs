@@ -263,6 +263,25 @@ pub fn lock() -> bool {
     !stalled.get()
 }
 
+/// Before `exit` takes the serial gate after an entry that ran without it
+/// (a local path): the current thread's entry is over, so a remote stall
+/// serviced while waiting must resume it where it now continues. The stall
+/// (`fl4_core::smp::stall`) makes a running thread restart at `FAULT_IP`,
+/// which is right for an entry it cancels before it ran; here `FAULT_IP`
+/// is still that of the thread's last kernel entry. For a thread a local
+/// path has just woken from `ReplyRecv` or `Recv`, that is the syscall
+/// instruction, which would run again with the received badge in the
+/// capability register (l4h issue 227: a cap fault in its receive phase
+/// on the badge). Only this core changes the thread's context until the
+/// stall is acknowledged.
+#[inline(always)]
+fn settle_resume_point(s: &mut PhysStore, ct: Tcb) {
+    if ct.state(s) == sched::TS_RUNNING && ct.0 != node_get(s, s.cur_cpu(), node::IDLE_THREAD) {
+        let ip = ct.reg(s, reg::NEXT_IP);
+        ct.set_reg(s, reg::FAULT_IP, ip);
+    }
+}
+
 #[inline(always)]
 fn unlock() {
     let pc = percpu::get();
@@ -687,6 +706,7 @@ pub fn exit() -> ! {
         // reused) unless this core holds the gate: after a local path, or
         // from the idle loop, it does not.
         if percpu::get().vspace_stale.get() && smp::multi() && !percpu::get().gate_held.get() {
+            settle_resume_point(s, ct);
             lock();
             continue;
         }
