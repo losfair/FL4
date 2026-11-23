@@ -1,6 +1,6 @@
 // x86_64 only: the AArch64 core has other registers and Arch methods.
 #![cfg(not(feature = "aarch64"))]
-use fl4_abi::label;
+use fl4_abi::{config::X86_VMENTER_FULL_STATE, label};
 use fl4_core::capability::{Cap, FrameSize};
 use fl4_core::error::{Exc, SysError};
 use fl4_core::layout::{self, ks, node, reg, tcb};
@@ -558,12 +558,11 @@ fn bind_ntfn(s: &mut Memory, t: Tcb) -> Ntfn {
     n
 }
 
-/// seL4 c_traps.c: a VMEnter that finds its bound notification active
-/// returns at once with the badge and SEL4_VMENTER_RESULT_NOTIF, the
-/// message registers as the caller sent them, and the thread not in
-/// RunningVM. The staged entry state still reaches the VCPU.
+/// A pending signal returns the caller's MRs in the standard ABI and
+/// the staged VCPU registers in the l4h ABI. Poison the old exit frame
+/// and the IPC buffer so neither can pass for the current registers.
 #[test]
-fn vmenter_with_a_pending_signal_leaves_the_message_registers_alone() {
+fn vmenter_with_a_pending_signal() {
     for backend in [1, 2] {
         let (mut s, mut a, t, v) = fixture(backend);
         s.write(t.0 + tcb::VCPU, v);
@@ -574,6 +573,9 @@ fn vmenter_with_a_pending_signal_leaves_the_message_registers_alone() {
         t.set_state(&mut s, sched::TS_RUNNING);
         for i in 0..30 {
             vcpu::set(&mut s, v, vcpu::EXIT + i * 8, 0xdead);
+        }
+        for i in 0..15 {
+            vcpu::set(&mut s, v, vcpu::REGS + i * 8, 0x1230 + i);
         }
         // MR0..3 are R10, R8, R9 and R15; MR4.. are in the IPC buffer.
         t.set_reg(&mut s, reg::R10, 0x1234);
@@ -589,11 +591,29 @@ fn vmenter_with_a_pending_signal_leaves_the_message_registers_alone() {
         assert_eq!(t.reg(&s, reg::MSG_INFO), 0);
         assert_eq!(t.reg(&s, reg::BADGE), 0x42);
         assert_eq!(t.reg(&s, reg::R10), 0x1234);
-        assert_eq!(t.reg(&s, reg::R8), 0xffff_ffff);
         assert_eq!(t.reg(&s, reg::R9), 0x8000_0030);
-        assert_eq!(t.reg(&s, reg::R15), 0x5555);
-        for i in 4..30 {
-            assert_eq!(s.read(0x40000 + 8 + i * 8), 0x1000 + i, "MR{i}");
+        if X86_VMENTER_FULL_STATE {
+            let ctl = if backend == 2 {
+                vcpu::get(&s, v, vcpu::svm::INTERCEPT_EXC) >> 32
+            } else {
+                vcpu::read_vmcs(&s, v, vcpu::vmx::CONTROL_PRIMARY_PROCESSOR_CONTROLS)
+            };
+            assert_eq!(t.reg(&s, reg::R8), ctl);
+            assert_eq!(t.reg(&s, reg::R15), if backend == 2 { 0x60 } else { 1 });
+            for i in 4..30 {
+                let expected = match i {
+                    7 => 2, // initial RFLAGS
+                    10..=24 => 0x1230 + i - 10,
+                    _ => 0,
+                };
+                assert_eq!(s.read(0x40000 + 8 + i * 8), expected, "MR{i}");
+            }
+        } else {
+            assert_eq!(t.reg(&s, reg::R8), 0xffff_ffff);
+            assert_eq!(t.reg(&s, reg::R15), 0x5555);
+            for i in 4..30 {
+                assert_eq!(s.read(0x40000 + 8 + i * 8), 0x1000 + i, "MR{i}");
+            }
         }
         let rip = if backend == 2 {
             vcpu::get(&s, v, vcpu::svm::RIP)
@@ -607,20 +627,18 @@ fn vmenter_with_a_pending_signal_leaves_the_message_registers_alone() {
     }
 }
 
-/// seL4 `vcpu_sysvmenter_reply_to_user`: a notification that ends a
-/// running VMEnter reports the guest's RIP, controls and pending event in
-/// MR0..2 and leaves every other message register alone, even after a
-/// host exit that saved a full exit record. An event FL4 reinjects after
-/// such an exit is in MR2, so passing MR2 back to VMEnter keeps it.
+/// After a host exit the standard ABI returns the event staged for
+/// re-entry. The l4h ABI reports interrupted delivery in MR27/28 so the
+/// VMM can requeue the event with its error code.
 #[test]
-fn a_notification_reports_only_the_resume_state() {
+fn a_notification_after_a_host_exit() {
     for backend in [1, 2] {
         let (mut s, a, t, v) = fixture(backend);
         s.write(t.0 + tcb::VCPU, v);
         vcpu::set(&mut s, v, vcpu::TCB, t.0);
         t.set_state(&mut s, sched::TS_RUNNING_VM);
         for i in 0..30 {
-            vcpu::set(&mut s, v, vcpu::EXIT + i * 8, 0xdead);
+            vcpu::set(&mut s, v, vcpu::EXIT + i * 8, 0x2000 + i);
         }
         vcpu::set(&mut s, v, vcpu::VALID, 1);
         let ctl = if backend == 2 {
@@ -634,6 +652,10 @@ fn a_notification_reports_only_the_resume_state() {
             vcpu::read_vmcs(&s, v, CONTROL_PRIMARY_PROCESSOR_CONTROLS)
         };
         assert_ne!(ctl, 0);
+        vcpu::set(&mut s, v, vcpu::EXIT, 0x25);
+        vcpu::set(&mut s, v, vcpu::EXIT + 8, ctl);
+        vcpu::set(&mut s, v, vcpu::EXIT + 2 * 8, 0);
+        vcpu::set(&mut s, v, vcpu::EXIT + 27 * 8, 0x8000_0b0e);
         t.set_reg(&mut s, reg::R15, 0x5555);
         for i in 4..30 {
             s.write(0x40000 + 8 + i * 8, 0x1000 + i);
@@ -644,10 +666,23 @@ fn a_notification_reports_only_the_resume_state() {
         assert_eq!(t.reg(&s, reg::BADGE), 0x42);
         assert_eq!(t.reg(&s, reg::R10), 0x25);
         assert_eq!(t.reg(&s, reg::R8), ctl);
-        assert_eq!(t.reg(&s, reg::R9), 0x8000_0b0e);
-        assert_eq!(t.reg(&s, reg::R15), 0x5555);
-        for i in 4..30 {
-            assert_eq!(s.read(0x40000 + 8 + i * 8), 0x1000 + i, "MR{i}");
+        if X86_VMENTER_FULL_STATE {
+            assert_eq!(t.reg(&s, reg::R9), 0);
+            assert_eq!(t.reg(&s, reg::R15), if backend == 2 { 0x60 } else { 1 });
+            for i in 4..30 {
+                let expected = match i {
+                    4 | 6 | 25 | 26 => 0,
+                    27 => 0x8000_0b0e,
+                    _ => 0x2000 + i,
+                };
+                assert_eq!(s.read(0x40000 + 8 + i * 8), expected, "MR{i}");
+            }
+        } else {
+            assert_eq!(t.reg(&s, reg::R9), 0x8000_0b0e);
+            assert_eq!(t.reg(&s, reg::R15), 0x5555);
+            for i in 4..30 {
+                assert_eq!(s.read(0x40000 + 8 + i * 8), 0x1000 + i, "MR{i}");
+            }
         }
     }
 }
@@ -679,7 +714,7 @@ fn signal_to_a_running_vm_on_this_core_completes_it_at_once() {
     assert_eq!(t.reg(&s, reg::MSG_INFO), 0);
     assert_eq!(t.reg(&s, reg::BADGE), 1);
     assert_eq!(t.reg(&s, reg::R10), 0x25);
-    assert_eq!(t.reg(&s, reg::R15), 0x5555);
+    assert_eq!(t.reg(&s, reg::R15), if X86_VMENTER_FULL_STATE { 0x60 } else { 0x5555 });
     assert_eq!(n.state(&s), NTFN_IDLE);
     notification::send_signal(&mut s, &mut a, n.0, 2);
     assert_eq!(t.reg(&s, reg::BADGE), 1);

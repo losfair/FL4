@@ -219,6 +219,12 @@ state on every entry.
 The other backend's field operations return `seL4_IllegalOperation`.
 VCPU objects occupy 32 KiB (`seL4_VCPUBits = 15`).
 
+For VMMs built against l4h's seL4 patches 0039 and 0040, configure
+`-DKernelX86VmenterFullState=ON`. A notification then returns the full
+guest register frame, with the external-interrupt reason for the active
+backend. This includes a notification already pending at VM entry.
+The default follows the upstream seL4 notification ABI.
+
 Each core retains a VMCS and uses `VMRESUME` after its first successful
 launch. A field cache follows both software writes and guest changes read
 on exit, so entries write only changed VMCS fields. The VCPU's software

@@ -394,9 +394,15 @@ static int test_vm_execute(env_t env)
      * clear. A pending signal also completes VMEnter without executing. */
     seL4_CPtr ntfn = vka_alloc_notification_leaky(&env->vka);
     test_eq(seL4_TCB_BindNotification(env->tcb, ntfn), seL4_NoError);
-    /* As in seL4, a pending signal leaves every message register as the
-     * caller sent it; one that ends a running guest reports MR0..2 (the
-     * guest's RIP, controls and event) and leaves the rest. */
+    /* The l4h ABI also replaces the sentinels with the notification
+     * frame, both before entry and after a timer interrupts the guest. */
+    const bool full_state = config_set(CONFIG_X86_VMENTER_FULL_STATE);
+    const seL4_Word intr_reason = amd ? 0x60 : 1;
+    if (full_state && !amd) {
+        seL4_X86_VCPU_WriteVMCS_t primary = seL4_X86_VCPU_WriteVMCS(v.cptr, 0x4002, ctl);
+        test_eq(primary.error, seL4_NoError);
+        ctl = primary.written;
+    }
     seL4_Signal(ntfn);
     seL4_SetMR(0, 3); seL4_SetMR(1, ctl); seL4_SetMR(2, 0);
     seL4_SetMR(SEL4_VMENTER_FAULT_REASON_MR, 0x5a5a);
@@ -404,8 +410,8 @@ static int test_vm_execute(env_t env)
     test_eq(seL4_VMEnter(&badge), SEL4_VMENTER_RESULT_NOTIF);
     test_eq(seL4_GetMR(SEL4_VMENTER_CALL_EIP_MR), 3);
     test_eq(seL4_GetMR(SEL4_VMENTER_CALL_CONTROL_PPC_MR), ctl);
-    test_eq(seL4_GetMR(SEL4_VMENTER_FAULT_REASON_MR), 0x5a5a);
-    test_eq(seL4_GetMR(SEL4_VMENTER_FAULT_INSTRUCTION_LEN_MR), 0x6b6b);
+    test_eq(seL4_GetMR(SEL4_VMENTER_FAULT_REASON_MR), full_state ? intr_reason : 0x5a5a);
+    test_eq(seL4_GetMR(SEL4_VMENTER_FAULT_INSTRUCTION_LEN_MR), full_state ? 0 : 0x6b6b);
     test_eq(seL4_TCB_SetTimer(env->tcb, __builtin_ia32_rdtsc() + 5000000, 0x42), seL4_NoError);
     seL4_SetMR(0, 3); seL4_SetMR(1, ctl); seL4_SetMR(2, 0);
     seL4_SetMR(SEL4_VMENTER_FAULT_REASON_MR, 0x5a5a);
@@ -413,8 +419,8 @@ static int test_vm_execute(env_t env)
     test_eq(seL4_VMEnter(&badge), SEL4_VMENTER_RESULT_NOTIF);
     test_eq(badge, 0x42);
     test_eq(seL4_GetMR(SEL4_VMENTER_CALL_EIP_MR), 3);
-    test_eq(seL4_GetMR(SEL4_VMENTER_FAULT_REASON_MR), 0x5a5a);
-    test_eq(seL4_GetMR(SEL4_VMENTER_FAULT_INSTRUCTION_LEN_MR), 0x6b6b);
+    test_eq(seL4_GetMR(SEL4_VMENTER_FAULT_REASON_MR), full_state ? intr_reason : 0x5a5a);
+    test_eq(seL4_GetMR(SEL4_VMENTER_FAULT_INSTRUCTION_LEN_MR), full_state ? 0 : 0x6b6b);
     test_eq(seL4_TCB_UnbindNotification(env->tcb), seL4_NoError);
     {
         /* seL4 sendSignal: signals to a RunningVM thread on the current
@@ -455,11 +461,11 @@ static int test_vm_execute(env_t env)
         test_eq(vm_results[0], SEL4_VMENTER_RESULT_NOTIF);
         test_eq(vm_results[1], 1);
         test_eq(vm_results[2], 0x25);
-        test_eq(vm_results[3], 0x5a5a);
+        test_eq(vm_results[3], full_state ? intr_reason : 0x5a5a);
         test_eq(vm_results[4], SEL4_VMENTER_RESULT_NOTIF);
         test_eq(vm_results[5], 2);
         test_eq(vm_results[6], 2);
-        test_eq(vm_results[7], 0xa5a5);
+        test_eq(vm_results[7], full_state ? intr_reason : 0xa5a5);
         cleanup_helper(env, &worker);
         test_eq(seL4_TCB_UnbindNotification(env->tcb), seL4_NoError);
         test_eq(seL4_TCB_SetEPTRoot(env->tcb, root.cptr), seL4_NoError);
