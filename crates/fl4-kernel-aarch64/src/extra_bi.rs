@@ -77,7 +77,7 @@ pub struct TpmEventLog {
 
 /// Write the records into `buf`: the ACPI RSDP, the boot core's ID
 /// registers (l4h 0018), optional virtualization info, the boot modules
-/// (l4h 0021), the TPM event log and the device tree. Returns their length, a multiple of 8
+/// (l4h 0021), the TPM event log, the ITS's MSI facts and the device tree. Returns their length, a multiple of 8
 /// (a padding record ends the chain if needed, as on x86_64); none if
 /// `buf` is too small.
 ///
@@ -92,6 +92,7 @@ pub fn build(
     virt_info: Option<&VirtInfo>,
     mods: &[Module],
     tpm_log: Option<&TpmEventLog>,
+    msi: Option<&[u64; 4]>,
     dtb: &[u8],
 ) -> Option<usize> {
     buf.fill(0);
@@ -123,6 +124,13 @@ pub fn build(
     if let Some(t) = tpm_log {
         hdr(buf, &mut off, id::TPM_EVENT_LOG, 16 + 24)?;
         for w in [t.paddr, t.size, t.flags] {
+            put(buf, &mut off, &w.to_le_bytes())?;
+        }
+    }
+    // seL4_AArch64MsiInfo: doorbell, num_lpis, num_events, num_devices.
+    if let Some(m) = msi {
+        hdr(buf, &mut off, id::AARCH64_MSI_INFO, 16 + 32)?;
+        for w in m {
             put(buf, &mut off, &w.to_le_bytes())?;
         }
     }

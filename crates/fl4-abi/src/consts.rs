@@ -324,6 +324,9 @@ pub mod bootinfo_header {
     /// Intel TDX guest facts (seL4_X86_TdxInfo: gpaw, attributes, td_ctls,
     /// num_vcpus, max_vcpus).
     pub const TDX_INFO: u64 = 14;
+    /// AArch64 MSIs through a GICv3 ITS (seL4_AArch64MsiInfo: doorbell,
+    /// num_lpis, num_events, num_devices), when the kernel drives one.
+    pub const AARCH64_MSI_INFO: u64 = 15;
 }
 
 /// `bootinfo_header::TPM_EVENT_LOG` flags (libsel4 `seL4_TpmEventLog_*`).

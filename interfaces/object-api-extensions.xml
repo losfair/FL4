@@ -105,4 +105,31 @@
             <error name="seL4_TruncatedMessage" description="A required argument or the frame capability is missing."/>
         </method>
     </interface>
+    <interface name="seL4_IRQControl" manual_name="IRQ Control" cap_description="An IRQControl capability. This gives you the authority to make this call.">
+        <method id="ARMIRQIssueIRQHandlerMSI" name="GetMSI" manual_name="Get MSI Handler">
+            <condition><config var="CONFIG_ARCH_AARCH64"/></condition>
+            <brief>Create an IRQ handler capability for MSIs of a PCI function through the GICv3 ITS.</brief>
+            <description>
+                Maps event `event` of device `device` (its PCI requester ID) to the kernel's LPI number
+                `irq` and routes it to core `target`. The device raises it by writing `event` to the
+                doorbell that SEL4_BOOTINFO_HEADER_AARCH64_MSI_INFO gives, whose numbers bound the
+                arguments. Deleting the handler unmaps the event. LPIs are edge triggered and are not
+                masked between their signal and IRQHandler_Ack.
+            </description>
+            <param dir="in" name="irq" type="seL4_Word" description="The LPI number, below num_lpis."/>
+            <param dir="in" name="device" type="seL4_Word" description="The device ID (PCI requester ID), below num_devices."/>
+            <param dir="in" name="event" type="seL4_Word" description="The event ID the device writes, below num_events."/>
+            <param dir="in" name="root" type="seL4_CNode" description="CPtr to the CNode that forms the root of the destination CSpace. Must be at a depth equivalent to the wordsize."/>
+            <param dir="in" name="index" type="seL4_Word" description="CPtr to the destination slot. Resolved from the root of the destination CSpace."/>
+            <param dir="in" name="depth" type="seL4_Uint8" description="Number of bits of index to resolve to find the destination slot."/>
+            <param dir="in" name="target" type="seL4_Word" description="The core the interrupt goes to."/>
+            <error name="seL4_IllegalOperation" description="The kernel drives no ITS, or the device has no ITS table left."/>
+            <error name="seL4_RangeError" description="The irq is not below num_lpis."/>
+            <error name="seL4_InvalidArgument" description="The device, the event (or the event is mapped already) or the target is invalid."/>
+            <error name="seL4_RevokeFirst" description="An IRQ handler for irq exists."/>
+            <error name="seL4_TruncatedMessage" description="A required argument or the destination root is missing."/>
+            <error name="seL4_DeleteFirst" description="The destination slot contains a capability."/>
+            <error name="seL4_FailedLookup" description="The destination slot could not be resolved."/>
+        </method>
+    </interface>
 </api>

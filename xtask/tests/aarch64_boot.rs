@@ -1604,7 +1604,7 @@ fn extra_bootinfo_records_chain_exactly_with_nothing_uninitialized() {
                         id_aa64dfr0_el1: 0x1030_5106,
                         id_aa64dfr1_el1: 0,
                     };
-                    let len = extra_bi::build(&mut buf, has_rsdp.then_some(&rsdp[..]), &regs, Some(&vi), mods, has_tpm.then_some(&tpm), &dtb).expect(&what);
+                    let len = extra_bi::build(&mut buf, has_rsdp.then_some(&rsdp[..]), &regs, Some(&vi), mods, has_tpm.then_some(&tpm), None, &dtb).expect(&what);
                     assert_eq!(len % 8, 0, "{what}");
                     assert!(buf.iter().all(|&b| b != 0xaa), "{what}: uninitialized bytes");
                     let recs = bi_records(&buf, len);
@@ -1675,9 +1675,9 @@ fn extra_bootinfo_records_chain_exactly_with_nothing_uninitialized() {
     }
     // Too small a buffer is refused, not overrun.
     let mut small = [0u8; 64];
-    assert_eq!(extra_bi::build(&mut small, Some(&rsdp), &regs, None, &[], None, &[]), None);
+    assert_eq!(extra_bi::build(&mut small, Some(&rsdp), &regs, None, &[], None, None, &[]), None);
     let mut small = vec![0u8; 4096];
-    assert_eq!(extra_bi::build(&mut small, None, &regs, None, &[], None, &[1u8; 4096]), None);
+    assert_eq!(extra_bi::build(&mut small, None, &regs, None, &[], None, None, &[1u8; 4096]), None);
 }
 
 /// Audit r13 T3-01: the EL2 nVHE identity map (TTBR0_EL2) keeps the W^X

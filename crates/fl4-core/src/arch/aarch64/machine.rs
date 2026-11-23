@@ -1,3 +1,13 @@
+/// `Arch::msi_map`'s answers.
+pub mod msi {
+    pub const OK: u64 = 0;
+    /// No ITS, or no table left for another device.
+    pub const NO_ITS: u64 = 1;
+    pub const BAD_DEVICE: u64 = 2;
+    /// Out of range, or mapped already.
+    pub const BAD_EVENT: u64 = 3;
+}
+
 macro_rules! arch_machine_methods {
     () => {
         /// AArch64 cache maintenance (seL4 `doFlush`): operation `op`
@@ -12,6 +22,10 @@ macro_rules! arch_machine_methods {
         /// AArch64: configure interrupt `irq` as edge (true) or level triggered
         /// and, for an SPI, route it to `core`.
         fn configure_irq(&mut self, irq: u64, edge: bool, core: u64);
+        /// AArch64: map event `event` of device `device` to LPI `irq` on
+        /// `core` through the ITS (`msi::OK`), or refuse and change nothing
+        /// (another `msi` code). `irq_free` unmaps it.
+        fn msi_map(&mut self, _irq: u64, _device: u64, _event: u64, _core: u64) -> u64 { msi::NO_ITS }
         /// AArch64 Stage-2 IPA width (40, 44, or 48).
         fn s2_ipa_bits(&self) -> u64 { 40 }
         /// AArch64: install Stage-2 root (kernel VA, 0 = empty root) & ASID into VTTBR_EL2.

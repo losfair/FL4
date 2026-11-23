@@ -131,7 +131,8 @@ pub mod reg {
 /// AArch64 interrupt numbering. GIC interrupt IDs 0-15 (SGIs) and 16-31
 /// (PPIs) are banked per core and 32-1019 (SPIs) are shared. An SPI's IRQ
 /// is its ID; a banked interrupt's is `BANKED_BASE + 32 * core + ID`, so
-/// every core has its own state and handler slot for it.
+/// every core has its own state and handler slot for it. The ITS's LPIs
+/// (IDs from `LPI_ID_BASE`, MSIs) follow at `LPI_BASE`.
 pub mod irq {
     pub const NUM_BANKED: u64 = 32;
     pub const SPI_MIN: u64 = 32;
@@ -150,30 +151,46 @@ pub mod irq {
     /// SGIs the kernel sends between cores.
     pub const REMOTE_CALL_ID: u64 = 0;
     pub const RESCHEDULE_ID: u64 = 1;
-    pub const MAX: u64 = BANKED_BASE + BANKED_CORES * NUM_BANKED - 1;
+    /// The first LPI's IRQ, and how many LPIs the kernel has (the ITS
+    /// maps each to one device's event, `GetMSI`).
+    pub const LPI_BASE: u64 = BANKED_BASE + BANKED_CORES * NUM_BANKED;
+    pub const NUM_LPIS: u64 = 256;
+    /// The first LPI's GIC interrupt ID.
+    pub const LPI_ID_BASE: u64 = 8192;
+    pub const MAX: u64 = LPI_BASE + NUM_LPIS - 1;
     pub const COUNT: u64 = MAX + 1;
 
-    /// The IRQ of interrupt `id` as `cpu` takes it.
+    /// The IRQ of interrupt `id` as `cpu` takes it (an LPI the kernel does
+    /// not have: past `MAX`).
     pub fn of(id: u64, cpu: u64) -> u64 {
-        if id < NUM_BANKED {
+        if id >= LPI_ID_BASE {
+            LPI_BASE.wrapping_add((id - LPI_ID_BASE).min(NUM_LPIS))
+        } else if id < NUM_BANKED {
             BANKED_BASE.wrapping_add((cpu % BANKED_CORES).wrapping_mul(NUM_BANKED)).wrapping_add(id)
         } else {
             id
         }
     }
 
+    /// Whether `irq` is an LPI.
+    pub fn is_lpi(irq: u64) -> bool {
+        irq >= LPI_BASE
+    }
+
     /// The GIC interrupt ID of `irq`.
     pub fn id(irq: u64) -> u64 {
-        if irq >= BANKED_BASE {
+        if irq >= LPI_BASE {
+            irq - LPI_BASE + LPI_ID_BASE
+        } else if irq >= BANKED_BASE {
             (irq - BANKED_BASE) % NUM_BANKED
         } else {
             irq
         }
     }
 
-    /// The core a banked `irq` belongs to (0 for SPIs).
+    /// The core a banked `irq` belongs to (0 for SPIs and LPIs).
     pub fn core(irq: u64) -> u64 {
-        if irq >= BANKED_BASE {
+        if irq >= BANKED_BASE && irq < LPI_BASE {
             (irq - BANKED_BASE) / NUM_BANKED
         } else {
             0

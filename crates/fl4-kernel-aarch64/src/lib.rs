@@ -80,7 +80,7 @@ pub fn fail(msg: &str) -> ! {
 /// The extra BootInfo records (`extra_bi::build`): the ACPI RSDP, the
 /// boot core's ID registers, virtualization info, the boot modules, the
 /// TPM event log and the device tree.
-fn build_extra_bi(buf: &mut [u8], h: &hw::Hw, dtb: u64, dtb_len: u64, mods: &[fl4_bootinfo::Module], tpm: Option<&extra_bi::TpmEventLog>) -> usize {
+fn build_extra_bi(buf: &mut [u8], h: &hw::Hw, dtb: u64, dtb_len: u64, mods: &[fl4_bootinfo::Module], tpm: Option<&extra_bi::TpmEventLog>, msi: Option<&fl4_arch_aarch64::its::Info>) -> usize {
     let regs = [
         fl4_arch_aarch64::mrs!("id_aa64isar0_el1"),
         fl4_arch_aarch64::mrs!("id_aa64isar1_el1"),
@@ -123,7 +123,8 @@ fn build_extra_bi(buf: &mut [u8], h: &hw::Hw, dtb: u64, dtb_len: u64, mods: &[fl
     };
     let src: &[u8] = if dtb_len != 0 { unsafe { core::slice::from_raw_parts(pptr(dtb) as *const u8, dtb_len as usize) } } else { &[] };
     let rsdp = if h.has_rsdp { Some(&h.rsdp[..]) } else { None };
-    match extra_bi::build(buf, rsdp, &regs, Some(&virt_info), mods, tpm, src) {
+    let msi = msi.map(|m| [m.doorbell, m.num_lpis, m.num_events, m.num_devices]);
+    match extra_bi::build(buf, rsdp, &regs, Some(&virt_info), mods, tpm, msi.as_ref(), src) {
         Some(len) => len,
         None => fail("extra BootInfo too large"),
     }
@@ -316,6 +317,13 @@ pub extern "C" fn fl4_boot(off: u64, el_mode: u64) -> ! {
         }
         device(h.gicc, 0x2000, "GIC CPU interface not mappable")
     };
+    // The ITS is the kernel's (its.rs), whether or not it can drive it.
+    let its_va = if h.gic_version == 3 && h.its != 0 {
+        keep(&mut dev_used, h.its, h.its.saturating_add(fl4_arch_aarch64::its::ITS_SIZE));
+        paging::map_device(h.its, fl4_arch_aarch64::its::ITS_SIZE)
+    } else {
+        None
+    };
     gic::init_dist(h.gic_version, gicd, gicc);
     gic::init_cpu(smp::find_gicr());
     if cpu::is_el2_nvhe() {
@@ -428,6 +436,37 @@ pub extern "C" fn fl4_boot(off: u64, el_mode: u64) -> ! {
         kprintln!("FL4: TPM event log: {:#x} bytes at {:#x}", t.size, t.paddr);
     }
 
+    // The ITS's tables, from the free RAM, 64 KiB aligned.
+    let mut msi = None;
+    if let Some(va) = its_va {
+        use fl4_arch_aarch64::its;
+        let size = its::memory_size(ncpus);
+        let mut pool = free;
+        if bi.dtb != 0 {
+            let dl = hw::dtb_size(bi.dtb);
+            pool.remove(bi.dtb & !(PAGE - 1), (bi.dtb + dl + PAGE - 1) & !(PAGE - 1));
+        }
+        match pool.take(size + 0x1_0000) {
+            Some(p) => {
+                free.remove(p, p + size + 0x1_0000);
+                let mem = (p + 0xffff) & !0xffff;
+                let gicr_pa = |c: usize| {
+                    let va = percpu::gicr(c);
+                    (0..h.n_gicr).find(|&i| va >= gicr_va[i].0 && va < gicr_va[i].0 + gicr_va[i].1)
+                        .map(|i| h.gicr[i].0 + (va - gicr_va[i].0))
+                };
+                match its::init(va, h.its, mem, ncpus, gicr_pa) {
+                    Ok(info) => {
+                        kprintln!("FL4: ITS at {:#x}: {} LPIs, {} device IDs, MSI doorbell {:#x}", h.its, info.num_lpis, info.num_devices, info.doorbell);
+                        msi = Some(info);
+                    }
+                    Err(e) => kprintln!("FL4: ITS at {:#x} unused: {}", h.its, e),
+                }
+            }
+            None => kprintln!("FL4: no memory for the ITS tables"),
+        }
+    }
+
     // The extra BootInfo, in memory taken from the free RAM.
     let dtb_len = if bi.dtb != 0 { hw::dtb_size(bi.dtb) } else { 0 };
     let extra_size = EXTRA_FIXED + ((dtb_len + 16 + PAGE) & !(PAGE - 1));
@@ -442,7 +481,7 @@ pub extern "C" fn fl4_boot(off: u64, el_mode: u64) -> ! {
     };
     free.remove(extra_pa, extra_pa + extra_size);
     let extra = unsafe { core::slice::from_raw_parts_mut(pptr(extra_pa) as *mut u8, extra_size as usize) };
-    let extra_len = build_extra_bi(extra, &h, bi.dtb, dtb_len, &mods[..extra_mods], tpm.as_ref());
+    let extra_len = build_extra_bi(extra, &h, bi.dtb, dtb_len, &mods[..extra_mods], tpm.as_ref(), msi.as_ref());
     // The boot frames go after the image in user space (fl4-core
     // `root_layout`): all of them below its end.
     let root_v_end = root.v_start.checked_add(root.p_end - root.p_start);

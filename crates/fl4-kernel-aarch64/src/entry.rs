@@ -177,8 +177,8 @@ enum TakenIrq {
 /// Acknowledge an interrupt; returns what kind of kernel entry it needs.
 fn take_irq() -> Option<TakenIrq> {
     let raw = gic::ack();
-    let id = raw & 0x3ff;
-    if raw == gic::SPURIOUS || id >= 1020 {
+    let id = gic::raw_id(raw);
+    if gic::is_spurious(raw) {
         return None;
     }
     percpu::get().iar.set(raw);

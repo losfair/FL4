@@ -47,6 +47,8 @@ pub struct Hw {
     /// GICv2 hypervisor control interface (GICH).
     pub gich: u64,
     pub gich_len: u64,
+    /// The first GICv3 ITS (0: none), which the kernel drives for MSIs.
+    pub its: u64,
     /// GICv2 virtual CPU interface (GICV).
     pub gicv: u64,
     pub gicv_len: u64,
@@ -78,6 +80,7 @@ impl Hw {
             vgic_maint: 0,
             gich: 0,
             gich_len: 0,
+            its: 0,
             gicv: 0,
             gicv_len: 0,
             rsdp: [0; RSDP_LEN],
@@ -240,6 +243,12 @@ fn parse_acpi(rsdp_p: u64, hw: &mut Hw) -> bool {
                             hw.gic_version = rd8(e + 20) as u64;
                         }
                         0x0e if l >= 16 => hw.add_gicr(rd64(e + 4), rd32(e + 12) as u64),
+                        // GIC ITS: its base.
+                        0x0f if l >= 16 => {
+                            if hw.its == 0 {
+                                hw.its = rd64(e + 8);
+                            }
+                        }
                         _ => {}
                     }
                     off += l;
@@ -482,6 +491,7 @@ const N_GICV3: u8 = 1;
 const N_GICV2: u8 = 2;
 const N_PL011: u8 = 3;
 const N_16550: u8 = 4;
+const N_ITS: u8 = 5;
 
 fn parse_dt(dtb: u64, hw: &mut Hw) -> bool {
     // The console and PSCI, then a pass per node: compatible strings come
@@ -560,6 +570,11 @@ fn parse_dt(dtb: u64, hw: &mut Hw) -> bool {
                     hw.vgic_maint = n.vgic_maint;
                 }
             }
+            N_ITS => {
+                if hw.its == 0 {
+                    hw.its = n.reg[0].0;
+                }
+            }
             N_PL011 | N_16550 => {
                 let u = (n.kind, n.reg[0].0);
                 if uart_any.is_none() {
@@ -578,7 +593,9 @@ fn parse_dt(dtb: u64, hw: &mut Hw) -> bool {
             cur = Node::EMPTY;
             cur_name = p.node;
         }
-        if has_compat(p, b"arm,gic-v3") {
+        if has_compat(p, b"arm,gic-v3-its") {
+            cur.kind = N_ITS;
+        } else if has_compat(p, b"arm,gic-v3") {
             cur.kind = N_GICV3;
         } else if has_compat(p, b"arm,cortex-a15-gic") || has_compat(p, b"arm,gic-400") || has_compat(p, b"arm,cortex-a9-gic") {
             cur.kind = N_GICV2;

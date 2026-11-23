@@ -33,7 +33,7 @@ fn remote_gic(kind: u64, id: u64, core: u64, v: bool) {
 /// The raw acknowledge value to end `irq` with.
 fn eoi_value(irq: u64) -> u64 {
     let raw = percpu::get().iar.get();
-    if raw & 0x3ff == irq::id(irq) {
+    if gic::raw_id(raw) == irq::id(irq) {
         raw
     } else {
         irq::id(irq)
@@ -45,12 +45,12 @@ fn eoi_value(irq: u64) -> u64 {
 /// preemption point. Returns the interrupt's IRQ, or `NO_IRQ`.
 pub fn poll_irq() -> u64 {
     let hp = gic::highest_pending();
-    if hp >= 1020 || hp == irq::REMOTE_CALL_ID {
+    if gic::is_spurious(hp) || hp == irq::REMOTE_CALL_ID {
         return fl4_core::syscall::NO_IRQ;
     }
     let raw = gic::ack();
-    let id = raw & 0x3ff;
-    if raw == gic::SPURIOUS || id >= 1020 {
+    let id = gic::raw_id(raw);
+    if gic::is_spurious(raw) {
         return fl4_core::syscall::NO_IRQ;
     }
     if id == irq::REMOTE_CALL_ID {
@@ -168,6 +168,12 @@ impl Arch for PhysArch {
     }
     fn max_spi(&self) -> u64 {
         gic::max_spi()
+    }
+    fn msi_map(&mut self, irq: u64, device: u64, event: u64, core: u64) -> u64 {
+        crate::its::map(irq, device, event, core)
+    }
+    fn irq_free(&mut self, irq: u64) {
+        crate::its::unmap(irq)
     }
     fn configure_irq(&mut self, irq: u64, edge: bool, core: u64) {
         if gic::remote(irq::id(irq), core) {

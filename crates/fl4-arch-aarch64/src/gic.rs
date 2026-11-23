@@ -66,6 +66,11 @@ fn gicd() -> u64 {
     GICD.load(Ordering::Relaxed)
 }
 
+/// GICD_TYPER.
+pub fn dist_typer() -> u32 {
+    rd(gicd() + GICD_TYPER)
+}
+
 /// Interrupt lines the distributor implements (SPIs end below this).
 pub fn lines() -> u64 {
     LINES.load(Ordering::Relaxed)
@@ -395,6 +400,17 @@ pub fn highest_pending() -> u64 {
     }
 }
 
+/// The interrupt ID in an acknowledge value: an LPI's whole, else the low
+/// ten bits (GICv2 puts an SGI's source core above them).
+pub fn raw_id(raw: u64) -> u64 {
+    if raw >= fl4_core::layout::irq::LPI_ID_BASE { raw } else { raw & 0x3ff }
+}
+
+/// Whether an acknowledge value names no interrupt.
+pub fn is_spurious(raw: u64) -> bool {
+    raw == SPURIOUS || (1020..fl4_core::layout::irq::LPI_ID_BASE).contains(&raw_id(raw))
+}
+
 /// End interrupt `id` (as `ack` returned it).
 pub fn eoi(id: u64) {
     if version() == 3 {
@@ -437,6 +453,10 @@ fn banked_base(core: u64) -> Option<u64> {
 
 /// Mask or unmask `id` (banked interrupts: on `core`).
 pub fn mask(id: u64, core: u64, masked: bool) {
+    // LPIs are never masked (its.rs).
+    if id >= 1020 {
+        return;
+    }
     let base = if id < 32 {
         match banked_base(core) {
             Some(b) => b,
@@ -451,6 +471,9 @@ pub fn mask(id: u64, core: u64, masked: bool) {
 
 /// Edge (true) or level triggering for `id`; for an SPI also the target.
 pub fn configure(id: u64, core: u64, edge: bool) {
+    if id >= 1020 {
+        return;
+    }
     let base = if id < 32 {
         match banked_base(core) {
             Some(b) => b,
@@ -472,7 +495,7 @@ pub fn configure(id: u64, core: u64, edge: bool) {
 
 /// Deliver SPI `id` to `core`.
 pub fn route(id: u64, core: u64) {
-    if id < 32 {
+    if !(32..1020).contains(&id) {
         return;
     }
     if version() == 3 {
