@@ -155,3 +155,23 @@ pub fn reschedule(mask: u64) {
     each(targets, |c| ipi(c, RESCHEDULE_VECTOR));
 }
 
+
+/// Whether an idle core polls before it halts (fl4-kernel's fl4_idle):
+/// with other cores to wake it, under a hypervisor (CPUID.1:ECX[31]),
+/// where a halt and the wakeup from it are exits, and not in a CVM, where
+/// the poll's RDTSC may itself exit. On bare metal HLT is cheap and the
+/// spin would only burn power and an SMT sibling's share. Decided once.
+pub fn idle_polls() -> bool {
+    static POLLS: core::sync::atomic::AtomicU8 = core::sync::atomic::AtomicU8::new(0);
+    // Cores come online after boot: only the platform is decided once.
+    multi()
+        && match POLLS.load(Ordering::Relaxed) {
+            1 => false,
+            2 => true,
+            _ => {
+                let on = crate::cpu::cpuid(1, 0).ecx & (1 << 31) != 0 && !crate::cvm::active();
+                POLLS.store(if on { 2 } else { 1 }, Ordering::Relaxed);
+                on
+            }
+        }
+}

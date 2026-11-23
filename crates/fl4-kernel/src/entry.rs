@@ -783,9 +783,9 @@ pub fn exit() -> ! {
         unlock();
         let stack_top = percpu::stack_top(percpu::cpu_index());
         if idle {
-            // Poll for a while before halting (fl4_idle), only with other
-            // cores to wake this one.
-            let end = if smp::multi() { timer::now().wrapping_add(timer::us_to_ticks(IDLE_POLL_US)).max(1) } else { 0 };
+            // Poll for a while before halting (fl4_idle): under a
+            // hypervisor, with other cores to wake this one (idle_polls).
+            let end = if smp::idle_polls() { timer::now().wrapping_add(timer::us_to_ticks(IDLE_POLL_US)).max(1) } else { 0 };
             percpu::get().idle.set(true);
             unsafe { fl4_idle(stack_top, end) }
         }

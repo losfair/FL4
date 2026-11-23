@@ -381,6 +381,8 @@ fl4_idle_loop:
     testq %r8, %r8
     jz 3f
 2:
+    cmpb $0, FL4_CVM_POISONED(%rip)
+    jne .Lpoisoned
     /* An interrupt window, cleared as the halt's below is. */
     fl4_clear_buffers
     sti

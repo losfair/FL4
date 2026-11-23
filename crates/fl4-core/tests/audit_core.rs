@@ -55,6 +55,8 @@ struct Machine {
     masked: Vec<(u64, bool)>,
     /// When set, a remote stall runs the stalled core's side on this memory.
     smp: Option<Shared>,
+    /// Reschedule IPIs sent, by core mask.
+    rescheduled: Vec<u64>,
     /// IOAPICs (24 pins each), what routing a pin returns, and the routes.
     ioapics: u64,
     ioapic_ok: bool,
@@ -127,7 +129,7 @@ impl Arch for Machine {
             fl4_core::smp::stall(&mut there, &mut Machine::default());
         }
     }
-    fn send_reschedule(&mut self, _: u64) {}
+    fn send_reschedule(&mut self, mask: u64) { self.rescheduled.push(mask); }
     fn putc(&mut self, _: u64) {}
     fn get_char(&mut self) -> u64 {
         0
@@ -693,4 +695,32 @@ fn preemption_point_reads_the_irq_line_even_without_budget() {
 fn abi_message_limits_match_the_kernel() {
     assert_eq!(fl4_abi::consts::MSG_MAX_LENGTH, fl4_core::msg::MSG_MAX_LENGTH);
     assert_eq!(fl4_abi::consts::MSG_MAX_EXTRA_CAPS, fl4_core::msg::MSG_MAX_EXTRA_CAPS);
+}
+
+/// A signal to a notification bound to a thread running its guest on
+/// another core interrupts that core (a reschedule IPI) and stalls nothing:
+/// the badge waits in the notification for the owner's entry check.
+#[cfg(not(feature = "aarch64"))]
+#[test]
+fn signal_to_a_remote_guest_kicks_without_stalling() {
+    use fl4_core::obj::{Ntfn, NTFN_ACTIVE};
+    use fl4_core::{notification, sched};
+    for (cpu, running, kicked) in [(1, true, true), (1, false, false), (0, true, false)] {
+        let mut s = Memory::default();
+        let mut a = Machine::default();
+        let guest = Tcb(0x20000);
+        let n = Ntfn(0x30000);
+        guest.set_state(&mut s, sched::TS_RUNNING_VM);
+        guest.set_affinity(&mut s, cpu);
+        n.set_bound_tcb(&mut s, guest.0);
+        if running {
+            node_set(&mut s, cpu, node::CUR_THREAD, guest.0);
+        }
+        notification::send_signal(&mut s, &mut a, n.0, 0x40);
+        assert_eq!(n.state(&s), NTFN_ACTIVE, "cpu {cpu}, running {running}");
+        assert_eq!(n.badge(&s), 0x40);
+        assert_eq!(guest.state(&s), sched::TS_RUNNING_VM);
+        assert!(!a.events.iter().any(|e| e.0 == "stall"), "no stall");
+        assert_eq!(a.rescheduled, if kicked { vec![1u64 << cpu] } else { vec![] }, "cpu {cpu}, running {running}");
+    }
 }
