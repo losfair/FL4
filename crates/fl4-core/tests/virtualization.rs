@@ -43,6 +43,8 @@ impl Store for Memory {
 #[derive(Default)]
 struct Machine {
     backend: u64,
+    /// The host's XCR0 (VCPU capability 0); None: 7.
+    xcr0: Option<u64>,
     invalidations: Vec<(u64, u64)>,
     dma_transitions: Vec<(u64, u64, bool)>,
 }
@@ -56,7 +58,7 @@ impl Arch for Machine {
     }
     fn vcpu_capability(&self, f: u64) -> u64 {
         match f {
-            0 => 7,
+            0 => self.xcr0.unwrap_or(7),
             1 => 48,
             0x486 => 0x20,
             0x488 => 1 << 13,
@@ -324,9 +326,9 @@ fn vmx_users_cannot_enable_host_address_controls_or_unswitched_state() {
         write(CONTROL_CR0_MASK, 0) & vcpu::CR0_OWNED,
         vcpu::CR0_OWNED
     );
-    assert_eq!(write(CONTROL_CR4_MASK, 0), !vcpu::CR4_ALLOWED);
+    assert_eq!(write(CONTROL_CR4_MASK, 0), !vcpu::cr4_allowed(&a));
     assert_eq!(
-        write(GUEST_CR4, u64::MAX) & !((1 << 13) | vcpu::CR4_ALLOWED),
+        write(GUEST_CR4, u64::MAX) & !((1 << 13) | vcpu::cr4_allowed(&a)),
         0
     );
     assert!(vcpu::sanitize_vmcs(&a, CONTROL_EPT_POINTER, 0).is_err());
@@ -366,7 +368,7 @@ fn svm_restricts_addresses_intercepts_and_pat() {
             vcpu::EXCEPTIONS | (vcpu::SVM_I1_FORCED << 32)
         );
         assert_eq!(
-            vcpu::sanitize_vmcb(&a, 0x548, 0, val).ok().unwrap() & !vcpu::CR4_ALLOWED,
+            vcpu::sanitize_vmcb(&a, 0x548, 0, val).ok().unwrap() & !vcpu::cr4_allowed(&a),
             0
         );
     }
@@ -407,8 +409,12 @@ fn vm_ibpb_defer_is_the_holders_choice() {
         assert_eq!(t.reg(&s, reg::R10), 1, "ReadMSR");
     }
     assert_ne!(vcpu::CR4_ALLOWED & (1 << 22), 0, "CR4.PKE");
-    let a = Machine { backend: 2, ..Default::default() };
-    assert_ne!(vcpu::sanitize_vmcb(&a, 0x548, 0, 1 << 22).ok().unwrap() & (1 << 22), 0);
+    // Only with PKRU in the host's XCR0, which switches it with the FPU.
+    for (xcr0, pke) in [(7, false), (0x207, true)] {
+        let a = Machine { backend: 2, xcr0: Some(xcr0), ..Default::default() };
+        assert_eq!(vcpu::sanitize_vmcb(&a, 0x548, 0, 1 << 22).ok().unwrap() & (1 << 22) != 0, pke, "SVM, XCR0 {xcr0:#x}");
+        assert_eq!(vcpu::sanitize_vmcs(&a, fl4_core::vcpu::vmx::CONTROL_CR4_MASK, 0).ok().unwrap() & (1 << 22) == 0, pke, "VMX mask, XCR0 {xcr0:#x}");
+    }
 }
 
 #[test]
