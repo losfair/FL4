@@ -153,7 +153,7 @@ pub fn set_mrs_fault<S: Store, A: Arch>(s: &mut S, a: &A, sender: Tcb, receiver:
         set_mrs_lookup_failure(s, receiver, buf, lf, 3)
     } else if ty == ft::UnknownSyscall {
         copy_mrs_fault(s, sender, receiver, &SYSCALL_MESSAGE, buf);
-        msg::set_mr(s, receiver, buf, unknown_syscall_number_mr!(), w0)
+        trap_syscall_message!(s, sender, buf, msg::set_mr(s, receiver, buf, unknown_syscall_number_mr!(), w0))
     } else if ty == ft::UserException {
         copy_mrs_fault(s, sender, receiver, &EXCEPTION_MESSAGE, buf);
         msg::set_mr(s, receiver, buf, 3, w0);
@@ -230,6 +230,7 @@ pub fn handle_fault_reply<S: Store, A: Arch>(s: &mut S, a: &mut A, receiver: Tcb
         true
     } else if ty == ft::UnknownSyscall {
         copy_mrs_fault_reply(s, sender, receiver, &SYSCALL_MESSAGE, len);
+        trap_syscall_reply!(s, sender, receiver, len);
         lbl == 0
     } else if ty == ft::UserException {
         copy_mrs_fault_reply(s, sender, receiver, &EXCEPTION_MESSAGE, len);

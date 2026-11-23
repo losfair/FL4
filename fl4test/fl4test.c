@@ -98,6 +98,53 @@ static int test_trap_syscalls(env_t env)
 }
 DEFINE_TEST(FL4TRAP0001, "trapSyscalls sends syscalls to the fault handler (l4h 0001)", test_trap_syscalls, true)
 
+#ifdef CONFIG_ARCH_AARCH64
+/* FL4: a trapped AArch64 syscall's message has x8-x30 and TPIDR_EL0 after
+ * the standard 13 words, and a reply that long sets them. */
+#define TRAP_EXTRA_FIRST 13
+#define TRAP_FULL_LENGTH (TRAP_EXTRA_FIRST + 24)
+static int trap_regs_once(seL4_Word a, seL4_Word b, seL4_Word c, seL4_Word d)
+{
+    register seL4_Word x7 __asm__("x7") = (seL4_Word) seL4_SysYield;
+    register seL4_Word x8 __asm__("x8") = TRAP_X8;
+    register seL4_Word x19 __asm__("x19") = 0x1919;
+    register seL4_Word x20 __asm__("x20") = 0;
+    __asm__ volatile("svc #0" : "+r"(x7), "+r"(x8), "+r"(x19), "+r"(x20) : : "x0", "x1", "x2", "x3", "x4", "x5", "x6", "memory");
+    return x19 == 0x1919 && x20 == 0x2020 ? 7 : 1;
+}
+
+static int test_trap_full_registers(env_t env)
+{
+    helper_thread_t t;
+    vka_object_t reply;
+    test_error_eq(vka_alloc_reply(&env->vka, &reply), 0);
+    seL4_CPtr fault_ep = vka_alloc_endpoint_leaky(&env->vka);
+    create_helper_thread(env, &t);
+    int error = api_tcb_set_space(get_helper_tcb(&t), fault_ep, env->cspace_root,
+                                  api_make_guard_skip_word(seL4_WordBits - env->cspace_size_bits),
+                                  env->page_directory, seL4_NilData);
+    test_error_eq(error, seL4_NoError);
+    seL4_TCB_SetFlags_t f = seL4_TCB_SetFlags(get_helper_tcb(&t), 0, seL4_TCBFlag_trapSyscalls);
+    test_error_eq(f.error, seL4_NoError);
+    start_helper(env, &t, trap_regs_once, 0, 0, 0, 0);
+    seL4_Word badge;
+    seL4_MessageInfo_t tag = api_recv(fault_ep, &badge, reply.cptr);
+    test_eq(seL4_MessageInfo_get_label(tag), (seL4_Word) seL4_Fault_UnknownSyscall);
+    test_eq(seL4_MessageInfo_get_length(tag), (seL4_Word) TRAP_FULL_LENGTH);
+    test_eq((seL4_Word) seL4_GetMR(TRAP_EXTRA_FIRST), (seL4_Word) TRAP_X8);
+    test_eq((seL4_Word) seL4_GetMR(TRAP_EXTRA_FIRST + 19 - 8), (seL4_Word) 0x1919);
+    /* Back to after the svc with x20 changed, every other register as sent. */
+    seL4_SetMR(seL4_UnknownSyscall_FaultIP, seL4_GetMR(seL4_UnknownSyscall_FaultIP) + 4);
+    seL4_SetMR(seL4_UnknownSyscall_LR, seL4_GetMR(seL4_UnknownSyscall_FaultIP));
+    seL4_SetMR(TRAP_EXTRA_FIRST + 20 - 8, 0x2020);
+    seL4_Send(reply.cptr, seL4_MessageInfo_new(0, 0, 0, TRAP_FULL_LENGTH));
+    test_eq(wait_for_helper(&t), 7);
+    cleanup_helper(env, &t);
+    return sel4test_get_result();
+}
+DEFINE_TEST(FL4TRAP0002, "a trapped AArch64 syscall carries and takes every register", test_trap_full_registers, true)
+#endif
+
 #ifdef CONFIG_ARCH_X86_64
 /* int $0xa0, the first gate open to user space, with RAX = 39 (Linux's
  * getpid). */

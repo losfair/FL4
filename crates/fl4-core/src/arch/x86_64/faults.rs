@@ -53,3 +53,15 @@ macro_rules! unknown_syscall_number_mr {
         18
     };
 }
+
+/// AArch64 appends a trapping thread's other registers to its UnknownSyscall
+/// message; x86_64's message has every general register already.
+macro_rules! trap_syscall_message {
+    ($s:expr, $sender:expr, $buf:expr, $n:expr) => {
+        $n
+    };
+}
+
+macro_rules! trap_syscall_reply {
+    ($s:expr, $sender:expr, $receiver:expr, $len:expr) => {};
+}
