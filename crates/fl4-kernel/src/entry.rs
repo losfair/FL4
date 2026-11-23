@@ -31,7 +31,7 @@ extern "C" {
     fn __x86_indirect_thunk_r11();
     fn fl4_retpoline_r11();
     fn fl4_restore_user(regs: u64, stack_top: u64, cr3: u64) -> !;
-    fn fl4_idle(stack_top: u64) -> !;
+    fn fl4_idle(stack_top: u64, poll_end: u64) -> !;
     static fl4_idle_loop: u8;
     static fl4_idle_end: u8;
     static fl4_vectors: u8;
@@ -661,6 +661,9 @@ fn dispatch_handler<S: fl4_core::machine::Store>(
 /// Leave the kernel to the current thread (or the idle loop), giving up
 /// the serial gate. What follows touches only this core's thread, whose
 /// context no other core changes without stalling this one first.
+/// How long an idle core polls before it halts (fl4_idle).
+const IDLE_POLL_US: u64 = 100;
+
 pub fn exit() -> ! {
     loop {
         cvm::halt_if_poisoned();
@@ -778,8 +781,11 @@ pub fn exit() -> ! {
         unlock();
         let stack_top = percpu::stack_top(percpu::cpu_index());
         if idle {
+            // Poll for a while before halting (fl4_idle), only with other
+            // cores to wake this one.
+            let end = if smp::multi() { timer::now().wrapping_add(timer::us_to_ticks(IDLE_POLL_US)).max(1) } else { 0 };
             percpu::get().idle.set(true);
-            unsafe { fl4_idle(stack_top) }
+            unsafe { fl4_idle(stack_top, end) }
         }
         fpu::switch_to(ct.0, ct.flags(s) & fl4_abi::consts::tcb_flag::FPU_DISABLED != 0);
         let pc = percpu::get();

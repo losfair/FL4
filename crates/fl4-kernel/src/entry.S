@@ -364,12 +364,36 @@ fl4_restore_user:
     .align 16
     .global fl4_idle
 fl4_idle:
+    /* fl4_idle(stack_top, poll_end): until the TSC reaches poll_end (0:
+     * not at all), spin with an interrupt window each round before
+     * halting, as Linux's haltpoll does: under a hypervisor a halt is an
+     * exit, and a wakeup from it another, which an interrupt taken while
+     * polling saves. On the reset stack, inside fl4_idle_loop..
+     * fl4_idle_end, so interrupts are dispatched on the kernel stack as
+     * from HLT, and r8 survives them (the entry restores it). */
     movq %rdi, %rsp
+    movq %rsi, %r8
     .global fl4_idle_loop
 fl4_idle_loop:
 1:
     cmpb $0, FL4_CVM_POISONED(%rip)
     jne .Lpoisoned
+    testq %r8, %r8
+    jz 3f
+2:
+    /* An interrupt window, cleared as the halt's below is. */
+    fl4_clear_buffers
+    sti
+    nop
+    cli
+    pause
+    rdtsc
+    shlq $32, %rdx
+    orq %rdx, %rax
+    cmpq %r8, %rax
+    jb 2b
+    xorl %r8d, %r8d
+3:
     fl4_clear_buffers
     sti
     hlt
