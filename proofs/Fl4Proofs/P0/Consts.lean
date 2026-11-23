@@ -234,7 +234,7 @@ open fl4_core
 @[step] theorem vcpu.CR0_OWNED.spec : vcpu.CR0_OWNED ⦃ v => v = 2147155904#u64 ⦄ := by
   unfold vcpu.CR0_OWNED; step*
 
-@[step] theorem vcpu.CR4_ALLOWED.spec : vcpu.CR4_ALLOWED ⦃ v => v = 7802879#u64 ⦄ := by
+@[step] theorem vcpu.CR4_ALLOWED.spec : vcpu.CR4_ALLOWED ⦃ v => v = 3608575#u64 ⦄ := by
   unfold vcpu.CR4_ALLOWED; step*
 
 @[step] theorem regs.FLAGS_TF.spec : regs.FLAGS_TF ⦃ v => v = 256#u64 ⦄ := by
