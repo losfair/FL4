@@ -94,6 +94,19 @@ require(svm_ops.index("clgi") < vmrun < svm_ops.index("stgi"),
         "SVM must keep GIF clear across the entry/exit boundary")
 require(max(i for i, op in enumerate(svm_ops) if op == "wrmsr") < svm_ops.index("stgi"),
         "SVM enables interrupts before host protection")
+# Safe RET: the exit's IBPB may be deferred (spec::vm_ibpb_deferred), so
+# returns are trained before the first one after the barrier, and the host
+# return goes through the return thunk.
+stgi = svm_ops.index("stgi")
+untrain_at = [i for i, (_, op, arg) in enumerate(svm)
+              if op == "call" and arg.endswith("<fl4_untrain_ret>")]
+require(len(untrain_at) == 1 and vmrun < untrain_at[0] < stgi
+        and svm_ops[untrain_at[0] - 1] == "lfence" and svm_ops[stgi - 1] == "lfence"
+        and "ret" not in svm_ops[untrain_at[0]:],
+        "SVM exit: Safe RET untraining before the first host return")
+svm_last = [i for i in svm if not i[1].startswith("nop") and i[1] not in ("cs", "data16", "xchg")][-1]
+require(svm_last[1] == "jmp" and svm_last[2].endswith("<__x86_return_thunk>"),
+        "SVM exit: host return not through the return thunk")
 
 def between(start, end):
     """The instructions from symbol `start` up to symbol `end`, whichever
@@ -153,14 +166,15 @@ require([op for _, op, _ in vector_entry[:3]] == ["push", "popf", "jmp"]
         "fl4_vector_entry must load RFLAGS = 2 before fl4_common_entry")
 require(not any(n.startswith("fl4_test_") for n in functions), "test trampoline in kernel")
 # All compiler-generated near returns, including core and compiler-builtins,
-# must go through the thunk. The VM-entry code's returns are after its IBPB
+# must go through the thunk. The VM-entry code's returns are its barrier's
+# (after its IBPB) and, on VMX, the host return
 # and the native entry's two raw returns are in the Intel-only BHB routine.
 require(near_returns == {
     "fl4_safe_ret_insn": 1,
     "__x86_return_thunk": 1,
     "fl4_common_entry": 2,
     "fl4_vmx_exit": 3,
-    "fl4_svm_run": 3,
+    "fl4_svm_run": 2,
 }, f"unexpected near returns: {near_returns}")
 untrain = functions["fl4_untrain_ret"]
 safe = functions["fl4_safe_ret"]

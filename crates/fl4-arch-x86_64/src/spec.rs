@@ -342,9 +342,14 @@ pub(crate) fn vmexit() -> Option<u32> {
 
 /// Whether a VM exit's IBPB waits for the core's next switch to another
 /// address space (`tlb::switch`) instead of running at the exit.  The
-/// kernel's own indirect branches are already out of the guest's reach
-/// (Automatic IBRS, or IBRS always on), as Linux relies on to skip the
-/// IBPB at every VM exit; what is left is the user-mode VMM, which on l4h
+/// kernel's own branches must already be out of the guest's reach, as
+/// Linux relies on to skip the IBPB at every VM exit: indirect branches by
+/// AutoIBRS or eIBRS (not legacy IBRS), and returns by hardware where a
+/// native entry needs no IBPB either (AutoIBRS with SRSO_NO or
+/// SRSO_USER_KERNEL_NO; eIBRS without ITS), or on AMD by Safe RET, which
+/// the SVM exit path then trains as a native entry does (vm.S, as Linux's
+/// UNTRAIN_RET_VM). ITS-affected Intel parts and Zen 3/4 without Safe RET
+/// keep the IBPB; what is left is the user-mode VMM, which on l4h
 /// is the guest's own monitor (an HVM VM's l4h-hvm, a dom0's KVM), whose
 /// address space holds nothing of another domain's.  Linux's vmscape IBPB
 /// before a return to the VMM protects QEMU's host address space; here
@@ -354,7 +359,7 @@ pub(crate) fn vm_ibpb_deferred() -> bool {
     percpu::get()
         .spec_plan
         .get()
-        .is_some_and(|p| p.vmexit & policy::IBPB != 0 && (p.auto_ibrs || p.spec_ctrl & 1 != 0))
+        .is_some_and(|p| policy::vm_ibpb_deferrable(&p, FL4_SAFE_RET.load(Ordering::Acquire)))
 }
 
 /// The IBPB a deferred VM exit owes, before the core runs address space

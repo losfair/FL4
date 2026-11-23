@@ -54,6 +54,18 @@
     popq %rbp
     ret
 .endm
+/* restore_host, returning through the return thunk: Safe RET's when it is
+ * on, which a return after a VM exit without IBPB needs (SRSO). */
+.macro restore_host_thunk
+    popq %rdi
+    popq %r15
+    popq %r14
+    popq %r13
+    popq %r12
+    popq %rbx
+    popq %rbp
+    jmp __x86_return_thunk
+.endm
 .global fl4_vmx_run
 fl4_vmx_run:
     save_host
@@ -115,5 +127,15 @@ fl4_svm_run:
     fl4_spec_barrier %r11d
     cld
     fl4_clear_guest_gprs
+    /* Safe RET (SRSO): returns trained as at a native entry before the
+     * first one, as Linux's UNTRAIN_RET_VM; the exit's IBPB, which also
+     * covered them, may be deferred (spec::vm_ibpb_deferred). GIF is
+     * clear: nothing interrupts the sequence. */
+    cmpb $0, FL4_SAFE_RET(%rip)
+    je 2f
+    lfence
+    call fl4_untrain_ret
+2:
+    lfence
     stgi
-    restore_host
+    restore_host_thunk

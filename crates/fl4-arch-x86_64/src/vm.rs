@@ -28,6 +28,16 @@ core::arch::global_asm!(
     spec_ibhf = const spec::policy::IBHF,
     options(att_syntax)
 );
+
+// The kernel's Safe RET routines (fl4-kernel's safe_ret.S), which vm.S's
+// SVM exit calls; host test builds of this crate alone link without them,
+// and never run a guest.
+#[cfg(not(target_os = "none"))]
+core::arch::global_asm!(
+    ".weak fl4_untrain_ret", "fl4_untrain_ret: ret",
+    ".weak __x86_return_thunk", "__x86_return_thunk: ret",
+    options(att_syntax)
+);
 // Exercise the real exit assembly in host tests without executing VMX:
 // reproduce HOST_RSP, load the guest GPRs, and enter the real exit label.
 #[cfg(test)]

@@ -220,6 +220,22 @@ fn intel_its(c: &Caps) -> bool {
 /// affected host. BHI and PBRSB keep their own
 /// entry barriers. As on AMD, this is the user/kernel boundary only:
 /// VM exits keep IBPB.
+/// Whether plan `p` may leave a VM exit's IBPB to the core's next switch
+/// to another address space (spec::vm_ibpb_deferred), with Safe RET on
+/// (`safe_ret`) or not. The kernel's own branches must be out of the
+/// guest's reach without it: indirect ones by AutoIBRS or eIBRS (legacy
+/// IBRS is not enough), returns by hardware where a native entry needs no
+/// IBPB (AutoIBRS with SRSO_NO or SRSO_USER_KERNEL_NO; eIBRS without ITS),
+/// or on AMD by Safe RET, which the SVM exit then trains first (vm.S, as
+/// Linux's UNTRAIN_RET_VM). ITS-affected Intel parts, legacy IBRS and
+/// SRSO-affected AMD parts without Safe RET keep the IBPB.
+pub fn vm_ibpb_deferrable(p: &Plan, safe_ret: bool) -> bool {
+    p.vmexit & IBPB != 0
+        && (p.auto_ibrs || p.spec_ctrl & 1 != 0)
+        && p.entry & LEGACY_IBRS == 0
+        && (p.entry & IBPB == 0 || p.auto_ibrs && safe_ret)
+}
+
 pub fn native_entry_without_ibpb(c: &Caps) -> bool {
     match c.vendor {
         Vendor::Amd => {
@@ -825,6 +841,40 @@ mod tests {
         assert!(!select(&c).unwrap().buffers);
         c.amd21 &= !LFENCE_SERIAL;
         assert_eq!(select(&c), Err(Rejected::Lfence));
+    }
+
+    #[test]
+    fn vm_exit_ibpb_is_deferrable_only_with_host_branch_isolation() {
+        // Intel eIBRS without ITS: yes. Legacy IBRS, or ITS: no.
+        let mut c = intel();
+        assert!(vm_ibpb_deferrable(&select(&c).unwrap(), false));
+        assert!(!vm_ibpb_deferrable(&select(&Caps { arch: c.arch & !IBRS_ALL, ..c }).unwrap(), true));
+        c.model = 0x6a;
+        c.stepping = 6;
+        c.leaf7_2_edx = 0;
+        c.microcode = 0x0d000404;
+        assert!(!vm_ibpb_deferrable(&select(&c).unwrap(), false));
+        assert!(!vm_ibpb_deferrable(&select(&c).unwrap(), true), "Safe RET is AMD's");
+        // Nested Zen 4 with AutoIBRS, no SRSO_NO: only with Safe RET.
+        let mut a = amd();
+        a.family = 0x19;
+        a.model = 0x61;
+        a.stepping = 2;
+        a.hypervisor = true;
+        a.amd21 |= AUTO_IBRS | IBPB_BRTYPE;
+        a.amd8 |= AMD_IBPB_RET;
+        a.amd21_ecx = TSA_NO;
+        let p = select(&a).unwrap();
+        assert_ne!(p.entry & IBPB, 0);
+        assert!(!vm_ibpb_deferrable(&p, false));
+        assert!(vm_ibpb_deferrable(&p, true));
+        // Without AutoIBRS, never.
+        let p = select(&Caps { amd21: a.amd21 & !AUTO_IBRS, ..a }).unwrap();
+        assert!(!vm_ibpb_deferrable(&p, true));
+        // SRSO_NO with AutoIBRS: by hardware.
+        let p = select(&Caps { family: 0x1a, amd21: a.amd21 | SRSO_NO | VERW_CLEAR, ..a }).unwrap();
+        assert_eq!(p.entry & IBPB, 0);
+        assert!(vm_ibpb_deferrable(&p, false));
     }
 
     #[test]

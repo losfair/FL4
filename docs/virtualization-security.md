@@ -32,9 +32,16 @@ below. FL4 does not install firmware/microcode updates.
   or interrupt enable. This also protects the userspace VMM without requiring
   a context switch. The guest cannot write the host's speculation-control MSRs.
   A VCPU's holder may defer it (VCPU MSR `0xffff_fffd`, `MSR_VM_IBPB_DEFER`,
-  0 or 1; 0 after retype) where the kernel's own indirect branches are already
-  out of the guest's reach (AutoIBRS, or IBRS always on), as Linux relies on to
-  skip the IBPB at VM exits: the core then owes the IBPB to its next switch to
+  0 or 1; 0 after retype) where the kernel's own branches are already out of
+  the guest's reach, as Linux relies on to skip the IBPB at VM exits
+  (`policy::vm_ibpb_deferrable`): indirect branches by AutoIBRS or eIBRS, not
+  legacy IBRS; returns by hardware where a native entry needs no IBPB either
+  (AutoIBRS with SRSO_NO or SRSO_USER_KERNEL_NO, eIBRS without ITS), or on AMD
+  by Safe RET. With Safe RET the SVM exit calls `fl4_untrain_ret` before its
+  first return and returns through the return thunk, as Linux's
+  `UNTRAIN_RET_VM` (`check_vm_asm.py` checks both). ITS-affected Intel parts
+  and SRSO-affected AMD parts without Safe RET keep the IBPB. The core then
+  owes the IBPB to its next switch to
   an address space other than the one that entered the guest (`tlb::switch`).
   Only the holder's address space is left without it, which suits a monitor
   whose address space is its guest's alone (l4h's HVM monitor holds guest RAM,
