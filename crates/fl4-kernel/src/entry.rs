@@ -698,6 +698,8 @@ pub fn exit() -> ! {
                     percpu::get().polled_irq.get()
                 } else if (VEC_IRQ_MIN..=VEC_IRQ_MAX).contains(&vector) {
                     vector - VEC_IRQ_MIN
+                } else if vector == fl4_arch_x86_64::vm::NO_INTERRUPT {
+                    syscall::NO_IRQ
                 } else {
                     // Acknowledged on exit, so in service until its EOI.
                     apic::ack_stray(vector);

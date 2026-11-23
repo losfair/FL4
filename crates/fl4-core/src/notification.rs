@@ -117,7 +117,7 @@ pub fn send_signal<S: Store, A: Arch>(s: &mut S, a: &mut A, n_ptr: u64, badge: u
             if !t.is_null() && t.state(s) == sched::TS_RUNNING_VM {
                 // The owner checks bound signals before every VM entry.
                 // Interrupt an in-flight guest so it reaches that check.
-                crate::smp::remote_tcb_stall(s, a, t);
+                kick_guest(s, a, t);
             }
         }
     } else if st == NTFN_WAITING {
@@ -134,6 +134,27 @@ pub fn send_signal<S: Store, A: Arch>(s: &mut S, a: &mut A, n_ptr: u64, badge: u
         let b = n.badge(s) | badge;
         n.set_badge(s, b);
     }
+}
+
+/// Make `t`, in `TS_RUNNING_VM`, reach its next VM entry's check of bound
+/// signals. On x86 an interrupt is enough, as KVM's kvm_vcpu_kick: the
+/// owner core checks under the serial gate, which it can only take after
+/// this signal's holder releases it, so it sees the badge; an interrupt
+/// that arrives between that check and the entry instruction is pending
+/// there and exits the guest at once. Nothing of the thread changes, so it
+/// need not be stalled (seL4 `remoteTCBStall`), which waits, gate held,
+/// for the other core to leave its guest: an exit under nesting. On
+/// AArch64 the VCPU's caller is stopped as well (`remote_tcb_stall`).
+fn kick_guest<S: Store, A: Arch>(s: &mut S, a: &mut A, t: Tcb) {
+    #[cfg(not(feature = "aarch64"))]
+    {
+        let cpu = t.affinity(s);
+        if cpu != s.cur_cpu() && crate::obj::node_get(s, cpu, crate::layout::node::CUR_THREAD) == t.0 {
+            a.send_reschedule(1u64 << (cpu & 63));
+        }
+    }
+    #[cfg(feature = "aarch64")]
+    crate::smp::remote_tcb_stall(s, a, t);
 }
 
 /// seL4 `receiveSignal`.

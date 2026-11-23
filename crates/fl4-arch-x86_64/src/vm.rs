@@ -1021,7 +1021,8 @@ pub fn run<S: Store>(s: &mut S, v: u64, tcb: u64, root: u64) -> u64 {
         cpu::iret_to_self();
     }
     vcpu::set(s, v, vcpu::PENDING, if host_exit { 0 } else { 1 });
-    // 0x100 means poll the local APIC; 0xff is spurious/no IRQ.
+    // 0x100 means poll the local APIC; NO_INTERRUPT, that no host
+    // interrupt caused the exit.
     if host_exit {
         if (amd && reason == 0x60) || (!amd && reason == 1) {
             if interrupt == u64::MAX {
@@ -1030,12 +1031,17 @@ pub fn run<S: Store>(s: &mut S, v: u64, tcb: u64, root: u64) -> u64 {
                 interrupt
             }
         } else {
-            0xff
+            NO_INTERRUPT
         }
     } else {
-        0xff
+        NO_INTERRUPT
     }
 }
+
+/// `run`'s result for an exit no host interrupt caused: told apart from a
+/// delivered vector, so that the exit path asks the local APIC nothing
+/// (an ISR read is itself an exit under a hypervisor, on every guest exit).
+pub const NO_INTERRUPT: u64 = 0x1ff;
 pub fn empty_root() -> u64 {
     maps().empty.0.as_ptr() as u64
 }
