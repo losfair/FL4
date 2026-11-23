@@ -1,6 +1,7 @@
 //! Kernel entry and exit: save the user registers into the current TCB,
 //! dispatch to fl4-core, and restore whichever thread is current after.
 use crate::kprintln;
+use crate::user_trap;
 use fl4_arch_x86_64::arch::{PhysArch, TIMER_VECTOR};
 use fl4_arch_x86_64::{apic, cpu, cvm, fpu, percpu, tdx, timer, tlb};
 use fl4_core::layout::{irq, node, reg, tcb as tl};
@@ -560,6 +561,17 @@ extern "C" fn fl4_entry(f: &mut Frame) -> u64 {
     } else {
         0
     };
+    // #BP (`int3`, a trap: RIP is past it) and #DB (single-step and data
+    // breakpoints are traps too) cannot be taken again by restarting the
+    // thread, and DR6 has just been cleared. A remote stall that cancelled
+    // the entry would lose them. So the thread keeps the trap until it is
+    // delivered, by `exit`, which takes the gate for it.
+    if v == 1 || v == 3 {
+        let s = &mut store();
+        sched::cur_thread(s).set_debug_reg(s, user_trap::SLOT, user_trap::encode(v, dr6, f.rip));
+        percpu::get().check_user_trap.set(true);
+        exit();
+    }
     // An interrupt is handled even if a stall cancelled the entry: it has
     // been accepted and needs its EOI.
     let body = |s: &mut PhysStore, a: &mut PhysArch| {
@@ -694,7 +706,50 @@ pub fn exit() -> ! {
                 // accepted host IRQ still needs handling under the gate.
                 let resumed = lock();
                 syscall::handle_vcpu_exit(s, &mut a, irq, stalled || !resumed);
+                // That ran the scheduler, and the next round has no gate.
+                percpu::get().check_user_trap.set(true);
                 unlock();
+                continue;
+            }
+        }
+        // A user #BP or #DB that `fl4_entry` left with the thread
+        // (`user_trap`): delivered under the gate. A stall while taking it
+        // moves the thread off this core with the trap still pending, and
+        // the thread resumes after the `int3` or trapping instruction
+        // (`settle_resume_point`); the trap is delivered when it next runs,
+        // on whichever core. Reading the current thread without the gate is
+        // safe: only this core changes its context until a stall is
+        // acknowledged. On one core `lock` does nothing.
+        //
+        // The slot is read only when a trap can be there: this entry left
+        // one (`check_user_trap`); a serial entry's scheduler made the
+        // thread current, and the gate is still held (a stalled thread is
+        // TS_RESTART, which no local path switches to); or the VM block
+        // above did so and gave the gate up (`check_user_trap` again). The
+        // flag is consumed first, whatever follows: after a stall the trap
+        // is the stalled thread's, found under the gate where it next runs.
+        //
+        // The invocation that stalled the thread may have changed it
+        // (written its registers, removed the breakpoint, redirected it
+        // from a timeout fault). A trap is delivered only if the thread is
+        // still where it trapped, and dropped otherwise, as a fault already
+        // sent is when such an invocation cancels the thread's IPC.
+        let pc = percpu::get();
+        if (pc.check_user_trap.replace(false) || pc.gate_held.get())
+            && ct.state(s) == sched::TS_RUNNING
+            && ct.0 != node_get(s, s.cur_cpu(), node::IDLE_THREAD)
+        {
+            if let Some(trap) = user_trap::decode(ct.debug_reg(s, user_trap::SLOT)) {
+                if !pc.gate_held.get() {
+                    settle_resume_point(s, ct);
+                    if !lock() {
+                        continue;
+                    }
+                }
+                ct.set_debug_reg(s, user_trap::SLOT, user_trap::NONE);
+                if trap.current(ct.reg(s, reg::FAULT_IP), ct.debug_reg(s, user_trap::DR7_SLOT)) {
+                    dispatch_entry(s, &mut PhysArch, trap.vector, false, 0, 0, trap.dr6);
+                }
                 continue;
             }
         }

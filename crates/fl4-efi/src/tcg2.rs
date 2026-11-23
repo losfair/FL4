@@ -286,6 +286,29 @@ pub fn measure_status(status: u64) -> Result<(), &'static str> {
     }
 }
 
+/// `EV_SEPARATOR` (TCG PC Client PFP §10.4.1).
+#[cfg_attr(not(target_arch = "x86_64"), allow(dead_code))]
+pub const EV_SEPARATOR: u32 = 4;
+/// A separator's event data when an error is signalled: `0xffffffff`.
+#[cfg_attr(not(target_arch = "x86_64"), allow(dead_code))]
+pub const SEPARATOR_ERROR: [u8; 4] = [0xff; 4];
+/// A TD ignores any TPM, but leaves no PCR in a state that looks like a
+/// clean boot: the loader extends an error separator into every static
+/// locality-0 PCR, 0..16 (firmware's 0..7, the boot loader's and the
+/// OS's 8..15).
+#[cfg_attr(not(target_arch = "x86_64"), allow(dead_code))]
+pub const POISON_PCR_COUNT: u32 = 16;
+
+/// Whether HashLogExtendEvent extended a PCR with the poison: success, or
+/// `EFI_VOLUME_FULL` (only the log is full).
+#[cfg_attr(not(target_arch = "x86_64"), allow(dead_code))]
+pub fn poison_status(status: u64) -> Result<(), &'static str> {
+    match status {
+        0 | VOLUME_FULL => Ok(()),
+        _ => Err("cannot poison TPM PCRs in TDX"),
+    }
+}
+
 /// The descriptor measured before a boot file's contents (tcg2.rs and
 /// ccel.rs): `"fl4-efi\0" || role || "\0" || len (u64 LE) || path`, into
 /// `buf` (at least the prefix, the role, 1 and 8 bytes); returns its
@@ -360,6 +383,24 @@ mod efi {
         if len > 0 {
             measure_bytes(PCR_BOOT_FILES, desc, pa, len)?;
         }
+        Ok(())
+    }
+
+    /// In a TD: extend an error separator (`EV_SEPARATOR`,
+    /// `SEPARATOR_ERROR`) into PCRs 0..`POISON_PCR_COUNT` of a TPM firmware
+    /// exposes, so that no PCR holds a value a clean boot would give. Ok
+    /// without a TPM; an error if the TPM refuses any extension.
+    #[cfg(target_arch = "x86_64")]
+    pub fn poison() -> Result<(), &'static str> {
+        let Some(tcg) = protocol() else { return Ok(()) };
+        let sep = SEPARATOR_ERROR;
+        let mut event = [0u8; TCG2_EVENT_FIXED + 4];
+        for pcr in 0..POISON_PCR_COUNT {
+            tcg2_event(&mut event, pcr, EV_SEPARATOR, &sep);
+            let r = unsafe { ((*tcg).hash_log_extend_event)(tcg, 0, sep.as_ptr() as u64, sep.len() as u64, event.as_ptr()) };
+            poison_status(r as u64)?;
+        }
+        say!("fl4-efi: TDX guest, poisoned TPM PCRs 0..15");
         Ok(())
     }
 

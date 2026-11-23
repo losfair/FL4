@@ -515,9 +515,9 @@ fn measuring_a_file_extends_the_descriptor_then_nonempty_contents() {
     assert!(at("file_descriptor(&mut desc, role, path, len)") < d && d < guard && guard < c);
 }
 
-/// x86: every `rootserver=` and `module=` file extends PCR 9 whether or
-/// not this is a TD (RTMR[2] as well in a TD), and a refused measurement
-/// stops the boot. All before the log is collected in `boot`.
+/// x86: every `rootserver=` and `module=` file extends PCR 9 outside a TD
+/// (RTMR[2] instead in a TD, which ignores any TPM), and a refused
+/// measurement stops the boot. All before the log is collected in `boot`.
 #[test]
 fn the_x86_loader_measures_option_files_into_pcr9() {
     let x86 = include_str!("../../crates/fl4-efi/src/x86.rs");
@@ -525,8 +525,8 @@ fn the_x86_loader_measures_option_files_into_pcr9() {
     for role in ["rootserver", "module"] {
         let arm = body(files, &format!("strip_prefix(b\"{role}=\")"), "files[");
         let at = |s: &str| arm.find(s).unwrap_or_else(|| panic!("{role}: {s}"));
-        let tpm = at(&format!("\n            tcg2::measure_file(b\"{role}\", path, pa, len).unwrap_or_else(|e| fail(e));"));
-        let cc = at(&format!("if measure {{\n                ccel::measure_file(b\"{role}\", path, pa, len);\n            }}"));
+        let cc = at(&format!("if measure {{\n                ccel::measure_file(b\"{role}\", path, pa, len);\n            }} else {{"));
+        let tpm = at(&format!("}} else {{\n                tcg2::measure_file(b\"{role}\", path, pa, len).unwrap_or_else(|e| fail(e));\n            }}"));
         assert!(at("read_file(li, path)") < cc && cc < tpm);
     }
     assert_eq!(files.matches("tcg2::measure_file(").count(), 2);
@@ -534,6 +534,7 @@ fn the_x86_loader_measures_option_files_into_pcr9() {
     assert!(start.find("boot_files(li, &opts, measure)").unwrap() < start.find("boot(image, ").unwrap());
     let boot = &x86[x86.find("pub(super) fn boot(").unwrap()..];
     assert!(!boot[..boot.find("tcg2::collect()").unwrap()].contains("measure_file("));
+    assert!(boot.contains("let tpm = if shared == 0 { tcg2::collect() } else { None };"), "no TPM log in a TD");
 }
 
 /// AArch64: the options' modules, root task and kernel command line all
@@ -555,4 +556,71 @@ fn the_aarch64_loader_measures_option_files_and_cmdline_into_pcr9() {
         assert!(m < collect);
     }
     assert!(root < at("load_segments(root_file, &rl, root_pa)"));
+}
+
+/// TDX poisons a TPM firmware exposes: an error `EV_SEPARATOR` into each
+/// static locality-0 PCR.
+#[test]
+fn the_tdx_poison_is_an_error_separator_in_pcrs_0_to_15() {
+    assert_eq!(tcg2::EV_SEPARATOR, 4);
+    assert_eq!(tcg2::SEPARATOR_ERROR, [0xff; 4]);
+    assert_eq!(tcg2::POISON_PCR_COUNT, 16);
+    let mut buf = [0xaau8; tcg2::TCG2_EVENT_FIXED + 4];
+    for pcr in 0..tcg2::POISON_PCR_COUNT {
+        let n = tcg2::tcg2_event(&mut buf, pcr, tcg2::EV_SEPARATOR, &tcg2::SEPARATOR_ERROR);
+        assert_eq!(n, 22);
+        assert_eq!(u32::from_le_bytes(buf[0..4].try_into().unwrap()), 22);
+        assert_eq!(u32::from_le_bytes(buf[4..8].try_into().unwrap()), 14);
+        assert_eq!(u16::from_le_bytes(buf[8..10].try_into().unwrap()), 1);
+        assert_eq!(u32::from_le_bytes(buf[10..14].try_into().unwrap()), pcr);
+        assert_eq!(u32::from_le_bytes(buf[14..18].try_into().unwrap()), 4);
+        assert_eq!(&buf[18..22], &[0xff; 4]);
+    }
+}
+
+/// A poison extension firmware refuses stops the boot; a full log does not.
+#[test]
+fn a_poison_extension_firmware_refuses_is_an_error() {
+    assert_eq!(tcg2::poison_status(0), Ok(()));
+    assert_eq!(tcg2::poison_status(tcg2::VOLUME_FULL), Ok(()));
+    for r in [1, (1 << 63) | 1, (1 << 63) | 2, (1 << 63) | 3, (1 << 63) | 7, (1 << 63) | 9, (1 << 63) | 14, 11, u64::MAX] {
+        assert_eq!(tcg2::poison_status(r), Err("cannot poison TPM PCRs in TDX"), "{r:#x}");
+    }
+}
+
+/// No TPM: nothing to poison. A TPM: every PCR 0..16 gets the separator,
+/// each extension checked, then the console says so.
+#[test]
+fn poisoning_extends_every_static_pcr_fail_closed() {
+    let p = body(tcg2_efi(), "pub fn poison() -> Result<(), &'static str> {", "\n    }\n");
+    let at = |s: &str| p.find(s).unwrap_or_else(|| panic!("{s}"));
+    let none = at("let Some(tcg) = protocol() else { return Ok(()) };");
+    let l = at("for pcr in 0..POISON_PCR_COUNT {");
+    let ev = at("tcg2_event(&mut event, pcr, EV_SEPARATOR, &sep);");
+    let ext = at("((*tcg).hash_log_extend_event)(tcg, 0, sep.as_ptr() as u64, sep.len() as u64, event.as_ptr())");
+    let chk = at("poison_status(r as u64)?;");
+    let said = at("say!(\"fl4-efi: TDX guest, poisoned TPM PCRs 0..15\");");
+    assert!(none < at("let sep = SEPARATOR_ERROR;") && none < l);
+    assert!(l < ev && ev < ext && ext < chk && chk < said);
+    assert!(p.trim_end().ends_with("Ok(())"));
+}
+
+/// x86: a TD poisons the TPM in `boot` (so for `start_default` and
+/// `Firmware::boot` alike), before ExitBootServices, and collects no TPM
+/// log.
+#[test]
+fn the_x86_loader_poisons_the_tpm_in_a_td() {
+    let x86 = include_str!("../../crates/fl4-efi/src/x86.rs");
+    let boot = &x86[x86.find("pub(super) fn boot(").unwrap()..];
+    let at = |s: &str| boot.find(s).unwrap_or_else(|| panic!("{s}"));
+    let poison = at("if shared != 0 {\n        tcg2::poison().unwrap_or_else(|e| fail(e));\n    }");
+    assert!(at("let shared = if mask == 0 { tdx_shared_mask() } else { 0 };") < poison);
+    assert!(poison < at("let tpm = if shared == 0 { tcg2::collect() } else { None };"));
+    assert!(poison < at("(bs().exit_boot_services)"));
+    assert_eq!(x86.matches("tcg2::poison()").count(), 1);
+    let fw = include_str!("../../crates/fl4-efi/src/firmware.rs");
+    assert!(fw.contains("x86::boot(self.image, kernel, &files[..modules.len()], cmdline)"));
+    let b = body(fw, "pub unsafe fn boot(&self, kernel: &[u8], modules: &[(&[u8], &[u8])]) -> ! {", "\n    }\n");
+    assert!(b.contains("unsafe { self.boot_with_cmdline(kernel, modules, c\"\") }"), "boot is boot_with_cmdline with none");
+    assert_eq!(fw.matches("x86::boot(").count(), 1, "only boot_with_cmdline enters x86::boot");
 }

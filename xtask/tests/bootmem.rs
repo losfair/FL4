@@ -353,3 +353,62 @@ fn free_ram_past_the_boot_range_limit_is_reported() {
     assert!(block.contains("kprintln!(\"FL4: {} free RAM region(s) ({:#x} bytes) exceed the boot range limit\", lost.len(), bytes);"));
     assert!(lib.contains("kprintln!(\"FL4: {} device memory regions exceed the boot range limit\", omitted);"));
 }
+
+/// BootParams' range limit, as fl4-core states it.
+fn max_regions() -> usize {
+    let core = include_str!("../../crates/fl4-core/src/boot.rs");
+    let at = core.find("pub const MAX_REGIONS: usize = ").expect("MAX_REGIONS") + "pub const MAX_REGIONS: usize = ".len();
+    core[at..at + core[at..].find(';').unwrap()].parse().unwrap()
+}
+
+/// A CVM's device memory split at 40 fragmented firmware ranges (ACPI
+/// reclaim and the like), each with a shared gap after it, yields more
+/// ranges than the old limit of 32 and all of them fit in BootParams now.
+#[test]
+fn fragmented_firmware_boundaries_fit_the_boot_device_ranges() {
+    assert_eq!(max_regions(), 128);
+    let base = 0x1_0000_0000;
+    let dev = [region(base, base + 1024 * MIB)];
+    let firmware: Vec<Region> = (0..40).map(|i| region(base + i * 2 * MIB, base + i * 2 * MIB + MIB)).collect();
+    let mut out = Vec::new();
+    bootmem::device_regions(&dev, &firmware, |r, private| out.push((r, private)));
+    // A private range per firmware entry, a shared gap after each.
+    assert_eq!(out.len(), 80);
+    assert!(out.len() > 32 && out.len() <= max_regions());
+    assert_eq!(out.iter().filter(|(_, private)| *private).count(), 40);
+    // Ordered, contiguous and covering the device range exactly.
+    assert_eq!(out[0].0.start, base);
+    assert_eq!(out.last().unwrap().0.end, base + 1024 * MIB);
+    for w in out.windows(2) {
+        assert_eq!(w[0].0.end, w[1].0.start);
+        assert_ne!(w[0].1, w[1].1, "visibility alternates");
+    }
+}
+
+/// The boot modules and event logs, [image.p_end, log_end), reach the root
+/// task only as device untypeds: if a range meeting them does not fit in
+/// BootParams the boot stops rather than lose them silently.
+#[test]
+fn boot_modules_and_event_logs_past_the_device_range_limit_stop_the_boot() {
+    let lib = include_str!("../../crates/fl4-kernel/src/lib.rs");
+    let call = &lib[lib.find("bootmem::device_regions(&dev.r[..dev.n], &firmware.r[..firmware.n], |r, private| {").expect("device ranges")..];
+    let call = &call[..call.find("\n    });\n").unwrap()];
+    let full = call.find("} else {\n            omitted += 1;").expect("omitted when full");
+    let meets = call.find("if r.start < log_end && image.p_end < r.end {\n                omitted_boot_data = true;\n            }").expect("boot data check");
+    assert!(full < meets);
+    let after = &lib[lib.find("let mut omitted_boot_data = false;").expect("flag")..];
+    let warn = after.find("kprintln!(\"FL4: {} device memory regions exceed the boot range limit\", omitted);").unwrap();
+    let stop = after
+        .find("if omitted_boot_data {\n        fail(\"boot modules or event logs exceed the boot device range limit\");\n    }")
+        .expect("fail-fast");
+    assert!(warn < stop);
+    assert!(stop < after.find("fl4_core::boot::create_root_task(").unwrap());
+    // The ranges handed over hold the modules and logs: added before.
+    assert!(lib.find("dev.add(image.p_end, log_end);").unwrap() < lib.find("let mut omitted_boot_data = false;").unwrap());
+    // AArch64 the same, for its modules and TPM log.
+    let a64 = include_str!("../../crates/fl4-kernel-aarch64/src/lib.rs");
+    let blk = &a64[a64.find("if dev.n > MAX_REGIONS {").expect("aarch64 limit")..];
+    let blk = &blk[..blk.find("\n    }\n").unwrap()];
+    assert!(blk.contains("let lost = &dev.r[MAX_REGIONS..dev.n];"));
+    assert!(blk.contains("fail(\"boot modules or event logs exceed the boot device range limit\");"));
+}

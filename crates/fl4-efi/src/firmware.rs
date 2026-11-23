@@ -37,6 +37,12 @@ pub struct Firmware<'a> {
 }
 
 impl Firmware<'_> {
+    /// Whether this is an Intel TDX guest. A TD's loader measures into
+    /// RTMR[2] and ignores any TPM, as `boot` does.
+    pub fn is_tdx(&self) -> bool {
+        x86::is_tdx()
+    }
+
     pub fn has_load_options(&self) -> bool {
         self.loaded.options_size != 0
     }
@@ -66,6 +72,15 @@ impl Firmware<'_> {
         NonNull::new(protocol).ok_or(EFI_LOAD_ERROR)
     }
 
+    /// Measure caller-selected external bytes when running in a trust domain.
+    /// The caller may return to EFI if the firmware cannot extend RTMR[2].
+    pub fn measure_cc_file(&self, name: &[u8], bytes: &[u8]) -> Result<(), Status> {
+        if x86::is_tdx() {
+            ccel::measure_bytes(name, bytes.as_ptr() as u64, bytes.len() as u64)?;
+        }
+        Ok(())
+    }
+
     /// Enter an x86_64 FL4 ELF kernel. The first module is the root task.
     /// Subsequent modules are passed in the order given.
     ///
@@ -75,6 +90,20 @@ impl Firmware<'_> {
     /// handoff ABI. The loader writes the kernel's ELF segments to physical
     /// memory and transfers control to it after exiting boot services.
     pub unsafe fn boot(&self, kernel: &[u8], modules: &[(&[u8], &[u8])]) -> ! {
+        unsafe { self.boot_with_cmdline(kernel, modules, c"") }
+    }
+
+    /// As `boot`, with a Multiboot 2 kernel command line.
+    ///
+    /// # Safety
+    ///
+    /// The same payload and handoff requirements as `boot` apply.
+    pub unsafe fn boot_with_cmdline(
+        &self,
+        kernel: &[u8],
+        modules: &[(&[u8], &[u8])],
+        cmdline: &core::ffi::CStr,
+    ) -> ! {
         let mut files = [(0, 0, &[][..]); 9];
         if modules.is_empty() || modules.len() > files.len() {
             fail("invalid number of boot modules");
@@ -84,7 +113,7 @@ impl Firmware<'_> {
             *len = bytes.len() as u64;
             *name = module_name;
         }
-        x86::boot(self.image, kernel, &files[..modules.len()])
+        x86::boot(self.image, kernel, &files[..modules.len()], cmdline)
     }
 }
 

@@ -26,6 +26,7 @@ const KIND_RETRY: u64 = 3;
 const EC_UNKNOWN: u64 = 0x00;
 const EC_FP: u64 = 0x07;
 const EC_SVC64: u64 = 0x15;
+const EC_HVC64: u64 = 0x16;
 const EC_IABT_LOW: u64 = 0x20;
 const EC_DABT_LOW: u64 = 0x24;
 
@@ -261,6 +262,29 @@ fn fl4_entry_vcpu_run(
     vcpu::record_exit_regs(run_v, far, eff_hpfar, esr);
     if ec == EC_IABT_LOW || ec == EC_DABT_LOW {
         run_entry(false, |s, a| syscall::handle_vcpu_run_exit(s, a, vcpu_run_stop::VMFAULT, esr, s2_ipa, far));
+    } else if ec == EC_HVC64 {
+        // HVC is the one exit here that is not raised again when the guest
+        // resumes: its ELR is already past the instruction. (A software
+        // step's ELR is past the stepped instruction too, but the step
+        // stays pending and should be taken again before the next one.)
+        // The caller stays `TS_RUNNING_VM` when a remote stall cancels this
+        // entry, and its next `ARMVCPURun` round enters the guest at the
+        // saved ELR: the guest would go on after an HVC its VMM never saw.
+        // So the guest's PC is the HVC until the entry runs (as `FAULT_IP`
+        // is for a bound VCPU's HVC, in `fl4_entry`), and goes past it
+        // again only in the body, before `complete_run` reads the guest
+        // state for the VMM. TCB invocations on a guest's TCB stall the
+        // thread running it, cancelling this entry before the body runs;
+        // the check below is defensive against moving a PC that is no
+        // longer the rewound one.
+        let elr = guest_tcb.reg(s, reg::ELR_EL1);
+        guest_tcb.set_reg(s, reg::ELR_EL1, elr.wrapping_sub(4));
+        run_entry(false, |s, a| {
+            if guest_tcb.reg(s, reg::ELR_EL1) == elr.wrapping_sub(4) {
+                guest_tcb.set_reg(s, reg::ELR_EL1, elr);
+            }
+            syscall::handle_vcpu_run_exit(s, a, vcpu_run_stop::VCPUFAULT, esr, far, eff_hpfar)
+        });
     } else {
         run_entry(false, |s, a| syscall::handle_vcpu_run_exit(s, a, vcpu_run_stop::VCPUFAULT, esr, far, eff_hpfar));
     }
@@ -370,7 +394,6 @@ extern "C" fn fl4_entry(kind: u64, esr: u64, far: u64, hpfar: u64) -> ! {
         // HVC (EC=0x16) advances ELR_EL2 past the instruction like SVC: record
         // FAULT_IP as elr - 4 so MCS budget exhaustion or a remote stall
         // restarts the HVC instead of silently skipping it.
-        const EC_HVC64: u64 = 0x16;
         t.set_reg(s, reg::FAULT_IP, if ec == EC_HVC64 { elr.wrapping_sub(4) } else { elr });
         vcpu::record_exit_regs(v, far, eff_hpfar, esr);
         if ec == EC_IABT_LOW || ec == EC_DABT_LOW {

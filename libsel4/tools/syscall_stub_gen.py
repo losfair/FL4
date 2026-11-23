@@ -256,11 +256,25 @@ def init_data_types(wordsize):
         CapType("seL4_DomainSet", wordsize),
         CapType("seL4_SchedContext", wordsize),
         CapType("seL4_SchedControl", wordsize),
-        # FL4's extension interfaces are parsed on every architecture; each
-        # method's condition keeps the stub to x86_64.
-        CapType("seL4_X86_TdxControl", wordsize),
     ]
 
+    return types
+
+
+def parse_types(data_types, arch_types, arch):
+    """
+    The types the interface files are parsed with: those of arch, then the
+    capability types of the other architectures. FL4's extension interfaces
+    are parsed on every architecture and each method's condition keeps its
+    stub to its own; the size asserts only cover data_types + arch_types[arch].
+    """
+    types = data_types + arch_types[arch]
+    names = {t.name for t in types}
+    for other in arch_types.values():
+        for t in other:
+            if isinstance(t, CapType) and t.name not in names:
+                types.append(t)
+                names.add(t.name)
     return types
 
 
@@ -347,6 +361,7 @@ def init_arch_types(wordsize, args):
             CapType("seL4_X86_IOSpace", wordsize),
             CapType("seL4_X86_Page", wordsize),
             CapType("seL4_X64_PML4", wordsize),
+            CapType("seL4_X86_TdxControl", wordsize),
             CapType("seL4_X86_PDPT", wordsize),
             CapType("seL4_X86_PageDirectory", wordsize),
             CapType("seL4_X86_PageTable", wordsize),
@@ -1020,7 +1035,7 @@ def generate_stub_file(arch, input_files, output_file, use_only_ipc_buffer, mcs,
     methods = []
     structs = []
     for infile in input_files:
-        method, struct, _ = parse_xml_file(infile, data_types + arch_types[arch])
+        method, struct, _ = parse_xml_file(infile, parse_types(data_types, arch_types, arch))
         methods += method
         structs += struct
 

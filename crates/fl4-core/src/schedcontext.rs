@@ -212,6 +212,12 @@ pub fn decode<S: Store, A: Arch>(s: &mut S, a: &mut A, lbl: u64, sc: Sc, call: b
                 if sched::is_blocked(s, t) && !sporadic::sc_released(s, sc) {
                     return illegal();
                 }
+                // A thread without an SC runs nowhere, except an AArch64
+                // guest TCB in `ARMVCPURun`, live on its `RUN_CALLER`'s
+                // core: stop it there before `migrate_tcb` flushes its
+                // state and changes its affinity.
+                #[cfg(feature = "aarch64")]
+                crate::smp::remote_tcb_stall(s, a, t);
                 sched::set_thread_state(s, ct, sched::TS_RESTART);
                 bind_tcb(s, a, sc, t);
                 Ok(())

@@ -121,6 +121,8 @@ pub fn check<S: Store, A: Arch>(s: &mut S, a: &mut A, t: Tcb) {
     }
     let v = s.read(t.0.wrapping_add(tl::RUN_VCPU));
     if v == 0 {
+        let ip = t.reg(s, reg::NEXT_IP);
+        t.set_reg(s, reg::FAULT_IP, ip);
         sched::set_thread_state(s, t, sched::TS_RUNNING);
         return;
     }
@@ -778,6 +780,10 @@ pub fn complete_run<S: Store, A: Arch>(
     ct.set_reg(s, msg::msg_register(2), w2);
     ct.set_reg(s, msg::msg_register(3), w3);
     msg::set_msg_info(s, ct, MessageInfo::new(0, 0, 0, 4));
+    // The call has finished: a timeout fault raised by the budget check
+    // that follows must resume after the SVC, not run it again.
+    let ip = ct.reg(s, reg::NEXT_IP);
+    ct.set_reg(s, reg::FAULT_IP, ip);
     sched::set_thread_state(s, ct, sched::TS_RUNNING);
 }
 
@@ -1015,6 +1021,7 @@ mod tests {
         fpu_released: std::vec::Vec<u64>,
         vcpu_flushed: std::vec::Vec<u64>,
         vcpu_flushed_state: std::vec::Vec<(u64, u64)>,
+        stalls: std::vec::Vec<u64>,
     }
     impl VgicArch {
         fn new(gic_v3: bool, lrs: u64) -> Self {
@@ -1025,6 +1032,7 @@ mod tests {
                 fpu_released: std::vec::Vec::new(),
                 vcpu_flushed: std::vec::Vec::new(),
                 vcpu_flushed_state: std::vec::Vec::new(),
+                stalls: std::vec::Vec::new(),
             }
         }
     }
@@ -1053,7 +1061,7 @@ mod tests {
         fn fpu_sanitise(&mut self, _: u64) {}
         fn fpu_reload(&mut self, _: u64) {}
         fn fpu_release(&mut self, t: u64) { self.fpu_released.push(t); }
-        fn remote_stall(&mut self, _: u64) {}
+        fn remote_stall(&mut self, cpu: u64) { self.stalls.push(cpu); }
         fn send_reschedule(&mut self, _: u64) {}
         fn cache_op(&mut self, _: u64, _: u64, _: u64, _: u64, _: u64, _: u64) {}
         fn hw_access_flag(&self) -> bool { true }
@@ -1357,6 +1365,194 @@ mod tests {
         assert_eq!(s.read(v + RUN_CALLER), 0);
         assert_eq!(s.read(v + OWNER_CPU), 0);
         assert_eq!(s.read(ct.0 + tl::RUN_VCPU), 0);
+    }
+
+    /// A caller in `ARMVCPURun` on cpu 0 with its IPC buffer, a VCPU bound
+    /// to `gtcb`, and an idle thread to switch to.
+    fn run_fixture() -> (Mem, VgicArch, Tcb, Tcb, u64) {
+        use crate::capability::FrameSize;
+        use crate::layout::node;
+        use crate::obj::{node_set, Sc};
+        let mut s = Mem(BTreeMap::new());
+        let mut a = VgicArch::new(true, 4);
+        let ct = Tcb(0x20_0000);
+        let gtcb = Tcb(0x21_0000);
+        let v = 0x30_0000;
+        node_set(&mut s, 0, node::CUR_THREAD, ct.0);
+        init(&mut s, &a, v);
+        s.write(v + TCB, gtcb.0);
+        set_bound(&mut s, gtcb, v);
+        ct.slot(tl::SLOT_BUFFER).set_cap(&mut s, Cap::Frame {
+            ptr: 0x40_0000,
+            size: FrameSize::Small,
+            rights: VM_READ_WRITE,
+            is_device: false,
+            mapped: true,
+            is_ept: false,
+            asid: 1,
+            vaddr: 0x1000,
+        });
+        let idle = Tcb(0x22_0000);
+        let idle_sc = Sc(0x60_0000);
+        idle.set_state(&mut s, sched::TS_IDLE);
+        idle.set_sc(&mut s, idle_sc.0);
+        crate::sporadic::refill_new(&mut s, idle_sc, 2, 100000, 0);
+        node_set(&mut s, 0, node::IDLE_THREAD, idle.0);
+        node_set(&mut s, 0, node::IDLE_SC, idle_sc.0);
+        ct.set_state(&mut s, sched::TS_RUNNING);
+        ct.set_reg(&mut s, msg::msg_register(0), 1024);
+        ct.set_reg(&mut s, msg::msg_register(1), 0);
+        ct.set_reg(&mut s, msg::msg_register(2), 0);
+        assert!(decode(&mut s, &mut a, label::ARMVCPURun, 3, v, true, 0, &[Slot(0), Slot(0), Slot(0)]).is_ok());
+        assert_eq!(ct.state(&s), sched::TS_RUNNING_VM);
+        // Entry recorded the SVC as the restart point.
+        ct.set_reg(&mut s, reg::FAULT_IP, 0x2000);
+        ct.set_reg(&mut s, reg::NEXT_IP, 0x2004);
+        (s, a, ct, gtcb, v)
+    }
+
+    /// A finished `ARMVCPURun` settles `FAULT_IP` at `NEXT_IP` before the
+    /// caller leaves `TS_RUNNING_VM`: the budget check that follows may
+    /// raise a timeout fault, and a restarting reply (label 0) must resume
+    /// after the SVC with the run's results, not run it again (X0 now holds
+    /// badge 0, so a rerun would be a cap fault and the exit lost).
+    #[test]
+    fn complete_run_settles_fault_ip_before_timeout_fault() {
+        use crate::layout::node;
+        use crate::obj::{node_set, Reply, Sc};
+        for vppi in [false, true] {
+            let (mut s, mut a, ct, _gtcb, _v) = run_fixture();
+            let sc = Sc(0x61_0000);
+            crate::sporadic::refill_new(&mut s, sc, 2, 1000, 10000);
+            sc.set_tcb(&mut s, ct.0);
+            ct.set_sc(&mut s, sc.0);
+            node_set(&mut s, 0, node::CUR_SC, sc.0);
+            node_set(&mut s, 0, node::CONSUMED, 1000);
+            let ep = 0x70_0000;
+            let r = Reply(0x71_0000);
+            let handler = Tcb(0x23_0000);
+            handler.set_state(&mut s, sched::TS_RUNNING);
+            let recv = Cap::Endpoint { ptr: ep, badge: 0, send: false, recv: true, grant: false, grant_reply: false };
+            crate::endpoint::receive_ipc(&mut s, &mut a, handler, recv, true, Cap::Reply { ptr: r.0, grant: true });
+            assert_eq!(handler.state(&s), sched::TS_BLOCKED_ON_RECV);
+            let th = Cap::Endpoint { ptr: ep, badge: 0x77, send: true, recv: false, grant: true, grant_reply: true };
+            ct.slot(tl::SLOT_TIMEOUT_HANDLER).set_cap(&mut s, th);
+
+            let stop = if vppi {
+                crate::syscall::handle_vcpu_run_vppi(&mut s, &mut a, irq::TIMER_ID);
+                vcpu_run_stop::VPPI
+            } else {
+                crate::syscall::handle_vcpu_run_exit(&mut s, &mut a, vcpu_run_stop::VCPUFAULT, 0x5a00_0001, 0, 0);
+                vcpu_run_stop::VCPUFAULT
+            };
+            assert_eq!(ct.state(&s), sched::TS_BLOCKED_ON_REPLY, "vppi={vppi}: timeout fault");
+            assert_eq!(ct.fault_type(&s), fl4_abi::consts::fault::Timeout);
+            assert_eq!(ct.reg(&s, reg::FAULT_IP), 0x2004, "vppi={vppi}: FAULT_IP settled");
+
+            handler.set_reg(&mut s, reg::MSG_INFO, 0);
+            crate::ipc::do_reply_transfer(&mut s, &mut a, handler, r, false);
+            assert_eq!(ct.state(&s), sched::TS_RESTART);
+            node_set(&mut s, 0, node::CUR_THREAD, ct.0);
+            sched::activate_thread(&mut s, &mut a);
+            assert_eq!(ct.state(&s), sched::TS_RUNNING);
+            assert_eq!(ct.reg(&s, reg::NEXT_IP), 0x2004, "vppi={vppi}: resumes after the SVC");
+            assert_eq!(ct.reg(&s, reg::BADGE), 0);
+            assert_eq!(ct.reg(&s, msg::msg_register(0)), stop);
+            assert_eq!(ct.reg(&s, msg::msg_register(1)), if vppi { irq::TIMER_ID } else { 0x5a00_0001 });
+            assert_eq!(msg::msg_info(&s, ct).length, 4);
+        }
+
+        // `check` without a run VCPU completes the call too.
+        let (mut s, mut a, ct, _gtcb, _v) = run_fixture();
+        s.write(ct.0 + tl::RUN_VCPU, 0);
+        check(&mut s, &mut a, ct);
+        assert_eq!(ct.state(&s), sched::TS_RUNNING);
+        assert_eq!(ct.reg(&s, reg::FAULT_IP), 0x2004);
+
+        // Suspending a running call keeps the SVC as the restart point.
+        let (mut s, mut a, ct, _gtcb, _v) = run_fixture();
+        sched::suspend(&mut s, &mut a, ct);
+        assert_eq!(ct.state(&s), sched::TS_INACTIVE);
+        assert_eq!(ct.reg(&s, reg::FAULT_IP), 0x2000);
+    }
+
+    /// A guest TCB in `ARMVCPURun` is live on the core running the
+    /// `RUN_CALLER`, not on its own affinity: stalling it must stop that
+    /// core, or TCB invocations on it race the running guest.
+    #[test]
+    fn remote_tcb_stall_on_guest_tcb_stalls_arm_vcpu_run_caller() {
+        use crate::layout::node;
+        use crate::obj::{node_get, node_set};
+        let setup = || {
+            let mut s = Mem(BTreeMap::new());
+            let a = VgicArch::new(true, 4);
+            let me = Tcb(0x20_0000);
+            let gtcb = Tcb(0x21_0000);
+            let runner = Tcb(0x22_0000);
+            let v = 0x30_0000;
+            node_set(&mut s, 0, node::CUR_THREAD, me.0);
+            me.set_state(&mut s, sched::TS_RUNNING);
+            s.write(v + TCB, gtcb.0);
+            set_bound(&mut s, gtcb, v);
+            runner.set_affinity(&mut s, 1);
+            runner.set_state(&mut s, sched::TS_RUNNING_VM);
+            s.write(v + RUN_CALLER, runner.0);
+            s.write(runner.0 + tl::RUN_VCPU, v);
+            node_set(&mut s, 1, node::CUR_THREAD, runner.0);
+            (s, a, me, gtcb, runner)
+        };
+        let stalled = |s: &Mem, a: &VgicArch| a.stalls == std::vec![1] && node_get(s, 0, node::IPI_PENDING) & 2 != 0;
+
+        // 1. Directly.
+        let (mut s, mut a, _me, gtcb, _runner) = setup();
+        smp::remote_tcb_stall(&mut s, &mut a, gtcb);
+        assert!(stalled(&s, &a));
+
+        // 2. Through TCB invocations on the guest TCB.
+        for (lbl, length) in [(label::TCBReadRegisters, 2), (label::TCBWriteRegisters, 3)] {
+            let (mut s, mut a, me, gtcb, _runner) = setup();
+            me.set_reg(&mut s, msg::msg_register(0), 0);
+            me.set_reg(&mut s, msg::msg_register(1), 1);
+            me.set_reg(&mut s, msg::msg_register(2), 0x1234);
+            let ex = [Slot(0), Slot(0), Slot(0)];
+            let c = crate::tcb::Ctx { length, buf: 0, call: true, slot: Slot(0), extra: &ex };
+            assert!(crate::tcb::decode(&mut s, &mut a, lbl, gtcb, &c).is_ok(), "label {lbl}");
+            assert!(stalled(&s, &a), "label {lbl}");
+        }
+        // TCBCopyRegisters with the guest TCB as the source.
+        let (mut s, mut a, me, gtcb, _runner) = setup();
+        let src = Slot(0x50_0000);
+        src.set_cap(&mut s, Cap::Thread { ptr: gtcb.0 });
+        let other = Tcb(0x23_0000);
+        me.set_reg(&mut s, msg::msg_register(0), 0);
+        let ex = [src, Slot(0), Slot(0)];
+        let c = crate::tcb::Ctx { length: 1, buf: 0, call: true, slot: Slot(0), extra: &ex };
+        let _ = crate::tcb::decode(&mut s, &mut a, label::TCBCopyRegisters, other, &c);
+        assert!(stalled(&s, &a));
+        // SchedContextBind of an SC on another core to the guest TCB.
+        let (mut s, mut a, _me, gtcb, _runner) = setup();
+        let sc = crate::obj::Sc(0x60_0000);
+        crate::sporadic::refill_new(&mut s, sc, 2, 1000, 10000);
+        sc.set_cpu(&mut s, 2);
+        let th = Slot(0x50_0000);
+        th.set_cap(&mut s, Cap::Thread { ptr: gtcb.0 });
+        let r = crate::schedcontext::decode(&mut s, &mut a, label::SchedContextBind, sc, true, &[th, Slot(0), Slot(0)]);
+        assert!(r.is_ok());
+        assert_eq!(sc.tcb(&s), gtcb.0);
+        assert_eq!(gtcb.affinity(&s), 2);
+        assert!(stalled(&s, &a));
+
+        // 3. No stall when the caller is not current on another core.
+        let (mut s, mut a, _me, gtcb, runner) = setup();
+        node_set(&mut s, 1, node::CUR_THREAD, 0x24_0000);
+        smp::remote_tcb_stall(&mut s, &mut a, gtcb);
+        assert!(a.stalls.is_empty());
+        assert_eq!(node_get(&s, 0, node::IPI_PENDING), 0);
+        runner.set_affinity(&mut s, 0);
+        node_set(&mut s, 0, node::CUR_THREAD, runner.0);
+        smp::remote_tcb_stall(&mut s, &mut a, gtcb);
+        assert!(a.stalls.is_empty());
+        assert_eq!(node_get(&s, 0, node::IPI_PENDING), 0);
     }
 
     #[test]

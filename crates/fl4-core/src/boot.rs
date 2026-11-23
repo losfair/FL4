@@ -16,7 +16,7 @@ use crate::sporadic;
 use crate::vspace;
 use fl4_abi::consts::{bits, root_slot as rs};
 
-pub const MAX_REGIONS: usize = 32;
+pub const MAX_REGIONS: usize = 128;
 pub const ROOT_CNODE_BITS: u64 = fl4_abi::config::ROOT_CNODE_SIZE_BITS;
 pub const MAX_BOOTINFO_UNTYPEDS: u64 = 230;
 pub const BOOT_THREAD_TIME_SLICE_US: u64 = 5 * 1000;

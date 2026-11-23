@@ -501,6 +501,19 @@ pub extern "C" fn fl4_boot(off: u64, el_mode: u64) -> ! {
     }
     if dev.n > MAX_REGIONS {
         kprintln!("FL4: {} device memory regions exceed the boot range limit", dev.n - MAX_REGIONS);
+        // The boot modules and the TPM log reach the root task only as
+        // these device untypeds.
+        let boot_data = mods[..extra_mods]
+            .iter()
+            .map(|m| (m.paddr, m.paddr + m.size))
+            .chain(tpm.as_ref().map(|t| (t.paddr, t.paddr + t.size)));
+        let lost = &dev.r[MAX_REGIONS..dev.n];
+        for (start, end) in boot_data {
+            let (start, end) = (start & !(PAGE - 1), (end + PAGE - 1) & !(PAGE - 1));
+            if lost.iter().any(|r| r.start < end && start < r.end) {
+                fail("boot modules or event logs exceed the boot device range limit");
+            }
+        }
     }
 
     // The root task's image came from the loader through the data cache;

@@ -201,32 +201,41 @@ fn the_area_taken_is_capped() {
     assert_eq!(area_limit(u64::MAX), MAX_EVENT_LOG);
 }
 
-/// The kernel gets the log only from a TDX guest and the TPM log is
-/// collected whatever happens to this one.
+/// The kernel gets the CC log only from a TDX guest and the TPM log only
+/// outside one: a TD ignores any TPM.
 #[test]
-fn the_loader_collects_both_logs_independently() {
+fn the_loader_collects_the_cc_log_in_a_td_and_the_tpm_log_otherwise() {
     let x86 = include_str!("../../crates/fl4-efi/src/x86.rs");
-    let tpm = x86.find("let tpm = tcg2::collect();").expect("TPM log collected");
+    let tpm = x86.find("let tpm = if shared == 0 { tcg2::collect() } else { None };").expect("TPM log collected");
     let cc = x86.find("let cc = if shared != 0 { ccel::collect() } else { None };").expect("CC log collected");
     assert!(tpm < cc);
+    assert_eq!(x86.matches("tcg2::collect()").count(), 1, "only outside a TD");
+    assert_eq!(x86.matches("ccel::collect()").count(), 1, "only in a TD");
     assert!(x86.contains("MB2_TAG_CC_EVENT_LOG: u32 = 0x464c_3402"));
     assert!(x86.contains("ccel::measure_file(b\"rootserver\", path, pa, len);"), "rootserver= file");
     assert!(x86.contains("ccel::measure_file(b\"module\", path, pa, len);"), "module= files");
 }
 
-/// RTMR[2] is a TDX register: the options' files are measured only in a TD.
+/// RTMR[2] is a TDX register: the options' files are measured into it only
+/// in a TD, and into the TPM only outside one.
 #[test]
 fn boot_files_are_measured_only_in_a_td() {
     let x86 = include_str!("../../crates/fl4-efi/src/x86.rs");
     for role in ["rootserver", "module"] {
-        let call = format!("if measure {{\n                ccel::measure_file(b\"{role}\", path, pa, len);\n            }}");
+        let call = format!(
+            "if measure {{\n                ccel::measure_file(b\"{role}\", path, pa, len);\n            }} else {{\n                tcg2::measure_file(b\"{role}\", path, pa, len).unwrap_or_else(|e| fail(e));\n            }}"
+        );
         assert_eq!(x86.matches(&call).count(), 1, "{role}");
     }
     assert_eq!(x86.matches("ccel::measure_file(").count(), 2, "only these two");
+    let is_tdx = &x86[x86.find("pub(super) fn is_tdx() -> bool {").expect("is_tdx")..];
+    assert!(is_tdx[..is_tdx.find("\n}\n").unwrap()].contains("sev().0 == 0 && tdx_shared_mask() != 0"));
     let start = &x86[x86.find("pub unsafe fn start_default(").expect("start_default")..];
     let start = &start[..start.find("\n}\n").unwrap()];
-    let check = start.find("let measure = sev().0 == 0 && tdx_shared_mask() != 0;").expect("TD check");
+    let check = start.find("let measure = is_tdx();").expect("TD check");
     assert!(check < start.find("boot_files(li, &opts, measure)").expect("boot_files"));
+    let fw = include_str!("../../crates/fl4-efi/src/firmware.rs");
+    assert!(fw.contains("pub fn is_tdx(&self) -> bool {\n        x86::is_tdx()\n    }"));
 }
 
 #[test]
@@ -339,4 +348,68 @@ fn the_cc_event_carries_the_descriptor() {
     let len = cc_event(&mut buf, &desc[..n]);
     assert_eq!(len, 18 + n);
     assert_eq!(&buf[18..len], &desc[..n]);
+}
+
+/// A caller's bytes (`Firmware::measure_cc_file`) fail closed in RTMR[2]:
+/// no protocol is `EFI_UNSUPPORTED`, nothing to hash is
+/// `EFI_INVALID_PARAMETER`, and a result `measure_status` refuses is
+/// returned as firmware gave it; each is said on the console.
+#[test]
+fn measure_bytes_fails_closed() {
+    let c = include_str!("../../crates/fl4-efi/src/ccel.rs");
+    assert!(c.contains("const UNSUPPORTED: Status = (1 << 63) | 3;"));
+    assert!(c.contains("const INVALID_PARAMETER: Status = (1 << 63) | 2;"));
+    let f = &c[c.find("pub fn measure_bytes(name: &[u8], pa: u64, len: u64) -> Result<(), Status> {").expect("measure_bytes")..];
+    let f = &f[..f.find("\n    }\n").unwrap()];
+    let at = |s: &str| f.find(s).unwrap_or_else(|| panic!("{s}"));
+    let none = at("let Some(cc) = protocol() else {");
+    let unsupported = at("return Err(UNSUPPORTED);");
+    let empty = at("if len == 0 {");
+    let invalid = at("return Err(INVALID_PARAMETER);");
+    let event = at("cc_event(&mut event, name);");
+    let ext = at("((*cc).hash_log_extend_event)(cc, 0, pa, len, event.as_ptr())");
+    let chk = at("measure_status(true, r as u64).map_err(|e| {");
+    assert!(none < at("measure_status(false, 0).unwrap_err()") && at("measure_status(false, 0).unwrap_err()") < unsupported);
+    assert!(unsupported < empty && empty < invalid && invalid < event && event < ext && ext < chk);
+    assert_eq!(f.matches("hash_log_extend_event)(").count(), 1);
+    assert_eq!(f.matches("say!(").count(), 3, "every refusal is said");
+    assert!(f.trim_end().ends_with("r\n        })"), "firmware's status is the error");
+    assert!(!f.contains("fail("), "the caller decides, but must not boot");
+}
+
+/// `measure_cc_file` measures only in a TD, and passes a refusal back.
+#[test]
+fn measure_cc_file_measures_only_in_a_td() {
+    let fw = include_str!("../../crates/fl4-efi/src/firmware.rs");
+    let f = &fw[fw.find("pub fn measure_cc_file(&self, name: &[u8], bytes: &[u8]) -> Result<(), Status> {").expect("measure_cc_file")..];
+    let f = &f[..f.find("\n    }\n").unwrap()];
+    assert!(f.contains("if x86::is_tdx() {\n            ccel::measure_bytes(name, bytes.as_ptr() as u64, bytes.len() as u64)?;\n        }\n        Ok(())"));
+    assert_eq!(fw.matches("ccel::measure_bytes(").count(), 1);
+}
+
+/// A command line becomes the Multiboot 2 command line tag (type 1, with
+/// its NUL) among the fixed tags, before `tags_end`; none when empty, as
+/// for `start_default` and `Firmware::boot`.
+#[test]
+fn a_command_line_is_a_multiboot2_tag_before_the_memory_map() {
+    let x86 = include_str!("../../crates/fl4-efi/src/x86.rs");
+    assert!(x86.contains("pub(super) fn boot(image: Handle, kernel: &[u8], files: &[BootFile<'_>], cmdline: &core::ffi::CStr) -> ! {"));
+    let start = &x86[x86.find("pub unsafe fn start_default(").expect("start_default")..];
+    let start = &start[..start.find("\n}\n").unwrap()];
+    assert!(start.contains("boot(image, embedded::KERNEL, &files[..n], c\"\")"));
+    let boot = &x86[x86.find("pub(super) fn boot(").unwrap()..];
+    let at = |s: &str| boot.find(s).unwrap_or_else(|| panic!("{s}"));
+    let guard = at("if !cmdline.is_empty() {");
+    let bytes = at("let bytes = cmdline.to_bytes_with_nul();");
+    let cap = at("if bytes.len() as u64 > PAGE {\n            fail(\"kernel command line too long\");");
+    let tag = at("write(info.tag(1, bytes.len() as u64), bytes);");
+    assert!(at("used: 8,") < guard && guard < bytes && bytes < cap && cap < tag);
+    assert!(tag < at("let tags_end = info.used;"));
+    assert_eq!(boot.matches("info.tag(1,").count(), 1);
+    let fw = include_str!("../../crates/fl4-efi/src/firmware.rs");
+    let b = &fw[fw.find("pub unsafe fn boot_with_cmdline(").expect("boot_with_cmdline")..];
+    let b = &b[..b.find("\n    }\n").unwrap()];
+    assert!(b.contains("cmdline: &core::ffi::CStr,"));
+    assert!(b.contains("fail(\"invalid number of boot modules\");"));
+    assert!(b.trim_end().ends_with("x86::boot(self.image, kernel, &files[..modules.len()], cmdline)"));
 }

@@ -43,11 +43,28 @@ pub fn migrate_tcb<S: Store, A: Arch>(s: &mut S, a: &mut A, t: Tcb, cpu: u64) {
 /// The stalled core is left idle with the thread back in its ready queue;
 /// it is asked to reschedule once this entry is done (seL4 leaves it to the
 /// core's next interrupt).
+/// On AArch64 a guest TCB in `ARMVCPURun` is live (registers, FPU, stage-2
+/// root) on the core running the VCPU's `RUN_CALLER`, so that core is
+/// stopped too.
 pub fn remote_tcb_stall<S: Store, A: Arch>(s: &mut S, a: &mut A, t: Tcb) {
     let cpu = t.affinity(s);
     if cpu != s.cur_cpu() && node_get(s, cpu, node::CUR_THREAD) == t.0 {
         a.remote_stall(cpu);
         remote_reschedule(s, a, cpu);
+    }
+    #[cfg(feature = "aarch64")]
+    {
+        let v = crate::vcpu::bound(s, t);
+        if v != 0 {
+            let caller = s.read(v.wrapping_add(crate::vcpu::RUN_CALLER));
+            if caller != 0 {
+                let c_cpu = Tcb(caller).affinity(s);
+                if c_cpu != s.cur_cpu() && node_get(s, c_cpu, node::CUR_THREAD) == caller {
+                    a.remote_stall(c_cpu);
+                    remote_reschedule(s, a, c_cpu);
+                }
+            }
+        }
     }
 }
 

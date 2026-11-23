@@ -9,7 +9,7 @@ use crate::layout::{self, ks, reg, tcb as tl};
 use crate::machine::{Arch, Store};
 use crate::msg;
 use crate::msginfo::MessageInfo;
-use crate::obj::{ks_get, ks_set, Ntfn, Slot, Tcb, NTFN_ACTIVE, NTFN_IDLE};
+use crate::obj::{ks_get, ks_set, node_get, Ntfn, Slot, Tcb, NTFN_ACTIVE, NTFN_IDLE};
 use crate::{sched, smp};
 use fl4_abi::label;
 
@@ -1090,8 +1090,9 @@ pub fn check<S: Store, A: Arch>(s: &mut S, a: &mut A, t: Tcb) {
 pub fn signal_completes<S: Store>(s: &S, t: Tcb) -> bool {
     let v = bound(s, t);
     let cpu = t.affinity(s);
-    v != 0 && get(s, v, PENDING) == 0 && (cpu == s.cur_cpu()
-        || (full_reply(s, t) && crate::obj::node_get(s, cpu, layout::node::CUR_THREAD) != t.0))
+    v != 0
+        && get(s, v, PENDING) == 0
+        && (cpu == s.cur_cpu() || (full_reply(s, t) && node_get(s, cpu, layout::node::CUR_THREAD) != t.0))
 }
 
 /// Finish l4h's notification reply after writing the guest registers. A
@@ -1115,6 +1116,8 @@ fn finish_notification<S: Store, A: Arch>(
     msg::set_mr(s, t, b, 26, 0);
     t.set_reg(s, reg::MSG_INFO, 0);
     t.set_reg(s, reg::BADGE, badge);
+    let next = t.reg(s, reg::NEXT_IP);
+    t.set_reg(s, reg::FAULT_IP, next);
     sched::set_thread_state(s, t, sched::TS_RUNNING);
 }
 
@@ -1149,6 +1152,10 @@ pub fn report<S: Store, A: Arch>(s: &mut S, a: &A, t: Tcb, badge: u64) {
         msg::set_mr(s, t, b, 2, intr);
         t.set_reg(s, reg::MSG_INFO, 0);
         t.set_reg(s, reg::BADGE, badge);
+        // The VMEnter has finished: a timeout fault raised by the budget
+        // check that follows must not restart it.
+        let next_ip = t.reg(s, reg::NEXT_IP);
+        t.set_reg(s, reg::FAULT_IP, next_ip);
         sched::set_thread_state(s, t, sched::TS_RUNNING);
         return;
     }
@@ -1233,5 +1240,7 @@ pub fn report<S: Store, A: Arch>(s: &mut S, a: &A, t: Tcb, badge: u64) {
     set(s, v, PENDING, 0);
     t.set_reg(s, reg::MSG_INFO, 1);
     t.set_reg(s, reg::BADGE, 0);
+    let ip = t.reg(s, reg::NEXT_IP);
+    t.set_reg(s, reg::FAULT_IP, ip);
     sched::set_thread_state(s, t, sched::TS_RUNNING);
 }

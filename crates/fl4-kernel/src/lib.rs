@@ -18,6 +18,7 @@ mod smp;
 mod snp;
 mod tdx;
 mod trace;
+mod user_trap;
 
 use core::cell::UnsafeCell;
 use core::fmt::Write;
@@ -588,6 +589,7 @@ pub extern "C" fn fl4_boot(magic: u32, info: u32, private_mask: u64, cpuid_page:
         }
     }
     let mut omitted = 0;
+    let mut omitted_boot_data = false;
     bootmem::device_regions(&dev.r[..dev.n], &firmware.r[..firmware.n], |r, private| {
         if let Some(slot) = p.device.get_mut(p.n_device as usize) {
             *slot = r;
@@ -595,9 +597,17 @@ pub extern "C" fn fl4_boot(magic: u32, info: u32, private_mask: u64, cpuid_page:
             if private { st.private_devices.add(r.start, r.end); }
         } else {
             omitted += 1;
+            // The boot modules and event logs reach the root task only as
+            // these device untypeds.
+            if r.start < log_end && image.p_end < r.end {
+                omitted_boot_data = true;
+            }
         }
     });
     if omitted != 0 { kprintln!("FL4: {} device memory regions exceed the boot range limit", omitted); }
+    if omitted_boot_data {
+        fail("boot modules or event logs exceed the boot device range limit");
+    }
     if let Some(w) = tdx_wakeup {
         st.private_devices.add(w.mailbox, w.mailbox + PAGE);
     }

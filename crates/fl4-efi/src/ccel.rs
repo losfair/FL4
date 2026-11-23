@@ -163,6 +163,35 @@ mod efi {
         }
     }
 
+    /// `EFI_UNSUPPORTED`: no `EFI_CC_MEASUREMENT_PROTOCOL`.
+    const UNSUPPORTED: Status = (1 << 63) | 3;
+    /// `EFI_INVALID_PARAMETER`: firmware refuses to hash nothing.
+    const INVALID_PARAMETER: Status = (1 << 63) | 2;
+
+    /// Measure caller-built bytes at `(pa, len)` into RTMR[2] as one event
+    /// named `name`, so that a quote covers them. Called only in a TD: bytes
+    /// that cannot be measured must not be booted, and neither must they
+    /// when firmware offers no `EFI_CC_MEASUREMENT_PROTOCOL`
+    /// (`measure_status`). The error, said on the console, is the caller's
+    /// to act on: it must not boot them.
+    pub fn measure_bytes(name: &[u8], pa: u64, len: u64) -> Result<(), Status> {
+        let Some(cc) = protocol() else {
+            say!("fl4-efi: {}", measure_status(false, 0).unwrap_err());
+            return Err(UNSUPPORTED);
+        };
+        if len == 0 {
+            say!("fl4-efi: refusing to measure empty bytes into RTMR[2]");
+            return Err(INVALID_PARAMETER);
+        }
+        let mut event = [0u8; CC_EVENT_FIXED + 256];
+        cc_event(&mut event, name);
+        let r = unsafe { ((*cc).hash_log_extend_event)(cc, 0, pa, len, event.as_ptr()) };
+        measure_status(true, r as u64).map_err(|e| {
+            say!("fl4-efi: {}", e);
+            r
+        })
+    }
+
     /// The log firmware keeps, found before ExitBootServices.
     pub enum CcLog {
         /// From the protocol, with the final events table.

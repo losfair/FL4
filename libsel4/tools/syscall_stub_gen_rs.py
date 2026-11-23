@@ -451,7 +451,8 @@ def generate_stub_file(arch, input_files, output_file, use_only_ipc_buffer, mcs,
     methods = []
     structs = []
     for infile in input_files:
-        method, struct, _ = syscall_stub_gen.parse_xml_file(infile, data_types + arch_types[arch])
+        method, struct, _ = syscall_stub_gen.parse_xml_file(
+            infile, syscall_stub_gen.parse_types(data_types, arch_types, arch))
         methods += method
         structs += struct
 

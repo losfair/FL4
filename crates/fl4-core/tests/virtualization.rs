@@ -1028,6 +1028,87 @@ fn suspending_a_vm_preserves_the_syscall_restart_context() {
     assert_eq!(vcpu::bound(&s, t), v);
 }
 
+/// A VMEnter that completes (a saved exit or a bound notification) has
+/// finished its syscall: `report` settles `FAULT_IP` at `NEXT_IP` before
+/// the thread leaves `TS_RUNNING_VM`. Otherwise the budget check that
+/// follows can raise a timeout fault on the stale `FAULT_IP` (still the
+/// VMEnter instruction), and a restarting reply (label 0) runs VMEnter
+/// again and loses the exit just reported.
+#[test]
+fn vcpu_report_settles_fault_ip_before_timeout_fault() {
+    use fl4_core::obj::Reply;
+    use fl4_core::{endpoint, ipc, syscall};
+    for (pending, request) in [(true, 0), (false, 0), (true, vcpu::NUM_MRS), (false, vcpu::NUM_MRS)] {
+        let (mut s, mut a, t, v) = fixture(2);
+        t.set_reg(&mut s, reg::MSG_INFO, request);
+        s.write(t.0 + tcb::VCPU, v);
+        vcpu::set(&mut s, v, vcpu::TCB, t.0);
+        vcpu::set(&mut s, v, vcpu::svm::RIP, 0x25);
+        let n = bind_ntfn(&mut s, t);
+        if pending {
+            vcpu::set(&mut s, v, vcpu::PENDING, 1);
+            vcpu::set(&mut s, v, vcpu::VALID, 1);
+            vcpu::set(&mut s, v, vcpu::EXIT, 0x1234);
+        } else {
+            n.set_state(&mut s, NTFN_ACTIVE);
+            n.set_badge(&mut s, 0x42);
+        }
+        t.set_state(&mut s, sched::TS_RUNNING_VM);
+        t.set_reg(&mut s, reg::FAULT_IP, 0x1000);
+        t.set_reg(&mut s, reg::NEXT_IP, 0x1002);
+
+        // An idle thread to switch to, and a periodic (not round-robin) SC
+        // whose budget is used up.
+        let idle = Tcb(0xc0000);
+        let idle_sc = Sc(0xa0000);
+        idle.set_state(&mut s, sched::TS_IDLE);
+        idle.set_sc(&mut s, idle_sc.0);
+        sporadic::refill_new(&mut s, idle_sc, 2, 100000, 0);
+        node_set(&mut s, 0, node::IDLE_THREAD, idle.0);
+        node_set(&mut s, 0, node::IDLE_SC, idle_sc.0);
+        let sc = Sc(0x90000);
+        sporadic::refill_new(&mut s, sc, 2, 1000, 10000);
+        sc.set_tcb(&mut s, t.0);
+        t.set_sc(&mut s, sc.0);
+        node_set(&mut s, 0, node::CUR_SC, sc.0);
+        node_set(&mut s, 0, node::CONSUMED, 1000);
+
+        // A timeout handler waiting on its endpoint with a reply object.
+        let ep = 0xd0000;
+        let r = Reply(0xe0000);
+        let handler = Tcb(0xb0000);
+        handler.set_state(&mut s, sched::TS_RUNNING);
+        let recv = Cap::Endpoint { ptr: ep, badge: 0, send: false, recv: true, grant: false, grant_reply: false };
+        endpoint::receive_ipc(&mut s, &mut a, handler, recv, true, Cap::Reply { ptr: r.0, grant: true });
+        assert_eq!(handler.state(&s), sched::TS_BLOCKED_ON_RECV);
+        let th = Cap::Endpoint { ptr: ep, badge: 0x77, send: true, recv: false, grant: true, grant_reply: true };
+        t.slot(tcb::SLOT_TIMEOUT_HANDLER).set_cap(&mut s, th);
+
+        syscall::handle_vcpu_exit(&mut s, &mut a, syscall::NO_IRQ, false);
+        assert_eq!(t.state(&s), sched::TS_BLOCKED_ON_REPLY, "pending={pending}: timeout fault");
+        assert_eq!(t.fault_type(&s), fl4_abi::consts::fault::Timeout);
+        assert_eq!(t.reg(&s, reg::FAULT_IP), 0x1002, "pending={pending}: FAULT_IP settled");
+
+        // The handler restarts the thread: label 0, no registers.
+        handler.set_reg(&mut s, reg::MSG_INFO, 0);
+        ipc::do_reply_transfer(&mut s, &mut a, handler, r, false);
+        assert_eq!(t.state(&s), sched::TS_RESTART);
+        node_set(&mut s, 0, node::CUR_THREAD, t.0);
+        sched::activate_thread(&mut s, &mut a);
+        assert_eq!(t.state(&s), sched::TS_RUNNING);
+        assert_eq!(t.reg(&s, reg::NEXT_IP), 0x1002, "pending={pending}: resumes after VMEnter");
+        if pending {
+            assert_eq!(t.reg(&s, reg::MSG_INFO), 1);
+            assert_eq!(t.reg(&s, reg::BADGE), 0);
+            assert_eq!(t.reg(&s, reg::R10), 0x1234);
+        } else {
+            assert_eq!(t.reg(&s, reg::MSG_INFO), 0);
+            assert_eq!(t.reg(&s, reg::BADGE), 0x42);
+            assert_eq!(t.reg(&s, reg::R10), 0x25);
+        }
+    }
+}
+
 /// A VMM may give its guest BTF (bit 1) of IA32_DEBUGCTL and nothing else:
 /// LBR (0), BUS_LOCK_DETECT (2), TR (6), BTS (7), BTINT (8),
 /// BTS_OFF_OS/USR (9, 10), the FREEZE bits (12, 14), RTM_DEBUG (15) and
