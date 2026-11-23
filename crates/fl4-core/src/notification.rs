@@ -93,13 +93,11 @@ pub fn send_signal<S: Store, A: Arch>(s: &mut S, a: &mut A, n_ptr: u64, badge: u
             unblock_sporadic(s, t);
         } else if !t.is_null()
             && t.state(s) == sched::TS_RUNNING_VM
-            && t.affinity(s) == s.cur_cpu()
             && crate::vcpu::signal_completes(s, t)
         {
-            // seL4's same-core `RunningVM` case: complete the VMEnter now
-            // with this badge (`Arch_leaveVMAsyncTransfer`); `t` runs.
-            // Under the serial gate, on `t`'s own core: no core is in its
-            // context or its guest.
+            // Complete this VMEnter before a second badge can coalesce.
+            // With l4h's patch 0039 the sender can also report from a
+            // descheduled remote VCPU: the serial gate protects its saved state.
             crate::vcpu::report(s, a, t, badge);
             maybe_donate_sched_context(s, a, t, n);
             if sched::is_schedulable(s, t) {
@@ -117,8 +115,7 @@ pub fn send_signal<S: Store, A: Arch>(s: &mut S, a: &mut A, n_ptr: u64, badge: u
         } else {
             set_active(s, n, badge);
             if !t.is_null() && t.state(s) == sched::TS_RUNNING_VM {
-                // On another core (or with an exit still to report): the
-                // owner checks bound signals before every VM entry.
+                // The owner checks bound signals before every VM entry.
                 // Interrupt an in-flight guest so it reaches that check.
                 crate::smp::remote_tcb_stall(s, a, t);
             }

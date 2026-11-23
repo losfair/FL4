@@ -553,7 +553,9 @@ LIBSEL4_INLINE_FUNC void seL4_Yield(void)
 }
 
 #ifdef CONFIG_VTX
-LIBSEL4_INLINE_FUNC seL4_Word seL4_VMEnter(seL4_Word *sender)
+#include <sel4/arch/vmenter.h>
+
+LIBSEL4_INLINE_FUNC seL4_Word x64_vm_enter(seL4_Word *sender, seL4_Word reply_length)
 {
     seL4_Word fault;
     seL4_Word badge;
@@ -562,7 +564,7 @@ LIBSEL4_INLINE_FUNC seL4_Word seL4_VMEnter(seL4_Word *sender)
     seL4_Word mr2 = seL4_GetMR(2);
     seL4_Word mr3 = seL4_GetMR(3);
 
-    x64_sys_send_recv(seL4_SysVMEnter, 0, &badge, 0, &fault, &mr0, &mr1, &mr2, &mr3, 0);
+    x64_sys_send_recv(seL4_SysVMEnter, 0, &badge, reply_length, &fault, &mr0, &mr1, &mr2, &mr3, 0);
 
     seL4_SetMR(0, mr0);
     seL4_SetMR(1, mr1);
@@ -572,6 +574,16 @@ LIBSEL4_INLINE_FUNC seL4_Word seL4_VMEnter(seL4_Word *sender)
         *sender = badge;
     }
     return fault;
+}
+
+LIBSEL4_INLINE_FUNC seL4_Word seL4_VMEnter(seL4_Word *sender)
+{
+    return x64_vm_enter(sender, 0);
+}
+
+LIBSEL4_INLINE_FUNC seL4_Word seL4_VMEnterFull(seL4_Word *sender)
+{
+    return x64_vm_enter(sender, SEL4_VMENTER_NUM_FAULT_MSGS);
 }
 #endif
 

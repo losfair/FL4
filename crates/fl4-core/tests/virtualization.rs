@@ -558,13 +558,35 @@ fn bind_ntfn(s: &mut Memory, t: Tcb) -> Ntfn {
     n
 }
 
+#[test]
+fn svm_vmenter_preserves_the_exception_error_code_for_each_caller() {
+    for (request, input, error) in [(0, (0x30 << 32) | 0x8000_0b0d, 0x30),
+                                    (vcpu::NUM_MRS, 0x8000_0b0d, 0x28)] {
+        let (mut s, mut a, t, v) = fixture(2);
+        s.write(t.0 + tcb::VCPU, v);
+        vcpu::set(&mut s, v, vcpu::TCB, t.0);
+        let n = bind_ntfn(&mut s, t);
+        let event = 0x8000_0b0d; // #GP with an error code
+        t.set_reg(&mut s, reg::R10, vcpu::svm::EVENT_INJ);
+        t.set_reg(&mut s, reg::R8, (0x28 << 32) | event);
+        assert!(vcpu::decode(&mut s, &mut a, label::X86VCPUWriteVMCB, 2, v, true, 0, &[Slot(0); 3]).is_ok());
+        n.set_state(&mut s, NTFN_ACTIVE);
+        t.set_reg(&mut s, reg::MSG_INFO, request);
+        t.set_reg(&mut s, reg::R9, input);
+        vcpu::enter(&mut s, &mut a, t);
+        assert_eq!(vcpu::get(&s, v, vcpu::svm::EVENT_INJ), (error << 32) | event);
+        assert_eq!(t.reg(&s, reg::R9), input);
+    }
+}
+
 /// A pending signal returns the caller's MRs in the standard ABI and
 /// the staged VCPU registers in the l4h ABI. Poison the old exit frame
 /// and the IPC buffer so neither can pass for the current registers.
 #[test]
 fn vmenter_with_a_pending_signal() {
-    for backend in [1, 2] {
+    for (backend, request) in [(1, 0), (2, 0), (1, vcpu::NUM_MRS), (2, vcpu::NUM_MRS)] {
         let (mut s, mut a, t, v) = fixture(backend);
+        t.set_reg(&mut s, reg::MSG_INFO, request);
         s.write(t.0 + tcb::VCPU, v);
         vcpu::set(&mut s, v, vcpu::TCB, t.0);
         let n = bind_ntfn(&mut s, t);
@@ -592,7 +614,7 @@ fn vmenter_with_a_pending_signal() {
         assert_eq!(t.reg(&s, reg::BADGE), 0x42);
         assert_eq!(t.reg(&s, reg::R10), 0x1234);
         assert_eq!(t.reg(&s, reg::R9), 0x8000_0030);
-        if cfg!(feature = "x86-vmenter-full-state") {
+        if request == vcpu::NUM_MRS {
             let ctl = if backend == 2 {
                 vcpu::get(&s, v, vcpu::svm::INTERCEPT_EXC) >> 32
             } else {
@@ -632,8 +654,9 @@ fn vmenter_with_a_pending_signal() {
 /// VMM can requeue the event with its error code.
 #[test]
 fn a_notification_after_a_host_exit() {
-    for backend in [1, 2] {
+    for (backend, request) in [(1, 0), (2, 0), (1, vcpu::NUM_MRS), (2, vcpu::NUM_MRS)] {
         let (mut s, a, t, v) = fixture(backend);
+        t.set_reg(&mut s, reg::MSG_INFO, request);
         s.write(t.0 + tcb::VCPU, v);
         vcpu::set(&mut s, v, vcpu::TCB, t.0);
         t.set_state(&mut s, sched::TS_RUNNING_VM);
@@ -654,7 +677,7 @@ fn a_notification_after_a_host_exit() {
         assert_ne!(ctl, 0);
         vcpu::set(&mut s, v, vcpu::EXIT, 0x25);
         vcpu::set(&mut s, v, vcpu::EXIT + 8, ctl);
-        vcpu::set(&mut s, v, vcpu::EXIT + 2 * 8, 0);
+        vcpu::set(&mut s, v, vcpu::EXIT + 2 * 8, if backend == 2 { 0x28 << 32 } else { 0 });
         vcpu::set(&mut s, v, vcpu::EXIT + 27 * 8, 0x8000_0b0e);
         t.set_reg(&mut s, reg::R15, 0x5555);
         for i in 4..30 {
@@ -666,7 +689,7 @@ fn a_notification_after_a_host_exit() {
         assert_eq!(t.reg(&s, reg::BADGE), 0x42);
         assert_eq!(t.reg(&s, reg::R10), 0x25);
         assert_eq!(t.reg(&s, reg::R8), ctl);
-        if cfg!(feature = "x86-vmenter-full-state") {
+        if request == vcpu::NUM_MRS {
             assert_eq!(t.reg(&s, reg::R9), 0);
             assert_eq!(t.reg(&s, reg::R15), if backend == 2 { 0x60 } else { 1 });
             for i in 4..30 {
@@ -690,11 +713,12 @@ fn a_notification_after_a_host_exit() {
 /// seL4 `sendSignal` (CONFIG_VTX): a signal to a RunningVM thread on the
 /// current core completes its VMEnter at once, so two signals give two
 /// results (badge 1 now, badge 2 left active for the next VMEnter), not
-/// one with the OR of both. On another core, or with a saved exit still to
-/// report, the signal stays active for the owner's check.
+/// one with the OR of both. The l4h ABI also completes a descheduled
+/// remote thread immediately. A running remote thread or a pending
+/// hardware exit leaves the badge for the owner's check.
 #[test]
-fn signal_to_a_running_vm_on_this_core_completes_it_at_once() {
-    let setup = |cpu: u64, affinity: u64, pending: bool| {
+fn vm_signals_respect_the_running_core_and_pending_exit() {
+    let setup = |cpu: u64, affinity: u64, current: bool, pending: bool| {
         let (mut s, a, t, v) = fixture(2);
         s.cpu = cpu;
         s.write(t.0 + tcb::VCPU, v);
@@ -703,38 +727,49 @@ fn signal_to_a_running_vm_on_this_core_completes_it_at_once() {
         vcpu::set(&mut s, v, vcpu::PENDING, pending as u64);
         vcpu::set(&mut s, v, vcpu::VALID, pending as u64);
         t.set_affinity(&mut s, affinity);
+        node_set(&mut s, affinity, node::CUR_THREAD, if current { t.0 } else { 0x30000 });
         t.set_state(&mut s, sched::TS_RUNNING_VM);
         t.set_reg(&mut s, reg::R15, 0x5555);
         let n = bind_ntfn(&mut s, t);
         (s, a, t, n)
     };
-    let (mut s, mut a, t, n) = setup(0, 0, false);
-    notification::send_signal(&mut s, &mut a, n.0, 1);
-    assert_eq!(t.state(&s), sched::TS_RUNNING);
-    assert_eq!(t.reg(&s, reg::MSG_INFO), 0);
-    assert_eq!(t.reg(&s, reg::BADGE), 1);
-    assert_eq!(t.reg(&s, reg::R10), 0x25);
-    let expected_reason = if cfg!(feature = "x86-vmenter-full-state") { 0x60 } else { 0x5555 };
-    assert_eq!(t.reg(&s, reg::R15), expected_reason);
-    assert_eq!(n.state(&s), NTFN_IDLE);
-    notification::send_signal(&mut s, &mut a, n.0, 2);
-    assert_eq!(t.reg(&s, reg::BADGE), 1);
-    assert_eq!(n.state(&s), NTFN_ACTIVE);
-    assert_eq!(n.badge(&s), 2);
-
-    for (cpu, affinity, pending) in [(0, 1, false), (1, 0, false), (0, 0, true)] {
-        let (mut s, mut a, t, n) = setup(cpu, affinity, pending);
-        notification::send_signal(&mut s, &mut a, n.0, 1);
-        notification::send_signal(&mut s, &mut a, n.0, 2);
-        assert_eq!(t.state(&s), sched::TS_RUNNING_VM);
-        assert_eq!(n.state(&s), NTFN_ACTIVE);
-        assert_eq!(n.badge(&s), 3);
-        if pending {
-            // The saved exit is reported first; the signal waits.
-            s.cpu = affinity;
-            vcpu::check(&mut s, &mut a, t);
-            assert_eq!(t.reg(&s, reg::MSG_INFO), 1);
+    for request in [0, vcpu::NUM_MRS] {
+        let full = request == vcpu::NUM_MRS;
+        for (cpu, affinity, current, pending) in [
+            (0, 0, true, false), (0, 1, false, false), (1, 0, true, false),
+            (0, 0, true, true), (0, 1, false, true),
+        ] {
+            let (mut s, mut a, t, n) = setup(cpu, affinity, current, pending);
+            t.set_reg(&mut s, reg::MSG_INFO, request);
+            notification::send_signal(&mut s, &mut a, n.0, 1);
+            if !pending && (cpu == affinity || (full && !current)) {
+                assert_eq!(t.state(&s), sched::TS_RUNNING);
+                assert_eq!(t.reg(&s, reg::MSG_INFO), 0);
+                assert_eq!(t.reg(&s, reg::BADGE), 1);
+                assert_eq!(t.reg(&s, reg::R10), 0x25);
+                assert_eq!(t.reg(&s, reg::R15), if full { 0x60 } else { 0x5555 });
+                assert_eq!(n.state(&s), NTFN_IDLE);
+                notification::send_signal(&mut s, &mut a, n.0, 2);
+                assert_eq!(t.reg(&s, reg::BADGE), 1);
+                assert_eq!(n.state(&s), NTFN_ACTIVE);
+                assert_eq!(n.badge(&s), 2);
+                s.cpu = affinity;
+                t.set_reg(&mut s, reg::MSG_INFO, request);
+                vcpu::enter(&mut s, &mut a, t);
+                assert_eq!(t.reg(&s, reg::BADGE), 2);
+                continue;
+            }
+            notification::send_signal(&mut s, &mut a, n.0, 2);
+            assert_eq!(t.state(&s), sched::TS_RUNNING_VM);
             assert_eq!(n.state(&s), NTFN_ACTIVE);
+            assert_eq!(n.badge(&s), 3);
+            if pending {
+                // The saved exit is reported first; the signal waits.
+                s.cpu = affinity;
+                vcpu::check(&mut s, &mut a, t);
+                assert_eq!(t.reg(&s, reg::MSG_INFO), 1);
+                assert_eq!(n.state(&s), NTFN_ACTIVE);
+            }
         }
     }
 }

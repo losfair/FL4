@@ -19,4 +19,3 @@ fl4-arch-x86_64 = { path = "../fl4-arch-x86_64" }
 
 [features]
 release-profile = ["fl4-abi/release-profile"]
-x86-vmenter-full-state = ["fl4-core/x86-vmenter-full-state"]

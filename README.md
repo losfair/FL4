@@ -219,12 +219,16 @@ state on every entry.
 The other backend's field operations return `seL4_IllegalOperation`.
 VCPU objects occupy 32 KiB (`seL4_VCPUBits = 15`).
 
-For VMMs built against l4h's seL4 patches 0039 and 0040, configure
-`-DKernelX86VmenterFullState=ON`. A notification then returns the full
-guest register frame, with the external-interrupt reason for the active
-backend. This includes a notification already pending at VM entry.
-The default follows the upstream seL4 notification ABI and is the x86
-configuration extracted by the Lean gate.
+Use `seL4_VMEnterFull` when the VMM needs all 30 guest-state words on a
+notification, including one already pending at entry. This wrapper puts
+the requested length (30) in the syscall's message-info register. The
+ordinary `seL4_VMEnter` wrapper passes zero and keeps the upstream
+three-word notification reply. Both calls work on the same kernel.
+In the full reply MR2 holds an unconsumed entry event. MR27 and MR28
+report interrupted delivery and its error code. On AMD, stage an entry
+exception's error code with `WriteVMCB` before passing its 32-bit
+descriptor in MR2. A signal completes a descheduled full-state caller
+immediately if there is no hardware exit pending.
 
 Each core retains a VMCS and uses `VMRESUME` after its first successful
 launch. A field cache follows both software writes and guest changes read

@@ -12,5 +12,3 @@ fl4-abi = { path = "../fl4-abi" }
 # The AArch64 kernel: ARM objects, registers and interrupts (DESIGN.md §11).
 # Without it fl4-core is the x86_64 core that the proofs are about.
 aarch64 = ["fl4-abi/aarch64"]
-# The x86 VMEnter register reply used by l4h's VMMs.
-x86-vmenter-full-state = []

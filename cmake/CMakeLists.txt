@@ -32,11 +32,6 @@ RequireTool(INVOCATION_ID_GEN_PATH invocation_header_gen.py)
 RequireTool(SYSCALL_ID_GEN_PATH syscall_header_gen.py)
 RequireTool(XMLLINT_PATH xmllint.sh)
 
-if(NOT FL4_AARCH64)
-  config_option(KernelX86VmenterFullState X86_VMENTER_FULL_STATE
-                "Return the full l4h x86 VCPU register frame on VMEnter notifications"
-                DEFAULT OFF)
-endif()
 include(config.cmake)
 
 if(FL4_AARCH64)
@@ -98,9 +93,6 @@ set(fl4_gen_config "${CMAKE_CURRENT_BINARY_DIR}/gen_config/kernel/gen_config.jso
 set(fl4_feature_list "")
 if(NOT KernelDebugBuild)
   list(APPEND fl4_feature_list "release-profile")
-endif()
-if(NOT FL4_AARCH64 AND KernelX86VmenterFullState)
-  list(APPEND fl4_feature_list "x86-vmenter-full-state")
 endif()
 if(fl4_feature_list)
   list(JOIN fl4_feature_list "," fl4_feature_csv)

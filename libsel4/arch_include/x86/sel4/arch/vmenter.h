@@ -95,5 +95,8 @@ typedef enum kernel_fault_context {
  * kernel for each of the return cases of VMEnter
  */
 #define SEL4_VMENTER_RESULT_FAULT_LEN SEL4_VMENTER_NUM_FAULT_MSGS
-#define SEL4_VMENTER_RESULT_NOTIF_LEN SEL4_VMENTER_NUM_FAULT_MSGS
+#define SEL4_VMENTER_RESULT_NOTIF_LEN 3
+/* seL4_VMEnterFull requests SEL4_VMENTER_NUM_FAULT_MSGS for both results.
+ * MR2 describes an unconsumed entry event. After guest execution, MR27
+ * and MR28 describe interrupted event delivery and its error code. */
 
