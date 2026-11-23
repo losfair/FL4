@@ -1,6 +1,6 @@
 // x86_64 only: the AArch64 core has other registers and Arch methods.
 #![cfg(not(feature = "aarch64"))]
-use fl4_abi::{config::X86_VMENTER_FULL_STATE, label};
+use fl4_abi::label;
 use fl4_core::capability::{Cap, FrameSize};
 use fl4_core::error::{Exc, SysError};
 use fl4_core::layout::{self, ks, node, reg, tcb};
@@ -592,7 +592,7 @@ fn vmenter_with_a_pending_signal() {
         assert_eq!(t.reg(&s, reg::BADGE), 0x42);
         assert_eq!(t.reg(&s, reg::R10), 0x1234);
         assert_eq!(t.reg(&s, reg::R9), 0x8000_0030);
-        if X86_VMENTER_FULL_STATE {
+        if cfg!(feature = "x86-vmenter-full-state") {
             let ctl = if backend == 2 {
                 vcpu::get(&s, v, vcpu::svm::INTERCEPT_EXC) >> 32
             } else {
@@ -666,7 +666,7 @@ fn a_notification_after_a_host_exit() {
         assert_eq!(t.reg(&s, reg::BADGE), 0x42);
         assert_eq!(t.reg(&s, reg::R10), 0x25);
         assert_eq!(t.reg(&s, reg::R8), ctl);
-        if X86_VMENTER_FULL_STATE {
+        if cfg!(feature = "x86-vmenter-full-state") {
             assert_eq!(t.reg(&s, reg::R9), 0);
             assert_eq!(t.reg(&s, reg::R15), if backend == 2 { 0x60 } else { 1 });
             for i in 4..30 {
@@ -714,7 +714,8 @@ fn signal_to_a_running_vm_on_this_core_completes_it_at_once() {
     assert_eq!(t.reg(&s, reg::MSG_INFO), 0);
     assert_eq!(t.reg(&s, reg::BADGE), 1);
     assert_eq!(t.reg(&s, reg::R10), 0x25);
-    assert_eq!(t.reg(&s, reg::R15), if X86_VMENTER_FULL_STATE { 0x60 } else { 0x5555 });
+    let expected_reason = if cfg!(feature = "x86-vmenter-full-state") { 0x60 } else { 0x5555 };
+    assert_eq!(t.reg(&s, reg::R15), expected_reason);
     assert_eq!(n.state(&s), NTFN_IDLE);
     notification::send_signal(&mut s, &mut a, n.0, 2);
     assert_eq!(t.reg(&s, reg::BADGE), 1);

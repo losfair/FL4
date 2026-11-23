@@ -20,11 +20,7 @@ jobs:
       - name: Host tests
         run: cargo test -p fl4-abi -p fl4-core -p fl4-arch-x86_64 -p xtask -p fl4-store -p fl4-sync
       - name: l4h VMEnter notification ABI
-        run: |
-          config=$(mktemp)
-          trap 'rm -f "$config"' EXIT
-          echo '{"X86_VMENTER_FULL_STATE":true}' > "$config"
-          FL4_GEN_CONFIG="$config" cargo test -p fl4-core --test virtualization
+        run: cargo test -p fl4-core --features x86-vmenter-full-state --test virtualization
       - name: Trusted base
         run: cargo xtask trusted
       - name: Simulation

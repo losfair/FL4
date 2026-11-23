@@ -1040,13 +1040,11 @@ pub fn enter<S: Store, A: Arch>(s: &mut S, a: &mut A, t: Tcb) {
     // `completeSignal`. The standard ABI preserves the caller's MRs.
     let n = Ntfn(t.bound_ntfn(s));
     if n.0 != 0 && n.state(s) == NTFN_ACTIVE {
-        let badge = n.badge(s);
         crate::notification::complete_signal(s, a, n, t);
-        if fl4_abi::config::X86_VMENTER_FULL_STATE {
-            report(s, a, t, badge);
-        } else {
-            t.set_reg(s, reg::MSG_INFO, 0);
-        }
+        #[cfg(feature = "x86-vmenter-full-state")]
+        report(s, a, t, t.reg(s, reg::BADGE));
+        #[cfg(not(feature = "x86-vmenter-full-state"))]
+        t.set_reg(s, reg::MSG_INFO, 0);
         return;
     }
     sched::set_thread_state(s, t, sched::TS_RUNNING_VM);
@@ -1083,12 +1081,38 @@ pub fn signal_completes<S: Store>(s: &S, t: Tcb) -> bool {
     v != 0 && get(s, v, PENDING) == 0
 }
 
+/// Finish l4h's notification reply after writing the guest registers. A
+/// host interrupt may have interrupted delivery of an event. Its vector,
+/// error code and instruction length survive in MR27, MR28 and MR5.
+#[cfg(feature = "x86-vmenter-full-state")]
+fn finish_notification<S: Store, A: Arch>(
+    s: &mut S,
+    a: &A,
+    t: Tcb,
+    b: u64,
+    badge: u64,
+    vectoring: bool,
+) {
+    msg::set_mr(s, t, b, 3, if a.virtualization() == 2 { 0x60 } else { 1 });
+    msg::set_mr(s, t, b, 4, 0);
+    if !vectoring {
+        msg::set_mr(s, t, b, 5, 0);
+    }
+    msg::set_mr(s, t, b, 6, 0);
+    msg::set_mr(s, t, b, 25, 0);
+    msg::set_mr(s, t, b, 26, 0);
+    t.set_reg(s, reg::MSG_INFO, 0);
+    t.set_reg(s, reg::BADGE, badge);
+    sched::set_thread_state(s, t, sched::TS_RUNNING);
+}
+
 /// Complete a VMEnter, preferring a saved exit to a later notification.
 pub fn report<S: Store, A: Arch>(s: &mut S, a: &A, t: Tcb, badge: u64) {
     let v = bound(s, t);
     let pending = v != 0 && get(s, v, PENDING) != 0;
     let b = msg::lookup_ipc_buffer(s, true, t);
-    if !pending && !fl4_abi::config::X86_VMENTER_FULL_STATE {
+    #[cfg(not(feature = "x86-vmenter-full-state"))]
+    if !pending {
         // seL4 `vcpu_sysvmenter_reply_to_user`: MR0..2 get the guest state
         // the next VMEnter resumes from (RIP, controls, event to inject);
         // every other message register is left as it was.
@@ -1116,18 +1140,28 @@ pub fn report<S: Store, A: Arch>(s: &mut S, a: &A, t: Tcb, badge: u64) {
         sched::set_thread_state(s, t, sched::TS_RUNNING);
         return;
     }
-    // A notification can arrive before entry, or after a host interrupt
-    // saved the guest registers. Only the latter has an exit frame from
-    // this VMEnter, including any interrupted event and its error code.
-    let valid = v != 0 && get(s, v, VALID) != 0;
+    #[cfg(feature = "x86-vmenter-full-state")]
+    let saved = v != 0 && get(s, v, VALID) != 0;
     let mut i = 0;
     while i < NUM_MRS {
-        let value = if pending || valid { get(s, v, EXIT + i * 8) } else { 0 };
-        msg::set_mr(s, t, b, i, value);
+        // A notification before entry has no exit frame. Clear stale exit
+        // metadata before reporting the staged state and the current GPRs.
+        #[cfg(feature = "x86-vmenter-full-state")]
+        if !pending && !saved {
+            msg::set_mr(s, t, b, i, 0);
+            i += 1;
+            continue;
+        }
+        msg::set_mr(s, t, b, i, get(s, v, EXIT + i * 8));
         i += 1;
     }
-    // A failed or interrupted entry: the staged state and current GPRs.
-    if v != 0 && !valid {
+    #[cfg(feature = "x86-vmenter-full-state")]
+    if v == 0 {
+        finish_notification(s, a, t, b, badge, false);
+        return;
+    }
+    // An entry without a hardware frame: report the staged state and GPRs.
+    if get(s, v, VALID) == 0 {
         let amd = a.virtualization() == 2;
         let ip = if amd {
             get(s, v, svm::RIP)
@@ -1152,6 +1186,9 @@ pub fn report<S: Store, A: Arch>(s: &mut S, a: &A, t: Tcb, badge: u64) {
             msg::set_mr(s, t, b, 10 + j, get(s, v, REGS + j * 8));
             j += 1;
         }
+    }
+    if get(s, v, VALID) == 0 {
+        let amd = a.virtualization() == 2;
         let flags = if amd {
             get(s, v, svm::RFLAGS)
         } else {
@@ -1173,22 +1210,14 @@ pub fn report<S: Store, A: Arch>(s: &mut S, a: &A, t: Tcb, badge: u64) {
         msg::set_mr(s, t, b, 9, cr3);
         msg::set_mr(s, t, b, 29, cr2);
     }
+    #[cfg(feature = "x86-vmenter-full-state")]
     if !pending {
-        // l4h patches 0039/0040 report an external interrupt. Preserve
-        // IDT vectoring from an interrupted delivery in MR27/28.
-        msg::set_mr(s, t, b, 3, if a.virtualization() == 2 { 0x60 } else { 1 });
-        msg::set_mr(s, t, b, 4, 0);
-        if !valid || get(s, v, EXIT + 27 * 8) & (1 << 31) == 0 {
-            msg::set_mr(s, t, b, 5, 0);
-        }
-        msg::set_mr(s, t, b, 6, 0);
-        msg::set_mr(s, t, b, 25, 0);
-        msg::set_mr(s, t, b, 26, 0);
+        let vectoring = saved && get(s, v, EXIT + 27 * 8) & (1 << 31) != 0;
+        finish_notification(s, a, t, b, badge, vectoring);
+        return;
     }
-    if v != 0 {
-        set(s, v, PENDING, 0);
-    }
-    t.set_reg(s, reg::MSG_INFO, if pending { 1 } else { 0 });
-    t.set_reg(s, reg::BADGE, if pending { 0 } else { badge });
+    set(s, v, PENDING, 0);
+    t.set_reg(s, reg::MSG_INFO, 1);
+    t.set_reg(s, reg::BADGE, 0);
     sched::set_thread_state(s, t, sched::TS_RUNNING);
 }

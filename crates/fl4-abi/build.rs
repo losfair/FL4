@@ -214,9 +214,6 @@ fn main() {
     for k in ["DEBUG_BUILD", "PRINTING", "HARDWARE_DEBUG_API", "KERNEL_INVOCATION_REPORT_ERROR_IPC", "IRQ_REPORTING", "ENABLE_SMP_SUPPORT", "SET_TLS_BASE_SELF", "KERNEL_X86_DANGEROUS_MSR", "EXPORT_PMC_USER"] {
         writeln!(o, "    pub const {k}: bool = {};", cfg_bool(&config, k)).unwrap();
     }
-    if !aarch64 {
-        writeln!(o, "    pub const X86_VMENTER_FULL_STATE: bool = {};", cfg_bool(&config, "X86_VMENTER_FULL_STATE")).unwrap();
-    }
     if aarch64 {
         // Counter and timer access user space asks for (AArch64 only).
         for k in ["ARM_EXPORT_PCNT_USER", "ARM_EXPORT_PTMR_USER", "ARM_EXPORT_VCNT_USER", "ARM_EXPORT_VTMR_USER"] {

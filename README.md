@@ -223,7 +223,8 @@ For VMMs built against l4h's seL4 patches 0039 and 0040, configure
 `-DKernelX86VmenterFullState=ON`. A notification then returns the full
 guest register frame, with the external-interrupt reason for the active
 backend. This includes a notification already pending at VM entry.
-The default follows the upstream seL4 notification ABI.
+The default follows the upstream seL4 notification ABI and is the x86
+configuration extracted by the Lean gate.
 
 Each core retains a VMCS and uses `VMRESUME` after its first successful
 launch. A field cache follows both software writes and guest changes read
