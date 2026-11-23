@@ -220,6 +220,7 @@ static int test_vm_execute(env_t env)
     test_eq(seL4_GetMR(SEL4_VMENTER_FAULT_REASON_MR), amd ? 0x72 : 10);
     test_eq(seL4_GetMR(SEL4_VMENTER_FAULT_EAX), regs.eax);
     test_eq(seL4_GetMR(SEL4_VMENTER_FAULT_R15), regs.r15);
+    test_eq(seL4_GetMR(SEL4_VMENTER_FAULT_INSTRUCTION_LEN_MR), 2);
     if (amd) {
         /* The entry rewrote the ASID word and clean bits from this core's
          * cache state: ReadVMCB hides both, WriteVMCB rejects both. */
@@ -232,7 +233,6 @@ static int test_vm_execute(env_t env)
         test_eq(vmcb_write(v.cptr, 0x58, 0), seL4_IllegalOperation);
         test_eq(vmcb_write(v.cptr, 0xc0, 0), seL4_IllegalOperation);
     }
-    test_eq(seL4_GetMR(SEL4_VMENTER_FAULT_INSTRUCTION_LEN_MR), 2);
     if (!amd) {
         /* Both kinds of failed VMRESUME must leave the VMCS launched,
          * and must not return the preceding CPUID exit's length. */
