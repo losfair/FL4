@@ -139,7 +139,7 @@ pub mod irq {
     pub const SPI_MAX: u64 = 1019;
     pub const BANKED_BASE: u64 = 1024;
     /// Cores with banked interrupt state (the backend's core limit).
-    pub const BANKED_CORES: u64 = 16;
+    pub const BANKED_CORES: u64 = 64;
     /// The VGIC maintenance interrupt PPI (SBSA).
     pub const VGIC_MAINT_ID: u64 = 25;
     /// The EL2 physical timer's PPI (SBSA), the kernel timer in EL2 VHE mode.

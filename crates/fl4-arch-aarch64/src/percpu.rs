@@ -11,7 +11,7 @@ use core::sync::atomic::{AtomicU64, Ordering};
 
 /// Cores the backend has room for (and that have banked interrupt state,
 /// `fl4_core::layout::irq::BANKED_CORES`).
-pub const MAX_CPUS: usize = 16;
+pub const MAX_CPUS: usize = 64;
 const _: () = assert!(MAX_CPUS as u64 == fl4_core::layout::irq::BANKED_CORES);
 pub const KSTACK_SIZE: usize = 64 * 1024;
 pub const NO_IRQ: u64 = u64::MAX;
