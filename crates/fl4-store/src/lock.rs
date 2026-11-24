@@ -27,6 +27,10 @@ pub trait Mem {
     fn a_add(&self, a: &AtomicU64, v: u64, o: Ordering) -> u64 {
         a.fetch_add(v, o)
     }
+    #[inline(always)]
+    fn fence(&self, o: Ordering) {
+        core::sync::atomic::fence(o)
+    }
 }
 
 const LOCK_BITS: u32 = 12;

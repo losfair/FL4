@@ -52,14 +52,22 @@ impl<T> core::ops::Deref for Line<T> {
     }
 }
 
-#[repr(C, align(64))]
+/// `serving` and `closed`, each on its own line: queued cores spin on
+/// `serving` and every local path reads `closed`, so a handoff while the
+/// gate stays closed (`release`) moves only the queued cores' line. On one
+/// line, every handoff pulled it back to every core (64 cores on a GCE N4A:
+/// getpid 19M ops/s, 24M apart).
+#[repr(C)]
 struct Head {
-    serving: AtomicU64,
+    serving: Line<AtomicU64>,
     /// 0: open; 1: closed, local paths may still be draining; 2: closed
     /// and drained. A successor that acquires `serving` inherits state 2
     /// while the gate remains closed.
-    closed: AtomicU64,
+    closed: Line<AtomicU64>,
 }
+
+// `acquire` drains the active flags through a u64 mask.
+const _: () = assert!(MAX_CPUS <= 64);
 
 /// The ticket counters and the gate state, on separate cache lines: a core
 /// takes a ticket with an add on `next` while queued successors spin on
@@ -86,7 +94,7 @@ impl SerialGate {
         SerialGate {
             policy: [const { Policy { local_hit: AtomicU64::new(1) } }; MAX_CPUS],
             next: Line(AtomicU64::new(0)),
-            head: Head { serving: AtomicU64::new(0), closed: AtomicU64::new(0) },
+            head: Head { serving: Line(AtomicU64::new(0)), closed: Line(AtomicU64::new(0)) },
             active: [const { Line(AtomicU64::new(0)) }; MAX_CPUS],
             owner: Line(AtomicU64::new(u64::MAX)),
             cores: AtomicU64::new(MAX_CPUS as u64),
@@ -138,17 +146,38 @@ impl SerialGate {
         }
         if m.a_load(&self.head.closed, Ordering::Relaxed) != 2 {
             m.a_store(&self.head.closed, 1, Ordering::SeqCst);
+            // The store, then every core's flag: one SeqCst fence orders
+            // them, and the flags are read with plain loads, whose misses
+            // overlap. SeqCst loads would be one after another on AArch64
+            // (LDAR), a cache miss each: with 64 cores, microseconds that
+            // every serial entry would wait.
+            m.fence(Ordering::SeqCst);
             let cores = self.cores.load(Ordering::Relaxed) as usize;
+            let mut busy = 0u64;
             for (c, a) in self.active[..cores].iter().enumerate() {
                 // (Mutation test: `mutant-gate-no-wait` does not wait.)
                 if c as u64 == cpu || cfg!(feature = "mutant-gate-no-wait") {
                     continue;
                 }
-                while m.a_load(&a.0, Ordering::SeqCst) != 0 {
-                    wait();
-                    core::hint::spin_loop();
+                if m.a_load(&a.0, Ordering::Relaxed) != 0 {
+                    busy |= 1 << c;
                 }
             }
+            while busy != 0 {
+                wait();
+                core::hint::spin_loop();
+                let mut left = busy;
+                while left != 0 {
+                    let c = left.trailing_zeros() as usize;
+                    left &= left - 1;
+                    if m.a_load(&self.active[c].0, Ordering::Relaxed) == 0 {
+                        busy &= !(1 << c);
+                    }
+                }
+            }
+            // What the drained local paths wrote (their `leave_local`
+            // releases) happens before this entry.
+            m.fence(Ordering::Acquire);
             m.a_store(&self.head.closed, 2, Ordering::Relaxed);
         }
         m.a_store(&self.owner, cpu, Ordering::Relaxed);
@@ -195,6 +224,19 @@ pub trait EntryEnv {
     /// kernel).
     fn holding_gate(&self);
     fn count(&self, _what: Count) {}
+    /// The time `local_wait_over` measures from, in the kernel's clock
+    /// ticks (read only once a local path finds the gate closed).
+    fn now(&self) -> u64 {
+        0
+    }
+    /// Whether `local_entry` has waited long enough for a closed gate to
+    /// open: `spins` spins since `start` (`now`). Without a clock, after
+    /// `LOCAL_WAIT_SPINS`. A kernel bounds the time instead (`LOCAL_WAIT_US`),
+    /// because what a spin costs depends on the CPU: an x86 `pause` takes
+    /// tens to over a hundred cycles, an AArch64 `yield` a few.
+    fn local_wait_over(&self, spins: u32, _start: u64) -> bool {
+        spins >= LOCAL_WAIT_SPINS
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -373,8 +415,16 @@ enum Candidate {
     Invocation,
 }
 
-/// How long `local_entry` waits for a closed gate to open: some tens of
-/// microseconds, several serial entries.
+/// How long `local_entry` waits for a closed gate to open, through
+/// `EntryEnv::local_wait_over`: many serial entries' worth. Too short a
+/// wait sends local paths into the gate's queue, which then keeps the gate
+/// closed (`release`) for the next ones to time out on, until nearly every
+/// syscall is serial. Measured on a 64-core GCE N4A (AArch64), getpid on
+/// 32/48/64 cores: 1024 spins (a few microseconds there) 0.4M/-/0.25M ops/s;
+/// 50 us 24M/0.27M/0.23M; 500 us 26M/23M/19M; 5 ms 26M/19M/16M (cores
+/// waiting out of FIFO order for longer).
+pub const LOCAL_WAIT_US: u64 = 500;
+/// The bound without a clock (the simulator), in spins.
 const LOCAL_WAIT_SPINS: u32 = 1024;
 
 enum Local {
@@ -395,12 +445,18 @@ fn local_entry<E: EntryEnv>(env: &E, gate: &SerialGate, local: &mut impl FnMut(&
     // The wait is bounded: serial entries queued back to back keep the
     // gate closed (`release`), and this core would wait out of FIFO order,
     // without its interrupts, for as long as they come; after
-    // `LOCAL_WAIT_SPINS` it takes a ticket.
+    // `LOCAL_WAIT_US` (`EntryEnv::local_wait_over`) it takes a ticket.
     let hit = &gate.policy[cpu as usize].local_hit;
     let mut spins = 0;
+    let mut start = 0;
     // (Mutation test: `mutant-local-no-active` does not mark the core.)
     while !cfg!(feature = "mutant-local-no-active") && !gate.try_enter_local(env.mem(), cpu) {
-        if env.mem().a_load(hit, Ordering::Relaxed) == 0 || spins == LOCAL_WAIT_SPINS {
+        if env.mem().a_load(hit, Ordering::Relaxed) == 0 {
+            return Local::Closed;
+        }
+        if spins == 0 {
+            start = env.now();
+        } else if env.local_wait_over(spins, start) {
             return Local::Closed;
         }
         spins += 1;

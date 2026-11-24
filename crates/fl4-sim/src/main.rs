@@ -555,6 +555,16 @@ impl lock::Mem for SimStore {
         self.drain();
         a.fetch_add(v, Ordering::SeqCst)
     }
+    fn fence(&self, o: Ordering) {
+        self.pause();
+        if let Some(c) = &self.conc {
+            c.explore_point(self.cpu);
+        }
+        // On x86 only a SeqCst fence (MFENCE) orders stores before loads.
+        if o == Ordering::SeqCst {
+            self.drain();
+        }
+    }
 }
 
 impl Store for SimStore {

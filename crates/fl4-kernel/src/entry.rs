@@ -333,6 +333,12 @@ impl fl4_sync::EntryEnv for KernelEnv {
         let pc = percpu::get();
         pc.gate_held.set(true);
     }
+    fn now(&self) -> u64 {
+        fl4_arch_x86_64::timer::now()
+    }
+    fn local_wait_over(&self, _spins: u32, start: u64) -> bool {
+        fl4_arch_x86_64::timer::now().wrapping_sub(start) >= fl4_arch_x86_64::timer::us_to_ticks(fl4_sync::LOCAL_WAIT_US)
+    }
     fn count(&self, what: fl4_sync::Count) {
         // These counters are exposed only by debug diagnostics. In a
         // release build their shared cache line would contend on every entry.
