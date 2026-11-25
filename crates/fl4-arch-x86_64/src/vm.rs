@@ -1057,22 +1057,31 @@ fn host_vmcs(gdt: &Table, idt: &Table, tr: u64) {
         vmwrite(HOST_PERF_GLOBAL_CTRL, msrs[2]);
     }
 }
-/// The host's STAR, LSTAR, CSTAR and FMASK, read once per core.
+/// The host's STAR, LSTAR, CSTAR and FMASK, read once per core; at every
+/// entry where user code may write MSRs (KERNEL_X86_DANGEROUS_MSR, as
+/// SVM's `SvmHost::needs_save`), so that such a write survives exits.
 fn host_syscall_msrs() -> [u64; 4] {
-    *local().host_syscall.get_or_insert_with(|| {
-        [cpu::rdmsr(0xc000_0081), cpu::rdmsr(0xc000_0082), cpu::rdmsr(0xc000_0083), cpu::rdmsr(0xc000_0084)]
-    })
+    let read = || [cpu::rdmsr(0xc000_0081), cpu::rdmsr(0xc000_0082), cpu::rdmsr(0xc000_0083), cpu::rdmsr(0xc000_0084)];
+    if fl4_abi::config::KERNEL_X86_DANGEROUS_MSR {
+        return read();
+    }
+    *local().host_syscall.get_or_insert_with(read)
 }
 /// The host's EFER, PAT and PERF_GLOBAL_CTRL, which the kernel sets at
 /// boot and never changes: read once per core, as an RDMSR is an exit of
-/// its own under a hypervisor.
+/// its own under a hypervisor; at every entry where user code may write
+/// MSRs (KERNEL_X86_DANGEROUS_MSR).
 fn host_msrs() -> [u64; 3] {
-    *local().host_msrs.get_or_insert_with(|| {
+    let read = || {
         // init_vmx removes this capability when CPUID does not expose a
         // usable PMU; a raw VMX capability bit alone cannot authorize RDMSR.
         let perf = if capability(0x483) >> 32 & (1 << 12) != 0 { cpu::rdmsr(0x38f) } else { 0 };
         [cpu::rdmsr(cpu::msr::EFER), cpu::rdmsr(0x277), perf]
-    })
+    };
+    if fl4_abi::config::KERNEL_X86_DANGEROUS_MSR {
+        return read();
+    }
+    *local().host_msrs.get_or_insert_with(read)
 }
 
 /// Run after the core registered the EPT root and current TCB under the
