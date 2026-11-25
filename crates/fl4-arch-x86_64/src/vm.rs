@@ -507,6 +507,8 @@ struct Core {
     current: u64,
     /// Host EFER, PAT and PERF_GLOBAL_CTRL, read once (`host_vmcs`).
     host_msrs: Option<[u64; 3]>,
+    /// Host STAR, LSTAR, CSTAR and FMASK, read once (`run`).
+    host_syscall: Option<[u64; 4]>,
     vmx_vpid: VmxVpidState,
     svm: SvmState,
     svm_host: SvmHost,
@@ -521,6 +523,7 @@ static CORES: Cores = Cores(UnsafeCell::new(
             host: Page([0; 4096]),
             current: 0,
             host_msrs: None,
+            host_syscall: None,
             vmx_vpid: VmxVpidState::new(),
             svm: SvmState::new(),
             svm_host: SvmHost { tls: None },
@@ -1054,6 +1057,12 @@ fn host_vmcs(gdt: &Table, idt: &Table, tr: u64) {
         vmwrite(HOST_PERF_GLOBAL_CTRL, msrs[2]);
     }
 }
+/// The host's STAR, LSTAR, CSTAR and FMASK, read once per core.
+fn host_syscall_msrs() -> [u64; 4] {
+    *local().host_syscall.get_or_insert_with(|| {
+        [cpu::rdmsr(0xc000_0081), cpu::rdmsr(0xc000_0082), cpu::rdmsr(0xc000_0083), cpu::rdmsr(0xc000_0084)]
+    })
+}
 /// The host's EFER, PAT and PERF_GLOBAL_CTRL, which the kernel sets at
 /// boot and never changes: read once per core, as an RDMSR is an exit of
 /// its own under a hypervisor.
@@ -1123,10 +1132,21 @@ pub fn run<S: Store>(s: &mut S, v: u64, tcb: u64, root: u64) -> u64 {
             vcpu::get(s, v, vcpu::MSRS + i as u64 * 8)
         },
     });
+    // STAR, LSTAR, CSTAR and FMASK are the kernel's, set at boot
+    // (fl4-kernel's gdt.rs) and read once per core: under a hypervisor
+    // each RDMSR of them is an exit of its own. KERNEL_GS_BASE holds the
+    // swapped-out user GS base and is read every time.
+    let syscall = if amd { [0; 4] } else { host_syscall_msrs() };
     let host_list: [Msr; 5] = core::array::from_fn(|i| Msr {
         number: msrs[i],
         reserved: 0,
-        value: if amd { 0 } else { cpu::rdmsr(msrs[i]) },
+        value: if amd {
+            0
+        } else if i < 4 {
+            syscall[i]
+        } else {
+            cpu::rdmsr(msrs[i])
+        },
     });
     if amd {
         vcpu::set(s, v, svm::IOPM_BASE, physical(maps().io.as_ptr() as u64));
