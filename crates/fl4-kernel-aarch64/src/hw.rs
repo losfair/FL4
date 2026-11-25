@@ -7,7 +7,10 @@
 use fl4_arch_aarch64::{mmu, serial, smp};
 use fl4_core::layout::pptr;
 
-pub const MAX_CPUS: usize = 64;
+/// Cores the tables may list: more than the kernel starts
+/// (`percpu::MAX_CPUS`), so that every redistributor is reserved.
+pub const MAX_CPUS: usize = 256;
+const _: () = assert!(MAX_CPUS >= fl4_arch_aarch64::percpu::MAX_CPUS);
 /// Redistributor ranges: one per core when the MADT's GICC entries give
 /// them (and the kernel reserves every one of them, started or not).
 pub const MAX_GICR: usize = MAX_CPUS;
