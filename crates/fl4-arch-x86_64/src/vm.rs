@@ -140,6 +140,23 @@ const fn slot_table() -> ([u8; 2048], usize) {
 }
 static SLOT: [u8; 2048] = slot_table().0;
 const _: () = assert!(slot_table().1 <= SLOTS);
+/// Per slot: its field, so that an encoding the image index aliases (a
+/// high half, a reserved bit) is not taken for a tracked field.
+static FIELD: [u64; SLOTS] = {
+    let t = slot_table().0;
+    let mut f = [u64::MAX; SLOTS];
+    let lists: [&[u64]; 4] = [&vcpu::READ_FIELDS, &vcpu::WRITE_FIELDS, &BACKEND_FIELDS, &BACKEND_COUNTS];
+    let mut l = 0;
+    while l < lists.len() {
+        let mut j = 0;
+        while j < lists[l].len() {
+            f[t[image_index(lists[l][j])] as usize - 1] = lists[l][j];
+            j += 1;
+        }
+        l += 1;
+    }
+    f
+};
 /// Guest-state fields an exit reads (kernel logic and the exit message
 /// use them); the guest's other guest-state fields are read on demand.
 const fn eager(field: u64) -> bool {
@@ -328,6 +345,7 @@ impl VmcsState {
     fn index(field: u64) -> Option<usize> {
         match SLOT[image_index(field) & 2047] {
             0 => None,
+            n if FIELD[n as usize - 1] != field => None,
             n => Some(n as usize - 1),
         }
     }
@@ -382,17 +400,37 @@ fn cur() -> &'static mut VmcsState {
     state(local().current)
 }
 
-/// Make VCPU `v`'s VMCS current on this core: cleared first on the core
-/// that last loaded it, if another (a VMCS may be active on one core
-/// only); its region initialized the first time. `v` does not run on any
-/// core (it is this core's to run, or stalled).
-fn load(v: u64) {
-    let me = percpu::cpu_index() as u64 + 1;
+/// Whether VCPU `v`'s VMCS can be made current on this core without a
+/// remote call: it is active here or nowhere (a VMCS may be active on
+/// one core only).
+pub fn loadable_here(v: u64) -> bool {
+    backend() != 1 || v == 0 || state(v).active == 0 || state(v).active == percpu::cpu_index() as u64 + 1
+}
+
+/// VMCLEAR VCPU `v`'s VMCS on the core that last loaded it, if another,
+/// so that this one may load it. A remote call: only with the serial gate
+/// held or from a local path (`smp`'s module comment), never from `run`,
+/// which runs after the gate is released and could otherwise take a stall
+/// while it waits for `CALL_LOCK`. `v` does not run on any core.
+pub fn evict(v: u64) {
+    if backend() != 1 {
+        return;
+    }
     let st = state(v);
+    let me = percpu::cpu_index() as u64 + 1;
     if st.active != 0 && st.active != me {
         crate::smp::remote_call(crate::smp::CALL_VMCLEAR, v, 0, 1 << (st.active - 1));
         st.active = 0;
     }
+}
+
+/// Make VCPU `v`'s VMCS current on this core, its region initialized the
+/// first time. It is active here or nowhere (`evict` first). `v` does not
+/// run on any core (it is this core's to run, or stalled).
+fn load(v: u64) {
+    let me = percpu::cpu_index() as u64 + 1;
+    let st = state(v);
+    assert!(st.active == 0 || st.active == me, "VMCS active on another core");
     let pa = physical(v + vcpu::VMCS);
     if st.active == 0 {
         if st.flags & VMCS_INIT == 0 {
@@ -445,9 +483,10 @@ pub fn sync(v: u64, field: u64) {
         return;
     }
     let st = state(v);
-    if st.flags & VMCS_INIT == 0 || st.synced(field) {
+    if st.flags & VMCS_INIT == 0 || VmcsState::index(field).is_none() || st.synced(field) {
         return;
     }
+    evict(v);
     load(v);
     let value = if !vmcs_field_exists(field, capability) {
         0
@@ -1288,8 +1327,9 @@ pub fn run<S: Store>(s: &mut S, v: u64, tcb: u64, root: u64) -> u64 {
         // invocation reads or writes one (`sync`).
         cur().synced = SYNCED_AFTER_EXIT;
         for field in vcpu::READ_FIELDS {
-            // Exit fields this exit does not define read as zero.
-            if field & 0xc00 == 0x400 {
+            // Exit fields this exit does not define, and fields this CPU
+            // lacks (whatever a VMM wrote), read as zero.
+            if field & 0xc00 == 0x400 || !vmcs_field_exists(field, capability) {
                 vcpu::write_vmcs(s, v, field, 0);
             }
         }
@@ -1734,7 +1774,11 @@ mod tests {
             }
         }
         assert_eq!(n, slot_table().1, "distinct fields, distinct slots");
-        assert_eq!(VmcsState::index(CONTROL_PAGE_FAULT_MASK), VmcsState::index(CONTROL_PAGE_FAULT_MASK));
+        // Encodings the image index aliases are not tracked fields: a high
+        // half, a reserved bit.
+        assert_eq!(VmcsState::index(GUEST_EFER | 1), None);
+        assert_eq!(VmcsState::index(GUEST_EFER | (1 << 12)), None);
+        assert_eq!(VmcsState::index(GUEST_RIP | (1 << 15)), None);
     }
     #[test]
     fn an_exit_reads_only_what_kernel_logic_and_the_message_need() {

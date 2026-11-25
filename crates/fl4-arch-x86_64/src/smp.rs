@@ -1,7 +1,8 @@
-//! Cross-core requests: remote calls (stall, TLB invalidation, FPU state)
-//! and reschedule IPIs. A remote call is made with the serial gate held,
-//! or, for a TLB invalidation, by a local path beside it (fl4-sync's frame
-//! invocations); `CALL_LOCK` gives one of them the mailbox at a time.
+//! Cross-core requests: remote calls (stall, TLB invalidation, FPU state,
+//! VMCLEAR) and reschedule IPIs. A remote call is made with the serial
+//! gate held, or, for a TLB invalidation or a VMCLEAR, by a local path
+//! beside it (fl4-sync's frame invocations; a VCPU state invocation's
+//! `vm::sync`); `CALL_LOCK` gives one of them the mailbox at a time.
 //! Targets service it in their interrupt handler or while spinning (on the
 //! gate, on `CALL_LOCK`; fl4-kernel), and the caller waits for every
 //! acknowledgement.
@@ -9,8 +10,9 @@
 //! The gate holder never waits for `CALL_LOCK`: it makes calls only in its
 //! body, after the local paths drained, and none starts until it leaves.
 //! So only local paths contend for it, and they make only TLB
-//! invalidations; a stall, which only the gate holder makes, cannot reach
-//! a core spinning for it. Every core a caller waits for is in user code,
+//! invalidations and VMCLEARs; a stall, which only the gate holder makes,
+//! cannot reach a core spinning for it. Code outside both (`vm::run`,
+//! after the gate is released) makes no remote call. Every core a caller waits for is in user code,
 //! idle, or in the kernel heading for a loop that services calls (local
 //! paths wait only here), so the wait ends.
 use crate::{apic, percpu};

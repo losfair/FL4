@@ -882,9 +882,9 @@ pub fn decode<S: Store, A: Arch>(
         if length < (if lbl == label::X86VCPUWriteVMCS { 2 } else { 1 }) {
             return illegal();
         }
-        a.vcpu_sync(v, f);
         if lbl == label::X86VCPUWriteVMCS {
             let val = sanitize_vmcs(a, f, value)?;
+            a.vcpu_sync(v, f);
             write_vmcs(s, v, f, val);
             // As WriteVMCB: a software write of the guest's paging state
             // (its paging registers, the PAE PDPTEs VM entry loads, and the
@@ -909,6 +909,7 @@ pub fn decode<S: Store, A: Arch>(
             if !contains(&READ_FIELDS, f) {
                 return illegal();
             }
+            a.vcpu_sync(v, f);
             let supported =
                 if f == GUEST_PERF_GLOBAL_CTRL && a.vcpu_capability(0x484) >> 32 & (1 << 13) == 0 {
                     false

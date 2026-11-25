@@ -740,6 +740,11 @@ pub fn exit() -> ! {
                         fl4_sync::Local::Closed | fl4_sync::Local::Declined => {}
                     }
                 }
+                // A VCPU whose VMCS another core last loaded is entered
+                // under the gate, which clears it there first (below).
+                if ready.is_some() && !fl4_arch_x86_64::vm::loadable_here(fl4_core::vcpu::bound(s, ct)) {
+                    ready = None;
+                }
                 if ready.is_none() {
                     lock();
                     ct = sched::cur_thread(s);
@@ -759,6 +764,11 @@ pub fn exit() -> ! {
             if let Some(root) = ready {
                 let root = if root == 0 { fl4_arch_x86_64::vm::empty_root() } else { root };
                 let v = fl4_core::vcpu::bound(s, ct);
+                // Still under the gate where it is held: `run` makes no
+                // remote call (fl4-arch-x86_64's smp module comment).
+                if percpu::get().gate_held.get() {
+                    fl4_arch_x86_64::vm::evict(v);
+                }
                 unlock();
                 let vector = fl4_arch_x86_64::vm::run(s, v, ct.0, root);
                 let irq = if vector == 0x100 {
