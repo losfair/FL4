@@ -117,6 +117,9 @@ fn wait_us(us: u64) {
     }
 }
 
+// The tables list every core start_aps may start, and more.
+const _: () = assert!(crate::hw::MAX_CPUS >= percpu::MAX_CPUS);
+
 /// Start the cores in `mpidrs` other than the boot core (which the tables
 /// may also leave out); returns the number running.
 pub fn start_aps(mpidrs: &[u64], ttbr1: u64) -> usize {
