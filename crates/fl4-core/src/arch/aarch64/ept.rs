@@ -488,7 +488,7 @@ mod tests {
         fn fpu_reload(&mut self, _: u64) {}
         fn fpu_release(&mut self, _: u64) {}
         fn remote_stall(&mut self, _: u64) {}
-        fn send_reschedule(&mut self, _: u64) {}
+        fn send_reschedule(&mut self, _: crate::machine::CoreMask) {}
         fn cache_op(&mut self, _: u64, _: u64, _: u64, _: u64, len: u64, paddr: u64) {
             self.log.borrow_mut().push(Ev::CacheClean(paddr, len));
         }

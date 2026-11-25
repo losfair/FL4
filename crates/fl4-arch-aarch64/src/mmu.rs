@@ -213,7 +213,7 @@ pub fn invalidate_asid(asid: u64) {
 }
 
 /// The cores other than this one whose current ASID is `asid`.
-pub fn cores_on(asid: u64) -> u64 {
+pub fn cores_on(asid: u64) -> fl4_core::machine::CoreMask {
     let me = percpu::cpu_index();
     let online = crate::smp::online_mask();
     let mut m = 0;
@@ -359,7 +359,7 @@ pub fn invalidate_high_vspace(root: u64) {
     HIGH_GEN.fetch_add(1, Ordering::SeqCst);
     let me = percpu::cpu_index();
     let online = crate::smp::online_mask();
-    let mut mask = 0u64;
+    let mut mask: fl4_core::machine::CoreMask = 0;
     for c in 0..percpu::MAX_CPUS {
         if c != me && online & (1 << c) != 0 && percpu::ttbr1(c) == Some(target) {
             mask |= 1 << c;
@@ -471,7 +471,7 @@ fn hw_vmid_for(asid: u64) -> u64 {
     if wrapped {
         let new_gen = VMID_TABLE.bump_gen();
         // 1. Synchronously retire every remote core from old-generation VMIDs.
-        crate::smp::remote_call(crate::smp::CALL_VMID_RETIRE, 0, 0, u64::MAX);
+        crate::smp::remote_call(crate::smp::CALL_VMID_RETIRE, 0, 0, u128::MAX);
         // 2. Retire this core to the empty Stage-2 root as well.
         let empty = EMPTY_S2_ROOT.load(Ordering::Relaxed);
         if cpu::is_el2_vhe() {
@@ -597,7 +597,7 @@ pub fn invalidate_stage2_vmid(asid: u64) {
     //    walker can refill from the retiring Stage-2 tables after TLBI.
     let me = percpu::cpu_index();
     let online = crate::smp::online_mask();
-    let mut mask = 0u64;
+    let mut mask: fl4_core::machine::CoreMask = 0;
     for c in 0..percpu::MAX_CPUS {
         if c != me && online & (1 << c) != 0 && percpu::s2_asid(c) == asid {
             mask |= 1 << c;

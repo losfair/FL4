@@ -100,9 +100,7 @@ pub fn stall<S: Store, A: Arch>(s: &mut S, a: &mut A) {
 pub fn remote_reschedule<S: Store, A: Arch>(s: &mut S, a: &mut A, cpu: u64) {
     let _ = a;
     if cpu != s.cur_cpu() {
-        let c = s.cur_cpu();
-        let m = node_get(s, c, node::IPI_PENDING) | (1u64 << (cpu & 63));
-        node_set(s, c, node::IPI_PENDING, m);
+        add_pending(s, cpu);
     }
 }
 
@@ -118,20 +116,36 @@ pub fn remote_queue_update<S: Store>(s: &mut S, t: Tcb) {
     let target = Tcb(node_get(s, cpu, node::CUR_THREAD));
     let idle = node_get(s, cpu, node::IDLE_THREAD);
     if target.0 == idle || t.prio(s) > target.prio(s) || node_get(s, cpu, node::REPROGRAM) != 0 {
-        let c = s.cur_cpu();
-        let m = node_get(s, c, node::IPI_PENDING) | (1u64 << (cpu & 63));
-        node_set(s, c, node::IPI_PENDING, m);
+        add_pending(s, cpu);
     }
+}
+
+/// Owe `cpu` a reschedule IPI at the end of this entry: its bit in the
+/// word of this core's `IPI_PENDING` pair that holds it.
+#[inline(always)]
+fn add_pending<S: Store>(s: &mut S, cpu: u64) {
+    let c = s.cur_cpu();
+    let off = if cpu & 64 == 0 { node::IPI_PENDING } else { node::IPI_PENDING_HI };
+    let m = node_get(s, c, off) | (1u64 << (cpu & 63));
+    node_set(s, c, off, m);
+}
+
+/// Whether core `cpu`'s entry owes no reschedule IPI.
+#[inline(always)]
+pub fn none_pending<S: Store>(s: &S, cpu: u64) -> bool {
+    node_get(s, cpu, node::IPI_PENDING) | node_get(s, cpu, node::IPI_PENDING_HI) == 0
 }
 
 /// Send the reschedule IPIs this entry asked for.
 #[inline(always)]
 pub fn send_pending<S: Store, A: Arch>(s: &mut S, a: &mut A) {
     let c = s.cur_cpu();
-    let m = node_get(s, c, node::IPI_PENDING);
-    if m != 0 {
+    let lo = node_get(s, c, node::IPI_PENDING);
+    let hi = node_get(s, c, node::IPI_PENDING_HI);
+    if lo | hi != 0 {
         node_set(s, c, node::IPI_PENDING, 0);
-        a.send_reschedule(m);
+        node_set(s, c, node::IPI_PENDING_HI, 0);
+        a.send_reschedule(((hi as u128) << 64) | lo as u128);
     }
 }
 

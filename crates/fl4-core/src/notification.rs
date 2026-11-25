@@ -150,7 +150,7 @@ fn kick_guest<S: Store, A: Arch>(s: &mut S, a: &mut A, t: Tcb) {
     {
         let cpu = t.affinity(s);
         if cpu != s.cur_cpu() && crate::obj::node_get(s, cpu, crate::layout::node::CUR_THREAD) == t.0 {
-            a.send_reschedule(1u64 << (cpu & 63));
+            a.send_reschedule(crate::machine::core_bit(cpu));
         }
     }
     #[cfg(feature = "aarch64")]

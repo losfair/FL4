@@ -162,7 +162,7 @@ pub(crate) fn timer_due<S: Store>(s: &S, cpu: u64, now: u64) -> bool {
 pub(crate) fn sched_quiet<S: Store>(s: &S, cpu: u64) -> bool {
     sched::action(s) == sched::ACTION_RESUME_CURRENT
         && sched::domain_time(s) != 0
-        && node_get(s, cpu, node::IPI_PENDING) == 0
+        && crate::smp::none_pending(s, cpu)
 }
 
 /// A thread `schedule()` may make current on this core and `exit` run

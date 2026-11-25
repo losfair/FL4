@@ -1065,9 +1065,10 @@ impl Arch for SimArch {
             }
         }
     }
-    fn send_reschedule(&mut self, mask: u64) {
+    fn send_reschedule(&mut self, mask: u128) {
         self.gate_only("send_reschedule");
-        self.apply(Effect::Reschedule(mask));
+        // The simulator's machines have far fewer than 64 cores.
+        self.apply(Effect::Reschedule(mask as u64));
     }
     fn putc(&mut self, c: u64) {
         self.apply(Effect::Putc(c as u8));

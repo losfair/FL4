@@ -7,6 +7,7 @@
 use crate::{gic, percpu};
 use core::sync::atomic::{AtomicU64, Ordering};
 use fl4_core::layout::irq;
+use fl4_core::machine::CoreMask;
 
 pub const CALL_STALL: u64 = 1;
 pub const CALL_FPU_DROP: u64 = 5;
@@ -23,24 +24,55 @@ pub const CALL_VMID_RETIRE: u64 = 11;
 /// Leave the `ArmHighVSpace` whose TTBR1 value is arg0 (`mmu::high_retired`).
 pub const CALL_HIGH_VSPACE: u64 = 12;
 
-static ONLINE: AtomicU64 = AtomicU64::new(1);
+/// A core set (`CoreMask`) as two words: cores 0-63, then 64-127.
+struct Cores([AtomicU64; 2]);
+
+impl Cores {
+    const fn new(lo: u64) -> Cores {
+        Cores([AtomicU64::new(lo), AtomicU64::new(0)])
+    }
+    fn load(&self, o: Ordering) -> CoreMask {
+        (self.0[1].load(o) as u128) << 64 | self.0[0].load(o) as u128
+    }
+    fn store(&self, m: CoreMask, o: Ordering) {
+        self.0[1].store((m >> 64) as u64, o);
+        self.0[0].store(m as u64, o);
+    }
+    /// Add (`set`) or remove core `c`.
+    fn set(&self, c: usize, set: bool, o: Ordering) {
+        let w = &self.0[(c >> 6) & 1];
+        let bit = 1u64 << (c & 63);
+        if set {
+            w.fetch_or(bit, o);
+        } else {
+            w.fetch_and(!bit, o);
+        }
+    }
+    fn has(&self, c: usize, o: Ordering) -> bool {
+        self.0[(c >> 6) & 1].load(o) & 1 << (c & 63) != 0
+    }
+}
+
+const _: () = assert!(percpu::MAX_CPUS <= 128);
+
+static ONLINE: Cores = Cores::new(1);
 static NUM_ONLINE: AtomicU64 = AtomicU64::new(1);
 
 struct Call {
     kind: AtomicU64,
     arg0: AtomicU64,
     arg1: AtomicU64,
-    pending: AtomicU64,
+    pending: Cores,
 }
 
-static CALL: Call = Call { kind: AtomicU64::new(0), arg0: AtomicU64::new(0), arg1: AtomicU64::new(0), pending: AtomicU64::new(0) };
+static CALL: Call = Call { kind: AtomicU64::new(0), arg0: AtomicU64::new(0), arg1: AtomicU64::new(0), pending: Cores::new(0) };
 
 pub fn set_online(c: usize) {
-    ONLINE.fetch_or(1 << c, Ordering::AcqRel);
+    ONLINE.set(c, true, Ordering::AcqRel);
     NUM_ONLINE.fetch_add(1, Ordering::AcqRel);
 }
 
-pub fn online_mask() -> u64 {
+pub fn online_mask() -> CoreMask {
     ONLINE.load(Ordering::Acquire)
 }
 
@@ -54,8 +86,8 @@ pub fn multi() -> bool {
 
 /// Make the cores in `mask` (other than this one) run a remote call, and
 /// wait until all have. The caller holds the serial gate.
-pub fn remote_call(kind: u64, arg0: u64, arg1: u64, mask: u64) {
-    let me = 1u64 << percpu::cpu_index();
+pub fn remote_call(kind: u64, arg0: u64, arg1: u64, mask: CoreMask) {
+    let me = 1u128 << percpu::cpu_index();
     let targets = mask & !me & online_mask();
     if targets == 0 {
         return;
@@ -63,6 +95,7 @@ pub fn remote_call(kind: u64, arg0: u64, arg1: u64, mask: u64) {
     CALL.kind.store(kind, Ordering::Relaxed);
     CALL.arg0.store(arg0, Ordering::Relaxed);
     CALL.arg1.store(arg1, Ordering::Relaxed);
+    // Both words before the first SGI: a target reads its own word only.
     CALL.pending.store(targets, Ordering::Release);
     for c in 0..percpu::MAX_CPUS {
         if targets & (1 << c) != 0 {
@@ -77,8 +110,8 @@ pub fn remote_call(kind: u64, arg0: u64, arg1: u64, mask: u64) {
 /// Service a remote call addressed to this core, if there is one.
 /// Returns whether a stall was serviced.
 pub fn service(stall: impl FnOnce()) -> bool {
-    let me = 1u64 << percpu::cpu_index();
-    if CALL.pending.load(Ordering::Acquire) & me == 0 {
+    let me = percpu::cpu_index();
+    if !CALL.pending.has(me, Ordering::Acquire) {
         return false;
     }
     let kind = CALL.kind.load(Ordering::Relaxed);
@@ -98,13 +131,13 @@ pub fn service(stall: impl FnOnce()) -> bool {
         CALL_HIGH_VSPACE => crate::mmu::high_retired(a0),
         _ => {}
     }
-    CALL.pending.fetch_and(!me, Ordering::AcqRel);
+    CALL.pending.set(me, false, Ordering::AcqRel);
     stalled
 }
 
 /// Send reschedule IPIs to the cores in `mask` other than this one.
-pub fn reschedule(mask: u64) {
-    let me = 1u64 << percpu::cpu_index();
+pub fn reschedule(mask: CoreMask) {
+    let me = 1u128 << percpu::cpu_index();
     let targets = mask & !me & online_mask();
     for c in 0..percpu::MAX_CPUS {
         if targets & (1 << c) != 0 {

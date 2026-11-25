@@ -1364,7 +1364,7 @@ mod tests {
         fn fpu_reload(&mut self, _: u64) {}
         fn fpu_release(&mut self, _: u64) {}
         fn remote_stall(&mut self, _: u64) {}
-        fn send_reschedule(&mut self, _: u64) {}
+        fn send_reschedule(&mut self, _: u128) {}
         fn cache_op(&mut self, op: u64, root: u64, asid: u64, vaddr: u64, len: u64, paddr: u64) {
             assert_eq!(root, layout::pptr(ROOT));
             self.log.borrow_mut().push(Ev::CacheOp { op, asid, vaddr, len, paddr });
@@ -1874,7 +1874,7 @@ mod high_window_tests {
         fn fpu_reload(&mut self, _: u64) {}
         fn fpu_release(&mut self, _: u64) {}
         fn remote_stall(&mut self, _: u64) {}
-        fn send_reschedule(&mut self, _: u64) {}
+        fn send_reschedule(&mut self, _: u128) {}
         fn cache_op(&mut self, _op: u64, root: u64, _asid: u64, vaddr: u64, _len: u64, _paddr: u64) {
             self.ev(Ev::CacheOp { root, vaddr })
         }

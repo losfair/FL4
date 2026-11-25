@@ -27,7 +27,7 @@ fn mask(irq: u64, m: bool) {
 /// remote call. It is done before the call
 /// returns, so an IRQ handler deleted from here is masked on its core.
 fn remote_gic(kind: u64, id: u64, core: u64, v: bool) {
-    smp::remote_call(kind, id, v as u64, 1u64 << (core & 63));
+    smp::remote_call(kind, id, v as u64, fl4_core::machine::core_bit(core));
 }
 
 /// The raw acknowledge value to end `irq` with: the one acknowledged, also
@@ -165,9 +165,9 @@ impl Arch for PhysArch {
     }
 
     fn remote_stall(&mut self, cpu: u64) {
-        smp::remote_call(smp::CALL_STALL, 0, 0, 1u64 << (cpu & 63));
+        smp::remote_call(smp::CALL_STALL, 0, 0, fl4_core::machine::core_bit(cpu));
     }
-    fn send_reschedule(&mut self, m: u64) {
+    fn send_reschedule(&mut self, m: fl4_core::machine::CoreMask) {
         smp::reschedule(m)
     }
 

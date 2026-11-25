@@ -942,7 +942,7 @@ mod tests {
         fn fpu_reload(&mut self, _: u64) {}
         fn fpu_release(&mut self, _: u64) {}
         fn remote_stall(&mut self, _: u64) {}
-        fn send_reschedule(&mut self, _: u64) {}
+        fn send_reschedule(&mut self, _: u128) {}
         fn cache_op(&mut self, _: u64, _: u64, _: u64, _: u64, _: u64, _: u64) {}
         fn hw_access_flag(&self) -> bool { true }
         fn max_spi(&self) -> u64 { 0 }
@@ -1070,7 +1070,7 @@ mod tests {
         fn fpu_reload(&mut self, _: u64) {}
         fn fpu_release(&mut self, t: u64) { self.fpu_released.push(t); }
         fn remote_stall(&mut self, cpu: u64) { self.stalls.push(cpu); }
-        fn send_reschedule(&mut self, _: u64) {}
+        fn send_reschedule(&mut self, _: u128) {}
         fn cache_op(&mut self, _: u64, _: u64, _: u64, _: u64, _: u64, _: u64) {}
         fn hw_access_flag(&self) -> bool { true }
         fn max_spi(&self) -> u64 { 0 }

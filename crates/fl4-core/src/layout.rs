@@ -86,8 +86,8 @@ pub const NUM_DOMAIN_SCHEDULES: u64 = config::NUM_DOMAIN_SCHEDULES;
 const _: () = assert!(NUM_DOMAINS == 1 || config::MAX_NUM_NODES == 1);
 pub const NUM_PRIORITIES: u64 = 256;
 pub const L2_BITMAP_WORDS: u64 = NUM_PRIORITIES / 64;
-/// Upper bound on cores (DESIGN.md §3): the user setting, at most 64.
-pub const MAX_NODES: u64 = if config::MAX_NUM_NODES > 64 { 64 } else { config::MAX_NUM_NODES };
+/// Upper bound on cores (DESIGN.md §3): the user setting, at most 128.
+pub const MAX_NODES: u64 = if config::MAX_NUM_NODES > 128 { 128 } else { config::MAX_NUM_NODES };
 
 /// Per-core state ("node" in seL4).
 pub mod node {
@@ -113,9 +113,10 @@ pub mod node {
     /// l4h 0003: the armed TCB with the earliest deadline.
     pub const TIMER_MIN: u64 = 112;
     /// Cores this entry must send a reschedule IPI to (seL4
-    /// ipiReschedulePending).
+    /// ipiReschedulePending): cores 0-63 here, 64-127 in `IPI_PENDING_HI`.
     pub const IPI_PENDING: u64 = 120;
-    pub const L1_BITMAP: u64 = 128;
+    pub const IPI_PENDING_HI: u64 = 128;
+    pub const L1_BITMAP: u64 = 136;
     pub const L2_BITMAP: u64 = L1_BITMAP + NUM_DOMAINS * WORD;
     pub const READY_QUEUES: u64 = L2_BITMAP + NUM_DOMAINS * L2_BITMAP_WORDS * WORD;
     /// Each queue is (head, tail).

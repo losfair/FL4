@@ -3,7 +3,7 @@
 use core::sync::atomic::{AtomicU64, Ordering};
 
 /// Cores the runtime supports: the serial gate's active flags.
-pub const MAX_CPUS: usize = 64;
+pub const MAX_CPUS: usize = 128;
 
 /// The runtime's atomics (serial gate, object locks) go through this, so
 /// that the simulator can run them on a store-buffer model of x86-TSO

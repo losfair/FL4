@@ -68,8 +68,8 @@ struct Head {
     closed: Line<AtomicU64>,
 }
 
-// `acquire` drains the active flags through a u64 mask.
-const _: () = assert!(MAX_CPUS <= 64);
+// `acquire` drains the active flags through a u128 mask.
+const _: () = assert!(MAX_CPUS <= 128);
 
 /// The ticket counters and the gate state, on separate cache lines: a core
 /// takes a ticket with an add on `next` while queued successors spin on
@@ -155,7 +155,7 @@ impl SerialGate {
             // every serial entry would wait.
             m.fence(Ordering::SeqCst);
             let cores = self.cores.load(Ordering::Relaxed) as usize;
-            let mut busy = 0u64;
+            let mut busy = 0u128;
             for (c, a) in self.active[..cores].iter().enumerate() {
                 // (Mutation test: `mutant-gate-no-wait` does not wait.)
                 if c as u64 == cpu || cfg!(feature = "mutant-gate-no-wait") {

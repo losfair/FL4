@@ -143,8 +143,8 @@ impl Arch for Machine {
     fn remote_stall(&mut self, c: u64) {
         self.ev.push(Ev::Stall(c));
     }
-    fn send_reschedule(&mut self, m: u64) {
-        self.ev.push(Ev::Reschedule(m));
+    fn send_reschedule(&mut self, m: u128) {
+        self.ev.push(Ev::Reschedule(m as u64));
     }
     fn cache_op(&mut self, _: u64, _: u64, _: u64, _: u64, _: u64, _: u64) {}
     fn hw_access_flag(&self) -> bool {
