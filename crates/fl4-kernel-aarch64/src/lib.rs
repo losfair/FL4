@@ -198,8 +198,8 @@ pub extern "C" fn fl4_boot(off: u64, el_mode: u64) -> ! {
         fail("too many memory map ranges");
     }
     let mib = |r: &Ranges| r.r[..r.n].iter().map(|x| x.end - x.start).sum::<u64>() >> 20;
-    kprintln!("FL4: {} MiB of free RAM in {} range(s) ({} MiB past the window), {} map entries",
-        mib(&usable), usable.n, mib(&all_usable) - mib(&usable), bi.n_mmap);
+    // Printed once there is a console.
+    let ram_report = (mib(&usable), usable.n, mib(&all_usable) - mib(&usable), bi.n_mmap);
     let mut window = [(0u64, 0u64); bootmem::MAX_RANGES];
     for i in 0..ram.n {
         window[i] = (ram.r[i].start, ram.r[i].end);
@@ -250,6 +250,8 @@ pub extern "C" fn fl4_boot(off: u64, el_mode: u64) -> ! {
     kprintln!("FL4: seL4 17.0 (MCS) API kernel, AArch64");
     kprintln!("FL4: hardware from the {}: GICv{}, {} core(s), console {} at {:#x}", h.source, h.gic_version, h.n_cpus,
         match h.uart_kind { serial::KIND_PL011 => "PL011", serial::KIND_16550 => "16550", _ => "none" }, h.uart_base);
+    kprintln!("FL4: {} MiB of free RAM in {} range(s) ({} MiB past the window), {} map entries",
+        ram_report.0, ram_report.1, ram_report.2, ram_report.3);
     if !cpu::has_asid16() {
         fail("16-bit ASIDs are required (l4h 0016)");
     }
