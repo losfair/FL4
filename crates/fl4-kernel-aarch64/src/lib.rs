@@ -245,8 +245,8 @@ pub extern "C" fn fl4_boot(off: u64, el_mode: u64) -> ! {
         serial::init(h.uart_kind, base, h.uart_shift, h.uart_wide);
     }
     kprintln!("FL4: seL4 17.0 (MCS) API kernel, AArch64");
-    kprintln!("FL4: hardware from the {}: GICv{}, {} core(s), console {}", h.source, h.gic_version, h.n_cpus,
-        match h.uart_kind { serial::KIND_PL011 => "PL011", serial::KIND_16550 => "16550", _ => "none" });
+    kprintln!("FL4: hardware from the {}: GICv{}, {} core(s), console {} at {:#x}", h.source, h.gic_version, h.n_cpus,
+        match h.uart_kind { serial::KIND_PL011 => "PL011", serial::KIND_16550 => "16550", _ => "none" }, h.uart_base);
     if !cpu::has_asid16() {
         fail("16-bit ASIDs are required (l4h 0016)");
     }
