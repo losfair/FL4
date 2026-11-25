@@ -57,6 +57,12 @@ impl Arch for PhysArch {
     fn virtualization(&self) -> u64 { crate::vm::backend() }
     fn vcpu_capability(&self, field: u64) -> u64 { crate::vm::capability(field) }
     fn vcpu_barrier(&mut self) {}
+    fn vcpu_sync(&mut self, v: u64, field: u64) {
+        crate::vm::sync(v, field)
+    }
+    fn vcpu_release(&mut self, v: u64) {
+        crate::vm::release(v)
+    }
     fn invalidate_ept(&mut self, root: u64, mask: u64) {
         crate::vm::invalidate_local(root);
         smp::remote_call(smp::CALL_EPT, root, 0, mask);

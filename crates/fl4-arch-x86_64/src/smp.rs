@@ -27,6 +27,9 @@ pub const CALL_FPU_DROP: u64 = 5;
 pub const CALL_EPT: u64 = 6;
 pub const CALL_FPU_RELEASE: u64 = 7;
 pub const CALL_CVM_INVLPG: u64 = 8;
+/// VMCLEAR a VCPU's VMCS here: it is to be loaded on another core or
+/// deleted (`vm::load`, `vm::release`).
+pub const CALL_VMCLEAR: u64 = 9;
 
 /// Kernel entries by how they ran, on all cores (DESIGN.md §7).
 pub static SERIAL_ENTRIES: AtomicU64 = AtomicU64::new(0);
@@ -126,6 +129,7 @@ pub fn service(stall: impl FnOnce()) -> bool {
         CALL_FPU_DROP => crate::fpu::forget_local(a0),
         CALL_FPU_RELEASE => crate::fpu::release_local(a0),
         CALL_CVM_INVLPG => crate::cvm::invalidate_aliases(a0, a1),
+        CALL_VMCLEAR => crate::vm::vmclear_local(a0),
         _ => {}
     }
     CALL.pending.fetch_and(!me, Ordering::AcqRel);

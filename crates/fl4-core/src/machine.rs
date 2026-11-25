@@ -54,6 +54,14 @@ pub trait Arch {
     fn vcpu_capability(&self, _field: u64) -> u64 { 0 }
     /// Require the serial gate before accessing live virtualization state.
     fn vcpu_barrier(&mut self) {}
+    /// Before kernel logic reads or writes field `field` of VCPU `v`'s
+    /// software VMCS image (`vcpu::read_vmcs`, `vcpu::write_vmcs`) for an
+    /// invocation: bring the image up to date with the VCPU's hardware
+    /// VMCS, which keeps guest state between exits (VMX). `v` is stalled.
+    fn vcpu_sync(&mut self, _v: u64, _field: u64) {}
+    /// VCPU `v` is being deleted: no core may keep its hardware state
+    /// (VMX: its VMCS is cleared wherever it is active). `v` is stalled.
+    fn vcpu_release(&mut self, _v: u64) {}
     /// Drop nested translations on the cores in mask, synchronously.
     fn invalidate_ept(&mut self, _root: u64, _mask: u64) {}
 

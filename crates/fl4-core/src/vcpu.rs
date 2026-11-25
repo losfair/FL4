@@ -13,7 +13,11 @@ use crate::obj::{ks_get, ks_set, node_get, Ntfn, Slot, Tcb, NTFN_ACTIVE, NTFN_ID
 use crate::{sched, smp};
 use fl4_abi::label;
 
-// 32 KiB: VMCB, VMCS software image, metadata/registers, I/O bitmap.
+// 32 KiB: VMCB (SVM) or the hardware VMCS (VMX), VMCS software image,
+// metadata/registers, the VMX backend's own state, I/O bitmap.
+/// The hardware VMCS region (VMX): the VMCB's page, which kernel logic
+/// leaves to the backend on VMX.
+pub const VMCS: u64 = 0;
 pub const SHADOW: u64 = 0x1000;
 pub const TCB: u64 = 0x5000;
 pub const NEXT: u64 = 0x5008;
@@ -39,6 +43,9 @@ pub const MSR_VM_IBPB_DEFER: u64 = 0xffff_fffd;
 pub const REGS: u64 = 0x5100;
 pub const MSRS: u64 = 0x5180;
 pub const EXIT: u64 = 0x5200;
+/// The VMX backend's bookkeeping for the VCPU's hardware VMCS (zero after
+/// retype), up to `IO`. Kernel logic neither reads nor writes it.
+pub const VMX_STATE: u64 = 0x5300;
 pub const IO: u64 = 0x6000;
 pub const NUM_MRS: u64 = 30;
 pub const CR4_ALLOWED: u64 = 0x0fff | (1 << 16) | (1 << 17) | (1 << 18) | (1 << 20) | (1 << 21) | (1 << 22);
@@ -729,6 +736,7 @@ pub fn detach<S: Store, A: Arch>(s: &mut S, a: &mut A, t: Tcb) {
 }
 pub fn finalise<S: Store, A: Arch>(s: &mut S, a: &mut A, v: u64) {
     stall(s, a, v);
+    a.vcpu_release(v);
     let t = Tcb(get(s, v, TCB));
     if !t.is_null() {
         detach(s, a, t);
@@ -874,6 +882,7 @@ pub fn decode<S: Store, A: Arch>(
         if length < (if lbl == label::X86VCPUWriteVMCS { 2 } else { 1 }) {
             return illegal();
         }
+        a.vcpu_sync(v, f);
         if lbl == label::X86VCPUWriteVMCS {
             let val = sanitize_vmcs(a, f, value)?;
             write_vmcs(s, v, f, val);

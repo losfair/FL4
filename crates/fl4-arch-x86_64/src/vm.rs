@@ -64,12 +64,108 @@ extern "C" {
 #[repr(C, align(4096))]
 struct Page([u8; 4096]);
 
+/// A VCPU's own VMCS (in its object at `vcpu::VMCS`, the VMCB's page) and
+/// its bookkeeping (at `vcpu::VMX_STATE`, zero after retype). The VMCS
+/// keeps the guest's state between exits, as seL4's and KVM's do: an exit
+/// reads only what kernel logic and the exit message need (`EAGER`), and
+/// the other guest-state fields reach the software image when an
+/// invocation needs one (`sync`). A VMCS is VMCLEARed on the core that
+/// last loaded it before another core loads it (`load`) or its object is
+/// deleted (`release`).
+///
+/// Per tracked field (`slot`): `values` holds what the VMCS holds where
+/// `valid` says so, so an entry writes only what changed; `synced` says
+/// that the image holds it too. A field not synced is a guest-state field
+/// the guest may have changed since its last exit; its image and `values`
+/// still agree, so an entry leaves it alone.
+#[repr(C)]
 struct VmcsState {
-    values: [u64; 2048],
-    valid: [u64; 32],
-    loaded: bool,
-    launched: bool,
+    /// The core (index + 1) that loaded the VMCS since it was last
+    /// cleared, if any.
+    active: u64,
+    flags: u64,
+    valid: [u64; SLOT_WORDS],
+    synced: [u64; SLOT_WORDS],
+    values: [u64; SLOTS],
 }
+/// `VmcsState::flags`: the region has its revision identifier and its
+/// tracked values; VMRESUME rather than VMLAUNCH.
+const VMCS_INIT: u64 = 1;
+const VMCS_LAUNCHED: u64 = 2;
+const SLOTS: usize = 192;
+const SLOT_WORDS: usize = SLOTS / 64;
+const _: () = assert!(
+    core::mem::size_of::<VmcsState>() as u64 <= vcpu::IO - vcpu::VMX_STATE
+        && vcpu::VMX_STATE >= vcpu::EXIT + vcpu::NUM_MRS * 8
+);
+
+/// Fields the backend writes besides `vcpu::WRITE_FIELDS`: host state and
+/// the kernel's own controls.
+const BACKEND_FIELDS: [u64; 35] = [
+    HOST_CR0, HOST_CR3, HOST_CR4, HOST_ES_SELECTOR, HOST_CS_SELECTOR, HOST_SS_SELECTOR, HOST_DS_SELECTOR,
+    HOST_FS_SELECTOR, HOST_GS_SELECTOR, HOST_TR_SELECTOR, HOST_FS_BASE, HOST_GS_BASE, HOST_TR_BASE,
+    HOST_GDTR_BASE, HOST_IDTR_BASE, HOST_SYSENTER_CS, HOST_SYSENTER_ESP, HOST_SYSENTER_EIP, HOST_EFER,
+    HOST_PAT, HOST_PERF_GLOBAL_CTRL, HOST_RIP, HOST_RSP, CONTROL_VPID, CONTROL_PAGE_FAULT_MASK,
+    CONTROL_PAGE_FAULT_MATCH, CONTROL_CR3_TARGET_COUNT, GUEST_VMCS_LINK_POINTER, CONTROL_IOA_ADDRESS,
+    CONTROL_IOB_ADDRESS, CONTROL_MSR_ADDRESS, CONTROL_EPT_POINTER, CONTROL_EXIT_MSR_STORE_ADDRESS,
+    CONTROL_EXIT_MSR_LOAD_ADDRESS, CONTROL_ENTRY_MSR_LOAD_ADDRESS,
+];
+const BACKEND_COUNTS: [u64; 3] =
+    [CONTROL_EXIT_MSR_STORE_COUNT, CONTROL_EXIT_MSR_LOAD_COUNT, CONTROL_ENTRY_MSR_LOAD_COUNT];
+
+/// The software image's index of `field` (`vcpu::vmcs_addr`).
+const fn image_index(field: u64) -> usize {
+    (((field & 0xff) >> 1) | (((field >> 10) & 3) << 7) | (((field >> 13) & 3) << 9)) as usize
+}
+/// Per image index: its slot + 1, or 0 for a field not tracked (always
+/// written, never cached); and how many slots there are.
+const fn slot_table() -> ([u8; 2048], usize) {
+    let mut t = [0u8; 2048];
+    let mut n = 0;
+    let lists: [&[u64]; 4] = [&vcpu::READ_FIELDS, &vcpu::WRITE_FIELDS, &BACKEND_FIELDS, &BACKEND_COUNTS];
+    let mut l = 0;
+    while l < lists.len() {
+        let mut i = 0;
+        while i < lists[l].len() {
+            let x = image_index(lists[l][i]);
+            if t[x] == 0 {
+                n += 1;
+                t[x] = n as u8;
+            }
+            i += 1;
+        }
+        l += 1;
+    }
+    (t, n)
+}
+static SLOT: [u8; 2048] = slot_table().0;
+const _: () = assert!(slot_table().1 <= SLOTS);
+/// Guest-state fields an exit reads (kernel logic and the exit message
+/// use them); the guest's other guest-state fields are read on demand.
+const fn eager(field: u64) -> bool {
+    field & 0xc00 != 0x800 || matches!(field, GUEST_RIP | GUEST_RFLAGS | GUEST_INTERRUPTABILITY)
+}
+/// `VmcsState::synced` after an exit: every tracked field but the lazy
+/// guest-state ones.
+const SYNCED_AFTER_EXIT: [u64; SLOT_WORDS] = {
+    let t = slot_table().0;
+    let mut m = [0u64; SLOT_WORDS];
+    let lists: [&[u64]; 4] = [&vcpu::READ_FIELDS, &vcpu::WRITE_FIELDS, &BACKEND_FIELDS, &BACKEND_COUNTS];
+    let mut l = 0;
+    while l < lists.len() {
+        let mut j = 0;
+        while j < lists[l].len() {
+            let f = lists[l][j];
+            let i = t[image_index(f)] as usize - 1;
+            if eager(f) {
+                m[i / 64] |= 1 << (i % 64);
+            }
+            j += 1;
+        }
+        l += 1;
+    }
+    m
+};
 
 /// Only one SVM address space is retained per core. The VCPU's owner word
 /// distinguishes migration and retype at the same address; core policy
@@ -219,19 +315,24 @@ impl SvmHost {
     }
 }
 impl VmcsState {
+    #[cfg(test)]
     const fn new() -> Self {
-        Self {
-            values: [0; 2048],
-            valid: [0; 32],
-            loaded: false,
-            launched: false,
+        Self { active: 0, flags: 0, valid: [0; SLOT_WORDS], synced: [0; SLOT_WORDS], values: [0; SLOTS] }
+    }
+    /// A fresh VMCS: nothing cached, the image is everything.
+    fn reset(&mut self) {
+        self.flags = VMCS_INIT;
+        self.valid = [0; SLOT_WORDS];
+        self.synced = [u64::MAX; SLOT_WORDS];
+    }
+    fn index(field: u64) -> Option<usize> {
+        match SLOT[image_index(field) & 2047] {
+            0 => None,
+            n => Some(n as usize - 1),
         }
     }
-    fn index(field: u64) -> usize {
-        ((vcpu::vmcs_addr(0, field) - vcpu::SHADOW) / 8) as usize
-    }
     fn get(&self, field: u64) -> Option<u64> {
-        let i = Self::index(field);
+        let i = Self::index(field)?;
         if self.valid[i / 64] & (1 << (i % 64)) != 0 {
             Some(self.values[i])
         } else {
@@ -239,9 +340,10 @@ impl VmcsState {
         }
     }
     fn observe(&mut self, field: u64, value: u64) {
-        let i = Self::index(field);
-        self.values[i] = value;
-        self.valid[i / 64] |= 1 << (i % 64);
+        if let Some(i) = Self::index(field) {
+            self.values[i] = value;
+            self.valid[i / 64] |= 1 << (i % 64);
+        }
     }
     fn write(&mut self, field: u64, value: u64, write: impl FnOnce(u64, u64)) {
         if self.get(field) != Some(value) {
@@ -249,21 +351,123 @@ impl VmcsState {
             self.observe(field, value);
         }
     }
+    fn synced(&self, field: u64) -> bool {
+        Self::index(field).is_none_or(|i| self.synced[i / 64] & (1 << (i % 64)) != 0)
+    }
+    fn set_synced(&mut self, field: u64) {
+        if let Some(i) = Self::index(field) {
+            self.synced[i / 64] |= 1 << (i % 64);
+        }
+    }
+    fn launched(&self) -> bool {
+        self.flags & VMCS_LAUNCHED != 0
+    }
     fn finish_entry(&mut self, failed: bool, reason: u64) -> bool {
         let valid = !failed && reason & (1 << 31) == 0;
         // Failed launches stay clear; failed resumes stay launched. Intel
         // sets the launch state only after guest-state and MSR checks.
-        self.launched |= valid;
+        if valid {
+            self.flags |= VMCS_LAUNCHED;
+        }
         valid
     }
+}
+/// VCPU `v`'s VMCS bookkeeping.
+fn state(v: u64) -> &'static mut VmcsState {
+    unsafe { &mut *((v + vcpu::VMX_STATE) as *mut VmcsState) }
+}
+/// The bookkeeping of this core's current VMCS.
+fn cur() -> &'static mut VmcsState {
+    debug_assert!(local().current != 0);
+    state(local().current)
+}
+
+/// Make VCPU `v`'s VMCS current on this core: cleared first on the core
+/// that last loaded it, if another (a VMCS may be active on one core
+/// only); its region initialized the first time. `v` does not run on any
+/// core (it is this core's to run, or stalled).
+fn load(v: u64) {
+    let me = percpu::cpu_index() as u64 + 1;
+    let st = state(v);
+    if st.active != 0 && st.active != me {
+        crate::smp::remote_call(crate::smp::CALL_VMCLEAR, v, 0, 1 << (st.active - 1));
+        st.active = 0;
+    }
+    let pa = physical(v + vcpu::VMCS);
+    if st.active == 0 {
+        if st.flags & VMCS_INIT == 0 {
+            let id = BASIC.load(Ordering::Relaxed) as u32 & 0x7fff_ffff;
+            unsafe { core::ptr::write_volatile((v + vcpu::VMCS) as *mut u32, id) };
+            st.reset();
+        }
+        // Cleared (again): launch state clear, as VMPTRLD on a new core
+        // needs. The region keeps the fields, so `values` stays valid.
+        assert!(vmclear(pa) && vmptrld(pa));
+        st.flags &= !VMCS_LAUNCHED;
+        st.active = me;
+    } else if local().current != v {
+        assert!(vmptrld(pa));
+    }
+    local().current = v;
+}
+
+/// VMCLEAR VCPU `v`'s VMCS on this core (`smp::CALL_VMCLEAR`, `release`).
+pub fn vmclear_local(v: u64) {
+    assert!(vmclear(physical(v + vcpu::VMCS)));
+    if local().current == v {
+        local().current = 0;
+    }
+}
+
+/// VCPU `v` is being deleted (`Arch::vcpu_release`): its VMCS is cleared
+/// wherever it is active, so that no core writes it back to memory that
+/// is reused.
+pub fn release(v: u64) {
+    if backend() != 1 {
+        return;
+    }
+    let st = state(v);
+    let me = percpu::cpu_index() as u64 + 1;
+    match st.active {
+        0 => {}
+        a if a == me => vmclear_local(v),
+        a => crate::smp::remote_call(crate::smp::CALL_VMCLEAR, v, 0, 1 << (a - 1)),
+    }
+    st.active = 0;
+}
+
+/// Before an invocation reads or writes field `field` of VCPU `v`'s
+/// software image (`Arch::vcpu_sync`): a guest-state field the guest may
+/// have changed since its last exit is read from its VMCS into the image
+/// (and the cache, so a write of its old value back is seen as a change).
+pub fn sync(v: u64, field: u64) {
+    if backend() != 1 {
+        return;
+    }
+    let st = state(v);
+    if st.flags & VMCS_INIT == 0 || st.synced(field) {
+        return;
+    }
+    load(v);
+    let value = if !vmcs_field_exists(field, capability) {
+        0
+    } else if field == CONTROL_SECONDARY_PROCESSOR_CONTROLS {
+        vmread(field) & !VPID_ENABLE
+    } else {
+        vmread(field)
+    };
+    unsafe { core::ptr::write_volatile(vcpu::vmcs_addr(v, field) as *mut u64, value) };
+    st.set_synced(field);
 }
 
 #[repr(C, align(4096))]
 struct Core {
     enable: Page,
     host: Page,
-    vmcs: Page,
-    vmx: VmcsState,
+    /// The VCPU whose VMCS is current here (`load`), if any.
+    current: u64,
+    /// Host EFER, PAT and PERF_GLOBAL_CTRL, read once (`host_vmcs`).
+    host_msrs: Option<[u64; 3]>,
     vmx_vpid: VmxVpidState,
     svm: SvmState,
     svm_host: SvmHost,
@@ -276,8 +480,8 @@ static CORES: Cores = Cores(UnsafeCell::new(
         Core {
             enable: Page([0; 4096]),
             host: Page([0; 4096]),
-            vmcs: Page([0; 4096]),
-            vmx: VmcsState::new(),
+            current: 0,
+            host_msrs: None,
             vmx_vpid: VmxVpidState::new(),
             svm: SvmState::new(),
             svm_host: SvmHost { tls: None },
@@ -418,11 +622,11 @@ fn vmread(f: u64) -> u64 {
     }
     // Guest execution can change fields without VMWRITE. The cache must
     // reflect hardware before a VMM changes one back to its old value.
-    local().vmx.observe(f, value);
+    cur().observe(f, value);
     value
 }
 fn vmwrite(f: u64, value: u64) {
-    local().vmx.write(f, value, |field, value| unsafe {
+    cur().write(f, value, |field, value| unsafe {
         asm!("vmwrite {field}, {value}", field=in(reg) field, value=in(reg) value, options(nostack));
     });
 }
@@ -676,7 +880,6 @@ fn init_vmx(bsp: bool) -> Result<(), u64> {
     }
     let c = local();
     c.enable.0[..4].copy_from_slice(&(basic as u32 & 0x7fff_ffff).to_le_bytes());
-    c.vmcs.0[..4].copy_from_slice(&(basic as u32 & 0x7fff_ffff).to_le_bytes());
     cpu::write_cr4(cr4);
     let pa = physical(c.enable.0.as_ptr() as u64);
     let fail: u8;
@@ -783,6 +986,7 @@ fn host_tables() -> (Table, Table, u64) {
     (gdt, idt, tr)
 }
 fn host_vmcs(gdt: &Table, idt: &Table, tr: u64) {
+    let msrs = host_msrs();
     for (field, value) in [
         (HOST_CR0, cpu::read_cr0()),
         (HOST_CR3, cpu::read_cr3()),
@@ -802,16 +1006,25 @@ fn host_vmcs(gdt: &Table, idt: &Table, tr: u64) {
         (HOST_SYSENTER_CS, 0),
         (HOST_SYSENTER_ESP, 0),
         (HOST_SYSENTER_EIP, 0),
-        (HOST_EFER, cpu::rdmsr(cpu::msr::EFER)),
-        (HOST_PAT, cpu::rdmsr(0x277)),
+        (HOST_EFER, msrs[0]),
+        (HOST_PAT, msrs[1]),
     ] {
         vmwrite(field, value);
     }
-    // init_vmx removes this capability when CPUID does not expose a
-    // usable PMU; a raw VMX capability bit alone cannot authorize RDMSR.
     if capability(0x483) >> 32 & (1 << 12) != 0 {
-        vmwrite(HOST_PERF_GLOBAL_CTRL, cpu::rdmsr(0x38f));
+        vmwrite(HOST_PERF_GLOBAL_CTRL, msrs[2]);
     }
+}
+/// The host's EFER, PAT and PERF_GLOBAL_CTRL, which the kernel sets at
+/// boot and never changes: read once per core, as an RDMSR is an exit of
+/// its own under a hypervisor.
+fn host_msrs() -> [u64; 3] {
+    *local().host_msrs.get_or_insert_with(|| {
+        // init_vmx removes this capability when CPUID does not expose a
+        // usable PMU; a raw VMX capability bit alone cannot authorize RDMSR.
+        let perf = if capability(0x483) >> 32 & (1 << 12) != 0 { cpu::rdmsr(0x38f) } else { 0 };
+        [cpu::rdmsr(cpu::msr::EFER), cpu::rdmsr(0x277), perf]
+    })
 }
 
 /// Run after the core registered the EPT root and current TCB under the
@@ -836,8 +1049,8 @@ pub fn run<S: Store>(s: &mut S, v: u64, tcb: u64, root: u64) -> u64 {
         guest_xcr0: vcpu::get(s, v, vcpu::XCR0),
         guest_cr2: vcpu::get(s, v, vcpu::CR2),
         failed: 0,
-        resume: local().vmx.launched as u64,
-        host_rsp: local().vmx.get(HOST_RSP).unwrap_or(0),
+        resume: 0,
+        host_rsp: 0,
         speculation: spec::vmexit().expect("VM backend without speculation protection") as u64,
     };
     // The exit's IBPB at the next switch to another address space.
@@ -910,11 +1123,9 @@ pub fn run<S: Store>(s: &mut S, v: u64, tcb: u64, root: u64) -> u64 {
             }
         }
     } else {
-        if !local().vmx.loaded {
-            let pa = physical(local().vmcs.0.as_ptr() as u64);
-            assert!(vmclear(pa) && vmptrld(pa));
-            local().vmx.loaded = true;
-        }
+        load(v);
+        run.resume = cur().launched() as u64;
+        run.host_rsp = cur().get(HOST_RSP).unwrap_or(0);
         let vpid = VPID_MODE.load(Ordering::Relaxed);
         for field in vcpu::WRITE_FIELDS {
             if vmcs_field_exists(field, capability) {
@@ -1067,35 +1278,32 @@ pub fn run<S: Store>(s: &mut S, v: u64, tcb: u64, root: u64) -> u64 {
         } else {
             raw & 0xffff
         };
-        valid = local().vmx.finish_entry(run.failed != 0, raw);
-        local().vmx.observe(HOST_RSP, run.host_rsp);
+        valid = cur().finish_entry(run.failed != 0, raw);
+        cur().observe(HOST_RSP, run.host_rsp);
         if valid && VPID_MODE.load(Ordering::Relaxed) != 0 {
             local().vmx_vpid.valid = true;
             vcpu::set(s, v, vcpu::SVM_CPU, s.cur_cpu() + 1);
         }
+        // The guest's other guest-state fields stay in its VMCS until an
+        // invocation reads or writes one (`sync`).
+        cur().synced = SYNCED_AFTER_EXIT;
         for field in vcpu::READ_FIELDS {
-            // Undefined exit fields must not expose another VCPU's last
-            // exit from this core's reusable VMCS.
-            let value = if field & 0xc00 == 0x400 || !vmcs_field_exists(field, capability) {
-                0
-            } else if field == CONTROL_SECONDARY_PROCESSOR_CONTROLS {
-                // "Enable VPID" is the kernel's, never the VMM's.
-                vmread(field) & !VPID_ENABLE
-            } else {
-                vmread(field)
-            };
-            vcpu::write_vmcs(s, v, field, value);
+            // Exit fields this exit does not define read as zero.
+            if field & 0xc00 == 0x400 {
+                vcpu::write_vmcs(s, v, field, 0);
+            }
         }
         for (i, msr) in guest_list.iter().enumerate() {
             vcpu::set(s, v, vcpu::MSRS + i as u64 * 8, msr.value);
         }
         exit[0] = vmread(GUEST_RIP);
+        vcpu::write_vmcs(s, v, GUEST_RIP, exit[0]);
         exit[1] = vcpu::read_vmcs(s, v, CONTROL_PRIMARY_PROCESSOR_CONTROLS);
         exit[2] = vmread(CONTROL_ENTRY_INTERRUPTION_INFO);
         if valid {
             exit[2] &= !(1 << 31);
-            vcpu::write_vmcs(s, v, CONTROL_ENTRY_INTERRUPTION_INFO, exit[2]);
         }
+        vcpu::write_vmcs(s, v, CONTROL_ENTRY_INTERRUPTION_INFO, exit[2]);
         exit[3] = reason;
         if run.failed != 0 {
             exit[4] = u64::MAX;
@@ -1111,6 +1319,8 @@ pub fn run<S: Store>(s: &mut S, v: u64, tcb: u64, root: u64) -> u64 {
         }
         exit[7] = vmread(GUEST_RFLAGS);
         exit[8] = vmread(GUEST_INTERRUPTABILITY);
+        vcpu::write_vmcs(s, v, GUEST_RFLAGS, exit[7]);
+        vcpu::write_vmcs(s, v, GUEST_INTERRUPTABILITY, exit[8]);
         exit[25] = metadata.interrupt;
         exit[26] = metadata.interrupt_error;
         exit[27] = vector;
@@ -1429,6 +1639,7 @@ mod tests {
             assert_eq!(secondary_with_vpid(CONTROL_VPID, 0, mode), 0);
         }
         // The VPID field has a VMCS cache slot of its own.
+        assert!(VmcsState::index(CONTROL_VPID).is_some());
         assert!(!vcpu::WRITE_FIELDS.iter().any(|&f| VmcsState::index(f) == VmcsState::index(CONTROL_VPID)));
     }
 
@@ -1509,17 +1720,69 @@ mod tests {
         }
     }
     #[test]
+    fn every_vmcs_field_has_its_own_slot() {
+        let mut seen = [false; SLOTS];
+        let mut n = 0;
+        for list in [&vcpu::READ_FIELDS[..], &vcpu::WRITE_FIELDS[..], &BACKEND_FIELDS[..], &BACKEND_COUNTS[..]] {
+            for &f in list {
+                let i = VmcsState::index(f).expect("tracked");
+                assert_eq!(image_index(f) as u64, (vcpu::vmcs_addr(0, f) - vcpu::SHADOW) / 8);
+                if !seen[i] {
+                    seen[i] = true;
+                    n += 1;
+                }
+            }
+        }
+        assert_eq!(n, slot_table().1, "distinct fields, distinct slots");
+        assert_eq!(VmcsState::index(CONTROL_PAGE_FAULT_MASK), VmcsState::index(CONTROL_PAGE_FAULT_MASK));
+    }
+    #[test]
+    fn an_exit_reads_only_what_kernel_logic_and_the_message_need() {
+        let synced = SYNCED_AFTER_EXIT;
+        let is = |f: u64| {
+            let i = VmcsState::index(f).unwrap();
+            synced[i / 64] & (1 << (i % 64)) != 0
+        };
+        for f in [GUEST_RIP, GUEST_RFLAGS, GUEST_INTERRUPTABILITY, CONTROL_ENTRY_INTERRUPTION_INFO,
+            CONTROL_PRIMARY_PROCESSOR_CONTROLS, CONTROL_CR0_READ_SHADOW, DATA_EXIT_INSTRUCTION_LENGTH, HOST_RSP]
+        {
+            assert!(is(f), "{f:#x} is current after an exit");
+        }
+        for f in [GUEST_RSP, GUEST_CR0, GUEST_CR3, GUEST_CS_ACCESS_RIGHTS, GUEST_FS_BASE, GUEST_EFER, GUEST_ACTIVITY] {
+            assert!(!is(f), "{f:#x} is read when an invocation needs it");
+        }
+    }
+    #[test]
+    fn lazy_guest_state_is_kept_until_synced_and_then_written_back() {
+        let mut state = VmcsState::new();
+        state.reset();
+        // First entry: everything is written.
+        state.write(GUEST_FS_BASE, 0x1000, |_, _| {});
+        // An exit: FS base is not read; the guest may have changed it.
+        state.synced = SYNCED_AFTER_EXIT;
+        assert!(!state.synced(GUEST_FS_BASE));
+        // Re-entry with the image unchanged leaves the VMCS's value alone.
+        state.write(GUEST_FS_BASE, 0x1000, |_, _| panic!("lazy field rewritten"));
+        // An invocation syncs it (the guest had written 0x2000), then the
+        // VMM writes the old value back: that is a change for the VMCS.
+        state.observe(GUEST_FS_BASE, 0x2000);
+        state.set_synced(GUEST_FS_BASE);
+        let mut wrote = None;
+        state.write(GUEST_FS_BASE, 0x1000, |f, v| wrote = Some((f, v)));
+        assert_eq!(wrote, Some((GUEST_FS_BASE, 0x1000)));
+    }
+    #[test]
     fn vmcs_failed_entries_preserve_the_launch_state() {
         let mut state = VmcsState::new();
-        assert!(!state.launched);
+        assert!(!state.launched());
         assert!(!state.finish_entry(true, 0));
         assert!(!state.finish_entry(false, (1 << 31) | 33));
-        assert!(!state.launched);
+        assert!(!state.launched());
         assert!(state.finish_entry(false, 10));
-        assert!(state.launched);
+        assert!(state.launched());
         assert!(!state.finish_entry(true, 10));
         assert!(!state.finish_entry(false, (1 << 31) | 33));
-        assert!(state.launched);
+        assert!(state.launched());
         assert!(state.finish_entry(false, 10));
     }
     #[test]

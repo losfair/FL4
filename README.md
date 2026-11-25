@@ -230,11 +230,18 @@ exception's error code with `WriteVMCB` before passing its 32-bit
 descriptor in MR2. A signal completes a descheduled full-state caller
 immediately if there is no hardware exit pending.
 
-Each core retains a VMCS and uses `VMRESUME` after its first successful
-launch. A field cache follows both software writes and guest changes read
-on exit, so entries write only changed VMCS fields. The VCPU's software
-image remains complete before remote operations or migration; the hardware
-VMCS stays on its core. EPT translations survive entries. Nested unmaps and
+Each VCPU has its own VMCS, in its object's first page, and uses `VMRESUME`
+after its first successful launch on a core. The VMCS keeps the guest's
+state between exits: an exit reads only what the exit message and the
+kernel need (RIP, RFLAGS, interruptibility, the entry event and the exit
+fields), and `ReadVMCS`/`WriteVMCS` read any other guest-state field from
+the VMCS first. Under a hypervisor without VMCS shadowing for a field each
+VMREAD is an exit of its own, so reading the whole image at every exit made
+a guest's CPUID take 65 µs on GCE C4 instead of 5 µs under KVM. A per-VCPU
+field cache follows both software writes and guest changes read, so entries
+write only changed VMCS fields. Before a VCPU runs on another core, and
+when it is deleted, its VMCS is cleared (VMCLEAR, by remote call) on the
+core that last loaded it. EPT translations survive entries. Nested unmaps and
 root/ASID-pool deletion synchronously invalidate every core recorded in
 the root before memory can be reused. Recording a core already present in
 the root's lifetime bitmap does not write the hardware page table again.
@@ -308,6 +315,6 @@ TSA microcode: positive guest tests use an explicitly labelled QEMU
 `VERW_CLEAR` capability fixture, while the unmodified capability set correctly
 disables virtualization. These runs validate control flow, not hardware TSA
 protection. See the security policy for reproduction commands.
-Intel hardware validation of the retained VMCS path remains outstanding.
+Intel validation of the per-VCPU VMCS path: L4H HVM guests on GCE C4 (nested under Google's KVM); bare-metal Intel remains outstanding.
 VMX performance-MSR switching is enabled only when CPUID exposes a suitable
 PMU; a PMU-present Intel hardware runtime has not been tested.
