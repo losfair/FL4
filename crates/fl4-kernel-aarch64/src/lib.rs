@@ -197,6 +197,9 @@ pub extern "C" fn fl4_boot(off: u64, el_mode: u64) -> ! {
     if ram.lost || usable.lost || all_usable.lost {
         fail("too many memory map ranges");
     }
+    let mib = |r: &Ranges| r.r[..r.n].iter().map(|x| x.end - x.start).sum::<u64>() >> 20;
+    kprintln!("FL4: {} MiB of free RAM in {} range(s) ({} MiB past the window), {} map entries",
+        mib(&usable), usable.n, mib(&all_usable) - mib(&usable), bi.n_mmap);
     let mut window = [(0u64, 0u64); bootmem::MAX_RANGES];
     for i in 0..ram.n {
         window[i] = (ram.r[i].start, ram.r[i].end);

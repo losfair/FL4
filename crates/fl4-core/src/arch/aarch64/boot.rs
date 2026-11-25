@@ -2,9 +2,11 @@
 /// the processor's own size (ID_AA64MMFR0_EL1.PARange).
 pub const PADDR_USER_DEVICE_TOP: u64 = 1 << 48;
 
-/// AArch64 has no l4h 0047: untypeds past `MAX_BOOTINFO_UNTYPEDS` are
-/// dropped, as in seL4.
-pub const EXTRA_UNTYPEDS: u64 = 0;
+/// l4h 0047 on AArch64 too: untypeds past `MAX_BOOTINFO_UNTYPEDS` go in
+/// the extra chunk. A bare-metal machine's address space has enough holes
+/// that its device untypeds alone can fill the BootInfo's list, and the
+/// RAM's, made after them, would be dropped.
+pub const EXTRA_UNTYPEDS: u64 = 256;
 
 /// AArch64: the same walk; the four levels are the VSpace and three page
 /// tables.
