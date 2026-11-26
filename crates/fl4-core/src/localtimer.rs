@@ -159,6 +159,15 @@ pub(crate) fn timer_due<S: Store>(s: &S, cpu: u64, now: u64) -> bool {
 /// reschedule pending (`schedule()` keeps or chooses among this core's
 /// threads, and `schedule_choose_new_thread` never moves the domain, which
 /// `domain_time` does when it is 0), no reschedule IPI owed.
+#[cfg(not(feature = "aarch64"))]
+pub(crate) fn sched_quiet<S: Store>(s: &S, cpu: u64) -> bool {
+    sched::action(s) == sched::ACTION_RESUME_CURRENT
+        && sched::domain_time(s) != 0
+        && node_get(s, cpu, node::IPI_PENDING) == 0
+}
+
+/// AArch64: the same, with both words of `IPI_PENDING`.
+#[cfg(feature = "aarch64")]
 pub(crate) fn sched_quiet<S: Store>(s: &S, cpu: u64) -> bool {
     sched::action(s) == sched::ACTION_RESUME_CURRENT
         && sched::domain_time(s) != 0

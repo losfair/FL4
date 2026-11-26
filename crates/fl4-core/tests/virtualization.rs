@@ -118,7 +118,7 @@ impl Arch for Machine {
     fn fpu_reload(&mut self, _: u64) {}
     fn fpu_release(&mut self, _: u64) {}
     fn remote_stall(&mut self, _: u64) {}
-    fn send_reschedule(&mut self, _: u128) {}
+    fn send_reschedule(&mut self, _: u64) {}
     fn putc(&mut self, _: u64) {}
     fn get_char(&mut self) -> u64 {
         0

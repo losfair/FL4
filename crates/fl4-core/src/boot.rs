@@ -169,7 +169,9 @@ fn arch_n_paging(r: Region) -> u64 {
 
 /// Bytes the extra BootInfo reserves for the l4h 0047 chunk: a header and
 /// `EXTRA_UNTYPEDS` 16-byte descriptors.
-fn extra_ut_reserve() -> u64 {
+/// The bytes `root_layout` adds to the extra BootInfo for the extra
+/// untyped chunk (l4h 0047), which the loader's tail check must count too.
+pub fn extra_ut_reserve() -> u64 {
     if EXTRA_UNTYPEDS > 0 {
         16 + 16 * EXTRA_UNTYPEDS
     } else {

@@ -36,7 +36,8 @@ fn default_config(debug: bool, aarch64: bool) -> Config {
     c.insert("EXPORT_PMC_USER".into(), b(false));
     c.insert("NUM_DOMAINS".into(), "1".into());
     c.insert("NUM_DOMAIN_SCHEDULES".into(), "2".into());
-    c.insert("MAX_NUM_NODES".into(), "64".into());
+    // `machine::CoreMask` is 64 bits on x86_64 and 128 on AArch64.
+    c.insert("MAX_NUM_NODES".into(), if aarch64 { "128" } else { "64" }.into());
     c.insert("ROOT_CNODE_SIZE_BITS".into(), "13".into());
     c
 }

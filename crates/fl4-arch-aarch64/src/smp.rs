@@ -97,11 +97,7 @@ pub fn remote_call(kind: u64, arg0: u64, arg1: u64, mask: CoreMask) {
     CALL.arg1.store(arg1, Ordering::Relaxed);
     // Both words before the first SGI: a target reads its own word only.
     CALL.pending.store(targets, Ordering::Release);
-    for c in 0..percpu::MAX_CPUS {
-        if targets & (1 << c) != 0 {
-            gic::send_sgi(irq::REMOTE_CALL_ID, c as u64);
-        }
-    }
+    send_sgis(irq::REMOTE_CALL_ID, targets);
     while CALL.pending.load(Ordering::Acquire) != 0 {
         core::hint::spin_loop();
     }
@@ -139,10 +135,16 @@ pub fn service(stall: impl FnOnce()) -> bool {
 pub fn reschedule(mask: CoreMask) {
     let me = 1u128 << percpu::cpu_index();
     let targets = mask & !me & online_mask();
-    for c in 0..percpu::MAX_CPUS {
-        if targets & (1 << c) != 0 {
-            gic::send_sgi(irq::RESCHEDULE_ID, c as u64);
-        }
+    send_sgis(irq::RESCHEDULE_ID, targets);
+}
+
+/// Send SGI `id` to each core in `targets`, visiting only the set bits.
+fn send_sgis(id: u64, targets: CoreMask) {
+    let mut t = targets;
+    while t != 0 {
+        let c = t.trailing_zeros() as u64;
+        gic::send_sgi(id, c);
+        t &= t - 1;
     }
 }
 

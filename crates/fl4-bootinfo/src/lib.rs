@@ -54,7 +54,8 @@ pub const USER_END: u64 = 0x0000_8000_0000_0000;
 pub const ROOT_TAIL_MIN: u64 = 3 * 4096;
 
 /// Whether the boot frames after a root task image ending at virtual
-/// `v_end` fit below `USER_END`, with `extra_len` bytes of extra BootInfo
+/// `v_end` fit below `USER_END`, with `extra_len` bytes of extra BootInfo,
+/// fl4-core's extra-untyped room (`boot::extra_ut_reserve`) included
 /// (mapped as fl4-core does: rounded up to a power of two of at least a
 /// page, `boot::extra_bi_size_bits`). Past it they would be mapped, and
 /// given out as caps, at addresses user space must not have.

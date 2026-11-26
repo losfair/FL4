@@ -129,7 +129,7 @@ impl Arch for Machine {
             fl4_core::smp::stall(&mut there, &mut Machine::default());
         }
     }
-    fn send_reschedule(&mut self, mask: u128) { self.rescheduled.push(mask as u64); }
+    fn send_reschedule(&mut self, mask: u64) { self.rescheduled.push(mask); }
     fn putc(&mut self, _: u64) {}
     fn get_char(&mut self) -> u64 {
         0

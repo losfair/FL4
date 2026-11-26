@@ -184,9 +184,8 @@ impl Arch for PhysArch {
     fn remote_stall(&mut self, cpu: u64) {
         smp::remote_call(smp::CALL_STALL, 0, 0, 1u64 << (cpu & 63));
     }
-    fn send_reschedule(&mut self, mask: fl4_core::machine::CoreMask) {
-        // x86-64 starts at most 64 cores (`percpu::MAX_CPUS`).
-        smp::reschedule(mask as u64)
+    fn send_reschedule(&mut self, mask: u64) {
+        smp::reschedule(mask)
     }
 
     fn putc(&mut self, c: u64) {

@@ -8,6 +8,15 @@ pub mod msi {
     pub const BAD_EVENT: u64 = 3;
 }
 
+/// A set of cores, bit `c` for core `c` (`layout::MAX_NODES` <= 128).
+pub type CoreMask = u128;
+
+/// The mask of core `cpu` alone.
+#[inline(always)]
+pub const fn core_bit(cpu: u64) -> CoreMask {
+    1u128 << (cpu & 127)
+}
+
 macro_rules! arch_machine_methods {
     () => {
         /// AArch64 cache maintenance (seL4 `doFlush`): operation `op`

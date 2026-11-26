@@ -150,8 +150,8 @@ impl Arch for Machine {
     fn remote_stall(&mut self, c: u64) {
         self.ev.push(Ev::Stall(c));
     }
-    fn send_reschedule(&mut self, m: u128) {
-        self.ev.push(Ev::Reschedule(m as u64));
+    fn send_reschedule(&mut self, m: u64) {
+        self.ev.push(Ev::Reschedule(m));
     }
     fn putc(&mut self, _: u64) {}
     fn get_char(&mut self) -> u64 {

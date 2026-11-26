@@ -645,9 +645,11 @@ pub extern "C" fn fl4_boot(off: u64, el_mode: u64) -> ! {
     let extra = unsafe { core::slice::from_raw_parts_mut(pptr(extra_pa) as *mut u8, extra_size as usize) };
     let extra_len = build_extra_bi(extra, &h, bi.dtb, dtb_len, &mods[..extra_mods], tpm.as_ref(), msi.as_ref());
     // The boot frames go after the image in user space (fl4-core
-    // `root_layout`): all of them below its end.
+    // `root_layout`): all of them below its end, the extra BootInfo with
+    // fl4-core's room for the extra untypeds.
     let root_v_end = root.v_start.checked_add(root.p_end - root.p_start);
-    if !root_v_end.is_some_and(|end| fl4_bootinfo::root_tail_fits(end, extra_len as u64)) {
+    let tail_len = (extra_len as u64).checked_add(fl4_core::boot::extra_ut_reserve());
+    if !root_v_end.zip(tail_len).is_some_and(|(end, len)| fl4_bootinfo::root_tail_fits(end, len)) {
         fail("root task image too close to the end of user space");
     }
     if has_option(bi, b"fb_console") {

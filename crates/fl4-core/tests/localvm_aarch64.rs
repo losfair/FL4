@@ -14,7 +14,7 @@ use fl4_core::layout::{ks, node, reg, tcb as tl};
 use fl4_core::localvm::{self, VmLocks, NTFN_BYTES, VCPU_BYTES};
 use fl4_core::machine::{Arch, Store};
 use fl4_core::msginfo::MessageInfo;
-use fl4_core::obj::{ks_set, node_set, Ntfn, Sc, Slot, Tcb, NTFN_ACTIVE, NTFN_IDLE};
+use fl4_core::obj::{ks_set, node_get, node_set, Ntfn, Sc, Slot, Tcb, NTFN_ACTIVE, NTFN_IDLE};
 use fl4_core::{cspace, interrupt, localtimer, msg, sched, sporadic, syscall, vcpu};
 use std::collections::HashMap;
 
@@ -65,7 +65,7 @@ enum Ev {
     High(u64, u64),
     Stage2(u64, u64),
     Flush(u64, u64),
-    Reschedule(u64),
+    Reschedule(u128),
     Stall(u64),
 }
 
@@ -144,7 +144,7 @@ impl Arch for Machine {
         self.ev.push(Ev::Stall(c));
     }
     fn send_reschedule(&mut self, m: u128) {
-        self.ev.push(Ev::Reschedule(m as u64));
+        self.ev.push(Ev::Reschedule(m));
     }
     fn cache_op(&mut self, _: u64, _: u64, _: u64, _: u64, _: u64, _: u64) {}
     fn hw_access_flag(&self) -> bool {
@@ -511,4 +511,27 @@ fn the_timer_with_the_callers_own_timer_armed_goes_beside_the_gate() {
     assert_eq!(l.objects.iter().filter(|&&(o, _)| o == N).count(), 2);
     assert_eq!(locked(&l).iter().filter(|&&(o, _)| o == N).count(), 1);
     refines(&s, &a, timer_local, timer_general);
+}
+
+/// Reschedule IPIs owed to cores past 63 go in `IPI_PENDING_HI` and reach
+/// the backend in the high word of the mask.
+#[test]
+fn reschedule_ipis_reach_cores_past_63() {
+    let (mut s, mut a) = fixture();
+    assert!(fl4_core::layout::MAX_NODES == 128);
+    let cores = [0u64, 63, 64, 70, 127];
+    assert!(!cores.contains(&CPU));
+    assert!(fl4_core::smp::none_pending(&s, CPU));
+    for c in cores {
+        fl4_core::smp::remote_reschedule(&mut s, &mut a, c);
+    }
+    // Its own core owes nothing.
+    fl4_core::smp::remote_reschedule(&mut s, &mut a, CPU);
+    assert!(!fl4_core::smp::none_pending(&s, CPU));
+    assert_eq!(node_get(&s, CPU, node::IPI_PENDING), 1 | 1 << 63);
+    assert_eq!(node_get(&s, CPU, node::IPI_PENDING_HI), 1 | 1 << 6 | 1 << 63);
+    fl4_core::smp::send_pending(&mut s, &mut a);
+    let want = cores.iter().fold(0u128, |m, &c| m | fl4_core::machine::core_bit(c));
+    assert_eq!(a.ev, vec![Ev::Reschedule(want)]);
+    assert!(fl4_core::smp::none_pending(&s, CPU));
 }
