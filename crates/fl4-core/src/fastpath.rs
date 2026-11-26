@@ -99,6 +99,13 @@ pub fn fault<S: Store, A: Arch>(s: &mut S, a: &mut A, t: Tcb, number: u64) -> bo
     if r.0 == 0 || !schedulable_here(s, dest) {
         return false;
     }
+    // AArch64: not to a thread with a bound VCPU, which `switch_to` would
+    // switch to its guest's Stage-2 root (`set_vm_root`); that may give
+    // the root a VMID, the gate's to allocate (`localtimer::may_run_here`).
+    #[cfg(feature = "aarch64")]
+    if crate::vcpu::bound(s, dest) != 0 {
+        return false;
+    }
     // choose_thread takes the head of the highest nonempty ready queue,
     // where possible_switch_to puts `dest` in front.
     if !sched::is_highest_prio(s, sched::cur_domain(s), dest.prio(s)) {
@@ -209,6 +216,13 @@ pub fn reply_recv_found<S: Store, A: Arch>(s: &mut S, a: &mut A, t: Tcb, rptr: u
     // schedulable_here first: another core may be writing the refills of a
     // thread that is not on this one.
     if usc.is_null() || !schedulable_here(s, u) || !sporadic::ready(s, usc) || !sporadic::sufficient(s, a, usc, 0) {
+        return false;
+    }
+    // AArch64: not to a thread with a bound VCPU, which `switch_to` would
+    // switch to its guest's Stage-2 root (`set_vm_root`); that may give
+    // the root a VMID, the gate's to allocate (`localtimer::may_run_here`).
+    #[cfg(feature = "aarch64")]
+    if crate::vcpu::bound(s, u) != 0 {
         return false;
     }
     let ntfn = Ntfn(t.bound_ntfn(s));

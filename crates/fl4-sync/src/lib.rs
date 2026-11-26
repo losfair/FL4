@@ -311,22 +311,30 @@ pub fn run_syscall<E: EntryEnv>(
     // may be no frame cap's (a TCB's CNode_Delete), whose local attempt
     // will decline again, so it does not wait next time. Nor does a
     // TCB_SetTimer or VM syscall that declined (another core's thread or
-    // VCPU, nVHE). But any candidate that found the gate closed may run
-    // beside it: a closed gate says nothing about the syscall, and a core
-    // that stopped waiting after one would take a ticket for its next
-    // frame-cap invocation or fault reply whenever the gate is closed,
-    // keeping it closed for the next core, until every core's local paths
-    // ran serially (an l4h guest's page faults on 64 AArch64 cores).
-    let hit = local_hit_after(candidate, fast.get(), &res);
+    // VCPU, nVHE); one that found the gate closed may run beside it. Any
+    // other candidate that found the gate closed leaves `local_hit` as it
+    // was: a closed gate says nothing about the syscall. Clearing it made
+    // a core that timed out waiting take a ticket for its next frame-cap
+    // invocation or fault reply whenever the gate was closed, keeping it
+    // closed for the next core, until every core's local paths ran
+    // serially (an l4h guest's page faults on 64 AArch64 cores); setting
+    // it made a core whose last attempt declined, and so did not wait,
+    // wait next time, every other call of a stream that declines.
+    let prev = env.mem().a_load(&gate.policy[env.cpu() as usize].local_hit, Ordering::Relaxed) != 0;
+    let hit = local_hit_after(candidate, fast.get(), &res, prev);
     env.mem().a_store(&gate.policy[env.cpu() as usize].local_hit, hit as u64, Ordering::Relaxed);
     ran
 }
 
 /// Whether a syscall `run_syscall` ran under the gate after local attempt
-/// `res` leaves this core waiting for a closed gate next time (`local_hit`).
+/// `res` leaves this core waiting for a closed gate next time (`local_hit`),
+/// `prev` before. `local_entry` writes `local_hit` only when its local path
+/// ran, so on `Local::Closed` it is still the one that attempt waited, or
+/// did not wait, by.
 #[inline(always)]
-fn local_hit_after(c: Candidate, fast: bool, res: &Local) -> bool {
-    fast || c == Candidate::Port || matches!(res, Local::Closed)
+fn local_hit_after(c: Candidate, fast: bool, res: &Local, prev: bool) -> bool {
+    fast || c == Candidate::Port
+        || (matches!(res, Local::Closed) && (prev || matches!(c, Candidate::SetTimer | Candidate::Vm)))
 }
 
 /// A VM fault from user code: on several cores, first try its fast path
@@ -961,15 +969,25 @@ mod tests {
     }
 
     /// A core waits for a closed gate next time after a fast path ran under
-    /// it, an I/O port access, or any local attempt that found it closed;
-    /// not after one that declined (or was stalled) with no fast path.
+    /// it, an I/O port access, or a `TCB_SetTimer` or VM syscall that found
+    /// it closed; any other attempt that found it closed keeps what the core
+    /// did (waiting after a timeout, not after a decline: no oscillation);
+    /// none waits after one that declined (or was stalled) with no fast path.
     #[test]
     fn only_closed_gates_or_fast_paths_keep_the_core_waiting() {
-        for c in [Candidate::Fast, Candidate::Invocation, Candidate::SetTimer, Candidate::Vm] {
-            assert!(local_hit_after(c, false, &Local::Closed) && local_hit_after(c, true, &Local::Declined));
-            assert!(!local_hit_after(c, false, &Local::Declined) && !local_hit_after(c, false, &Local::Stalled));
+        for prev in [false, true] {
+            for c in [Candidate::Fast, Candidate::Invocation, Candidate::SetTimer, Candidate::Vm] {
+                assert!(local_hit_after(c, true, &Local::Declined, prev));
+                assert!(!local_hit_after(c, false, &Local::Declined, prev) && !local_hit_after(c, false, &Local::Stalled, prev));
+            }
+            for c in [Candidate::SetTimer, Candidate::Vm] {
+                assert!(local_hit_after(c, false, &Local::Closed, prev));
+            }
+            for c in [Candidate::Fast, Candidate::Invocation] {
+                assert_eq!(local_hit_after(c, false, &Local::Closed, prev), prev);
+            }
+            assert!(local_hit_after(Candidate::Port, false, &Local::Declined, prev));
         }
-        assert!(local_hit_after(Candidate::Port, false, &Local::Declined));
     }
 
     #[test]

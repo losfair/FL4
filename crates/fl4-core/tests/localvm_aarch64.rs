@@ -535,3 +535,42 @@ fn reschedule_ipis_reach_cores_past_63() {
     assert_eq!(a.ev, vec![Ev::Reschedule(want)]);
     assert!(fl4_core::smp::none_pending(&s, CPU));
 }
+
+const EP: u64 = 0x92_0000;
+const R: u64 = 0x93_0000;
+
+/// A data abort of `CT` beside the gate (`handle_vm_fault_local`), with `W`
+/// waiting for faults on `CT`'s fault endpoint; `bind` binds `W` a VCPU.
+fn vm_fault_beside_the_gate(bind: bool) -> (bool, Memory) {
+    use fl4_core::obj::{Ep, Reply, EP_RECV};
+    let (mut s, mut a) = fixture();
+    CT.slot(tl::SLOT_FAULT_HANDLER)
+        .set_cap(&mut s, Cap::Endpoint { ptr: EP, badge: 7, send: true, recv: false, grant: true, grant_reply: false });
+    Ep(EP).set_queue(&mut s, W.0, W.0, EP_RECV);
+    W.set_state(&mut s, sched::TS_BLOCKED_ON_RECV);
+    W.set_reply_obj(&mut s, R);
+    Reply(R).set_tcb(&mut s, W.0);
+    if bind {
+        s.write(W.0 + tl::VCPU, VC);
+    }
+    // ESR_EL1: a data abort from EL0 (EC 0x24), a level-3 translation
+    // fault on a write.
+    let esr = (0x24 << 26) | (1 << 25) | (1 << 6) | 0x07;
+    let ran = syscall::handle_vm_fault_local(&mut s, &mut a, 0x7000_1000, esr);
+    (ran, s)
+}
+
+/// The VM fault's fast path hands the fault to a waiting handler on this
+/// core; not to one with a bound VCPU, whose Stage-2 root `switch_to`
+/// would install, which may allocate a VMID (the gate's).
+#[test]
+fn a_vm_fault_beside_the_gate_switches_to_its_handler_but_not_to_a_vcpu_thread() {
+    let (ran, s) = vm_fault_beside_the_gate(false);
+    assert!(ran);
+    assert_eq!(sched::cur_thread(&s).0, W.0);
+    assert_eq!(CT.state(&s), sched::TS_BLOCKED_ON_REPLY);
+    let (ran, s) = vm_fault_beside_the_gate(true);
+    assert!(!ran);
+    assert_eq!(sched::cur_thread(&s).0, CT.0);
+    assert_eq!(CT.state(&s), sched::TS_RUNNING);
+}
