@@ -307,11 +307,16 @@ pub fn run_syscall<E: EntryEnv>(
     // (a timer due, the budget spent) would usually run there next time.
     let fast = core::cell::Cell::new(false);
     let ran = run_entry(env, gate, false, |s, a| fast.set(body(s, a)));
-    // An invocation candidate is so by its label alone: one that ran here
+    // An invocation candidate is so by its label alone: one that declined
     // may be no frame cap's (a TCB's CNode_Delete), whose local attempt
     // will decline again, so it does not wait next time. Nor does a
     // TCB_SetTimer or VM syscall that declined (another core's thread or
-    // VCPU, nVHE), but one that found the gate closed may run beside it.
+    // VCPU, nVHE). But any candidate that found the gate closed may run
+    // beside it: a closed gate says nothing about the syscall, and a core
+    // that stopped waiting after one would take a ticket for its next
+    // frame-cap invocation or fault reply whenever the gate is closed,
+    // keeping it closed for the next core, until every core's local paths
+    // ran serially (an l4h guest's page faults on 64 AArch64 cores).
     let hit = local_hit_after(candidate, fast.get(), &res);
     env.mem().a_store(&gate.policy[env.cpu() as usize].local_hit, hit as u64, Ordering::Relaxed);
     ran
@@ -321,7 +326,7 @@ pub fn run_syscall<E: EntryEnv>(
 /// `res` leaves this core waiting for a closed gate next time (`local_hit`).
 #[inline(always)]
 fn local_hit_after(c: Candidate, fast: bool, res: &Local) -> bool {
-    fast || c == Candidate::Port || (matches!(c, Candidate::SetTimer | Candidate::Vm) && matches!(res, Local::Closed))
+    fast || c == Candidate::Port || matches!(res, Local::Closed)
 }
 
 /// A VM fault from user code: on several cores, first try its fast path
@@ -956,17 +961,15 @@ mod tests {
     }
 
     /// A core waits for a closed gate next time after a fast path ran under
-    /// it, an I/O port access, or a `TCB_SetTimer` or VM syscall that found it closed.
+    /// it, an I/O port access, or any local attempt that found it closed;
+    /// not after one that declined (or was stalled) with no fast path.
     #[test]
     fn only_closed_gates_or_fast_paths_keep_the_core_waiting() {
-        for c in [Candidate::SetTimer, Candidate::Vm] {
+        for c in [Candidate::Fast, Candidate::Invocation, Candidate::SetTimer, Candidate::Vm] {
             assert!(local_hit_after(c, false, &Local::Closed) && local_hit_after(c, true, &Local::Declined));
             assert!(!local_hit_after(c, false, &Local::Declined) && !local_hit_after(c, false, &Local::Stalled));
         }
         assert!(local_hit_after(Candidate::Port, false, &Local::Declined));
-        assert!(local_hit_after(Candidate::Fast, true, &Local::Declined));
-        assert!(!local_hit_after(Candidate::Invocation, false, &Local::Closed));
-        assert!(!local_hit_after(Candidate::Fast, false, &Local::Closed));
     }
 
     #[test]

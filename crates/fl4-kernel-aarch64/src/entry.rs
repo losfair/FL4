@@ -615,6 +615,13 @@ extern "C" fn fl4_entry(kind: u64, esr: u64, far: u64, hpfar: u64) -> ! {
         };
         let body = |s: &mut PhysStore, a: &mut PhysArch| dispatch_syscall(s, a, number);
         fl4_sync::run_syscall(&KernelEnv, &GATE, number, local, body);
+    } else if ec == EC_DABT_LOW || ec == EC_IABT_LOW {
+        // A user page fault: its fast path may run beside the gate, as on
+        // x86_64 (`fl4_sync::run_vm_fault`), at the address
+        // `dispatch_handler` gives the general path.
+        let addr = if ec == EC_DABT_LOW { far } else { elr };
+        let local = |s: &mut PhysStore, a: &mut PhysArch| fl4_sync::local_vm_fault(s, a, &Phys, addr, esr, |_, _| {});
+        fl4_sync::run_vm_fault(&KernelEnv, &GATE, local, |s, a| dispatch(s, a, ec, esr, far, elr));
     } else {
         run_entry(false, |s, a| dispatch(s, a, ec, esr, far, elr));
     }
