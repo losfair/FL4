@@ -128,8 +128,9 @@ impl fl4_sync::EntryEnv for KernelEnv {
     fn now(&self) -> u64 {
         fl4_arch_aarch64::timer::now()
     }
-    fn local_wait_over(&self, _spins: u32, start: u64) -> bool {
-        fl4_arch_aarch64::timer::now().wrapping_sub(start) >= fl4_arch_aarch64::timer::us_to_ticks(fl4_sync::LOCAL_WAIT_US)
+    fn local_wait_over(&self, _spins: u32, start: u64, probe: bool) -> bool {
+        let us = if probe { fl4_sync::LOCAL_PROBE_US } else { fl4_sync::LOCAL_WAIT_US };
+        fl4_arch_aarch64::timer::now().wrapping_sub(start) >= fl4_arch_aarch64::timer::us_to_ticks(us)
     }
 }
 

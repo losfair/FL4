@@ -232,12 +232,14 @@ pub trait EntryEnv {
         0
     }
     /// Whether `local_entry` has waited long enough for a closed gate to
-    /// open: `spins` spins since `start` (`now`). Without a clock, after
-    /// `LOCAL_WAIT_SPINS`. A kernel bounds the time instead (`LOCAL_WAIT_US`),
+    /// open: `spins` spins since `start` (`now`), for the full wait or,
+    /// `probe`, the short one of a core whose last attempt declined.
+    /// Without a clock, after `LOCAL_WAIT_SPINS` or `LOCAL_PROBE_SPINS`. A
+    /// kernel bounds the time instead (`LOCAL_WAIT_US`, `LOCAL_PROBE_US`),
     /// because what a spin costs depends on the CPU: an x86 `pause` takes
     /// tens to over a hundred cycles, an AArch64 `yield` a few.
-    fn local_wait_over(&self, spins: u32, _start: u64) -> bool {
-        spins >= LOCAL_WAIT_SPINS
+    fn local_wait_over(&self, spins: u32, _start: u64, probe: bool) -> bool {
+        spins >= if probe { LOCAL_PROBE_SPINS } else { LOCAL_WAIT_SPINS }
     }
 }
 
@@ -468,6 +470,12 @@ enum Candidate {
 pub const LOCAL_WAIT_US: u64 = 500;
 /// The bound without a clock (the simulator), in spins.
 const LOCAL_WAIT_SPINS: u32 = 1024;
+/// How long `local_entry` waits for a closed gate after a local attempt
+/// that declined (`local_hit` 0): long enough for queued serial entries
+/// to drain once cores stop adding to them (a fraction of a microsecond
+/// each), a tenth of `LOCAL_WAIT_US`.
+pub const LOCAL_PROBE_US: u64 = 50;
+const LOCAL_PROBE_SPINS: u32 = 64;
 
 /// How a local path beside the gate went (`try_local`).
 pub enum Local {
@@ -494,23 +502,28 @@ fn local_entry<E: EntryEnv>(env: &E, gate: &SerialGate, local: &mut impl FnMut(&
     let cpu = env.cpu();
     // While the gate is closed, wait for it to open, servicing remote
     // calls, rather than take a ticket: queued syscalls would keep it closed
-    // for each other. But only after a fast path that ran: one that then
-    // declined would have waited for the gate twice.
-    // The wait is bounded: serial entries queued back to back keep the
+    // for each other. After a fast path that ran (`local_hit`), up to
+    // `LOCAL_WAIT_US`; otherwise only up to `LOCAL_PROBE_US`, since one that
+    // then declines has waited for the gate twice. Not at all would leave
+    // a core whose last attempt declined taking a ticket for as long as the
+    // gate stays closed, and the gate closed by those tickets: an l4h
+    // guest's address-space teardown deletes its page tables first (not
+    // frame caps: they decline), then its frame caps, which on 64 AArch64
+    // cores all ran serially, 740k a second, while the faults of other
+    // cores waited on the gate.
+    // Each wait is bounded: serial entries queued back to back keep the
     // gate closed (`release`), and this core would wait out of FIFO order,
-    // without its interrupts, for as long as they come; after
-    // `LOCAL_WAIT_US` (`EntryEnv::local_wait_over`) it takes a ticket.
+    // without its interrupts, for as long as they come; after the bound
+    // (`EntryEnv::local_wait_over`) it takes a ticket.
     let hit = &gate.policy[cpu as usize].local_hit;
+    let probe = env.mem().a_load(hit, Ordering::Relaxed) == 0;
     let mut spins = 0;
     let mut start = 0;
     // (Mutation test: `mutant-local-no-active` does not mark the core.)
     while !cfg!(feature = "mutant-local-no-active") && !gate.try_enter_local(env.mem(), cpu) {
-        if env.mem().a_load(hit, Ordering::Relaxed) == 0 {
-            return Local::Closed;
-        }
         if spins == 0 {
             start = env.now();
-        } else if env.local_wait_over(spins, start) {
+        } else if env.local_wait_over(spins, start, probe) {
             return Local::Closed;
         }
         spins += 1;
