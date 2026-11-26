@@ -435,6 +435,53 @@ pub fn handle_ioport_local<S: Store, A: Arch>(s: &mut S, a: &mut A, number: i64)
     true
 }
 
+/// An NBWait (`SysNBWait`) of the current thread on the notification `n`,
+/// the one its capability register names (`fl4-sync` `local_nbwait` found
+/// it, and holds the locks of the slots that lookup read and of `n`),
+/// beside the serial gate: the general path's own `handle_recv`, which
+/// polls `n` without blocking, and `finish`, once reads show that it writes
+/// only the caller, `n` and this core's scheduler state. That takes, as
+/// for an I/O port access, no reschedule pending or due on this core and
+/// budget left; and a notification the caller may receive on (else a cap
+/// fault), with no scheduling context to donate (`n` has none) and the
+/// caller running on its own (`receive_signal`'s `unblock_check` then
+/// writes nothing). An l4h vCPU polls its bound notification for every
+/// event it finds by itself (a timer deadline passed, an IPI's reason), at
+/// some 500 a second on each vCPU. Returns false, having written only
+/// `FAULT_IP` and the timestamp, which the general path repeats, otherwise.
+pub fn handle_nbwait_local<S: Store, A: Arch>(s: &mut S, a: &mut A, number: i64, n: u64) -> bool {
+    let t = sched::cur_thread(s);
+    if crate::layout::NUM_DOMAINS != 1 || number != sc::SysNBWait || t.flags(s) & tcb_flag::TRAP_SYSCALLS != 0 {
+        return false;
+    }
+    // As `syscall` and `budget_ok` begin; the rest only reads.
+    let next = t.reg(s, reg::NEXT_IP);
+    t.set_reg(s, reg::FAULT_IP, next.wrapping_sub(syscall_insn_len!()));
+    sched::update_timestamp(s, a);
+    let csc = sched::cur_sc(s);
+    let ntfn = Ntfn(n);
+    let bound = ntfn.bound_tcb(s);
+    let may_receive = match cspace::lookup_cap(s, t, t.reg(s, reg::CAP)) {
+        Ok(Cap::Notification { ptr, recv, .. }) => ptr == n && recv && (bound == 0 || bound == t.0),
+        _ => false,
+    };
+    if !may_receive
+        || ntfn.sc(s) != 0
+        || t.sc(s) != csc.0
+        || sched::action(s) != sched::ACTION_RESUME_CURRENT
+        || t.yield_to(s) != 0
+        || !sporadic::sufficient(s, a, csc, sched::consumed(s))
+        || !crate::fastpath::schedulable_here(s, t)
+    {
+        return false;
+    }
+    // `budget_ok` after its update_timestamp: sufficient, the domain not
+    // expired, so it writes nothing.
+    handle_recv(s, a, false, false);
+    finish(s, a);
+    true
+}
+
 /// A frame-cap invocation (`localinv`) run beside the serial gate with its
 /// plan's words locked: the general path's own decode, as
 /// `handle_invocation` runs it, on the plan's invoked slot and extra caps,

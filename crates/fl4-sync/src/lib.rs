@@ -433,6 +433,8 @@ fn local_candidate<S: fl4_core::machine::Store>(s: &S, number: i64) -> Candidate
         Candidate::SetTimer
     } else if localvm::is_vm_syscall(s, t, number) {
         Candidate::Vm
+    } else if number == fl4_abi::syscall::SysNBWait {
+        Candidate::Poll
     } else {
         Candidate::No
     }
@@ -451,6 +453,8 @@ enum Candidate {
     SetTimer,
     /// A VM's syscall (`localvm`).
     Vm,
+    /// An NBWait (a poll of a notification, `handle_nbwait_local`).
+    Poll,
 }
 
 /// How long `local_entry` waits for a closed gate to open, through
@@ -625,6 +629,35 @@ fn local_set_timer<S: fl4_core::machine::Store, A: fl4_core::machine::Arch, M: M
 
 const _: () = assert!(localtimer::MAX_TIMER_LOCKS <= lock::MAX_HELD);
 
+/// An NBWait beside the gate (`fl4_core::syscall::handle_nbwait_local`) on
+/// the notification its capability register names: found with the slots
+/// of its lookup locked (`lookup_slot_locked`), as `local_set_timer` finds
+/// its target, and the notification locked, which a Signal on another
+/// core (under the gate, or a VM's beside it) would write. It writes the
+/// notification, the caller and this core's state.
+fn local_nbwait<S: fl4_core::machine::Store, A: fl4_core::machine::Arch, M: Mem>(
+    s: &mut S,
+    a: &mut A,
+    m: &M,
+    number: i64,
+    observe: impl FnOnce(&S, &[(u64, u64)]),
+) -> bool {
+    let t = fl4_core::sched::cur_thread(s);
+    let cptr = t.reg(s, fl4_core::layout::reg::CAP);
+    let mut held = lock::Held::new();
+    let n = match lookup_slot_locked(s, m, t, cptr, &mut held).map(|slot| slot.cap(s)) {
+        Some(fl4_core::capability::Cap::Notification { ptr, .. }) if lock_object(m, ptr, &mut held) => ptr,
+        _ => {
+            lock::unlock_held(m, &mut held);
+            return false;
+        }
+    };
+    observe(s, &[(n, localvm::NTFN_BYTES)]);
+    let done = fl4_core::syscall::handle_nbwait_local(s, a, number, n);
+    lock::unlock_held(m, &mut held);
+    done
+}
+
 /// A kernel timer interrupt (`IRQ_TIMER`) on a multi-core system: first
 /// its local path beside the serial gate (`local_timer_irq`), then
 /// `run_entry`. The interrupt has been accepted, so it is handled whatever
@@ -746,6 +779,8 @@ pub fn local_syscall<S: fl4_core::machine::Store, A: fl4_core::machine::Arch, M:
         && fl4_core::msg::msg_info(s, t).label == fl4_abi::label::TCBSetTimer
     {
         return local_set_timer(s, a, m, number, observe);
+    } else if number == fl4_abi::syscall::SysNBWait {
+        return local_nbwait(s, a, m, number, observe);
     } else {
         #[cfg(not(feature = "aarch64"))]
         if localvm::is_vm_syscall(s, t, number) {

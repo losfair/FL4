@@ -264,6 +264,9 @@ struct LocalCounts {
     timer_irq_fire_wake_ntfn: u64,
     timer_irq_idle_wake: u64,
     timer_irq_switch: u64,
+    /// NBWait on a notification (`handle_nbwait_local`): tried, run.
+    poll_tried: u64,
+    poll_ran: u64,
 }
 
 impl LocalCounts {
@@ -290,10 +293,12 @@ impl LocalCounts {
         timer_irq_fire_wake_ntfn: 0,
         timer_irq_idle_wake: 0,
         timer_irq_switch: 0,
+        poll_tried: 0,
+        poll_ran: 0,
     };
 
     /// Every count by name, for the runs' output and a campaign's totals.
-    fn fields(&mut self) -> [(&'static str, &mut u64); 22] {
+    fn fields(&mut self) -> [(&'static str, &mut u64); 24] {
         [
             ("inv_tried", &mut self.inv_tried),
             ("inv_ran", &mut self.inv_ran),
@@ -317,6 +322,8 @@ impl LocalCounts {
             ("timer_irq_fire_wake_ntfn", &mut self.timer_irq_fire_wake_ntfn),
             ("timer_irq_idle_wake", &mut self.timer_irq_idle_wake),
             ("timer_irq_switch", &mut self.timer_irq_switch),
+            ("poll_tried", &mut self.poll_tried),
+            ("poll_ran", &mut self.poll_ran),
         ]
     }
 
@@ -1773,6 +1780,8 @@ impl Sim {
             c.inv_tried += inv as u64;
             c.inv_ran += (inv && ran) as u64;
             c.vm_reply_ran += (vm_reply && ran) as u64;
+            c.poll_tried += (number == sc::SysNBWait) as u64;
+            c.poll_ran += (number == sc::SysNBWait && ran) as u64;
             ran
         };
         fl4_sync::run_syscall(&env, &GATE, number, local, |s, a| syscall::handle_syscall_fast(s, a, number));
@@ -1871,7 +1880,8 @@ impl Sim {
         let port = !trap && (number == sc::SysCall || number == sc::SysSend) && fl4_core::ioport::is_port_label(lbl);
         let local_inv = !trap && number == sc::SysCall && fl4_core::localinv::is_local_label(lbl);
         let set_timer = !trap && number == sc::SysCall && lbl == label::TCBSetTimer;
-        let try_local = local && (trap || number == sc::SysReplyRecv || port || local_inv || set_timer);
+        let poll = !trap && number == sc::SysNBWait;
+        let try_local = local && (trap || number == sc::SysReplyRecv || port || local_inv || set_timer || poll);
         let (target, d_old) = if set_timer { self.set_timer_target() } else { (Tcb(0), 0) };
         let cpu = self.s.cpu;
         let ncores = self.ncores;
@@ -1899,6 +1909,8 @@ impl Sim {
             let mut c = LOCAL_COUNTS.lock().unwrap();
             c.inv_tried += (local_inv && try_local) as u64;
             c.inv_ran += (local_inv && ran_local) as u64;
+            c.poll_tried += (poll && try_local) as u64;
+            c.poll_ran += (poll && ran_local) as u64;
             c.vm_reply_ran += (vm_reply && ran_local) as u64;
         }
         {
@@ -3572,7 +3584,7 @@ impl Campaign {
         if any {
             let t = total;
             println!(
-                "fl4-sim:   local paths (run/tried): TCB_SetTimer {}/{} (disarm {}, re-arm {}); timer interrupts {}/{} (no-op {}, round-robin {}, fired: unbound {}, active {}, set active {}, woke Recv {}, woke Wait {}; from idle {}, switched {}); frame-cap invocations {}/{}; VM faults {}/{}, replies {}",
+                "fl4-sim:   local paths (run/tried): TCB_SetTimer {}/{} (disarm {}, re-arm {}); timer interrupts {}/{} (no-op {}, round-robin {}, fired: unbound {}, active {}, set active {}, woke Recv {}, woke Wait {}; from idle {}, switched {}); frame-cap invocations {}/{}; VM faults {}/{}, replies {}; NBWait {}/{}",
                 t.set_timer_ran,
                 t.set_timer_tried,
                 t.set_timer_disarm,
@@ -3592,7 +3604,9 @@ impl Campaign {
                 t.inv_tried,
                 t.vm_fault_ran,
                 t.vm_fault_tried,
-                t.vm_reply_ran
+                t.vm_reply_ran,
+                t.poll_ran,
+                t.poll_tried
             );
         }
         failed
@@ -4047,6 +4061,27 @@ mod tests {
         assert!(local_set_timer(&mut sim, mine, t - 5, 3));
         assert_eq!(node_get(&sim.s, 0, node::TIMER_MIN), tcb_of(&sim, mine).0);
         sim.after("set timer");
+    }
+
+    /// NBWait beside the gate, checked against the general path
+    /// (`diff_syscall_with`): an idle notification (badge 0), then an
+    /// active one (its badge, made idle).
+    #[test]
+    fn nbwait_runs_locally() {
+        use fl4_core::obj::{Ntfn, NTFN_ACTIVE, NTFN_IDLE};
+        let mut sim = booted(2);
+        let root = root_thread(&sim);
+        let n = retype(&mut sim, ot::Notification);
+        let ntfn = Ntfn(sim.root_cnode_slot(n).ptr());
+        sim.load_syscall(0, sc::SysNBWait, n, 0, [0; 4]);
+        assert!(sim.diff_syscall_with(sc::SysNBWait, true), "an idle notification");
+        assert_eq!(root.reg(&sim.s, reg::BADGE), 0);
+        ntfn.set_badge(&mut sim.s, 5);
+        ntfn.set_state(&mut sim.s, NTFN_ACTIVE);
+        sim.load_syscall(0, sc::SysNBWait, n, 0, [0; 4]);
+        assert!(sim.diff_syscall_with(sc::SysNBWait, true), "an active notification");
+        assert_eq!(root.reg(&sim.s, reg::BADGE), 5);
+        assert_eq!(ntfn.state(&sim.s), NTFN_IDLE);
     }
 
     /// The kernel timer interrupt beside the gate: nothing due, a timer of
