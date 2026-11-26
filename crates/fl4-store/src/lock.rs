@@ -60,6 +60,13 @@ fn index(addr: u64) -> usize {
 /// free, which `held` then records.
 pub fn try_lock_object<M: Mem>(m: &M, addr: u64, held: &mut Held) -> bool {
     let e = index(addr);
+    // Two objects of one path on one lock word: this core holds it
+    // already (recorded once, so released once). Otherwise the path
+    // would decline whenever they collide, every time for the same pair
+    // (a vCPU's notification and a slot of its CSpace).
+    if held.e[..held.n].contains(&e) {
+        return true;
+    }
     if held.n == MAX_HELD
         || m.a_load(&TABLE[e].0, Ordering::Relaxed) != 0
         || m.a_cas(&TABLE[e].0, 0, 1, Ordering::Acquire, Ordering::Relaxed).is_err()
@@ -105,6 +112,25 @@ mod tests {
 
     struct Atomics;
     impl Mem for Atomics {}
+
+    /// Two objects of one path on one lock word (here the same object
+    /// twice, and its neighbour in the same 16 bytes): the second is this
+    /// core's already, recorded once and released once.
+    #[test]
+    fn a_lock_word_this_core_holds_is_taken_again() {
+        let (a, b) = (0x50_0000, 0x50_0008);
+        assert_eq!(index(a), index(b));
+        let mut h = Held::new();
+        let mut other = Held::new();
+        assert!(try_lock_object(&Atomics, a, &mut h));
+        assert!(try_lock_object(&Atomics, b, &mut h));
+        assert!(try_lock_object(&Atomics, a, &mut h));
+        assert_eq!(h.n, 1);
+        assert!(!try_lock_object(&Atomics, b, &mut other));
+        unlock_held(&Atomics, &mut h);
+        assert!(try_lock_object(&Atomics, b, &mut other));
+        unlock_held(&Atomics, &mut other);
+    }
 
     #[test]
     fn a_held_lock_refuses_others_until_released() {

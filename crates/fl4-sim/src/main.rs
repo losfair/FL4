@@ -1765,6 +1765,8 @@ impl Sim {
         let local = |s: &mut SimStore, a: &mut SimArch| {
             let mut vm_reply = false;
             let what = format!("syscall {number}");
+            // An NBWait candidate: not a trapped thread's syscall.
+            let poll = number == sc::SysNBWait && sched::cur_thread(&*s).flags(&*s) & fl4_abi::consts::tcb_flag::TRAP_SYSCALLS == 0;
             // (Read once the core is active: its timer tree is its own.)
             let (target, d_old) = if set_timer { me.set_timer_target() } else { (Tcb(0), 0) };
             let ran = under_footprint(&conc, ncores, cpu as u64, &what, inv, |observe| {
@@ -1780,8 +1782,8 @@ impl Sim {
             c.inv_tried += inv as u64;
             c.inv_ran += (inv && ran) as u64;
             c.vm_reply_ran += (vm_reply && ran) as u64;
-            c.poll_tried += (number == sc::SysNBWait) as u64;
-            c.poll_ran += (number == sc::SysNBWait && ran) as u64;
+            c.poll_tried += poll as u64;
+            c.poll_ran += (poll && ran) as u64;
             ran
         };
         fl4_sync::run_syscall(&env, &GATE, number, local, |s, a| syscall::handle_syscall_fast(s, a, number));

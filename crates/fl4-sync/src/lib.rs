@@ -297,7 +297,24 @@ pub fn run_syscall<E: EntryEnv>(
             let _ = body(s, a);
         });
     }
+    let policy = &gate.policy[env.cpu() as usize].local_hit;
+    let before = env.mem().a_load(policy, Ordering::Relaxed);
     let res = local_entry(env, gate, &mut local);
+    if candidate == Candidate::Poll {
+        // An NBWait leaves `local_hit` as it was, whatever its attempt
+        // did: one that declines (an endpoint, a notification bound to
+        // another thread, a lock taken) says nothing about the core's
+        // next ReplyRecv or fault, and was no candidate before it had a
+        // local path.
+        env.mem().a_store(policy, before, Ordering::Relaxed);
+        return match res {
+            Local::Done => true,
+            Local::Stalled => false,
+            Local::Closed | Local::Declined => run_entry(env, gate, false, |s, a| {
+                let _ = body(s, a);
+            }),
+        };
+    }
     match res {
         Local::Done => return true,
         Local::Stalled => return false,
@@ -311,9 +328,10 @@ pub fn run_syscall<E: EntryEnv>(
     let ran = run_entry(env, gate, false, |s, a| fast.set(body(s, a)));
     // An invocation candidate is so by its label alone: one that declined
     // may be no frame cap's (a TCB's CNode_Delete), whose local attempt
-    // will decline again, so it does not wait next time. Nor does a
-    // TCB_SetTimer or VM syscall that declined (another core's thread or
-    // VCPU, nVHE); one that found the gate closed may run beside it. Any
+    // will decline again, so it waits only `LOCAL_PROBE_US` for a closed
+    // gate next time. So does a TCB_SetTimer or VM syscall that declined
+    // (another core's thread or VCPU, nVHE); one that found the gate
+    // closed may run beside it. Any
     // other candidate that found the gate closed leaves `local_hit` as it
     // was: a closed gate says nothing about the syscall. Clearing it made
     // a core that timed out waiting take a ticket for its next frame-cap
@@ -322,9 +340,9 @@ pub fn run_syscall<E: EntryEnv>(
     // serially (an l4h guest's page faults on 64 AArch64 cores); setting
     // it made a core whose last attempt declined, and so did not wait,
     // wait next time, every other call of a stream that declines.
-    let prev = env.mem().a_load(&gate.policy[env.cpu() as usize].local_hit, Ordering::Relaxed) != 0;
+    let prev = env.mem().a_load(policy, Ordering::Relaxed) != 0;
     let hit = local_hit_after(candidate, fast.get(), &res, prev);
-    env.mem().a_store(&gate.policy[env.cpu() as usize].local_hit, hit as u64, Ordering::Relaxed);
+    env.mem().a_store(policy, hit as u64, Ordering::Relaxed);
     ran
 }
 
@@ -645,9 +663,10 @@ const _: () = assert!(localtimer::MAX_TIMER_LOCKS <= lock::MAX_HELD);
 /// An NBWait beside the gate (`fl4_core::syscall::handle_nbwait_local`) on
 /// the notification its capability register names: found with the slots
 /// of its lookup locked (`lookup_slot_locked`), as `local_set_timer` finds
-/// its target, and the notification locked, which a Signal on another
-/// core (under the gate, or a VM's beside it) would write. It writes the
-/// notification, the caller and this core's state.
+/// its target, and the notification locked against the other paths beside
+/// the gate that write one (the timer interrupt's, the VM paths'); the
+/// core's active mark already excludes a Signal under the gate. It writes
+/// the notification, the caller and this core's state.
 fn local_nbwait<S: fl4_core::machine::Store, A: fl4_core::machine::Arch, M: Mem>(
     s: &mut S,
     a: &mut A,
@@ -1016,11 +1035,13 @@ mod tests {
         }
     }
 
-    /// A core waits for a closed gate next time after a fast path ran under
-    /// it, an I/O port access, or a `TCB_SetTimer` or VM syscall that found
-    /// it closed; any other attempt that found it closed keeps what the core
-    /// did (waiting after a timeout, not after a decline: no oscillation);
-    /// none waits after one that declined (or was stalled) with no fast path.
+    /// A core waits the full time for a closed gate next time after a fast
+    /// path ran under it, an I/O port access, or a `TCB_SetTimer` or VM
+    /// syscall that found it closed; any other attempt that found it closed
+    /// keeps what the core did (the full wait after a timeout, the short
+    /// probe after a decline: no oscillation); after one that declined (or
+    /// was stalled) with no fast path it waits only `LOCAL_PROBE_US`. An
+    /// NBWait (`Candidate::Poll`) changes nothing (`run_syscall`).
     #[test]
     fn only_closed_gates_or_fast_paths_keep_the_core_waiting() {
         for prev in [false, true] {
@@ -1117,6 +1138,104 @@ mod tests {
     /// table is the process's, run one at a time: one test's held lock
     /// would make another's lookup decline.
     static LOCK_TABLE_TEST: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    /// An `Arch` that does nothing: `local_entry` and `run_syscall` only
+    /// pass it to their paths.
+    struct NoArch;
+    impl fl4_core::machine::Arch for NoArch {
+        fn now(&mut self) -> u64 { 0 }
+        fn set_deadline(&mut self, _: u64) {}
+        fn us_to_ticks(&self, x: u64) -> u64 { x }
+        fn ticks_to_us(&self, x: u64) -> u64 { x }
+        fn max_us(&self) -> u64 { u64::MAX }
+        fn kernel_wcet_ticks(&self) -> u64 { 1 }
+        fn irq_pending(&mut self) -> bool { false }
+        fn take_pending_irq(&mut self) -> u64 { u64::MAX }
+        fn mask_irq(&mut self, _: u64, _: bool) {}
+        fn ack_irq(&mut self, _: u64) {}
+        fn set_vspace(&mut self, _: u64, _: u64) {}
+        fn invalidate_page(&mut self, _: u64, _: u64) {}
+        fn invalidate_asid(&mut self, _: u64) {}
+        fn invalidate_page_structures(&mut self, _: u64) {}
+        fn ioapic_map(&mut self, _: u64, _: u64, _: u64, _: u64, _: u64) -> bool { false }
+        fn ioapic_map_remapped(&mut self, _: u64, _: u64, _: u64, _: u64, _: u64, _: u64) -> bool { false }
+        fn num_ioapics(&self) -> u64 { 0 }
+        fn ioapic_pins(&self, _: u64) -> u64 { 0 }
+        fn port_in(&mut self, _: u64, _: u64) -> u64 { 0 }
+        fn port_out(&mut self, _: u64, _: u64, _: u64) {}
+        fn fpu_flush(&mut self, _: u64) {}
+        fn fpu_sanitise(&mut self, _: u64) {}
+        fn fpu_reload(&mut self, _: u64) {}
+        fn fpu_release(&mut self, _: u64) {}
+        fn remote_stall(&mut self, _: u64) {}
+        fn send_reschedule(&mut self, _: fl4_core::machine::CoreMask) {}
+        fn putc(&mut self, _: u64) {}
+        fn get_char(&mut self) -> u64 { 0 }
+        fn halt(&mut self) {}
+    }
+
+    /// Core `cpu` of two, with its spins waiting for a closed gate counted
+    /// (`local_entry` services remote calls once a spin).
+    struct SpinEnv {
+        cpu: u64,
+        spins: core::cell::Cell<u32>,
+    }
+    impl EntryEnv for SpinEnv {
+        type S = MapStore;
+        type A = NoArch;
+        type M = Atomics;
+        fn cpu(&self) -> u64 { self.cpu }
+        fn multi(&self) -> bool { true }
+        fn store(&self) -> MapStore {
+            MapStore { m: std::collections::HashMap::new(), cpu: self.cpu, reads: core::cell::RefCell::new(std::vec::Vec::new()) }
+        }
+        fn arch(&self) -> NoArch { NoArch }
+        fn mem(&self) -> &Atomics { &Atomics }
+        fn service_remote(&self) -> bool {
+            self.spins.set(self.spins.get() + 1);
+            false
+        }
+        fn holding_gate(&self) {}
+    }
+
+    /// While another core holds the gate, a core whose last local attempt
+    /// declined (`local_hit` 0) waits `LOCAL_PROBE_SPINS` for it, one whose
+    /// last ran a fast path `LOCAL_WAIT_SPINS`, and then takes a ticket.
+    #[test]
+    fn a_core_whose_last_attempt_declined_waits_briefly_for_a_closed_gate() {
+        let gate = SerialGate::new();
+        gate.set_cores(2);
+        gate.acquire(&Atomics, 0, || panic!("empty gate"));
+        for (hit, want) in [(0, LOCAL_PROBE_SPINS), (1, LOCAL_WAIT_SPINS)] {
+            gate.policy[1].local_hit.store(hit, Ordering::Relaxed);
+            let env = SpinEnv { cpu: 1, spins: core::cell::Cell::new(0) };
+            let res = local_entry(&env, &gate, &mut |_: &mut MapStore, _: &mut NoArch| panic!("the gate is held"));
+            assert!(matches!(res, Local::Closed), "local_hit {hit}");
+            assert_eq!(env.spins.get(), want, "local_hit {hit}");
+            assert_eq!(gate.policy[1].local_hit.load(Ordering::Relaxed), hit);
+        }
+        gate.release(&Atomics);
+    }
+
+    /// An NBWait (`Candidate::Poll`) leaves `local_hit` as it was, whether
+    /// its local attempt declined or ran.
+    #[test]
+    fn an_nbwait_leaves_local_hit_alone() {
+        let gate = SerialGate::new();
+        gate.set_cores(2);
+        for (hit, ran) in [(1, false), (0, true), (1, true), (0, false)] {
+            gate.policy[1].local_hit.store(hit, Ordering::Relaxed);
+            let env = SpinEnv { cpu: 1, spins: core::cell::Cell::new(0) };
+            assert!(local_candidate(&env.store(), fl4_abi::syscall::SysNBWait) == Candidate::Poll);
+            run_syscall(&env, &gate, fl4_abi::syscall::SysNBWait, |_, _| ran, |_, _| false);
+            assert_eq!(gate.policy[1].local_hit.load(Ordering::Relaxed), hit, "hit {hit}, ran {ran}");
+            if !ran {
+                // It took the gate, which a kernel releases as it leaves.
+                assert_eq!(gate.owner(), 1);
+                gate.release(&Atomics);
+            }
+        }
+    }
 
     /// Kernel memory as a map, recording the words read.
     struct MapStore {
