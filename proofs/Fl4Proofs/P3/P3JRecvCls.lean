@@ -237,7 +237,7 @@ variable {AR : A → Fl4Spec.Cr3 → Prop} {MR : A → Fl4Spec.MachineState → 
 
 set_option maxHeartbeats 8000000 in
 /-- (p3J gen 30) **The receive class of `DispStabFoot` from the endpoint leaf** (module docstring). -/
-theorem dispRecv_stFt (hA : P0.ArchTotal arI) (hnd : Fl4Spec.numDomains = 1) (hMT : MachPlatT arI MR)
+theorem dispRecv_stFt (hA : P0.ArchTotal arI) (hnd : Fl4Spec.numDomains = 1) (hMT : MachPlat arI MR)
     (hKD : MRKeepD arI MR) {σ : Fl4Spec.State Unit} (hX : SInvX σ) (hct : σ.curThread ≠ σ.idleThread)
     {Z : XSets} [VxE Z] {H : P1.Heap} {Cs : Set U64} {s : S} {a : A} {n : I64} {bl cr : Bool}
     (hn : RecvSys n bl cr)

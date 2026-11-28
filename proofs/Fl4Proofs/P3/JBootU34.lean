@@ -110,7 +110,7 @@ start state `jReachU34_w0I`, under `OpaqueWK` [P] (no `irqOracle` fact). The `Pl
 theorem u34_w0I (O : OpaqueWK) :
     ARIface warI wAR ∧ P0.ArchTotal warI ∧ Fl4Spec.numDomains = 1 ∧ MachPlatF warI ipiMR ∧ IpiF warI ipiMR ∧
       MRKeepD warI ipiMR ∧ MRKeepIo warI ipiMR ∧ MRKeepIoapic warI ipiMR ∧
-      (∀ a c, wAR a c → warI.irq_pending a ⦃ r => wAR r.2 c ⦄) ∧ IrqPlatK warI wAR ∧ TimeAgree warI ∧
+      (∀ a c, wAR a c → warI.irq_pending a ⦃ r => wAR r.2 c ⦄) ∧ IrqPlatA warI wAR ∧ TimeAgree warI ∧
       Fl4Spec.maxTicksToUs = core.num.U64.MAX.bv ∧
       (∀ a v, warI.ticks_to_us a v ⦃ r => r.bv = Fl4Spec.ticksToUs v.bv ⦄) ∧
       ArchRefines warI wAR ∧ PortInValMR warI ipiMR ∧ P1.StoreExt wst ∧

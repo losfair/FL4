@@ -61,6 +61,14 @@ theorem jVtxHypMU_of {s : S} {ar : A} {σ : Fl4Spec.State Unit} {ct : U64}
   exact (h hR hVT hVI lbl length blk call don fp buf extra slbl argsU hlen hargs hbuf hl ci sl hsl _ hc
     ⟨x, hx, h14, h19⟩ excaps buffer hXO hXN hLb hA5 hN).monoX fun _ _ _ h => h.1
 
+/-- `jVtxHypMU_of` on `JDecMRLKQ` (moved from IrqFixC in collapse A, Q). -/
+theorem jVtxHypMU_ofQ {S : Type} {st : machine.Store S} [L : P1.LawfulStore st] {A : Type}
+    {arI : machine.Arch A} {AR : A → Fl4Spec.Cr3 → Prop} {MR : A → Fl4Spec.MachineState → Prop}
+    {Z : XSets} {H : P1.Heap} {Cs D : Set U64} {s : S} {ar : A} {σ : Fl4Spec.State Unit} {ct : U64}
+    (h : JDecMRLKQ (L := L) arI VtxK AR MR Z H Cs D s ar σ ct) :
+    JVtxHypMU (L := L) arI AR MR Z H Cs D s ar σ ct :=
+  jVtxHypMU_of h.1
+
 end
 
 section
@@ -81,10 +89,10 @@ variable {arI}
 theorem KDispHypsKV41.to35 {AR : A → Fl4Spec.Cr3 → Prop} {MR : A → Fl4Spec.MachineState → Prop} {Z : XSets}
     {H : P1.Heap} {Cs D : Set U64} {s : S} {a : A} {σ : Fl4Spec.State Unit} {n : I64} {c : Fl4Spec.Syscall}
     (h : KDispHypsKV41 (L := L) arI AR Z H Cs D s a σ n c)
-    (hDL : ∀ ct, sched.cur_thread st s = ok ct → JDecMRLK (L := L) arI VtxK AR MR Z H Cs D s a σ ct) :
+    (hDL : ∀ ct, sched.cur_thread st s = ok ct → JDecMRLKQ (L := L) arI VtxK AR MR Z H Cs D s a σ ct) :
     KDispHypsKV35 (L := L) arI AR MR Z H Cs D s a σ n c :=
-  ⟨fun ct call bl don hct hi => let ⟨e, p⟩ := h.inv ct call bl don hct hi; ⟨e, p, jVtxHypMU_of (hDL ct hct)⟩,
-   fun ct rg sr cr hct hm => let ⟨e, p⟩ := h.mid ct rg sr cr hct hm; ⟨e, p, jVtxHypMU_of (hDL ct hct)⟩⟩
+  ⟨fun ct call bl don hct hi => let ⟨e, p⟩ := h.inv ct call bl don hct hi; ⟨e, p, jVtxHypMU_ofQ (hDL ct hct)⟩,
+   fun ct rg sr cr hct hm => let ⟨e, p⟩ := h.mid ct rg sr cr hct hm; ⟨e, p, jVtxHypMU_ofQ (hDL ct hct)⟩⟩
 
 end
 

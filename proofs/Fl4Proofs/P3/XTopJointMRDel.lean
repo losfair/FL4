@@ -155,7 +155,7 @@ theorem post_mrv (hM : MachPlat arI MR) (hKD : MRKeepD arI MR) {s : S} {a : A} {
   · rename_i irq
     have hirq : irq.val < 128 := hw
     obtain ⟨a1, hm, hR1⟩ := spec_exists (hM.mask a irq (decide (interrupt.IRQ_INACTIVE = interrupt.IRQ_INACTIVE))
-      σ.machineState h.1 (by omega))
+      σ.machineState h.1 (by simp; omega))
     obtain ⟨a2, hf, hR2⟩ := spec_exists (hKD.irq_free a1 irq _ hR1)
     unfold objects.post_cap_deletion
     simp only

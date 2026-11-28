@@ -2,9 +2,9 @@
 P3 (p3J gen 27): **stage Q of the fault entries' footprints; the user-exception, VM-fault, unknown-syscall and
 `int $N` clauses on `RunMcWKR` with no footprint premise.**
 
-* P3JMcFlt's `jEvRef_userFt` / `jEvRef_vmfFt` and P3JMcFltS's `jEvRef_sysUFt` / `jEvRef_trapFt` transported by
-  IrqFixGen's `specD` (`MachPlat` ↦ `MachPlatT`, …), as P3JMcIrqRQ; the copies `Fl4ProofsQ.P3.…` take the
-  multicore tops' globals. Every copy goes through `addDecl` (kernel-checked).
+* P3JMcFlt's `jEvRef_userFt` / `jEvRef_vmfFt` and P3JMcFltS's `jEvRef_sysUFt` / `jEvRef_trapFt` at the multicore
+  tops' globals (collapse A, Q: on the narrowed `MachPlat` / `IrqPlatA` themselves; the stage-Q transport copies
+  `Fl4ProofsQ.P3.…` this module made are gone).
 * **`userFootWC_holdsR`**, **`vmfFootWC_holdsR`**, **`sysUFootWC_holdsR`**, **`trapFootWC_holdsR`**: gen 23's
   `UserFootWC` / `VmfFootWC` / `SysUFootWC` / `TrapFootWC` [J] hold at every `RR` state (with globals the
   clause tops already take); `SInvX`, `MR` and `CKI` from `RunMcWK`'s `RunCK` (`jreach_invU3`).
@@ -15,18 +15,6 @@ No premise beyond the stated hypotheses; no sorry. New module; no existing state
 -/
 import Fl4Proofs.P3.P3JMcFltS
 import Fl4Proofs.P3.P3JMcLiftR
-open Lean Meta Elab Command
-
-set_option maxRecDepth 200000 in
-open Fl4Proofs.P3.IrqFix in
-run_cmd liftCoreM do
-  let (n, r) ← transport specD [``Fl4Proofs.P3.jEvRef_userFt, ``Fl4Proofs.P3.jEvRef_vmfFt,
-    ``Fl4Proofs.P3.jEvRef_sysUFt, ``Fl4Proofs.P3.jEvRef_trapFt]
-  logInfo m!"p3J g27 fault footprints Q transport: {n} copied, {r} reused"
-
-#check @Fl4ProofsQ.P3.jEvRef_userFt
-#check @Fl4ProofsQ.P3.jEvRef_trapFt
-
 open Aeneas Aeneas.Std Result
 
 namespace Fl4Proofs.P3.Mc
@@ -49,7 +37,7 @@ theorem userFootWC_holdsR (hARI : ARIface arI AR) (hA : P0.ArchTotal arI)
   obtain ⟨⟨⟨⟨⟨hJ17, -⟩, -⟩, hCK⟩, -⟩, -⟩ := hR
   obtain ⟨_, _, _, _, _, _, -, hX, -, -, -, hMR, -, -, -⟩ := jreach_invU3 hnd hJ17.1
   haveI := hV
-  exact WP.spec_mono (Fl4ProofsQ.P3.jEvRef_userFt J hX hct hMR hCK hRR n c hU hARI hA hnd
+  exact WP.spec_mono (Fl4Proofs.P3.jEvRef_userFt J hX hct hMR hCK hRR n c hU hARI hA hnd
     (MachPlatF.toT hM hIp) hKD (fun a => hT.mrt a) hT.mb hmax htu) fun r hr _ _ => hr
 
 set_option maxHeartbeats 4000000 in
@@ -64,7 +52,7 @@ theorem vmfFootWC_holdsR (hARI : ARIface arI AR) (hA : P0.ArchTotal arI)
   obtain ⟨⟨⟨⟨⟨hJ17, -⟩, -⟩, hCK⟩, -⟩, -⟩ := hR
   obtain ⟨_, _, _, _, _, _, -, hX, -, -, -, hMR, -, -, -⟩ := jreach_invU3 hnd hJ17.1
   haveI := hV
-  exact WP.spec_mono (Fl4ProofsQ.P3.jEvRef_vmfFt J hX hct hMR hCK hRR ad c ft hVm hARI hA hnd
+  exact WP.spec_mono (Fl4Proofs.P3.jEvRef_vmfFt J hX hct hMR hCK hRR ad c ft hVm hARI hA hnd
     (MachPlatF.toT hM hIp) hKD (fun a => hT.mrt a) hT.mb hmax htu) fun r hr _ _ => hr
 
 set_option maxHeartbeats 4000000 in
@@ -79,7 +67,7 @@ theorem sysUFootWC_holdsR (hARI : ARIface arI AR) (hA : P0.ArchTotal arI)
   obtain ⟨⟨⟨⟨⟨hJ17, -⟩, -⟩, hCK⟩, -⟩, -⟩ := hR
   obtain ⟨_, _, _, _, _, _, -, hX, -, -, -, hMR, -, -, -⟩ := jreach_invU3 hnd hJ17.1
   haveI := hV
-  exact WP.spec_mono (Fl4ProofsQ.P3.jEvRef_sysUFt hnd n J hX hct hMR hCK hRR hU hD hSX hARI hA
+  exact WP.spec_mono (Fl4Proofs.P3.jEvRef_sysUFt hnd n J hX hct hMR hCK hRR hU hD hSX hARI hA
     (MachPlatF.toT hM hIp) hKD (fun a => hT.mrt a) hT.mb hmax htu) fun r hr _ _ _ _ => hr
 
 set_option maxHeartbeats 4000000 in
@@ -94,14 +82,14 @@ theorem trapFootWC_holdsR (hARI : ARIface arI AR) (hA : P0.ArchTotal arI)
   obtain ⟨⟨⟨⟨⟨hJ17, -⟩, -⟩, hCK⟩, -⟩, -⟩ := hR
   obtain ⟨_, _, _, _, _, _, -, hX, -, -, -, hMR, -, -, -⟩ := jreach_invU3 hnd hJ17.1
   haveI := hV
-  exact WP.spec_mono (Fl4ProofsQ.P3.jEvRef_trapFt hnd v hv J hX hct hMR hCK hRR hARI hA
+  exact WP.spec_mono (Fl4Proofs.P3.jEvRef_trapFt hnd v hv J hX hct hMR hCK hRR hARI hA
     (MachPlatF.toT hM hIp) hKD (fun a => hT.mrt a) hT.mb hmax htu) fun r hr _ _ _ _ => hr
 
 /-- **The user-exception entry, `RunMcWKR` to `RunMcWKR`, with no footprint premise** (module docstring). -/
 theorem kernel_entry_runMcWKR_user [Fl4Proofs.P1.PlainStore st] (hARI : ARIface arI AR) (hA : P0.ArchTotal arI)
     (hnd : Fl4Spec.numDomains = 1) (hM : MachPlatF arI MR) (hIp : IpiF arI MR)
     (hKD : MRKeepD arI MR)
-    (hPAi : ∀ a c, AR a c → arI.irq_pending a ⦃ r => AR r.2 c ⦄) (hIA : IrqPlatK arI AR)
+    (hPAi : ∀ a c, AR a c → arI.irq_pending a ⦃ r => AR r.2 c ⦄) (hIA : IrqPlatA arI AR)
     (hT : TimeAgree arI)
     (hmax : Fl4Spec.maxTicksToUs = core.num.U64.MAX.bv)
     (htu : ∀ a v, arI.ticks_to_us a v ⦃ r => r.bv = Fl4Spec.ticksToUs v.bv ⦄)
@@ -118,7 +106,7 @@ theorem kernel_entry_runMcWKR_user [Fl4Proofs.P1.PlainStore st] (hARI : ARIface 
 theorem kernel_entry_runMcWKR_vmf [Fl4Proofs.P1.PlainStore st] (hARI : ARIface arI AR) (hA : P0.ArchTotal arI)
     (hnd : Fl4Spec.numDomains = 1) (hM : MachPlatF arI MR) (hIp : IpiF arI MR)
     (hKD : MRKeepD arI MR)
-    (hPAi : ∀ a c, AR a c → arI.irq_pending a ⦃ r => AR r.2 c ⦄) (hIA : IrqPlatK arI AR)
+    (hPAi : ∀ a c, AR a c → arI.irq_pending a ⦃ r => AR r.2 c ⦄) (hIA : IrqPlatA arI AR)
     (hT : TimeAgree arI)
     (hmax : Fl4Spec.maxTicksToUs = core.num.U64.MAX.bv)
     (htu : ∀ a v, arI.ticks_to_us a v ⦃ r => r.bv = Fl4Spec.ticksToUs v.bv ⦄)
@@ -135,7 +123,7 @@ theorem kernel_entry_runMcWKR_vmf [Fl4Proofs.P1.PlainStore st] (hARI : ARIface a
 theorem kernel_entry_runMcWKR_sysU [Fl4Proofs.P1.PlainStore st] (hARI : ARIface arI AR) (hA : P0.ArchTotal arI)
     (hnd : Fl4Spec.numDomains = 1) (hM : MachPlatF arI MR) (hIp : IpiF arI MR)
     (hKD : MRKeepD arI MR)
-    (hPAi : ∀ a c, AR a c → arI.irq_pending a ⦃ r => AR r.2 c ⦄) (hIA : IrqPlatK arI AR)
+    (hPAi : ∀ a c, AR a c → arI.irq_pending a ⦃ r => AR r.2 c ⦄) (hIA : IrqPlatA arI AR)
     (hT : TimeAgree arI)
     (hmax : Fl4Spec.maxTicksToUs = core.num.U64.MAX.bv)
     (htu : ∀ a v, arI.ticks_to_us a v ⦃ r => r.bv = Fl4Spec.ticksToUs v.bv ⦄)

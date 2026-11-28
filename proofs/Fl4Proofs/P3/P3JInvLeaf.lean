@@ -87,7 +87,7 @@ theorem invDecSt_of_w (P : capability.Cap → Prop) {s : S} {a : A} {σ : Fl4Spe
 set_option maxHeartbeats 4000000 in
 /-- (p3J gen 35; gen 34's `midDecEasy_of` for the invoking class) **The mid decode leaves of the Null, Zombie and Notification caps** (module docstring). -/
 theorem invDecEasy_of (hA : P0.ArchTotal arI) (hnd : Fl4Spec.numDomains = 1) (hT : TimeAgree arI)
-    (hMT : MachPlatT arI MR) (hKD : MRKeepD arI MR) [VxE Z] {s : S} {a : A} {σ : Fl4Spec.State Unit} {n : I64}
+    (hMT : MachPlat arI MR) (hKD : MRKeepD arI MR) [VxE Z] {s : S} {a : A} {σ : Fl4Spec.State Unit} {n : I64}
     {call bl don : Bool} (hX : SInvX σ) (hni : σ.curThread ≠ σ.idleThread) :
     InvDecStW (L := L) arI AR MR (fun cp => SInvCk.KW (absCap cp) ∧ IsEasyCap cp) Z H Cs s a σ n call bl don := by
   intro σb hBA V' Ac' Lst' D' s' a' hKF J hMb hCb hRRb ct hct hn info mi buf buffer r2 er argsU
@@ -163,7 +163,7 @@ set_option maxHeartbeats 4000000 in
 theorem invDecReply_of (hA : P0.ArchTotal arI) (hnd : Fl4Spec.numDomains = 1)
     (hmax : Fl4Spec.maxTicksToUs = core.num.U64.MAX.bv)
     (htu : ∀ (a : A) v, arI.ticks_to_us a v ⦃ r => r.bv = Fl4Spec.ticksToUs v.bv ⦄) (hT : TimeAgree arI)
-    (hMT : MachPlatT arI MR) (hKD : MRKeepD arI MR) [VxE Z] {s : S} {a : A} {σ : Fl4Spec.State Unit} {n : I64}
+    (hMT : MachPlat arI MR) (hKD : MRKeepD arI MR) [VxE Z] {s : S} {a : A} {σ : Fl4Spec.State Unit} {n : I64}
     {call bl don : Bool} (hX : SInvX σ) (hni : σ.curThread ≠ σ.idleThread) :
     InvDecStW (L := L) arI AR MR (fun cp => SInvCk.KW (absCap cp) ∧ IsReplyCap cp) Z H Cs s a σ n call bl don := by
   intro σb hBA V' Ac' Lst' D' s' a' hKF J hMb hCb hRRb ct hct hn info mi buf buffer r2 er argsU
@@ -208,7 +208,7 @@ theorem invDecReply_of (hA : P0.ArchTotal arI) (hnd : Fl4Spec.numDomains = 1)
 set_option maxHeartbeats 4000000 in
 /-- (p3J gen 35; `midDecEp_of` for the invoking class) **The mid decode leaf of the Endpoint cap** (module docstring). -/
 theorem invDecEp_of (hA : P0.ArchTotal arI) (hnd : Fl4Spec.numDomains = 1)
-    (hMT : MachPlatT arI MR) (hKD : MRKeepD arI MR) [VxE Z] {s : S} {a : A} {σ : Fl4Spec.State Unit} {n : I64}
+    (hMT : MachPlat arI MR) (hKD : MRKeepD arI MR) [VxE Z] {s : S} {a : A} {σ : Fl4Spec.State Unit} {n : I64}
     {call bl don : Bool} (hX : SInvX σ) (hni : σ.curThread ≠ σ.idleThread) :
     InvDecStW (L := L) arI AR MR (fun cp => SInvCk.KW (absCap cp) ∧ IsEpCap cp) Z H Cs s a σ n call bl don := by
   intro σb hBA V' Ac' Lst' D' s' a' hKF J hMb hCb hRRb ct hct hn info mi buf buffer r2 er argsU
@@ -277,7 +277,7 @@ rest** (module docstring). -/
 theorem invDecSt_of_rest (hA : P0.ArchTotal arI) (hnd : Fl4Spec.numDomains = 1)
     (hmax : Fl4Spec.maxTicksToUs = core.num.U64.MAX.bv)
     (htu : ∀ (a : A) v, arI.ticks_to_us a v ⦃ r => r.bv = Fl4Spec.ticksToUs v.bv ⦄) (hT : TimeAgree arI)
-    (hMT : MachPlatT arI MR) (hKD : MRKeepD arI MR) [VxE Z] {s : S} {a : A} {σ : Fl4Spec.State Unit} {n : I64}
+    (hMT : MachPlat arI MR) (hKD : MRKeepD arI MR) [VxE Z] {s : S} {a : A} {σ : Fl4Spec.State Unit} {n : I64}
     {call bl don : Bool} (hX : SInvX σ) (hni : σ.curThread ≠ σ.idleThread)
     (h : InvDecStW (L := L) arI AR MR
       (fun cp => SInvCk.KW (absCap cp) ∧ ¬ IsReplyCap cp ∧ ¬ IsEasyCap cp ∧ ¬ IsEpCap cp) Z H Cs s a σ n call bl don) :

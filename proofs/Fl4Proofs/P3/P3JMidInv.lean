@@ -125,7 +125,7 @@ variable {MR : A → Fl4Spec.MachineState → Prop}
 
 set_option maxHeartbeats 4000000 in
 /-- (p3J gen 32) **The success tail at `MidX`** (module docstring). -/
-theorem midTailSt (hA : P0.ArchTotal arI) (hMT : MachPlatT arI MR) (hKD : MRKeepD arI MR) [VxE Z] {s0 : S}
+theorem midTailSt (hA : P0.ArchTotal arI) (hMT : MachPlat arI MR) (hKD : MRKeepD arI MR) [VxE Z] {s0 : S}
     {ct : U64} (s1 : S) (a1 : A) (σ' : Fl4Spec.State Unit) (hX : MidX (L := L) arI AR MR Z H Cs s0 s1 a1 σ')
     (hc : σ'.curThread = ct.bv) :
     flTail (st := st) ct false s1 a1 ⦃ res => res.1 = .Ok () ∧
@@ -172,7 +172,7 @@ theorem midInvPost_of {s0 : S} {cptr : Fl4Spec.CapRef} {σ : Fl4Spec.State Unit}
 set_option maxHeartbeats 2000000 in
 /-- (p3J gen 33) **The mid invocation at `MidX` / `MidXP`** (module docstring): `handle_invocation_refinesMXP` in
 the `refine … ?_` shape, every premise a separate goal. -/
-theorem midInvHI [Fl4Proofs.P1.PlainStore st] (hA : P0.ArchTotal arI) (hMT : MachPlatT arI MR)
+theorem midInvHI [Fl4Proofs.P1.PlainStore st] (hA : P0.ArchTotal arI) (hMT : MachPlat arI MR)
     (hKD : MRKeepD arI MR) [VxE Z] {s : S} {a : A} {σ : Fl4Spec.State Unit} {n : I64} {c : Fl4Spec.Syscall}
     (hD : MidDecSt (L := L) arI AR MR Z H Cs s a σ n c) (σb : Fl4Spec.State Unit) (hBA : BudgetAt σ σb true)
     (V' : XVs) (Ac' : Set U64) (Lst' : U64 → List U64) (D' : Set U64) (s' : S) (a' : A)
@@ -211,7 +211,7 @@ theorem midInvHI [Fl4Proofs.P1.PlainStore st] (hA : P0.ArchTotal arI) (hMT : Mac
 
 set_option maxHeartbeats 2000000 in
 /-- (p3J gen 33) **`MidDecSt → MidInvStFt`** (module docstring): `midInvHI` and `midInvPost_of`. -/
-theorem midInvStFt_of [Fl4Proofs.P1.PlainStore st] (hA : P0.ArchTotal arI) (hMT : MachPlatT arI MR)
+theorem midInvStFt_of [Fl4Proofs.P1.PlainStore st] (hA : P0.ArchTotal arI) (hMT : MachPlat arI MR)
     (hKD : MRKeepD arI MR) [VxE Z] {s : S} {a : A} {σ : Fl4Spec.State Unit} {n : I64} {c : Fl4Spec.Syscall}
     (hD : MidDecSt (L := L) arI AR MR Z H Cs s a σ n c) : Mc.MidInvStFt (L := L) arI AR MR Z H Cs s a σ n c := by
   intro σb hBA V' Ac' Lst' D' s' a' hKF J hMb hCb hRRb ct rg sr cr hct hn

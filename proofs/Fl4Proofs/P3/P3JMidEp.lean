@@ -108,7 +108,7 @@ variable {MR : A → Fl4Spec.MachineState → Prop}
 set_option maxHeartbeats 4000000 in
 /-- (p3J gen 35) **The mid decode leaf of the Endpoint cap** (module docstring). -/
 theorem midDecEp_of (hA : P0.ArchTotal arI) (hnd : Fl4Spec.numDomains = 1)
-    (hMT : MachPlatT arI MR) (hKD : MRKeepD arI MR) [VxE Z] {s : S} {a : A} {σ : Fl4Spec.State Unit} {n : I64}
+    (hMT : MachPlat arI MR) (hKD : MRKeepD arI MR) [VxE Z] {s : S} {a : A} {σ : Fl4Spec.State Unit} {n : I64}
     {c : Fl4Spec.Syscall} (hX : SInvX σ) (hni : σ.curThread ≠ σ.idleThread) :
     MidDecStW (L := L) arI AR MR (fun cp => SInvCk.KW (absCap cp) ∧ IsEpCap cp) Z H Cs s a σ n c := by
   intro σb hBA V' Ac' Lst' D' s' a' hKF J hMb hCb hRRb ct rg sr cr hct hn info mi buf buffer r2 er argsU
@@ -174,7 +174,7 @@ theorem midDecEp_of (hA : P0.ArchTotal arI) (hnd : Fl4Spec.numDomains = 1)
 
 /-- (p3J gen 35) **gen 34's `midDecRest` from the Endpoint leaf and the remaining caps** (module docstring). -/
 theorem midDecRest_of_ep (hA : P0.ArchTotal arI) (hnd : Fl4Spec.numDomains = 1)
-    (hMT : MachPlatT arI MR) (hKD : MRKeepD arI MR) [VxE Z] {s : S} {a : A} {σ : Fl4Spec.State Unit} {n : I64}
+    (hMT : MachPlat arI MR) (hKD : MRKeepD arI MR) [VxE Z] {s : S} {a : A} {σ : Fl4Spec.State Unit} {n : I64}
     {c : Fl4Spec.Syscall} (hX : SInvX σ) (hni : σ.curThread ≠ σ.idleThread)
     (h : MidDecStW (L := L) arI AR MR
       (fun cp => SInvCk.KW (absCap cp) ∧ ¬ IsReplyCap cp ∧ ¬ IsEasyCap cp ∧ ¬ IsEpCap cp) Z H Cs s a σ n c) :

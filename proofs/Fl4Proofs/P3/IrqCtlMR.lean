@@ -9,7 +9,9 @@ cap's decode with `MR` at the chosen outcome** (`CPostM`).
   opaque rest, outside the four fields `MR` reads; MachFieldFam's
   `mkf_machineOpLift` on the spec side).
 * `invoke_mrM` (FL4): `invoke_irq_control` moves `MR` by its one
-  `mask_irq irq (IRQ_SIGNAL = IRQ_INACTIVE)` (`MaskMR`, i.e. `MachPlat.mask`);
+  `mask_irq irq (IRQ_SIGNAL = IRQ_INACTIVE)` (`MaskMR`, i.e. `MachPlat.mask`), an unmask, so for a line
+  `irq < 126` (collapse A, Q: irqfix's IrqFixA re-proofs written back; the callers pass the decode's bound
+  `ISA_MAX = 15` / `USER_MAX = 123`: `hirq6`, `hz126`);
   `ctl_mr_close` (spec): an outcome of `setIrqState Signal irq` then
   `capInsert` has the four fields of the line unmasked (`setIrqState_ms`,
   `MachT.mtk_capInsert`).
@@ -40,9 +42,9 @@ structure MRKeepIoapic (AR : A → C → Prop) : Prop where
   map : ∀ a i p l po v c, AR a c → arI.ioapic_map a i p l po v ⦃ r => AR r.2 c ⦄
   mapr : ∀ a i p l po v h c, AR a c → arI.ioapic_map_remapped a i p l po v h ⦃ r => AR r.2 c ⦄
 
-/-- `MachPlat.mask`'s shape. -/
+/-- `MachPlat.mask`'s shape (masking any line `< 256`, unmasking below 126; collapse A, Q: irqfix's `MaskMRF`). -/
 def MaskMR (MR : A → Fl4Spec.MachineState → Prop) : Prop :=
-  ∀ a (w : U64) m ms, MR a ms → w.val < 256 → arI.mask_irq a w m ⦃ a' =>
+  ∀ a (w : U64) m ms, MR a ms → w.val < cond m 256 126 → arI.mask_irq a w m ⦃ a' =>
     MR a' { ms with irqMasks := Function.update ms.irqMasks (w.bv.setWidth 8) m } ⦄
 
 end
@@ -110,12 +112,15 @@ section
 variable {S : Type} {st : machine.Store S} [L : P1.LawfulStore st] {A : Type} (arI : machine.Arch A)
 variable {MR : A → Fl4Spec.MachineState → Prop}
 
+theorem sig_inact_false : decide (interrupt.IRQ_SIGNAL = interrupt.IRQ_INACTIVE) = false := by
+  unfold interrupt.IRQ_SIGNAL interrupt.IRQ_INACTIVE; decide
+
 /-- **FL4's `invoke_irq_control` with `MR`** (module docstring). -/
 theorem invoke_mrM (hMk : MaskMR arI MR) {s : S} {a : A} {irq d src : U64} {ms : Fl4Spec.MachineState}
-    (hR : MR a ms) (hirq : irq.val < 256) :
+    (hR : MR a ms) (hirq : irq.val < 126) :
     interrupt.invoke_irq_control st arI s a irq d src ⦃ r =>
       MR r.2 { ms with irqMasks := Function.update ms.irqMasks (irq.bv.setWidth 8) (decide (interrupt.IRQ_SIGNAL = interrupt.IRQ_INACTIVE)) } ⦄ := by
-  obtain ⟨a1, ha1, hm1⟩ := spec_exists (hMk a irq (decide (interrupt.IRQ_SIGNAL = interrupt.IRQ_INACTIVE)) ms hR hirq)
+  obtain ⟨a1, ha1, hm1⟩ := spec_exists (hMk a irq (decide (interrupt.IRQ_SIGNAL = interrupt.IRQ_INACTIVE)) ms hR (by rw [sig_inact_false]; exact hirq))
   unfold interrupt.invoke_irq_control
   rw [set_irq_state_eq arI s a _ irq ha1]
   simp only [bind_ok]
@@ -261,7 +266,7 @@ theorem issue_tailM (th : TypedHeap) (hP : Placed th) (s : S) (ar : A) (σ : Fl4
     (ct : U64) (hcur : σ.curThread = ct.bv) (htcb : th ct = some .tcb)
     (hact : OutsideObjects th (L.nodeAt s (L.cpu s) layout.node.SCHED_ACTION))
     (hact2 : ∀ i : U64, i.val < 128 → L.nodeAt s (L.cpu s) layout.node.SCHED_ACTION ≠ irqStA (L.ksb s) i)
-    (irq : U64) (hirq : irq.val < 128) (hin : L.mem s (irqStA (L.ksb s) irq) = 0#u64)
+    (irq : U64) (hirq : irq.val < 128) (hirq6 : irq.val < 126) (hin : L.mem s (irqStA (L.ksb s) irq) = 0#u64)
     {ps : U64} {rs : Nat} (hps : th ps = some (.cnode rs)) {idxs : List Bool} (hls : idxs.length = rs)
     (hsrcC : capAt (L.mem s) (cslotAddr (ps.bv, idxs)) = ok .IrqControl)
     (dsl : Fl4Spec.CslotPtr) (pd : U64) (hpd1 : dsl.1 = pd.bv) (hpd : th pd = some (.cnode dsl.2.length))
@@ -297,7 +302,7 @@ theorem issue_tailM (th : TypedHeap) (hP : Placed th) (s : S) (ar : A) (σ : Fl4
   refine WP.spec_bind (WP.spec_and (WP.spec_and (invoke_ctl_rel arI th hP s1 ar σ1 G hCR1 hL1 hIR1' hHA1 hFI1 hFR1 hmask irq hirq
     hin1 hps hpd hls rfl hsrc1 hdst1 (hDL.same hS hkb))
     (invoke_ctl_dk4c arI hP s1 ar hL1 hCR1.2.2.1 hmask irq hirq hAs.isSlot hAd.isSlot hsrc1))
-    (invoke_mrM (L := L) arI hMk hR0 (show irq.val < 256 by omega))) ?_
+    (invoke_mrM (L := L) arI hMk hR0 hirq6)) ?_
   rintro ⟨s2, a2⟩ ⟨⟨⟨σ', G', hmem, hCR', hIR', -, hFI', hHA', hFR', hstp2⟩, hdk2⟩, hmr⟩
   apply (WP.spec_ok (core.result.Result.Ok (), s2, a2)).mpr
   refine ⟨.irqControl (BitVec.ofNat 8 irq.val) (pd.bv, db) (ps.bv, idxs), rfl, σ1, hst, σ', G', ?_, ?_, hCR', ?_,
@@ -410,7 +415,7 @@ theorem irq_issue_refinesM (th : TypedHeap) (hP : Placed th) (s : S) (ar : A) (�
     hR hV c0 ac0 hca0 hcv0 y1 y2
     (fun d => Fl4Spec.NonDetE.returnOk (.irqControl (BitVec.ofNat 8 y0.val) d (ps.bv, idxs))) _ ?_
   intro dsl pd hpd1 hpd hpdr hdst
-  exact issue_tailM arI th hP s ar σ G ⟨hR, hV, hM, hC, hI⟩ hL hIR hHA hFI hFR hmask ct hcur htcb hact hact2 y0 (by omega)
+  exact issue_tailM arI th hP s ar σ G ⟨hR, hV, hM, hC, hI⟩ hL hIR hHA hFI hFR hmask ct hcur htcb hact hact2 y0 (by omega) (by omega)
     hact0 hps hls hsrcC dsl pd hpd1 hpd hdst (DestLive.of_cnRef hpdr ⟨x0, hx0s, capV_of_capAt hc0⟩) hMk hfr hR0
 
 /-- **`X86IRQIssueIRQHandlerMSI`** (label 71). -/
@@ -507,6 +512,7 @@ theorem irq_msi_refinesM (th : TypedHeap) (hP : Placed th) (s : S) (ar : A) (σ 
   rw [hz]; simp only [bind_ok]
   rw [irqv_eq y6 hy6, show y6.val + 16 = z.val by rw [hzv]; rfl]
   have hz128 : z.val < 128 := by rw [hzv]; simp; omega
+  have hz126 : z.val < 126 := by rw [hzv]; simp; omega
   rw [is_irq_active_eq]; simp only [bind_ok]
   refine CPostM.congr (run_bind_ok (run_liftE (isIrqActive_run hIR hz128)) _) ?_
   by_cases hact0 : L.mem s (irqStA (L.ksb s) z) = 0#u64
@@ -579,7 +585,7 @@ theorem irq_msi_refinesM (th : TypedHeap) (hP : Placed th) (s : S) (ar : A) (σ 
   refine WP.spec_bind (WP.spec_and (WP.spec_and (ctl_finish arI th hP s σ G ⟨hR, hV, hM, hC, hI⟩ hL hHA hFI hFR hmask z hz128 hact0 hps hls hsrcC
     dsl pd hpd1 hpd hdst (DestLive.of_cnRef hpdr ⟨x0, hx0s, capV_of_capAt hc0⟩) s1 σ1 hkb hS hCR1 hIR1 hw (ksub_of_eq (setThreadState_nks _ _) hst) ar σb rfl rfl rfl rfl rfl)
     (ctl_dk4_at arI th hP s s1 hkb hS hL hCR1.2.2.1 hmask z hz128 hps hls hsrcC dsl pd hpd1 hpd ar))
-    (invoke_mrM (L := L) arI hMk hR0 (show z.val < 256 by omega))) ?_
+    (invoke_mrM (L := L) arI hMk hR0 hz126)) ?_
   rintro ⟨s2, a2⟩ ⟨⟨⟨σ', G', hmem, hCR', hIR', hFI', hHA', hFR', hstp2⟩, hdk2⟩, hmr⟩
   apply (WP.spec_ok (core.result.Result.Ok (), s2, a2)).mpr
   refine ⟨.issueIRQHandlerMSI (BitVec.ofNat 8 z.val) dsl (ps.bv, idxs) y2.bv y3.bv y4.bv y5.bv, rfl, σ1, hst,
@@ -686,6 +692,7 @@ theorem irq_ioapic_refinesM (th : TypedHeap) (hP : Placed th) (s : S) (ar : A) (
   rw [hz]; simp only [bind_ok]
   rw [irqv_eq y6 hy6, show y6.val + 16 = z.val by rw [hzv]; rfl]
   have hz128 : z.val < 128 := by rw [hzv]; simp; omega
+  have hz126 : z.val < 126 := by rw [hzv]; simp; omega
   rw [is_irq_active_eq]; simp only [bind_ok]
   refine CPostM.congr (run_bind_ok (run_liftE (isIrqActive_run hIR hz128)) _) ?_
   by_cases hact0 : L.mem s (irqStA (L.ksb s) z) = 0#u64
@@ -812,7 +819,7 @@ theorem irq_ioapic_refinesM (th : TypedHeap) (hP : Placed th) (s : S) (ar : A) (
   refine WP.spec_bind (WP.spec_and (WP.spec_and (ctl_finish arI th hP s σ G ⟨hR, hV, hM, hC, hI⟩ hL hHA hFI hFR hAR.mask z hz128 hact0 hps hls hsrcC
     dsl pd hpd1 hpd hdst (DestLive.of_cnRef hpdr ⟨x0, hx0s, capV_of_capAt hc0⟩) s1 σ1 hkb hS hCR1 hIR1 hw (ksub_of_eq (setThreadState_nks _ _) hst) a1 σb rfl rfl rfl rfl rfl)
     (ctl_dk4_at arI th hP s s1 hkb hS hL hCR1.2.2.1 hAR.mask z hz128 hps hls hsrcC dsl pd hpd1 hpd a1))
-    (invoke_mrM (L := L) arI hMk hRa1 (show z.val < 256 by omega))) ?_
+    (invoke_mrM (L := L) arI hMk hRa1 hz126)) ?_
   rintro ⟨s2, a2⟩ ⟨⟨⟨σ', G', hmem, hCR', hIR', hFI', hHA', hFR', hstp2⟩, hdk2⟩, hmr⟩
   apply (WP.spec_ok (core.result.Result.Ok (), s2, a2)).mpr
   refine ⟨.issueIRQHandlerIOAPIC (BitVec.ofNat 8 z.val) dsl (ps.bv, idxs) y2.bv y3.bv y4.bv y5.bv
@@ -921,6 +928,7 @@ theorem irq_remap_refinesM (th : TypedHeap) (hP : Placed th) (s : S) (ar : A) (�
   rw [hz]; simp only [bind_ok]
   rw [irqv_eq y6 hy6, show y6.val + 16 = z.val by rw [hzv]; rfl]
   have hz128 : z.val < 128 := by rw [hzv]; simp; omega
+  have hz126 : z.val < 126 := by rw [hzv]; simp; omega
   rw [is_irq_active_eq]; simp only [bind_ok]
   refine CPostM.congr (run_bind_ok (run_liftE (isIrqActive_run hIR hz128)) _) ?_
   by_cases hact0 : L.mem s (irqStA (L.ksb s) z) = 0#u64
@@ -1058,7 +1066,7 @@ theorem irq_remap_refinesM (th : TypedHeap) (hP : Placed th) (s : S) (ar : A) (�
   refine WP.spec_bind (WP.spec_and (WP.spec_and (ctl_finish arI th hP s σ G ⟨hR, hV, hM, hC, hI⟩ hL hHA hFI hFR hAR.mask z hz128 hact0 hps hls hsrcC
     dsl pd hpd1 hpd hdst (DestLive.of_cnRef hpdr ⟨x0, hx0s, capV_of_capAt hc0⟩) s1 σ1 hkb hS hCR1 hIR1 hw (ksub_of_eq (setThreadState_nks _ _) hst) a1 σb rfl rfl rfl rfl rfl)
     (ctl_dk4_at arI th hP s s1 hkb hS hL hCR1.2.2.1 hAR.mask z hz128 hps hls hsrcC dsl pd hpd1 hpd a1))
-    (invoke_mrM (L := L) arI hMk hRa1 (show z.val < 256 by omega))) ?_
+    (invoke_mrM (L := L) arI hMk hRa1 hz126)) ?_
   rintro ⟨s2, a2⟩ ⟨⟨⟨σ', G', hmem, hCR', hIR', hFI', hHA', hFR', hstp2⟩, hdk2⟩, hmr⟩
   apply (WP.spec_ok (core.result.Result.Ok (), s2, a2)).mpr
   refine ⟨.ioapicRemapped (BitVec.ofNat 8 z.val) dsl (ps.bv, idxs) y2.bv y3.bv y4.bv y5.bv

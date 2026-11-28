@@ -314,8 +314,31 @@ def JDecMRL2 (AR : A → Fl4Spec.Cr3 → Prop)
     XCapP (L := L) arI (JAtM (L := L) arI AR MR) (JAtPreMV (L := L) arI AR MR) s ar σ lbl length (cslotAddr sl) c
       blk call don fp buf extra slbl (argsU.map UScalar.bv) ci sl excaps buffer ct
 
+/-- **[J] The IRQ ack's unmask at an entry state** (module docstring): unmasking the line of an IRQ
+handler cap held in a CNode slot keeps `MR` (moved from IrqFixC in collapse A, Q). Under the un-narrowed `MachPlat`
+before collapse A (unmasking any line `< 256`) it held; under `MachPlatF` it is l4v `valid_cap`'s `irq ≤ maxIRQ` for the handler caps (`IrqAckU.of_bound`). -/
+def IrqAckU (MR : A → Fl4Spec.MachineState → Prop) (Z : XSets) (s : S) (ar : A) (σ : Fl4Spec.State Unit) : Prop :=
+  ∀ (sl : Fl4Spec.CslotPtr) (irq : U64), (∃ p, sl.1 = p.bv ∧ Z.th p = some (.cnode sl.2.length)) →
+    capAt (L.mem s) (cslotAddr sl) = ok (.IrqHandler irq) → irq.val < 128 → MR ar σ.machineState →
+    arI.mask_irq ar irq false ⦃ a' =>
+      MR a' { σ.machineState with irqMasks := Function.update σ.machineState.irqMasks (irq.bv.setWidth 8) false } ⦄
+
+/-- `JDecMRL2` with the IRQ ack's `IrqAckU`. -/
+def JDecMRL2Q (AR : A → Fl4Spec.Cr3 → Prop)
+    (MR : A → Fl4Spec.MachineState → Prop) (Z : XSets) (H : P1.Heap)
+    (Cs D : Set U64) (s : S) (ar : A) (σ : Fl4Spec.State Unit) (ct : U64) : Prop :=
+  JDecMRL2 (L := L) arI AR MR Z H Cs D s ar σ ct ∧ IrqAckU (L := L) arI MR Z s ar σ
+
 variable {AR : A → Fl4Spec.Cr3 → Prop} {Z : XSets} {H : P1.Heap} {Cs Ac : Set U64}
   {Lst : U64 → List U64} {D : Set U64} {MR : A → Fl4Spec.MachineState → Prop}
+
+variable {arI} in
+/-- **`IrqAckU` under `MachPlatF` from l4v `valid_cap`'s bound** (every handler cap's line `≤ maxIRQ`). -/
+theorem IrqAckU.of_bound (hM : MachPlatF arI MR) {s : S} {ar : A} {σ : Fl4Spec.State Unit}
+    (hB : ∀ (sl : Fl4Spec.CslotPtr) (irq : U64), (∃ p, sl.1 = p.bv ∧ Z.th p = some (.cnode sl.2.length)) →
+      capAt (L.mem s) (cslotAddr sl) = ok (.IrqHandler irq) → irq.val ≤ 125) :
+    IrqAckU (L := L) arI MR Z s ar σ :=
+  fun sl irq hsl hc _ hR => hM.mask0 ar irq _ hR (hB sl irq hsl hc)
 
 set_option maxHeartbeats 4000000 in
 /-- **`JDecMRL` from `JDecMRL2`** at a dispatch state (module docstring): the
@@ -329,7 +352,7 @@ theorem jDecMRL_of [Fl4Proofs.P1.PlainStore st] (s : S) (ar : A) (σ : Fl4Spec.S
     (ct : U64) (hct : sched.cur_thread st s = ok ct)
     (hPD : JPreDecHypM (L := L) arI AR MR Z H Cs D s ar σ ct) (hNs : NativeScope σ) (hM : MachPlat arI MR)
     (hKD : MRKeepD arI MR) (hIo : MRKeepIo arI MR)
-    (hIoa : MRKeepIoapic arI MR) (hDL : JDecMRL2 (L := L) arI AR MR Z H Cs D s ar σ ct) :
+    (hIoa : MRKeepIoapic arI MR) (hDL : JDecMRL2Q (L := L) arI AR MR Z H Cs D s ar σ ct) :
     JDecMRL (L := L) arI AR MR Z H Cs D s ar σ ct := by
   intro hR hVT hVI lbl length blk call don fp buf extra slbl argsU hlen hargs hbuf hl ci sl hsl c hc hcl
     excaps buffer hXO hXN hLb hA5 hN
@@ -346,7 +369,7 @@ theorem jDecMRL_of [Fl4Proofs.P1.PlainStore st] (s : S) (ar : A) (σ : Fl4Spec.S
   case IrqHandler irq =>
     have hirq : irq.val < 128 := (slot_cap_wf J.xtop hAs (capV_of_capAt hc)).1
     subst hLb
-    exact XCapP.mrG (f := fun ms => if lbl = fl4_abi.label.IRQAckIRQ then unmaskMs ms irq else ms) hM hX0 (MKD.decode_irq_handler_mr L.total hA hKD (hM.mask ar irq false _ hR (by omega)) hR)
+    exact XCapP.mrG (f := fun ms => if lbl = fl4_abi.label.IRQAckIRQ then unmaskMs ms irq else ms) hM hX0 (MKD.decode_irq_handler_mr L.total hA hKD (hDL.2 sl irq hsl hc hirq hR) hR)
       (perfF_irqH irq hirq lbl σ blk call don fp _ ci sl excaps buffer)
   case IrqControl =>
     subst hLb
@@ -365,7 +388,7 @@ theorem jDecMRL_of [Fl4Proofs.P1.PlainStore st] (s : S) (ar : A) (σ : Fl4Spec.S
       (fun _ _ _ h => Steps.jat arI hG.ari.toMask (jStepHyps arI) h rfl J (J.zNoBlk hE.sg)) (fun _ _ _ h => JAt.xtop arI h)
       blk call don fp ci buffer hM.mask (fun a ms ms' h e => mF_mr hM h e) hR hIoa).toPN arI (specDec_noPreK (by trivial))
   all_goals
-    exact hDL hR hVT hVI lbl length blk call don fp buf extra slbl argsU hlen hargs hbuf hl ci sl hsl _ hc
+    exact hDL.1 hR hVT hVI lbl length blk call don fp buf extra slbl argsU hlen hargs hbuf hl ci sl hsl _ hc
       ⟨trivial, hNat⟩ excaps buffer hXO hXN hLb hA5 hN
 
 end

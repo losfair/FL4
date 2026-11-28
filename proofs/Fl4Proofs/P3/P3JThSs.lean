@@ -305,7 +305,7 @@ variable {AR : A → Fl4Spec.Cr3 → Prop} {MR : A → Fl4Spec.MachineState → 
 set_option maxHeartbeats 4000000 in
 /-- (p3J gen 40) **The Thread cap's decode at a dispatch state at ConfigureSingleStepping, any flags** (module
 docstring). -/
-theorem decThSsSt (hA : P0.ArchTotal arI) (hMT : MachPlatT arI MR) (hKD : MRKeepD arI MR)
+theorem decThSsSt (hA : P0.ArchTotal arI) (hMT : MachPlat arI MR) (hKD : MRKeepD arI MR)
     [VxE Z] {V' : XVs} {Ac' : Set U64} {Lst' : U64 → List U64}
     {D' : Set U64} {s' : S} {a' : A} {σb : Fl4Spec.State Unit}
     (J : JAtZ (L := L) arI AR (Z.mv Z.G V') H Cs Ac' Lst' D' s' a' σb) (hnib : Entered σb)
@@ -348,7 +348,7 @@ theorem decThSsSt (hA : P0.ArchTotal arI) (hMT : MachPlatT arI MR) (hKD : MRKeep
       fl4_abi.label.TCBConfigureSingleStepping.val ≠ 9 ∧ fl4_abi.label.TCBConfigureSingleStepping.val ≠ 10 ∧
       fl4_abi.label.TCBConfigureSingleStepping.val ≠ 11 := by simp [fl4_abi.label.TCBConfigureSingleStepping]
   refine XCapP.lbl_congr arI (specDec_thread p hd) ?_
-  refine Fl4ProofsQ.P3.XCapP.mrG (f := id) hMT ?_
+  refine Fl4Proofs.P3.XCapP.mrG (f := id) hMT ?_
     (WP.spec_mono (MKD.decode_thread_nonins L.total hA hKD ss_nonIns hMb) fun r h => by split <;> exact h)
     (perfF_tcbN hlbl hl5 σb bl call don fp _ ci sl exs buffer p)
   refine XCap.toPN arI ?_ (thread_noPre_of hlbl hl5)
@@ -367,7 +367,7 @@ theorem decThSsSt (hA : P0.ArchTotal arI) (hMT : MachPlatT arI MR) (hKD : MRKeep
 
 set_option maxHeartbeats 4000000 in
 /-- (p3J gen 40) **`MidDecStWL` at `KW ∧ IsRestCap13` from the ConfigureSingleStepping leaf** (module docstring). -/
-theorem midDecRest13_of_ss (hA : P0.ArchTotal arI) (hnd : Fl4Spec.numDomains = 1) (hMT : MachPlatT arI MR)
+theorem midDecRest13_of_ss (hA : P0.ArchTotal arI) (hnd : Fl4Spec.numDomains = 1) (hMT : MachPlat arI MR)
     (hKD : MRKeepD arI MR) [VxE Z] {s : S} {a : A}
     {σ : Fl4Spec.State Unit} {n : I64} {c : Fl4Spec.Syscall} (hX : SInvX σ) (hni : σ.curThread ≠ σ.idleThread)
     (h : MidDecStWL (L := L) arI AR MR (fun cp l => SInvCk.KW (absCap cp) ∧ IsRestCap14 cp l) Z H Cs s a σ n c) :
@@ -383,7 +383,7 @@ theorem midDecRest13_of_ss (hA : P0.ArchTotal arI) (hnd : Fl4Spec.numDomains = 1
 
 set_option maxHeartbeats 4000000 in
 /-- (p3J gen 40) **`InvDecStWL` at `KW ∧ IsRestCap13` from the ConfigureSingleStepping leaf** (module docstring). -/
-theorem invDecRest13_of_ss (hA : P0.ArchTotal arI) (hnd : Fl4Spec.numDomains = 1) (hMT : MachPlatT arI MR)
+theorem invDecRest13_of_ss (hA : P0.ArchTotal arI) (hnd : Fl4Spec.numDomains = 1) (hMT : MachPlat arI MR)
     (hKD : MRKeepD arI MR) [VxE Z] {s : S} {a : A}
     {σ : Fl4Spec.State Unit} {n : I64} {call bl don : Bool} (hX : SInvX σ) (hni : σ.curThread ≠ σ.idleThread)
     (h : InvDecStWL (L := L) arI AR MR (fun cp l => SInvCk.KW (absCap cp) ∧ IsRestCap14 cp l) Z H Cs s a σ n

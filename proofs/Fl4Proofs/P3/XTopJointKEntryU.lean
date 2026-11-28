@@ -98,7 +98,7 @@ theorem kernel_entryJ13PUGMD4S [Fl4Proofs.P1.PlainStore st] {AR : A → Fl4Spec.
     (hDL : ∀ σb, BudgetAt σ σb true → ∀ (V' : XVs) (Ac' : Set U64) (Lst' : U64 → List U64) (D' : Set U64)
       (s' : S) (a' : A), KFrontB (L := L) arI s a s' a' →
         JAtZ (L := L) arI AR (Z.mv Z.G V') H Cs Ac' Lst' D' s' a' σb →
-        ∀ ct', sched.cur_thread st s' = ok ct' → JDecMRLK (L := L) arI VtxK AR MR (Z.mv Z.G V') H Cs D' s' a' σb ct')
+        ∀ ct', sched.cur_thread st s' = ok ct' → JDecMRLKQ (L := L) arI VtxK AR MR (Z.mv Z.G V') H Cs D' s' a' σb ct')
     (hFin : ∀ x ∈ (specFront c σ).1, ∀ (Z' : XSets) (H' : P1.Heap) (Cs' Ac' : Set U64) (Lst' : U64 → List U64)
       (D' : Set U64) (s' : S) (a' : A), KFrontF (L := L) arI n s a s' a' →
         JAtZR (L := L) arI AR Z' H' Cs' Ac' Lst' D' s' a' x.2 →
@@ -282,7 +282,7 @@ set_option maxHeartbeats 4000000 in
 /-- **The unified syscall top** (module docstring). Premises: `J` (carried),
 `hct` [S], `hR` (`MR`, carried), `hX : SInvX σ` (carried; `SInvW` = `hX.w`),
 `hI : SInvIP σ` (carried), `hLF : LargeFrOK` [J] FL4 at the entry, `hn` [S],
-`hflag` [S], `hK : KDispHypsKV42` and `hDL : JDecMRLK VtxK` [W] at the
+`hflag` [S], `hK : KDispHypsKV42` and `hDL : JDecMRLKQ VtxK` [W] at the
 dispatch states, `hFin : KFinAtR31` at the front outcomes, the [P] bundle,
 `hRP5 : RRPreAt5` [J] (m67's `nvm`, ReplyRecv only).
 `hSX : StoreExt` [P]: the fast path's BLOCK_OBJ / STATE write order (`P1.rr_same`). -/
@@ -301,7 +301,7 @@ theorem kernel_entryJ42 [Fl4Proofs.P1.PlainStore st] {AR : A → Fl4Spec.Cr3 →
     (hDL : ∀ σb, BudgetAt σ σb true → ∀ (V' : XVs) (Ac' : Set U64) (Lst' : U64 → List U64) (D' : Set U64)
       (s' : S) (a' : A), KFrontB (L := L) arI s a s' a' →
         JAtZ (L := L) arI AR (Z.mv Z.G V') H Cs Ac' Lst' D' s' a' σb →
-        ∀ ct', sched.cur_thread st s' = ok ct' → JDecMRLK (L := L) arI VtxK AR MR (Z.mv Z.G V') H Cs D' s' a' σb ct')
+        ∀ ct', sched.cur_thread st s' = ok ct' → JDecMRLKQ (L := L) arI VtxK AR MR (Z.mv Z.G V') H Cs D' s' a' σb ct')
     (hFin : ∀ x ∈ (specFront c σ).1, ∀ (Z' : XSets) (H' : P1.Heap) (Cs' Ac' : Set U64) (Lst' : U64 → List U64)
       (D' : Set U64) (s' : S) (a' : A), KFrontF (L := L) arI n s a s' a' →
         JAtZR (L := L) arI AR Z' H' Cs' Ac' Lst' D' s' a' x.2 →

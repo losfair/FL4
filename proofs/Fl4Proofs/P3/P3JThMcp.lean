@@ -220,7 +220,7 @@ variable {AR : A → Fl4Spec.Cr3 → Prop} {MR : A → Fl4Spec.MachineState → 
 
 set_option maxHeartbeats 4000000 in
 /-- (p3J gen 40) **The Thread cap's decode at a dispatch state at SetMCPriority, any flags** (module docstring). -/
-theorem decThMcpSt (hA : P0.ArchTotal arI) (hMT : MachPlatT arI MR) (hKD : MRKeepD arI MR)
+theorem decThMcpSt (hA : P0.ArchTotal arI) (hMT : MachPlat arI MR) (hKD : MRKeepD arI MR)
     [VxE Z] {V' : XVs} {Ac' : Set U64} {Lst' : U64 → List U64}
     {D' : Set U64} {s' : S} {a' : A} {σb : Fl4Spec.State Unit}
     (J : JAtZ (L := L) arI AR (Z.mv Z.G V') H Cs Ac' Lst' D' s' a' σb) (hnib : Entered σb)
@@ -275,7 +275,7 @@ theorem decThMcpSt (hA : P0.ArchTotal arI) (hMT : MachPlatT arI MR) (hKD : MRKee
       fl4_abi.label.TCBSetMCPriority.val ≠ 9 ∧ fl4_abi.label.TCBSetMCPriority.val ≠ 10 ∧
       fl4_abi.label.TCBSetMCPriority.val ≠ 11 := by simp [fl4_abi.label.TCBSetMCPriority]
   refine XCapP.lbl_congr arI (specDec_thread p hd) ?_
-  refine Fl4ProofsQ.P3.XCapP.mrG (f := id) hMT ?_
+  refine Fl4Proofs.P3.XCapP.mrG (f := id) hMT ?_
     (WP.spec_mono (MKD.decode_thread_nonins L.total hA hKD mcp_nonIns hMb) fun r h => by split <;> exact h)
     (perfF_tcbN hlbl hl5 σb bl call don fp _ ci sl exs buffer p)
   refine XCap.toPN arI ?_ (thread_noPre_of hlbl hl5)
@@ -292,7 +292,7 @@ theorem decThMcpSt (hA : P0.ArchTotal arI) (hMT : MachPlatT arI MR) (hKD : MRKee
 
 set_option maxHeartbeats 4000000 in
 /-- (p3J gen 40) **`MidDecStWL` at `KW ∧ IsRestCap10` from the SetMCPriority leaf** (module docstring). -/
-theorem midDecRest10_of_mcp (hA : P0.ArchTotal arI) (hnd : Fl4Spec.numDomains = 1) (hMT : MachPlatT arI MR)
+theorem midDecRest10_of_mcp (hA : P0.ArchTotal arI) (hnd : Fl4Spec.numDomains = 1) (hMT : MachPlat arI MR)
     (hKD : MRKeepD arI MR) [VxE Z] {s : S} {a : A}
     {σ : Fl4Spec.State Unit} {n : I64} {c : Fl4Spec.Syscall} (hX : SInvX σ) (hni : σ.curThread ≠ σ.idleThread)
     (h : MidDecStWL (L := L) arI AR MR (fun cp l => SInvCk.KW (absCap cp) ∧ IsRestCap11 cp l) Z H Cs s a σ n c) :
@@ -308,7 +308,7 @@ theorem midDecRest10_of_mcp (hA : P0.ArchTotal arI) (hnd : Fl4Spec.numDomains = 
 
 set_option maxHeartbeats 4000000 in
 /-- (p3J gen 40) **`InvDecStWL` at `KW ∧ IsRestCap10` from the SetMCPriority leaf** (module docstring). -/
-theorem invDecRest10_of_mcp (hA : P0.ArchTotal arI) (hnd : Fl4Spec.numDomains = 1) (hMT : MachPlatT arI MR)
+theorem invDecRest10_of_mcp (hA : P0.ArchTotal arI) (hnd : Fl4Spec.numDomains = 1) (hMT : MachPlat arI MR)
     (hKD : MRKeepD arI MR) [VxE Z] {s : S} {a : A}
     {σ : Fl4Spec.State Unit} {n : I64} {call bl don : Bool} (hX : SInvX σ) (hni : σ.curThread ≠ σ.idleThread)
     (h : InvDecStWL (L := L) arI AR MR (fun cp l => SInvCk.KW (absCap cp) ∧ IsRestCap11 cp l) Z H Cs s a σ n

@@ -292,6 +292,12 @@ def JDecMRLK (K : capability.Cap → U64 → List U64 → Prop) (AR : A → Fl4S
     XCapP (L := L) arI (JAtM (L := L) arI AR MR) (JAtPreMV (L := L) arI AR MR) s ar σ lbl length (cslotAddr sl) c
       blk call don fp buf extra slbl (argsU.map UScalar.bv) ci sl excaps buffer ct
 
+/-- `JDecMRLK` with the IRQ ack's `IrqAckU` (moved from IrqFixC in collapse A, Q). -/
+def JDecMRLKQ (K : capability.Cap → U64 → List U64 → Prop) (AR : A → Fl4Spec.Cr3 → Prop)
+    (MR : A → Fl4Spec.MachineState → Prop) (Z : XSets) (H : P1.Heap)
+    (Cs D : Set U64) (s : S) (ar : A) (σ : Fl4Spec.State Unit) (ct : U64) : Prop :=
+  JDecMRLK (L := L) arI K AR MR Z H Cs D s ar σ ct ∧ IrqAckU (L := L) arI MR Z s ar σ
+
 /-- **The caps left after the Thread cap** (module docstring): a Thread cap
 at SetEPTRoot (a VT-x label, [scope]) and every Untyped cap. -/
 def LoudT : capability.Cap → U64 → List U64 → Prop
@@ -374,6 +380,16 @@ theorem jDecMRL2_ofT [Fl4Proofs.P1.PlainStore st] (s : S) (ar : A) (σ : Fl4Spec
     exact hR3 hR hVT hVI lbl length blk call don fp buf extra slbl argsU hlen hargs hbuf hl ci sl hsl _ hc trivial
       excaps buffer hXO hXN hLb hA5 hN
   all_goals exact (show False from hcl.1).elim
+
+set_option maxHeartbeats 4000000 in
+/-- `jDecMRL2_ofT` carrying `IrqAckU` (`JDecMRLKQ`; moved from IrqFixC in collapse A, Q). -/
+theorem jDecMRL2_ofTQ [Fl4Proofs.P1.PlainStore st] (s : S) (ar : A) (σ : Fl4Spec.State Unit)
+    (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s ar σ) [VxE Z]
+    (hG : JEntryGlobM (L := L) arI AR MR Z.th) (hE : JEntryAt (L := L) arI AR Z H Cs s ar σ)
+    (ct : U64) (hct : sched.cur_thread st s = ok ct) (hM : MachPlat arI MR) (hKD : MRKeepD arI MR)
+    (hR3 : JDecMRLKQ (L := L) arI LoudT AR MR Z H Cs D s ar σ ct) :
+    JDecMRL2Q (L := L) arI AR MR Z H Cs D s ar σ ct :=
+  ⟨jDecMRL2_ofT arI s ar σ J hG hE ct hct hM hKD hR3.1, hR3.2⟩
 
 end
 
@@ -460,6 +476,17 @@ theorem jDecMRLK_ofU [Fl4Proofs.P1.PlainStore st] (s : S) (ar : A) (σ : Fl4Spec
           (hUR hR hVT hVI lbl length blk call don fp buf extra slbl argsU hlen hargs hbuf hl ci sl hsl _ hc p sb fi true rfl
             hNat excaps buffer hXO hXN hLb hA5 hN0) hR)
   all_goals exact (show False from hK).elim
+
+set_option maxHeartbeats 4000000 in
+/-- `jDecMRLK_ofU` carrying `IrqAckU` (`JDecMRLKQ`; moved from IrqFixC in collapse A, Q). -/
+theorem jDecMRLK_ofUQ [Fl4Proofs.P1.PlainStore st] (s : S) (ar : A) (σ : Fl4Spec.State Unit)
+    (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s ar σ) [VxE Z]
+    (hG : JEntryGlobM (L := L) arI AR MR Z.th) (hE : JEntryAt (L := L) arI AR Z H Cs s ar σ)
+    (ct : U64) (hct : sched.cur_thread st s = ok ct) (hM : MachPlat arI MR) (hKD : MRKeepD arI MR)
+    (hVx : JDecMRLKQ (L := L) arI VtxK AR MR Z H Cs D s ar σ ct)
+    (hUR : JUtResetHyp (L := L) arI AR MR Z H Cs D s ar σ ct) :
+    JDecMRLKQ (L := L) arI LoudT AR MR Z H Cs D s ar σ ct :=
+  ⟨jDecMRLK_ofU arI s ar σ J hG hE ct hct hM hKD hVx.1 hUR, hVx.2⟩
 
 end
 /-! ## Every native dispatch with `MR` at the chosen outcome -/

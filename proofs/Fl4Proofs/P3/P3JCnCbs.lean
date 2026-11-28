@@ -193,7 +193,7 @@ variable {AR : A → Fl4Spec.Cr3 → Prop} {MR : A → Fl4Spec.MachineState → 
 set_option maxHeartbeats 4000000 in
 /-- (p3J gen 39) **The CNode cap's decode at a dispatch state at CancelBadgedSends, any flags** (module
 docstring). -/
-theorem decCnCbsSt (hA : P0.ArchTotal arI) (hARI : ARIface arI AR) (hMT : MachPlatT arI MR) (hKD : MRKeepD arI MR)
+theorem decCnCbsSt (hA : P0.ArchTotal arI) (hARI : ARIface arI AR) (hMT : MachPlat arI MR) (hKD : MRKeepD arI MR)
     [VxE Z] {V' : XVs} {Ac' : Set U64} {Lst' : U64 → List U64}
     {D' : Set U64} {s' : S} {a' : A} {σb : Fl4Spec.State Unit}
     (J : JAtZ (L := L) arI AR (Z.mv Z.G V') H Cs Ac' Lst' D' s' a' σb) (hnib : Entered σb) (hsg : SpecGlob σb)
@@ -253,7 +253,7 @@ theorem decCnCbsSt (hA : P0.ArchTotal arI) (hARI : ARIface arI AR) (hMT : MachPl
 set_option maxHeartbeats 4000000 in
 /-- (p3J gen 39) **`MidDecStWL` at `KW ∧ IsRestCap7` from the CancelBadgedSends leaf** (module docstring). -/
 theorem midDecRest7_of_cbs (hA : P0.ArchTotal arI) (hnd : Fl4Spec.numDomains = 1) (hARI : ARIface arI AR)
-    (hMT : MachPlatT arI MR) (hKD : MRKeepD arI MR) [VxE Z] {s : S} {a : A}
+    (hMT : MachPlat arI MR) (hKD : MRKeepD arI MR) [VxE Z] {s : S} {a : A}
     {σ : Fl4Spec.State Unit} {n : I64} {c : Fl4Spec.Syscall} (hX : SInvX σ) (hni : σ.curThread ≠ σ.idleThread)
     (h : MidDecStWL (L := L) arI AR MR (fun cp l => SInvCk.KW (absCap cp) ∧ IsRestCap8 cp l) Z H Cs s a σ n c) :
     MidDecStWL (L := L) arI AR MR (fun cp l => SInvCk.KW (absCap cp) ∧ IsRestCap7 cp l) Z H Cs s a σ n c := by
@@ -270,7 +270,7 @@ theorem midDecRest7_of_cbs (hA : P0.ArchTotal arI) (hnd : Fl4Spec.numDomains = 1
 set_option maxHeartbeats 4000000 in
 /-- (p3J gen 39) **`InvDecStWL` at `KW ∧ IsRestCap7` from the CancelBadgedSends leaf** (module docstring). -/
 theorem invDecRest7_of_cbs (hA : P0.ArchTotal arI) (hnd : Fl4Spec.numDomains = 1) (hARI : ARIface arI AR)
-    (hMT : MachPlatT arI MR) (hKD : MRKeepD arI MR) [VxE Z] {s : S} {a : A}
+    (hMT : MachPlat arI MR) (hKD : MRKeepD arI MR) [VxE Z] {s : S} {a : A}
     {σ : Fl4Spec.State Unit} {n : I64} {call bl don : Bool} (hX : SInvX σ) (hni : σ.curThread ≠ σ.idleThread)
     (h : InvDecStWL (L := L) arI AR MR (fun cp l => SInvCk.KW (absCap cp) ∧ IsRestCap8 cp l) Z H Cs s a σ n
       call bl don) :

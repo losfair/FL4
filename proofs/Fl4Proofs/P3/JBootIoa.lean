@@ -210,7 +210,7 @@ start state `jReachU34_w0I`, under `OpaqueWK` [P] (no `irqOracle` fact). The `Pl
 theorem u34_w0I1 (O : OpaqueWK) :
     ARIface warI1 wAR ∧ P0.ArchTotal warI1 ∧ Fl4Spec.numDomains = 1 ∧ MachPlatF warI1 ipiMR ∧ IpiF warI1 ipiMR ∧
       MRKeepD warI1 ipiMR ∧ MRKeepIo warI1 ipiMR ∧ MRKeepIoapic warI1 ipiMR ∧
-      (∀ a c, wAR a c → warI1.irq_pending a ⦃ r => wAR r.2 c ⦄) ∧ IrqPlatK warI1 wAR ∧ TimeAgree warI1 ∧
+      (∀ a c, wAR a c → warI1.irq_pending a ⦃ r => wAR r.2 c ⦄) ∧ IrqPlatA warI1 wAR ∧ TimeAgree warI1 ∧
       Fl4Spec.maxTicksToUs = core.num.U64.MAX.bv ∧
       (∀ a v, warI1.ticks_to_us a v ⦃ r => r.bv = Fl4Spec.ticksToUs v.bv ⦄) ∧
       ArchRefines warI1 wAR ∧ PortInValMR warI1 ipiMR ∧ P1.StoreExt wst ∧
@@ -277,7 +277,7 @@ its start state `jReachU38_w0I1`, under `OpaqueWK` [P]. Only U38's per-entry [J]
 theorem u38_w0I1 (O : OpaqueWK) :
     ARIface warI1 wAR ∧ P0.ArchTotal warI1 ∧ Fl4Spec.numDomains = 1 ∧ MachPlatF warI1 ipiMR ∧ IpiF warI1 ipiMR ∧
       MRKeepD warI1 ipiMR ∧ MRKeepIo warI1 ipiMR ∧ MRKeepIoapic warI1 ipiMR ∧
-      (∀ a c, wAR a c → warI1.irq_pending a ⦃ r => wAR r.2 c ⦄) ∧ IrqPlatK warI1 wAR ∧ TimeAgree warI1 ∧
+      (∀ a c, wAR a c → warI1.irq_pending a ⦃ r => wAR r.2 c ⦄) ∧ IrqPlatA warI1 wAR ∧ TimeAgree warI1 ∧
       Fl4Spec.maxTicksToUs = core.num.U64.MAX.bv ∧
       (∀ a v, warI1.ticks_to_us a v ⦃ r => r.bv = Fl4Spec.ticksToUs v.bv ⦄) ∧
       ArchRefines warI1 wAR ∧ PortInValMR warI1 ipiMR ∧ P1.StoreExt wst ∧
@@ -295,7 +295,7 @@ theorem warI1_ioaMap : IoaMap warI1 :=
 theorem u39_w0I1 (O : OpaqueWK) :
     ARIface warI1 wAR ∧ P0.ArchTotal warI1 ∧ Fl4Spec.numDomains = 1 ∧ MachPlatF warI1 ipiMR ∧ IpiF warI1 ipiMR ∧
       MRKeepD warI1 ipiMR ∧ MRKeepIo warI1 ipiMR ∧ MRKeepIoapic warI1 ipiMR ∧
-      (∀ a c, wAR a c → warI1.irq_pending a ⦃ r => wAR r.2 c ⦄) ∧ IrqPlatK warI1 wAR ∧ TimeAgree warI1 ∧
+      (∀ a c, wAR a c → warI1.irq_pending a ⦃ r => wAR r.2 c ⦄) ∧ IrqPlatA warI1 wAR ∧ TimeAgree warI1 ∧
       Fl4Spec.maxTicksToUs = core.num.U64.MAX.bv ∧
       (∀ a v, warI1.ticks_to_us a v ⦃ r => r.bv = Fl4Spec.ticksToUs v.bv ⦄) ∧
       ArchRefines warI1 wAR ∧ PortInValMR warI1 ipiMR ∧ P1.StoreExt wst ∧

@@ -134,7 +134,7 @@ set_option maxHeartbeats 4000000 in
 /-- (p3J gen 38) **gen 37's `midDecRest` from the SchedContext leaf and the label-aware three left** (module
 docstring). -/
 theorem midDecRest3_of_sc (hA : P0.ArchTotal arI) (hnd : Fl4Spec.numDomains = 1) (hARI : ARIface arI AR)
-    (hMT : MachPlatT arI MR) (hKD : MRKeepD arI MR) (hT : TimeAgree arI)
+    (hMT : MachPlat arI MR) (hKD : MRKeepD arI MR) (hT : TimeAgree arI)
     (hmax : Fl4Spec.maxTicksToUs = core.num.U64.MAX.bv)
     (htu : ∀ a v, arI.ticks_to_us a v ⦃ r => r.bv = Fl4Spec.ticksToUs v.bv ⦄) [VxE Z] {s : S} {a : A}
     {σ : Fl4Spec.State Unit} {n : I64} {c : Fl4Spec.Syscall} (hX : SInvX σ) (hni : σ.curThread ≠ σ.idleThread)
@@ -154,7 +154,7 @@ set_option maxHeartbeats 4000000 in
 /-- (p3J gen 38) **gen 37's `invDecRest` from the SchedContext leaf and the label-aware three left** (module
 docstring). -/
 theorem invDecRest3_of_sc (hA : P0.ArchTotal arI) (hnd : Fl4Spec.numDomains = 1) (hARI : ARIface arI AR)
-    (hMT : MachPlatT arI MR) (hKD : MRKeepD arI MR) (hT : TimeAgree arI)
+    (hMT : MachPlat arI MR) (hKD : MRKeepD arI MR) (hT : TimeAgree arI)
     (hmax : Fl4Spec.maxTicksToUs = core.num.U64.MAX.bv)
     (htu : ∀ a v, arI.ticks_to_us a v ⦃ r => r.bv = Fl4Spec.ticksToUs v.bv ⦄) [VxE Z] {s : S} {a : A}
     {σ : Fl4Spec.State Unit} {n : I64} {call bl don : Bool} (hX : SInvX σ) (hni : σ.curThread ≠ σ.idleThread)

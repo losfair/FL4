@@ -4,8 +4,9 @@ P3 (line p3J, gen 2): **`kernel_entry_reachU35`'s proof transported onto the nar
 
 Definitions `JPathAtM`, …, `JPathAtMU29` ↦ `JPathAtML`, …, `JPathAtMU29L` and `JPathAtMU30` ↦ `JPathAtMU35`
 (P3JLook); the 16 conversions and the two consumers that apply the path premise ↦ their P3JLook re-proofs;
-every other constant of U35's cone mentioning these ↦ its copy (`Fl4ProofsJ…`, `Fl4ProofsJI…`,
-`Fl4ProofsJQ…`, `Fl4ProofsJQI…`). The copy `Fl4ProofsJ.P3.SInvR.G5.kernel_entry_reachU35` is U35 with
+every other constant of U35's cone mentioning these ↦ its copy (`Fl4ProofsJ…`; collapse A, N / I / Q: the
+`Fl4ProofsJI…` / `Fl4ProofsJQ…` / `Fl4ProofsJQI…` copies of the earlier transports' copies are gone, the cone is
+the base one). The copy `Fl4ProofsJ.P3.SInvR.G5.kernel_entry_reachU35` is U35 with
 `KDispHypsKVU35` ↦ its copy (fields on `JPathAtMU35`); XTopJointKEntryU36 states it. No premise added; no
 sorry.
 -/
@@ -53,7 +54,7 @@ def specL : Spec where
      (`Fl4Proofs.P3.SInvR.G5.JPathAtMU29.toU28, `Fl4Proofs.P3.SInvR.G5.JPathAtMU29L.toU28L),
      (`Fl4Proofs.P3.SInvR.G5.JPathAtMU30.toU29, `Fl4Proofs.P3.SInvR.G5.JPathAtMU35.toU29L),
      (`Fl4Proofs.P3.handle_invocation_entryJMU, `Fl4Proofs.P3.handle_invocation_entryJMUL),
-     (`Fl4ProofsQ.P3.handle_invocation_entryJMUM, `Fl4Proofs.P3.handle_invocation_entryJMUML)]
+     (`Fl4Proofs.P3.handle_invocation_entryJMUM, `Fl4Proofs.P3.handle_invocation_entryJMUML)]
 
 end Fl4Proofs.P3.P3JX
 

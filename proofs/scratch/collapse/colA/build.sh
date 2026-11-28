@@ -3,7 +3,7 @@
 # sweeps collapse/axall.lean / axallA64.lean. Run from the mirror's repo root. SEED: absolute path of a built .lake.
 mkdir -p afklogs colAback; S=${SEED:-/data/fl4/lake/FL4-int27}
 free -g | head -2
-MODE=build NAX=100000 AX=proofs/scratch/collapse/colA/axint27b3.lean SEED=$S bash proofs/scratch/int27/rssrun.sh > afklogs/colA-build.out 2>&1; echo BUILD_EXIT $?
+MODE=build NAX=100000 AX=${AXF:-proofs/scratch/collapse/colA/axint27b3.lean} SEED=$S bash proofs/scratch/int27/rssrun.sh > afklogs/colA-build.out 2>&1; echo BUILD_EXIT $?
 grep -E '^(SEEDED|SEEDFAIL|BUILD|ERRORS|SORRY|JOBS|OLEANS|AX|RSS_OVER)' afklogs/colA-build.out
 grep -E 'Build completed|error: build failed' afklogs/b-build.log | tail -2
 grep -E '^error' afklogs/b-build.log | head -40

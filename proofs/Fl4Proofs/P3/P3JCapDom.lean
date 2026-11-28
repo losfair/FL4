@@ -64,7 +64,7 @@ variable {AR : A → Fl4Spec.Cr3 → Prop} {MR : A → Fl4Spec.MachineState → 
 set_option maxHeartbeats 4000000 in
 /-- (p3J gen 36) **The Domain cap's decode at a dispatch state, any flags** (module docstring). -/
 theorem decDomSt (hA : P0.ArchTotal arI) (hnd : Fl4Spec.numDomains = 1) (hARI : ARIface arI AR)
-    (hMT : MachPlatT arI MR) (hKD : MRKeepD arI MR) [VxE Z] {V' : XVs} {Ac' : Set U64} {Lst' : U64 → List U64}
+    (hMT : MachPlat arI MR) (hKD : MRKeepD arI MR) [VxE Z] {V' : XVs} {Ac' : Set U64} {Lst' : U64 → List U64}
     {D' : Set U64} {s' : S} {a' : A} {σb : Fl4Spec.State Unit}
     (J : JAtZ (L := L) arI AR (Z.mv Z.G V') H Cs Ac' Lst' D' s' a' σb) (hnib : Entered σb) (hsg : SpecGlob σb)
     (hMb : MR a' σb.machineState) {ct : U64} (hct : sched.cur_thread st s' = ok ct)
@@ -129,7 +129,7 @@ theorem dispEnteredSg (hnd : Fl4Spec.numDomains = 1) {σ σb : Fl4Spec.State Uni
 set_option maxHeartbeats 4000000 in
 /-- (p3J gen 36) **The mid decode leaf of the Domain cap** (module docstring). -/
 theorem midDecDom_of (hA : P0.ArchTotal arI) (hnd : Fl4Spec.numDomains = 1) (hARI : ARIface arI AR)
-    (hMT : MachPlatT arI MR) (hKD : MRKeepD arI MR) [VxE Z] {s : S} {a : A} {σ : Fl4Spec.State Unit} {n : I64}
+    (hMT : MachPlat arI MR) (hKD : MRKeepD arI MR) [VxE Z] {s : S} {a : A} {σ : Fl4Spec.State Unit} {n : I64}
     {c : Fl4Spec.Syscall} (hX : SInvX σ) (hni : σ.curThread ≠ σ.idleThread) :
     MidDecStW (L := L) arI AR MR (fun cp => SInvCk.KW (absCap cp) ∧ cp = .Domain) Z H Cs s a σ n c := by
   intro σb hBA V' Ac' Lst' D' s' a' hKF J hMb hCb hRRb ct rg sr cr hct hn info mi buf buffer r2 er argsU
@@ -141,7 +141,7 @@ theorem midDecDom_of (hA : P0.ArchTotal arI) (hnd : Fl4Spec.numDomains = 1) (hAR
 set_option maxHeartbeats 4000000 in
 /-- (p3J gen 36) **The invoking class's decode leaf of the Domain cap** (module docstring). -/
 theorem invDecDom_of (hA : P0.ArchTotal arI) (hnd : Fl4Spec.numDomains = 1) (hARI : ARIface arI AR)
-    (hMT : MachPlatT arI MR) (hKD : MRKeepD arI MR) [VxE Z] {s : S} {a : A} {σ : Fl4Spec.State Unit} {n : I64}
+    (hMT : MachPlat arI MR) (hKD : MRKeepD arI MR) [VxE Z] {s : S} {a : A} {σ : Fl4Spec.State Unit} {n : I64}
     {call bl don : Bool} (hX : SInvX σ) (hni : σ.curThread ≠ σ.idleThread) :
     InvDecStW (L := L) arI AR MR (fun cp => SInvCk.KW (absCap cp) ∧ cp = .Domain) Z H Cs s a σ n call bl don := by
   intro σb hBA V' Ac' Lst' D' s' a' hKF J hMb hCb hRRb ct hct hn info mi buf buffer r2 er argsU
@@ -152,7 +152,7 @@ theorem invDecDom_of (hA : P0.ArchTotal arI) (hnd : Fl4Spec.numDomains = 1) (hAR
 
 /-- (p3J gen 36) **gen 35's `midDecRest` from the Domain leaf and the four left** (module docstring). -/
 theorem midDecRest_of_dom (hA : P0.ArchTotal arI) (hnd : Fl4Spec.numDomains = 1) (hARI : ARIface arI AR)
-    (hMT : MachPlatT arI MR) (hKD : MRKeepD arI MR) [VxE Z] {s : S} {a : A} {σ : Fl4Spec.State Unit} {n : I64}
+    (hMT : MachPlat arI MR) (hKD : MRKeepD arI MR) [VxE Z] {s : S} {a : A} {σ : Fl4Spec.State Unit} {n : I64}
     {c : Fl4Spec.Syscall} (hX : SInvX σ) (hni : σ.curThread ≠ σ.idleThread)
     (h : MidDecStW (L := L) arI AR MR (fun cp => SInvCk.KW (absCap cp) ∧ IsRestCap cp) Z H Cs s a σ n c) :
     MidDecStW (L := L) arI AR MR
@@ -168,7 +168,7 @@ theorem midDecRest_of_dom (hA : P0.ArchTotal arI) (hnd : Fl4Spec.numDomains = 1)
 
 /-- (p3J gen 36) **gen 35's `invDecRest` from the Domain leaf and the four left** (module docstring). -/
 theorem invDecRest_of_dom (hA : P0.ArchTotal arI) (hnd : Fl4Spec.numDomains = 1) (hARI : ARIface arI AR)
-    (hMT : MachPlatT arI MR) (hKD : MRKeepD arI MR) [VxE Z] {s : S} {a : A} {σ : Fl4Spec.State Unit} {n : I64}
+    (hMT : MachPlat arI MR) (hKD : MRKeepD arI MR) [VxE Z] {s : S} {a : A} {σ : Fl4Spec.State Unit} {n : I64}
     {call bl don : Bool} (hX : SInvX σ) (hni : σ.curThread ≠ σ.idleThread)
     (h : InvDecStW (L := L) arI AR MR (fun cp => SInvCk.KW (absCap cp) ∧ IsRestCap cp) Z H Cs s a σ n call bl don) :
     InvDecStW (L := L) arI AR MR

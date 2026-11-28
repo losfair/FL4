@@ -119,7 +119,7 @@ theorem midX_of_wjst {kb : U64} {s0 s : S} {a : A} {σ : Fl4Spec.State Unit} {G 
 
 /-- (p3J gen 46) **`MidXP` at the installs' preempted invariant** (module docstring; P3JPreSt's `midXP_of_wjpv`). -/
 theorem midXP_of_wjstp [VxE Z] (hARI : ARIface arI AR) (hAT : P0.ArchTotal arI) (hnd : Fl4Spec.numDomains = 1)
-    (hM : MachPlatT arI MR) (hKD : MRKeepD arI MR) (hIP : IrqPlatK arI AR) (hTA : TimeAgree arI)
+    (hM : MachPlat arI MR) (hKD : MRKeepD arI MR) (hIP : IrqPlatA arI AR) (hTA : TimeAgree arI)
     (hPA : PPPlatA arI AR) {kb : U64} {s0 s : S} {a : A} {σ : Fl4Spec.State Unit} {G : MdbGhost}
     (h : WJStP (L := L) arI AR MR Z H Cs s0 kb s a σ G) : MidXP (L := L) arI AR MR Z H Cs s0 s a σ :=
   midXP_of_wjpv hARI hAT hnd hM hKD hIP hTA hPA h.1 h.2.1 h.2.2
@@ -274,7 +274,7 @@ set_option maxHeartbeats 4000000 in
 theorem tcb_set_spaceJSt [Fl4Proofs.P1.PlainStore st] (hARI : ARIface arI AR) (hT : P0.ArchTotal arI)
     (hticks : Fl4Spec.maxTicksToUs = core.num.U64.MAX.bv ∧
       ∀ (a : A) (v : U64), arI.ticks_to_us a v ⦃ r => r.bv = Fl4Spec.ticksToUs v.bv ⦄)
-    (hnd : Fl4Spec.numDomains = 1) (hMT : MachPlatT arI MR) (hKD : MRKeepD arI MR) (hIP : IrqPlatK arI AR)
+    (hnd : Fl4Spec.numDomains = 1) (hMT : MachPlat arI MR) (hKD : MRKeepD arI MR) (hIP : IrqPlatA arI AR)
     (hTA : TimeAgree arI) (hPA : PPPlatA arI AR)
     {G : MdbGhost} {V : XVs} (s : S) (ar : A) (σ : Fl4Spec.State Unit)
     (J : JAtZ (L := L) arI AR (Z.mv G V) H Cs Ac Lst D s ar σ) [VxE (Z.mv G V)] (hni : Entered σ)

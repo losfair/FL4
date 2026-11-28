@@ -66,7 +66,7 @@ set_option maxHeartbeats 4000000 in
 /-- `IrqFootWC` at a `NoSig` state from `BudFootJ` and `FinFootJ` (`IrqSigFootJ` not needed). -/
 theorem irqFootWC_of_JN (hARI : ARIface arI AR) (hA : P0.ArchTotal arI)
     (hnd : Fl4Spec.numDomains = 1) (hM : MachPlatF arI MR) (hIp : IpiF arI MR) (hKD : MRKeepD arI MR)
-    (hIA : IrqPlatK arI AR) (hT : TimeAgree arI) (hmax : Fl4Spec.maxTicksToUs = core.num.U64.MAX.bv)
+    (hIA : IrqPlatA arI AR) (hT : TimeAgree arI) (hmax : Fl4Spec.maxTicksToUs = core.num.U64.MAX.bv)
     (htu : ∀ a v, arI.ticks_to_us a v ⦃ r => r.bv = Fl4Spec.ticksToUs v.bv ⦄)
     (hBud : BudFootJ (st := st) (L := L) arI AR) (hFn : FinFootJ (st := st) (L := L) arI AR) (s : S) (a : A)
     (σ : Fl4Spec.State Unit) (hN : SInvNs.NoSig σ) :
@@ -75,7 +75,7 @@ theorem irqFootWC_of_JN (hARI : ARIface arI AR) (hA : P0.ArchTotal arI)
   obtain ⟨⟨⟨⟨⟨hJ17, -⟩, -⟩, hCK⟩, -⟩, -⟩ := hR
   obtain ⟨_, _, _, _, _, _, -, hX, -⟩ := jreach_invU3 hnd hJ17.1
   haveI := hV
-  exact WP.spec_mono (Fl4ProofsQ.P3.jEvRef_irqAFt J hX hCK hw hBud (Or.inr hN) hFn hARI hA hnd
+  exact WP.spec_mono (Fl4Proofs.P3.jEvRef_irqAFt J hX hCK hw hBud (Or.inr hN) hFn hARI hA hnd
     (MachPlatF.toT hM hIp) hKD hIA (fun a => hT.mrt a) hT.mb hmax htu) fun r hr _ _ => hr
 
 set_option maxHeartbeats 4000000 in
@@ -84,7 +84,7 @@ docstring; `hBud`, `hFn` [J]). -/
 theorem kernel_entry_runMcWKN_irqJ [Fl4Proofs.P1.PlainStore st] (hARI : ARIface arI AR) (hA : P0.ArchTotal arI)
     (hnd : Fl4Spec.numDomains = 1) (hM : MachPlatF arI MR) (hIp : IpiF arI MR)
     (hKD : MRKeepD arI MR)
-    (hPAi : ∀ a c, AR a c → arI.irq_pending a ⦃ r => AR r.2 c ⦄) (hIA : IrqPlatK arI AR)
+    (hPAi : ∀ a c, AR a c → arI.irq_pending a ⦃ r => AR r.2 c ⦄) (hIA : IrqPlatA arI AR)
     (hT : TimeAgree arI)
     (hmax : Fl4Spec.maxTicksToUs = core.num.U64.MAX.bv)
     (htu : ∀ a v, arI.ticks_to_us a v ⦃ r => r.bv = Fl4Spec.ticksToUs v.bv ⦄)

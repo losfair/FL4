@@ -45,7 +45,7 @@ changed.
 import Fl4Proofs.P3.P3JNtfnFt
 import Fl4Proofs.P3.P3JCapDom
 import Fl4Proofs.P3.XTopJointIrqL
-import Fl4Proofs.P3.IrqFixGenB
+import Fl4Proofs.P3.JBootIpi
 import Fl4Proofs.P3.ScInstFoot
 open Aeneas Aeneas.Std Result
 
@@ -198,7 +198,7 @@ variable {AR : A → Fl4Spec.Cr3 → Prop} {MR : A → Fl4Spec.MachineState → 
 set_option maxHeartbeats 4000000 in
 /-- (p3J gen 37) **The IrqHandler cap's decode at a dispatch state, any flags** (module docstring). -/
 theorem decIrqSt [Fl4Proofs.P1.PlainStore st] (hA : P0.ArchTotal arI) (hARI : ARIface arI AR)
-    (hMT : MachPlatT arI MR) (hKD : MRKeepD arI MR) {V' : XVs} {Ac' : Set U64} {Lst' : U64 → List U64}
+    (hMT : MachPlat arI MR) (hKD : MRKeepD arI MR) {V' : XVs} {Ac' : Set U64} {Lst' : U64 → List U64}
     {D' : Set U64} {s' : S} {a' : A} {σb : Fl4Spec.State Unit}
     (J : JAtZ (L := L) arI AR (Z.mv Z.G V') H Cs Ac' Lst' D' s' a' σb) (hnib : Entered σb) (hsg : SpecGlob σb)
     (hP0 : PPR0 σb) (hMb : MR a' σb.machineState) {ct : U64} (hct : sched.cur_thread st s' = ok ct)
@@ -239,7 +239,7 @@ theorem decIrqSt [Fl4Proofs.P1.PlainStore st] (hA : P0.ArchTotal arI) (hARI : AR
     rw [hr2, WP.spec_ok] at h
     exact h e he
   rw [← hLb]
-  refine Fl4ProofsQ.P3.XCapP.mrG
+  refine Fl4Proofs.P3.XCapP.mrG
     (f := fun ms => if info.label = fl4_abi.label.IRQAckIRQ then unmaskMs ms irq else ms) hMT ?_
     (MKD.decode_irq_handler_mr L.total hA hKD (hMT.mask a' irq false _ hMb (by simp; omega)) hMb)
     (perfF_irqH irq hirq info.label σb bl call don fp _ ci sl exs buffer)

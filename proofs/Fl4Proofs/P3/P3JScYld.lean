@@ -430,7 +430,7 @@ variable {AR : A → Fl4Spec.Cr3 → Prop} {MR : A → Fl4Spec.MachineState → 
 
 set_option maxHeartbeats 4000000 in
 /-- (p3J gen 38) **The SchedContext cap's decode at a dispatch state, any flags, any label** (module docstring). -/
-theorem decScStAll (hA : P0.ArchTotal arI) (hARI : ARIface arI AR) (hMT : MachPlatT arI MR) (hKD : MRKeepD arI MR)
+theorem decScStAll (hA : P0.ArchTotal arI) (hARI : ARIface arI AR) (hMT : MachPlat arI MR) (hKD : MRKeepD arI MR)
     (hT : TimeAgree arI) (hmax : Fl4Spec.maxTicksToUs = core.num.U64.MAX.bv)
     (htu : ∀ a v, arI.ticks_to_us a v ⦃ r => r.bv = Fl4Spec.ticksToUs v.bv ⦄)
     [VxE Z] {V' : XVs} {Ac' : Set U64} {Lst' : U64 → List U64}
@@ -489,7 +489,7 @@ set_option maxHeartbeats 4000000 in
 /-- (p3J gen 38) **`MidDecStWL` at `KW ∧ IsRestCap5` from the YieldTo leaf** (module
 docstring). -/
 theorem midDecRest5_of_scY (hA : P0.ArchTotal arI) (hnd : Fl4Spec.numDomains = 1) (hARI : ARIface arI AR)
-    (hMT : MachPlatT arI MR) (hKD : MRKeepD arI MR) (hT : TimeAgree arI)
+    (hMT : MachPlat arI MR) (hKD : MRKeepD arI MR) (hT : TimeAgree arI)
     (hmax : Fl4Spec.maxTicksToUs = core.num.U64.MAX.bv)
     (htu : ∀ a v, arI.ticks_to_us a v ⦃ r => r.bv = Fl4Spec.ticksToUs v.bv ⦄) [VxE Z] {s : S} {a : A}
     {σ : Fl4Spec.State Unit} {n : I64} {c : Fl4Spec.Syscall} (hX : SInvX σ) (hni : σ.curThread ≠ σ.idleThread)
@@ -508,7 +508,7 @@ set_option maxHeartbeats 4000000 in
 /-- (p3J gen 38) **`InvDecStWL` at `KW ∧ IsRestCap5` from the YieldTo leaf** (module
 docstring). -/
 theorem invDecRest5_of_scY (hA : P0.ArchTotal arI) (hnd : Fl4Spec.numDomains = 1) (hARI : ARIface arI AR)
-    (hMT : MachPlatT arI MR) (hKD : MRKeepD arI MR) (hT : TimeAgree arI)
+    (hMT : MachPlat arI MR) (hKD : MRKeepD arI MR) (hT : TimeAgree arI)
     (hmax : Fl4Spec.maxTicksToUs = core.num.U64.MAX.bv)
     (htu : ∀ a v, arI.ticks_to_us a v ⦃ r => r.bv = Fl4Spec.ticksToUs v.bv ⦄) [VxE Z] {s : S} {a : A}
     {σ : Fl4Spec.State Unit} {n : I64} {call bl don : Bool} (hX : SInvX σ) (hni : σ.curThread ≠ σ.idleThread)

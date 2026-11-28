@@ -72,7 +72,7 @@ set_option maxHeartbeats 4000000 in
 theorem midDecReply_ofE (hA : P0.ArchTotal arI) (hnd : Fl4Spec.numDomains = 1)
     (hmax : Fl4Spec.maxTicksToUs = core.num.U64.MAX.bv)
     (htu : ∀ (a : A) v, arI.ticks_to_us a v ⦃ r => r.bv = Fl4Spec.ticksToUs v.bv ⦄) (hT : TimeAgree arI)
-    (hMT : MachPlatT arI MR) (hKD : MRKeepD arI MR) [VxE Z] {s : S} {a : A} {σ : Fl4Spec.State Unit} {n : I64}
+    (hMT : MachPlat arI MR) (hKD : MRKeepD arI MR) [VxE Z] {s : S} {a : A} {σ : Fl4Spec.State Unit} {n : I64}
     {c : Fl4Spec.Syscall} (hX : SInvX σ) (hni : σ.curThread ≠ σ.idleThread) :
     MidDecStW (L := L) arI AR MR (fun cp => SInvCk.KW (absCap cp) ∧ IsReplyCap cp) Z H Cs s a σ n c := by
   intro σb hBA V' Ac' Lst' D' s' a' hKF J hMb hCb hRRb ct rg sr cr hct hn info mi buf buffer r2 er argsU

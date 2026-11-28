@@ -197,7 +197,7 @@ set_option maxHeartbeats 8000000 in
 /-- (p3J gen 32) **The mid run at a dispatch state from its two halves** (module docstring;
 XTopJointKEntry38's `mid_invRecvJMUNM` shape). -/
 theorem mid_invRecvSt (hA : P0.ArchTotal arI) (hmax : Fl4Spec.maxTicksToUs = core.num.U64.MAX.bv)
-    (htu : ∀ a v, arI.ticks_to_us a v ⦃ r => r.bv = Fl4Spec.ticksToUs v.bv ⦄) (hMT : MachPlatT arI MR)
+    (htu : ∀ a v, arI.ticks_to_us a v ⦃ r => r.bv = Fl4Spec.ticksToUs v.bv ⦄) (hMT : MachPlat arI MR)
     (hKD : MRKeepD arI MR) {Z : XSets} [VxE Z] {H : P1.Heap} {Cs : Set U64} {V' : XVs} {Ac' : Set U64}
     {Lst' : U64 → List U64} {D' : Set U64} {s' : S} {a' : A} {σb : Fl4Spec.State Unit}
     (J : JAtZ (L := L) arI AR (Z.mv Z.G V') H Cs Ac' Lst' D' s' a' σb) {ct : U64}
@@ -270,7 +270,7 @@ set_option maxHeartbeats 8000000 in
 /-- (p3J gen 32) **`dispatch_syscall` for the mid syscalls at a dispatch state from the two halves** (the if-chain
 as XTopJointKEntry38's `dispatch_midJMUNM`). -/
 theorem dispatch_midSt (hA : P0.ArchTotal arI) (hmax : Fl4Spec.maxTicksToUs = core.num.U64.MAX.bv)
-    (htu : ∀ a v, arI.ticks_to_us a v ⦃ r => r.bv = Fl4Spec.ticksToUs v.bv ⦄) (hMT : MachPlatT arI MR)
+    (htu : ∀ a v, arI.ticks_to_us a v ⦃ r => r.bv = Fl4Spec.ticksToUs v.bv ⦄) (hMT : MachPlat arI MR)
     (hKD : MRKeepD arI MR) {Z : XSets} [VxE Z] {H : P1.Heap} {Cs : Set U64} {V' : XVs} {Ac' : Set U64}
     {Lst' : U64 → List U64} {D' : Set U64} {s' : S} {a' : A} {σb : Fl4Spec.State Unit}
     (J : JAtZ (L := L) arI AR (Z.mv Z.G V') H Cs Ac' Lst' D' s' a' σb) {ct : U64}
@@ -308,7 +308,7 @@ theorem dispatch_midSt (hA : P0.ArchTotal arI) (hmax : Fl4Spec.maxTicksToUs = co
 set_option maxHeartbeats 8000000 in
 /-- (p3J gen 32) **The mid class of `DispStabFootAt` from its two halves** (module docstring). -/
 theorem dispMid_stFt (hA : P0.ArchTotal arI) (hmax : Fl4Spec.maxTicksToUs = core.num.U64.MAX.bv)
-    (htu : ∀ a v, arI.ticks_to_us a v ⦃ r => r.bv = Fl4Spec.ticksToUs v.bv ⦄) (hMT : MachPlatT arI MR)
+    (htu : ∀ a v, arI.ticks_to_us a v ⦃ r => r.bv = Fl4Spec.ticksToUs v.bv ⦄) (hMT : MachPlat arI MR)
     (hKD : MRKeepD arI MR) {Z : XSets} [VxE Z] {H : P1.Heap} {Cs : Set U64} {s : S} {a : A}
     {σ : Fl4Spec.State Unit} {n : I64} {c : Fl4Spec.Syscall} (hm : MidSys n c)
     (hI : MidInvStFt (L := L) arI AR MR Z H Cs s a σ n c) (hP : MidSpecAt σ)

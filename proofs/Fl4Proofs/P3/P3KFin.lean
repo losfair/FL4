@@ -120,7 +120,7 @@ structure KFinAtRI (AR : A → Fl4Spec.Cr3 → Prop) (Z : XSets) (H : P1.Heap) (
 
 end
 
-theorem msF_mrT {A : Type} {arI : machine.Arch A} {MR : A → Fl4Spec.MachineState → Prop} (hM : MachPlatT arI MR)
+theorem msF_mrT {A : Type} {arI : machine.Arch A} {MR : A → Fl4Spec.MachineState → Prop} (hM : MachPlat arI MR)
     {a : A} {σ σ' : Fl4Spec.State Unit} (hR : MR a σ.machineState) (h : MachF.msF σ' = MachF.msF σ) :
     MR a σ'.machineState := by
   simp only [MachF.msF, Prod.mk.injEq] at h
@@ -496,7 +496,7 @@ theorem jat_finishJRNMQI {Z : XSets} {H : P1.Heap} {Cs Ac : Set U64}
       SchTailHypsR AR Z H D1 r.1 r.2 σ' ⦄)
     (hmax : Fl4Spec.maxTicksToUs = core.num.U64.MAX.bv)
     (htu : ∀ a v, arI.ticks_to_us a v ⦃ r => r.bv = Fl4Spec.ticksToUs v.bv ⦄)
-    (hM : MachPlatT arI MR) (hKD : MRKeepD arI MR) (hR : MR a σ.machineState) :
+    (hM : MachPlat arI MR) (hKD : MRKeepD arI MR) (hR : MR a σ.machineState) :
     syscall.finish st arI s a ⦃ r => ∃ σ',
       ((), σ') ∈ ((Fl4Spec.fl4Awaken (Z := Unit) >>= fun _ => Fl4Spec.schedule >>= fun _ => Fl4Spec.activateThread) σ).1 ∧
       RJ (L := L) arI AR r.1 r.2 σ' ∧ MR r.2 σ'.machineState ⦄ := by

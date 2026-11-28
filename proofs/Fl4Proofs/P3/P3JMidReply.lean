@@ -48,7 +48,7 @@ variable {S : Type} {st : machine.Store S} [L : P1.LawfulStore st] {A : Type} {a
 variable {MR : A → Fl4Spec.MachineState → Prop}
 
 /-- (p3J gen 33) **`TopPostDMXP.mr` from `MachPlatT`** (module docstring). -/
-theorem TopPostDMXP.mrT (hM : MachPlatT arI MR) {X XP : S → A → Fl4Spec.State Unit → Prop}
+theorem TopPostDMXP.mrT (hM : MachPlat arI MR) {X XP : S → A → Fl4Spec.State Unit → Prop}
     {σ : Fl4Spec.State Unit} {blk call don : Bool} {m : Fl4Spec.SEMonad Unit Fl4Spec.Fl4Invocation} {s : S}
     {res : core.result.Result Unit error.Exc × S × A}
     (h : TopPostDMXP (L := L) X XP σ blk call don m s res) (hR : MR res.2.2 σ.machineState)
@@ -68,7 +68,7 @@ theorem TopPostDMXP.mrT (hM : MachPlatT arI MR) {X XP : S → A → Fl4Spec.Stat
       exact ⟨h4, msF_mrT hM hR ((msF_qperf (hq inv h1) hy).trans (msF_restart h2))⟩
 
 /-- (p3J gen 33) **`TopPostRMX.mr` from `MachPlatT`**. -/
-theorem TopPostRMX.mrT (hM : MachPlatT arI MR) {X : S → A → Fl4Spec.State Unit → Prop} {σ : Fl4Spec.State Unit}
+theorem TopPostRMX.mrT (hM : MachPlat arI MR) {X : S → A → Fl4Spec.State Unit → Prop} {σ : Fl4Spec.State Unit}
     {blk call don : Bool} {m : Fl4Spec.SEMonad Unit Fl4Spec.Fl4Invocation} {ct : U64} {s : S}
     {res : core.result.Result Unit error.Exc × S × A}
     (h : TopPostRMX (L := L) X σ blk call don m ct s res) (hR : MR res.2.2 σ.machineState)
@@ -81,7 +81,7 @@ theorem TopPostRMX.mrT (hM : MachPlatT arI MR) {X : S → A → Fl4Spec.State Un
       (msF_qperf (hq inv h3) h5)).trans (msF_restart h4)
 
 /-- (p3J gen 33) **`XCapP.mr` from `MachPlatT`** (module docstring). -/
-theorem XCapP.mrT (hM : MachPlatT arI MR) {X XP : S → A → Fl4Spec.State Unit → Prop} {s : S} {ar : A}
+theorem XCapP.mrT (hM : MachPlat arI MR) {X XP : S → A → Fl4Spec.State Unit → Prop} {s : S} {ar : A}
     {σ : Fl4Spec.State Unit} {lbl length slot : U64} {c : capability.Cap} {blk call don fp : Bool} {buf : U64}
     {extra : Aeneas.Std.Array obj.Slot 3#usize} {slbl : Fl4Spec.Data} {args : List Fl4Spec.Data}
     {ci : Fl4Spec.CapRef} {sl : Fl4Spec.CslotPtr} {excaps : List (Fl4Spec.Cap × Fl4Spec.CslotPtr)}
@@ -122,7 +122,7 @@ set_option maxHeartbeats 4000000 in
 theorem midDecReply_of (hA : P0.ArchTotal arI) (hnd : Fl4Spec.numDomains = 1)
     (hmax : Fl4Spec.maxTicksToUs = core.num.U64.MAX.bv)
     (htu : ∀ (a : A) v, arI.ticks_to_us a v ⦃ r => r.bv = Fl4Spec.ticksToUs v.bv ⦄) (hT : TimeAgree arI)
-    (hMT : MachPlatT arI MR) (hKD : MRKeepD arI MR) [VxE Z] {s : S} {a : A} {σ : Fl4Spec.State Unit} {n : I64}
+    (hMT : MachPlat arI MR) (hKD : MRKeepD arI MR) [VxE Z] {s : S} {a : A} {σ : Fl4Spec.State Unit} {n : I64}
     {c : Fl4Spec.Syscall} (hX : SInvX σ) (hni : σ.curThread ≠ σ.idleThread)
     (hRF : ReplyXferFt (L := L) arI AR Z H Cs) :
     MidDecStW (L := L) arI AR MR (fun cp => SInvCk.KW (absCap cp) ∧ IsReplyCap cp) Z H Cs s a σ n c := by

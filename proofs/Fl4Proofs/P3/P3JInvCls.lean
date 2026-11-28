@@ -86,7 +86,7 @@ variable {AR : A → Fl4Spec.Cr3 → Prop} {MR : A → Fl4Spec.MachineState → 
 set_option maxHeartbeats 4000000 in
 /-- (p3J gen 35) **The invoking class's invocation at `MidX` / `MidXP`** (module docstring). -/
 theorem invInvHI [Fl4Proofs.P1.PlainStore st] (hA : P0.ArchTotal arI) (hnd : Fl4Spec.numDomains = 1)
-    (hMT : MachPlatT arI MR) (hKD : MRKeepD arI MR) [VxE Z] {s : S} {a : A} {σ : Fl4Spec.State Unit} {n : I64}
+    (hMT : MachPlat arI MR) (hKD : MRKeepD arI MR) [VxE Z] {s : S} {a : A} {σ : Fl4Spec.State Unit} {n : I64}
     {call bl don : Bool} (hX : SInvX σ) (hni : σ.curThread ≠ σ.idleThread)
     (hD : InvDecSt (L := L) arI AR MR Z H Cs s a σ n call bl don) (σb : Fl4Spec.State Unit) (hBA : BudgetAt σ σb true)
     (V' : XVs) (Ac' : Set U64) (Lst' : U64 → List U64) (D' : Set U64) (s' : S) (a' : A)
@@ -242,7 +242,7 @@ theorem dispatch_invSt {V' : XVs} {Ac' : Set U64} {Lst' : U64 → List U64} {D' 
 set_option maxHeartbeats 4000000 in
 /-- (p3J gen 35) **The invoking class of `DispStabFootAt` from `InvDecSt`** (module docstring). -/
 theorem dispInv_stFt [Fl4Proofs.P1.PlainStore st] (hA : P0.ArchTotal arI) (hnd : Fl4Spec.numDomains = 1)
-    (hMT : MachPlatT arI MR) (hKD : MRKeepD arI MR) [VxE Z] {s : S} {a : A} {σ : Fl4Spec.State Unit} {n : I64}
+    (hMT : MachPlat arI MR) (hKD : MRKeepD arI MR) [VxE Z] {s : S} {a : A} {σ : Fl4Spec.State Unit} {n : I64}
     {call bl don : Bool} (hX : SInvX σ) (hni : σ.curThread ≠ σ.idleThread) (hn : InvSys n call bl don)
     (hD : InvDecSt (L := L) arI AR MR Z H Cs s a σ n call bl don) :
     SInvR.G5.DispStabFootAt (L := L) arI AR MR Z H Cs s a σ n (invSysOf call bl) := by

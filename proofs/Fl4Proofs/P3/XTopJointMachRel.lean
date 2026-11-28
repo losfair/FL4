@@ -221,6 +221,12 @@ theorem PPPlat.false (hP : PPPlat arI AR) (a : A) : False := by
   omega
 
 variable (arI) in
+/-- **`IrqPlatA.noIpi` at related states** (JBootIpi's `IpiF`, moved here in collapse A, Q): from an `MR`-related
+state, `take_pending_irq` never gives an IPI vector 126 / 127. -/
+def IpiF (MR : A → Fl4Spec.MachineState → Prop) : Prop :=
+  ∀ a ms, MR a ms → arI.take_pending_irq a ⦃ r => r.1.val ≠ 126 ∧ r.1.val ≠ 127 ⦄
+
+variable (arI) in
 /-- **The platform reads against the spec's machine state** [P] (module
 docstring). `MR a ms`: the arch state `a` and the spec machine state `ms`
 agree on what the platform reads depend on (IRQ masks and pending lines,
@@ -238,8 +244,9 @@ structure MachPlat (MR : A → Fl4Spec.MachineState → Prop) : Prop where
   take : ∀ a ms, MR a ms → arI.take_pending_irq a ⦃ r =>
     (r.1 = syscall.NO_IRQ ↔ gaiLine true ms = none) ∧
     (∀ i, gaiLine true ms = some i → r.1.val = i.toNat) ∧ MR r.2 (gaiState ms) ⦄
-  /-- `mask_irq w m` is `maskInterrupt m w` (`mask = true` masks). -/
-  mask : ∀ a (w : U64) m ms, MR a ms → w.val < 256 → arI.mask_irq a w m ⦃ a' =>
+  /-- `mask_irq w m` is `maskInterrupt m w` (`mask = true` masks): masking any line `< 256`, unmasking a line
+  `≤ maxIRQ = 125` (`cond m 256 126`; collapse A, Q: irqfix's `MachPlatT.mask`). -/
+  mask : ∀ a (w : U64) m ms, MR a ms → w.val < cond m 256 126 → arI.mask_irq a w m ⦃ a' =>
     MR a' { ms with irqMasks := Function.update ms.irqMasks (w.bv.setWidth 8) m } ⦄
   /-- `ack_irq` is `ackInterrupt` (no machine-state change). -/
   ack : ∀ a w ms, MR a ms → arI.ack_irq a w ⦃ a' => MR a' ms ⦄
@@ -247,6 +254,36 @@ structure MachPlat (MR : A → Fl4Spec.MachineState → Prop) : Prop where
   time. -/
   frame : ∀ a ms ms', MR a ms → ms'.irqMasks = ms.irqMasks → ms'.irqState = ms.irqState →
     ms'.timeState = ms.timeState → ms'.lastMachineTime = ms.lastMachineTime → MR a ms'
+  /-- `IpiF`: no IPI vector (126 / 127) from an `MR`-related state (collapse A, Q: irqfix's `MachPlatT.noIpi`). -/
+  noIpi : IpiF arI MR
+
+variable (arI) in
+/-- **`MachPlat` with the mask split** (JBootIpi's fix, moved here in collapse A, Q): masking any line, unmasking
+the spec's IRQs only (`≤ maxIRQ = 125`); no `noIpi`. With `IpiF` it is `MachPlat` (`MachPlatF.toT`). -/
+structure MachPlatF (MR : A → Fl4Spec.MachineState → Prop) : Prop where
+  now : ∀ a ms, MR a ms → arI.now a ⦃ r => r.1.bv = gctVal ms ∧ MR r.2 (gctState ms) ⦄
+  irqPending : ∀ a ms, MR a ms → arI.irq_pending a ⦃ r =>
+    (r.1 = true ↔ gaiLine true ms ≠ none) ∧ MR r.2 (gaiState ms) ⦄
+  take : ∀ a ms, MR a ms → arI.take_pending_irq a ⦃ r =>
+    (r.1 = syscall.NO_IRQ ↔ gaiLine true ms = none) ∧
+    (∀ i, gaiLine true ms = some i → r.1.val = i.toNat) ∧ MR r.2 (gaiState ms) ⦄
+  /-- Masking: any line. -/
+  mask1 : ∀ a (w : U64) ms, MR a ms → w.val < 256 → arI.mask_irq a w true ⦃ a' =>
+    MR a' { ms with irqMasks := Function.update ms.irqMasks (w.bv.setWidth 8) true } ⦄
+  /-- Unmasking: the spec's IRQs only (`≤ maxIRQ = 125`). -/
+  mask0 : ∀ a (w : U64) ms, MR a ms → w.val ≤ 125 → arI.mask_irq a w false ⦃ a' =>
+    MR a' { ms with irqMasks := Function.update ms.irqMasks (w.bv.setWidth 8) false } ⦄
+  ack : ∀ a w ms, MR a ms → arI.ack_irq a w ⦃ a' => MR a' ms ⦄
+  frame : ∀ a ms ms', MR a ms → ms'.irqMasks = ms.irqMasks → ms'.irqState = ms.irqState →
+    ms'.timeState = ms.timeState → ms'.lastMachineTime = ms.lastMachineTime → MR a ms'
+
+/-- `MachPlatF` and `IpiF` give `MachPlat`. -/
+theorem MachPlatF.toT {MR : A → Fl4Spec.MachineState → Prop} (h : MachPlatF arI MR) (hI : IpiF arI MR) :
+    MachPlat arI MR :=
+  ⟨h.now, h.irqPending, h.take, fun a w m ms hR hw => by
+    cases m
+    · exact h.mask0 a w ms hR (by simp at hw; omega)
+    · exact h.mask1 a w ms hR (by simpa using hw), h.ack, h.frame, hI⟩
 
 /-- `MR` is independent of the memory (the joint relation moves the spec's
 memory with FL4's). -/
@@ -395,8 +432,9 @@ theorem modelTake_some {ms : MachineState} {i : Irq} (h : gaiLine true ms = some
 theorem modelTake_none {ms : MachineState} (h : gaiLine true ms = none) : modelTake ms = syscall.NO_IRQ := by
   unfold modelTake; rw [h]
 
-/-- **The model satisfies `MachPlat`.** -/
-theorem modelArch_machPlat : MachPlat modelArch modelMR where
+/-- **The model satisfies `MachPlatF`** (no oracle fact; `MachPlat` adds `IpiF`, which at `modelMR` needs the
+oracle to avoid 126 / 127: P2/LocPlatModel `archT_machPlat`). -/
+theorem modelArch_machPlat : MachPlatF modelArch modelMR where
   now a ms := by
     rintro ⟨h1, h2, h3, h4⟩
     show (ok ((⟨gctVal a⟩ : U64), gctState a) : Result (U64 × MachineState)) ⦃ _ ⦄
@@ -420,11 +458,16 @@ theorem modelArch_machPlat : MachPlat modelArch modelMR where
     cases e : gaiLine true a with
     | none => exact ⟨fun _ => rfl, fun _ => modelTake_none e⟩
     | some i => exact ⟨fun h => absurd h (modelTake_some e).1, fun h => by cases h⟩
-  mask a w m ms := by
+  mask1 a w ms := by
     rintro ⟨h1, h2, h3, h4⟩ -
     show (ok _ : Result MachineState) ⦃ _ ⦄
     rw [WP.spec_ok]
-    exact ⟨by show Function.update a.irqMasks _ m = Function.update ms.irqMasks _ m; rw [h1], h2, h3, h4⟩
+    exact ⟨by show Function.update a.irqMasks _ true = Function.update ms.irqMasks _ true; rw [h1], h2, h3, h4⟩
+  mask0 a w ms := by
+    rintro ⟨h1, h2, h3, h4⟩ -
+    show (ok _ : Result MachineState) ⦃ _ ⦄
+    rw [WP.spec_ok]
+    exact ⟨by show Function.update a.irqMasks _ false = Function.update ms.irqMasks _ false; rw [h1], h2, h3, h4⟩
   ack a w ms := by
     intro h
     show (ok a : Result MachineState) ⦃ _ ⦄

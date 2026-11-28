@@ -9,10 +9,9 @@ execution and the tops, not for the slot obligations (`chain_run` / `chain_act0`
 `kernel_entry_nativeScopeU29` / `kernel_entry_reachU29`; handoff §59).
 
 * **`locPlatCR_wit`**: `LocPlatCR wst warI wAR ipiMR` from `OpaqueWK` [P] only. `toC` is gen 46's `locPlatC_wit`;
-  `run` is jboot gen 5's existing kernel-checked copy `Fl4ProofsQ.P2.E2EV.chain_run` (P2/WitU34Gen) at
-  `wit_locPlatK O` and `wit_ioapicI` (`MRKeepIoapic` at `ipiMR` is a theorem); `act0` is `chain_act0`'s argument
-  over the existing copy `Fl4ProofsQ.P3.SInvR.G5.kernel_entry_reachU29` (its `JAtZ` / `SInvX` are the base ones).
-  No new transport.
+  `run` is `chain_run` at `wit_locPlatK O` and `wit_ioapicI` (`MRKeepIoapic` at `ipiMR` is a theorem); `act0`
+  is `chain_act0`'s argument over `kernel_entry_reachU29`. (Before collapse A, Q both were jboot gen 5's
+  kernel-checked copies `Fl4ProofsQ.…` of P2/WitU34Gen; Q wrote the fixed platform back into `LocPlat`.)
 * **`serializable_fl4_V15_pmKADZW`**: `serializable_fl4_V15_pmKADZ_C` (P2/InsV15Pm) at `locPlatCR_wit O`.
 
 ## Premise diff vs `serializable_fl4_V15_pmKADZ`
@@ -46,7 +45,7 @@ open Fl4Proofs.P3 Fl4Proofs.P3.JBoot
 /-- **`LocPlatCR` on jboot's witness platform at `ipiMR`, from `OpaqueWK` [P] only** (module docstring). -/
 theorem locPlatCR_wit (O : OpaqueWK) : LocPlatCR wst warI wAR ipiMR where
   toC := locPlatC_wit O
-  run := fun {_ _ _} hC {_} hσ hct => Fl4ProofsQ.P2.E2EV.chain_run (wit_locPlatK O) wit_ioapicI hC hσ hct
+  run := fun {_ _ _} hC {_} hσ hct => Fl4Proofs.P2.E2EV.chain_run (wit_locPlatK O) wit_ioapicI hC hσ hct
   act0 := by
     intro σe K Ch hC σ hσ hct
     obtain ⟨Z, H, Cx, nc, -, -, hCh, -, -⟩ := hC
@@ -54,7 +53,7 @@ theorem locPlatCR_wit (O : OpaqueWK) : LocPlatCR wst warI wAR ipiMR where
     obtain ⟨a, τ, hR⟩ := hσ
     have hJ := hR.reach
     have P := wit_locPlatK O
-    obtain ⟨Z', H', Cs, Ac, Lst, D, J, hX, -⟩ := Fl4ProofsQ.P3.SInvR.G5.kernel_entry_reachU29 warI wAR ipiMR P.ari
+    obtain ⟨Z', H', Cs, Ac, Lst, D, J, hX, -⟩ := Fl4Proofs.P3.SInvR.G5.kernel_entry_reachU29 warI wAR ipiMR P.ari
       P.tot P.nd P.mach P.kd P.io wit_ioapicI P.pa P.ia P.t P.max P.tu P.ref P.pi P.sx P.dr hJ
     exact (J.curFacts (hX.entered (hct a τ hJ)) (cur_thread_ok σ)).2.2.2
 

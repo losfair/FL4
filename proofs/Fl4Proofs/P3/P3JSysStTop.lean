@@ -25,7 +25,7 @@ dispatch-level [J] (`DispStabFoot`).
   `fastpath.reply_recv` accepts, P1's `FastAgree` (from `FastAcc.of_rrpre`, `JAtZ.rrPreAt` / `rrPre5At`, global
   `StoreExt` [P]) gives the general path's post to the fast run (P3JSysSt).
   - **`sysStFtC_of_disp`**: `DispStabFoot → SysStFtC` with the clause tops' globals (P3JSysStK's
-    `Fl4ProofsKQ…sys_entryStFU41`, the finish record by U43's `kFinAtR42_of`). **`sysStabC_sysFootWC_of_disp`**:
+    `Fl4ProofsK…sys_entryStFU41`, the finish record by U43's `kFinAtR42_of`). **`sysStabC_sysFootWC_of_disp`**:
     at a `RunMcWKR` state `DispStabFoot` gives `SysStabC` **and** `SysFootWC` (both halves of `SysStabC`).
   - **`kernel_entry_runMcWKR_sysD`**: the native syscall clause, `RunMcWKR` → `RunMcWKR`, with `DispStabFoot` only
     (+ U45nv's globals as `kernel_entry_runMcWKR_sysU`, and the clause's per-entry K6 input as before).
@@ -154,7 +154,7 @@ theorem sysStFtC_of_disp [Fl4Proofs.P1.PlainStore st] (hARI : ARIface arI AR) (h
   intro hR Z H Cs Ac Lst D J hV n c hct hns hfl hk6
   obtain ⟨⟨⟨⟨⟨hJ17, -⟩, -⟩, hCK⟩, -⟩, -⟩ := hR.1.1
   haveI := hV
-  refine WP.spec_mono (Fl4ProofsKQ.P3.SInvR.G5.sys_entryStFU41 hARI hA hnd (MachPlatF.toT hM hIp) hKD
+  refine WP.spec_mono (Fl4ProofsK.P3.SInvR.G5.sys_entryStFU41 hARI hA hnd (MachPlatF.toT hM hIp) hKD
     ⟨hPAi, hT.mb⟩ hT hmax htu hRef hSX hDR hFpu hJ17 hCK hR.2 J n c hct hns hfl
     (fun _ _ _ _ _ _ _ _ _ _ _ _ => (kFinAtR42_of hFpu hFW hA).toK hA)
     (hDF hR Z H Cs Ac Lst D J hV n c hct hns hfl hk6)) ?_

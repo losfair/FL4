@@ -38,6 +38,12 @@ device state — but they are what P3's `MachPlat` / `IrqPlatA` / `PortInValMR` 
 the opaque constants (findings, see the line handoff wit.md).
 
 No sorry. New module; no existing statement changed.
+
+**Collapse A, Q:** `warI_machPlat`, `warI_take_ne`, `warI_max_period`, `warI_timeAgree`, `wit_locPlat` and
+`wit_ioapic` are removed together with U2 (`serializable_fl4_localU2`) and its witnesses (P2/WitExec,
+P2/WitUncond). With `MachPlat` narrowed (`noIpi : IpiF` at related states), `LocPlat` at `wMR = modelMR` would
+need `OpaqueW.ipi` inside `MachPlat`; jboot's `ipiMR` witness (P2/WitU34 `wit_locPlatK`) needs no oracle fact.
+The store, the arch and `OpaqueW` stay (jboot's witnesses use them).
 -/
 import Fl4Proofs.P2.E2EPU2P
 open Aeneas Aeneas.Std Result
@@ -276,102 +282,6 @@ theorem warI_total : P0.ArchTotal warI where
   putc _ _ := (WP.spec_ok _).2 trivial
   get_char _ := (WP.spec_ok _).2 trivial
   halt _ := (WP.spec_ok _).2 trivial
-
-/-- `MachPlat` for `warI`: its clock and interrupt operations are `modelArch`'s. -/
-theorem warI_machPlat : MachPlat warI wMR :=
-  ⟨modelArch_machPlat.now, modelArch_machPlat.irqPending, modelArch_machPlat.take, modelArch_machPlat.mask,
-    modelArch_machPlat.ack, modelArch_machPlat.frame⟩
-
-theorem warI_take_ne (a : Fl4Spec.MachineState) (h : ∀ n, Fl4Spec.irqOracle n ≠ 126 ∧ Fl4Spec.irqOracle n ≠ 127) :
-    (modelTake a).val ≠ 126 ∧ (modelTake a).val ≠ 127 := by
-  cases e : gaiLine true a with
-  | none =>
-    rw [modelTake_none e]
-    have : syscall.NO_IRQ.bv.toNat = 18446744073709551615 := by rw [no_irq_bv]; simp
-    show syscall.NO_IRQ.bv.toNat ≠ 126 ∧ syscall.NO_IRQ.bv.toNat ≠ 127
-    rw [this]; decide
-  | some i =>
-    rw [(modelTake_some e).2]
-    have hi : i = Fl4Spec.irqOracle (a.irqState + 1) := by
-      unfold gaiLine at e
-      split at e
-      · cases e
-      · exact (Option.some.inj e).symm
-    subst hi
-    obtain ⟨h1, h2⟩ := h (a.irqState + 1)
-    exact ⟨fun e1 => h1 (BitVec.eq_of_toNat_eq (e1.trans rfl)),
-      fun e2 => h2 (BitVec.eq_of_toNat_eq (e2.trans rfl))⟩
-
-theorem warI_max_period (O : OpaqueW) (a : Fl4Spec.MachineState) :
-    sporadic.max_period_us warI a ⦃ v => v.bv = Fl4Spec.MAX_PERIOD_US ⦄ := by
-  have e : warI.max_us a = ok (⟨(Fl4Spec.MAX_PERIOD_US * 8 : BitVec 64)⟩ : U64) := rfl
-  unfold sporadic.max_period_us
-  simp only [e, bind_ok]
-  obtain ⟨v, hv, hvv⟩ := spec_exists (U64.div_spec (x := (⟨(Fl4Spec.MAX_PERIOD_US * 8 : BitVec 64)⟩ : U64)) (y := 8#u64)
-    (by decide))
-  rw [hv, WP.spec_ok]
-  apply BitVec.eq_of_toNat_eq
-  have hp := O.per
-  have h1 : (Fl4Spec.MAX_PERIOD_US * 8).toNat = Fl4Spec.MAX_PERIOD_US.toNat * 8 := by
-    rw [BitVec.toNat_mul]
-    have h8 : (8 : BitVec 64).toNat = 8 := rfl
-    rw [h8]
-    have h64 : (2 : Nat) ^ 64 = 18446744073709551616 := by norm_num
-    rw [h64]
-    exact Nat.mod_eq_of_lt (by omega)
-  have h2 : v.bv.toNat = (Fl4Spec.MAX_PERIOD_US * 8).toNat / 8 := hvv
-  rw [h2, h1]
-  omega
-
-theorem warI_timeAgree (O : OpaqueW) : Sched.TimeAgree warI where
-  maxPeriod a := warI_max_period O a
-  usToTicks _ _ _ := (WP.spec_ok _).2 rfl
-  kernelWcet _ := (WP.spec_ok _).2 rfl
-  wcetUs := O.wcet
-  timerUnit := O.unit
-
-/-- **The concrete platform meets `LocPlat`** under the opaque-constant facts `OpaqueW` [P]. -/
-theorem wit_locPlat (O : OpaqueW) : LocPlat wst warI wAR wMR where
-  ari := ⟨⟨fun _ _ _ => (WP.spec_ok _).2 trivial, fun _ _ _ _ => (WP.spec_ok _).2 trivial,
-      fun _ _ _ _ => (WP.spec_ok _).2 trivial, fun _ _ _ _ => (WP.spec_ok _).2 trivial,
-      fun _ _ _ _ => (WP.spec_ok _).2 trivial, fun _ _ _ _ => (WP.spec_ok _).2 trivial,
-      fun _ _ _ _ => (WP.spec_ok _).2 trivial, fun _ _ _ _ => (WP.spec_ok _).2 trivial,
-      fun _ _ _ => (WP.spec_ok _).2 trivial, fun _ _ _ _ => (WP.spec_ok _).2 trivial⟩,
-    fun _ _ _ _ _ => trivial⟩
-  tot := warI_total
-  nd := O.nd
-  mach := warI_machPlat
-  kd := ⟨fun a _ _ h => (WP.spec_ok _).2 h, fun a _ _ h => (WP.spec_ok _).2 h,
-    fun a _ _ h => (WP.spec_ok _).2 h, fun a _ _ h => (WP.spec_ok _).2 h, fun a _ _ h => (WP.spec_ok _).2 h,
-    fun a _ _ h => (WP.spec_ok _).2 h, fun a _ _ h => (WP.spec_ok _).2 h, fun a _ h => (WP.spec_ok _).2 h,
-    fun a _ _ h => (WP.spec_ok _).2 h, fun a _ _ _ h => (WP.spec_ok _).2 h,
-    fun a _ _ _ h => (WP.spec_ok _).2 h, fun a _ _ h => (WP.spec_ok _).2 h, fun a _ _ h => (WP.spec_ok _).2 h,
-    fun a _ _ _ h => (WP.spec_ok _).2 h, fun a _ _ _ _ h => (WP.spec_ok _).2 h,
-    fun a _ _ h => (WP.spec_ok _).2 h,
-    fun a _ _ _ _ _ _ _ _ _ _ h => (WP.spec_ok _).2 h, fun a _ _ _ _ _ _ _ _ h => (WP.spec_ok _).2 h,
-    fun a _ _ _ h => (WP.spec_ok _).2 h⟩
-  io := ⟨fun a _ _ _ h => (WP.spec_ok _).2 h, fun a _ _ _ _ h => (WP.spec_ok _).2 h⟩
-  pa := ⟨fun _ _ _ => (WP.spec_ok _).2 trivial, fun a => (warI_timeAgree O).mb a⟩
-  ia := ⟨fun _ _ _ => (WP.spec_ok _).2 trivial, fun a => (WP.spec_ok _).2 (warI_take_ne a O.ipi),
-    fun _ _ _ _ => (WP.spec_ok _).2 trivial⟩
-  t := warI_timeAgree O
-  max := O.max
-  tu _ _ := (WP.spec_ok _).2 rfl
-  ref := ⟨fun _ _ _ _ _ => (WP.spec_ok _).2 trivial, fun _ _ _ _ _ => (WP.spec_ok _).2 trivial,
-    fun _ _ _ _ => (WP.spec_ok _).2 trivial, fun _ _ _ _ _ => (WP.spec_ok _).2 trivial,
-    fun _ _ _ _ => (WP.spec_ok _).2 trivial⟩
-  pi := by
-    intro a a' p z v hv σ _
-    have e : (ok (pinF p z, a) : Result (U64 × Fl4Spec.MachineState)) = ok (v, a') := hv
-    have ev : pinF p z = v := (Prod.mk.inj (ok_inj e)).1
-    rw [← ev]
-    exact pinF_ok O.pin p z σ
-  sx := wst_ext
-  dr := fun _ ms _ d x y hx hy => O.dl d ms.machineStateRest x y hx hy
-
-/-- U2's `hIoa` on the concrete platform. -/
-theorem wit_ioapic : MRKeepIoapic warI wMR :=
-  ⟨fun _ _ _ _ _ _ _ h => (WP.spec_ok _).2 h, fun _ _ _ _ _ _ _ _ h => (WP.spec_ok _).2 h⟩
 
 end
 end Fl4Proofs.P2.Wit

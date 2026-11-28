@@ -47,7 +47,7 @@ variable (arI) in
 /-- **The platform reads the deletion loop uses** [P] (module docstring): the part of `MachPlat` /
 `MachPlatT` read by the preemption point (`now`, `irqPending`), by `post_cap_deletion` of an IRQ handler
 (masking a line `< 256`) and by every `MR`-keeping step (`frame`). Not a premise of any top: it is
-projected from `MachPlat` (`MachPlat.toC`) or `MachPlatT` (`MachPlatT.toC`). -/
+projected from `MachPlat` (`MachPlat.toC`; collapse A, Q: `MachPlatT` is `MachPlat`, its `MachPlatT.toC` is gone). -/
 structure MachPlatC (MR : A → Fl4Spec.MachineState → Prop) : Prop where
   now : ∀ a ms, MR a ms → arI.now a ⦃ r => r.1.bv = gctVal ms ∧ MR r.2 (gctState ms) ⦄
   irqPending : ∀ a ms, MR a ms → arI.irq_pending a ⦃ r =>
@@ -60,10 +60,6 @@ structure MachPlatC (MR : A → Fl4Spec.MachineState → Prop) : Prop where
 
 /-- `MachPlat` gives `MachPlatC`. -/
 theorem MachPlat.toC (h : MachPlat arI MR) : MachPlatC arI MR :=
-  ⟨h.now, h.irqPending, fun a w ms hR hw => h.mask a w true ms hR hw, h.frame⟩
-
-/-- `MachPlatT` (the stable tops' record) gives `MachPlatC`. -/
-theorem MachPlatT.toC (h : MachPlatT arI MR) : MachPlatC arI MR :=
   ⟨h.now, h.irqPending, fun a w ms hR hw => h.mask a w true ms hR hw, h.frame⟩
 
 /-- **`NowAgree` at a related state** (module docstring): the platform's
@@ -542,7 +538,7 @@ theorem delHypsJLMftC [Fl4Proofs.P1.PlainStore st] (hT : P0.ArchTotal arI) (hK :
 theorem delHypsJLMckT [Fl4Proofs.P1.PlainStore st] (hT : P0.ArchTotal arI) (hK : ARKeep arI AR)
     (hticks : Fl4Spec.maxTicksToUs = core.num.U64.MAX.bv ∧
       ∀ (a : A) (v : U64), arI.ticks_to_us a v ⦃ r => r.bv = Fl4Spec.ticksToUs v.bv ⦄)
-    (hnd : Fl4Spec.numDomains = 1) (hM : MachPlatT arI MR) (hKD : MRKeepD arI MR) (hPA : PPPlatA arI AR)
+    (hnd : Fl4Spec.numDomains = 1) (hM : MachPlat arI MR) (hKD : MRKeepD arI MR) (hPA : PPPlatA arI AR)
     (hAM : ARMask arI AR) (Z : XSets) [VxE Z] (H : P1.Heap) (Cs : Set U64) (kb : U64) (hth : Z.th = th) :
     DelHypsWRZ (L := L) arI (WMR MR (WCk (WJL (L := L) arI AR Z H Cs kb)))
       (WMR MR (WCk (WJLx (L := L) arI AR Z H Cs kb)))
@@ -553,7 +549,7 @@ theorem delHypsJLMckT [Fl4Proofs.P1.PlainStore st] (hT : P0.ArchTotal arI) (hK :
 theorem delHypsJLMftT [Fl4Proofs.P1.PlainStore st] (hT : P0.ArchTotal arI) (hK : ARKeep arI AR)
     (hticks : Fl4Spec.maxTicksToUs = core.num.U64.MAX.bv ∧
       ∀ (a : A) (v : U64), arI.ticks_to_us a v ⦃ r => r.bv = Fl4Spec.ticksToUs v.bv ⦄)
-    (hnd : Fl4Spec.numDomains = 1) (hM : MachPlatT arI MR) (hKD : MRKeepD arI MR) (hPA : PPPlatA arI AR)
+    (hnd : Fl4Spec.numDomains = 1) (hM : MachPlat arI MR) (hKD : MRKeepD arI MR) (hPA : PPPlatA arI AR)
     (hAM : ARMask arI AR) (Z : XSets) [VxE Z] (H : P1.Heap) (Cs : Set U64) (kb : U64) (hth : Z.th = th) (s0 : S) :
     DelHypsWRZ (L := L) arI (WFt (L := L) H Cs s0 (WMR MR (WCk (WJL (L := L) arI AR Z H Cs kb))))
       (WFt (L := L) H Cs s0 (WMR MR (WCk (WJLx (L := L) arI AR Z H Cs kb))))

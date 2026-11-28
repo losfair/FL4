@@ -20,7 +20,7 @@ ends at an outcome of the spec's `preemptionPath` with `JStab Z H Cs`, `MR`, and
   gap of P3JMcIrqF's `IrqSigFootJ` at `CKI` states (`irqSigFootJ_of_cki`).
 * **`JHole.afterInvSt`**: `after_invocation (Err _)` from a round-robin hole: P3JPreHole's `JHole.mcsSt`, then the
   IRQ take (`MachPlatT.takeAt`, `IrqPlatK.takeAR`, `MachPlatT.noIpi`) and the stable handler (IrqFixGen's
-  transported `Fl4ProofsQ.P3.JAtZ.handleIrqJIMSt`, at `MachPlatT` / `IrqPlatK`), the footprints composed.
+  transported `JAtZ.handleIrqJIMSt`; collapse A, Q: formerly its `Fl4ProofsQ` copy at `MachPlatT` / `IrqPlatK`), the footprints composed.
 * **`midXP_of_pre`**: P3JMidInv's `MidXP Z H Cs MR s0` at the preempted state, from the pre-state facts
   (`JAtZ (Z.mv G V) H Cs`, `NoSwitch`, `PPR0`, `MRV`), `CKI` / `RR` / `NativeScope` at the preempted spec state
   and the footprint `s0 → preempted state`; **`midXP_of_wjpv`**: the same from P3JDelMT's preempted invariant
@@ -230,8 +230,8 @@ set_option maxHeartbeats 4000000 in
 (module docstring). -/
 theorem JHole.afterInvSt [VxE Z] {s0 : S} {a0 : A} {σ0 : Fl4Spec.State Unit} {s : S} {a : A}
     {σ : Fl4Spec.State Unit} (Hh : JHole (L := L) arI AR Z H Cs Ac Lst D s0 a0 σ0 s a σ) (hT : TShift σ0 σ)
-    (hARI : ARIface arI AR) (hAT : P0.ArchTotal arI) (hnd : Fl4Spec.numDomains = 1) (hM : MachPlatT arI MR)
-    (hKD : MRKeepD arI MR) (hIP : IrqPlatK arI AR) (hTA : TimeAgree arI)
+    (hARI : ARIface arI AR) (hAT : P0.ArchTotal arI) (hnd : Fl4Spec.numDomains = 1) (hM : MachPlat arI MR)
+    (hKD : MRKeepD arI MR) (hIP : IrqPlatA arI AR) (hTA : TimeAgree arI)
     (hmb : ∀ a : A, sporadic.min_budget arI a ⦃ mb => mb.bv = Fl4Spec.MIN_BUDGET ⦄)
     (hni : σ.curThread ≠ σ.idleThread) (hns : Vs.NoSwitch σ) (hf : CurScFree σ) (hct : CtOK σ) (hg : Chg σ)
     (hRR : SInvRr.RR σ) (hR : MR a σ.machineState) (hV : ValidIrqMasks σ) (hN : NativeScope σ)
@@ -274,7 +274,7 @@ theorem JHole.afterInvSt [VxE Z] {s0 : S} {a0 : A} {σ0 : Fl4Spec.State Unit} {s
     rw [e]
     simp only [↓reduceIte]
     have hw256 : w.val < 256 := by rw [hwi]; exact i.isLt
-    refine WP.spec_bind (WP.spec_and (Fl4ProofsQ.P3.JAtZ.handleIrqJIMSt hARI hAT hIP hM hKD.toK hmb J2 hN1 hR2 w i hwi
+    refine WP.spec_bind (WP.spec_and (Fl4Proofs.P3.JAtZ.handleIrqJIMSt hARI hAT hIP hM hKD.toK hmb J2 hN1 hR2 w i hwi
       hw256 h126 h127) (Mc.JAtZ.handleIrqFt hAT J2 hC1 w)) ?_
     rintro ⟨s2, a3⟩ ⟨hf | ⟨z, hz, hJ, hRz⟩, hW2⟩
     · exact absurd hf (gai_active hVI hIq i rfl)
@@ -286,7 +286,7 @@ set_option maxHeartbeats 4000000 in
 `JAtZ (Z.mv G V) H Cs` state with `NoSwitch`, `PPR0` and `MRV`, its preemption point preempts, the preempted spec
 state is `CKI`, `RR` and `NativeScope`, and the run from `s0` to the preempted state writes only `ProjW H Cs s0`. -/
 theorem midXP_of_pre [VxE Z] (hARI : ARIface arI AR) (hAT : P0.ArchTotal arI) (hnd : Fl4Spec.numDomains = 1)
-    (hM : MachPlatT arI MR) (hKD : MRKeepD arI MR) (hIP : IrqPlatK arI AR) (hTA : TimeAgree arI)
+    (hM : MachPlat arI MR) (hKD : MRKeepD arI MR) (hIP : IrqPlatA arI AR) (hTA : TimeAgree arI)
     (hPA : PPPlatA arI AR) {s0 s' s : S} {a' a : A} {σ' σ : Fl4Spec.State Unit} {G : MdbGhost} {V : XVs}
     (J : JAtZ (L := L) arI AR (Z.mv G V) H Cs Ac Lst D s' a' σ') (hns : Vs.NoSwitch σ') (hp : PPR0 σ')
     (hMV : MRV MR a' σ')
@@ -306,7 +306,7 @@ theorem midXP_of_pre [VxE Z] (hARI : ARIface arI AR) (hAT : P0.ArchTotal arI) (h
 /-- (p3J gen 45) **`MidXP` at the installs' preempted invariant** (P3JDelMT's `delHypsJLMftC` ends a preemption at
 `WFt s0 (WCk WJPMV)`): with `RR` and `NativeScope` at the preempted spec state. -/
 theorem midXP_of_wjpv [VxE Z] (hARI : ARIface arI AR) (hAT : P0.ArchTotal arI) (hnd : Fl4Spec.numDomains = 1)
-    (hM : MachPlatT arI MR) (hKD : MRKeepD arI MR) (hIP : IrqPlatK arI AR) (hTA : TimeAgree arI)
+    (hM : MachPlat arI MR) (hKD : MRKeepD arI MR) (hIP : IrqPlatA arI AR) (hTA : TimeAgree arI)
     (hPA : PPPlatA arI AR) {kb : U64} {s0 s : S} {a : A} {σ : Fl4Spec.State Unit} {G : MdbGhost}
     (h : WFt (L := L) H Cs s0 (WCk (WJPMV (L := L) arI AR MR Z H Cs kb)) s a σ G)
     (hRR : SInvRr.RR σ) (hN : NativeScope σ) :

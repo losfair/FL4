@@ -1,7 +1,7 @@
 /-
 P3 (p3J gen 19): **the hand part of stage K of the stable-ghost interrupt chain** (as P3KFin is for P3KGen).
 
-The stable-ghost finish `jat_finishJRNMSt` (StPostEv; its Q copy `Fl4ProofsQ.P3.jat_finishJRNMSt`) passes its
+The stable-ghost finish `jat_finishJRNMSt` (StPostEv) passes its
 `hFO : FpuOwnOK σ` to `jat_finishJRN`, which P3KGen's `specK` replaces by P3KFin's `jat_finishJRNI`
 (`hFO : FinRootI`): a mechanical copy is rejected by the kernel. Here, by hand:
 
@@ -9,7 +9,7 @@ The stable-ghost finish `jat_finishJRNMSt` (StPostEv; its Q copy `Fl4ProofsQ.P3.
   `jat_finishJRNI`'s last conjunct kept as `JStab Z H Cs` at the same outcome (what `jat_finishJRNMSt` adds to
   `jat_finishJRNM`).
 
-P3JStIrqK maps `Fl4ProofsQ.P3.jat_finishJRNMSt` ↦ `jat_finishJRNMStQI`; its callers pass the K records' `F.fo`
+P3JStIrqK maps `jat_finishJRNMSt` ↦ `jat_finishJRNMStQI` (collapse A, Q: formerly its `Fl4ProofsQ` copy); its callers pass the K records' `F.fo`
 (`FinRootI`) unchanged. Premises: `jat_finishJRNMQI`'s; no new premise. No sorry. New module.
 -/
 import Fl4Proofs.P3.P3KFin
@@ -51,7 +51,7 @@ theorem jat_finishJRNMStQI {Z : XSets} {H : P1.Heap} {Cs Ac : Set U64}
       SchTailHypsR AR Z H D1 r.1 r.2 σ' ⦄)
     (hmax : Fl4Spec.maxTicksToUs = core.num.U64.MAX.bv)
     (htu : ∀ a v, arI.ticks_to_us a v ⦃ r => r.bv = Fl4Spec.ticksToUs v.bv ⦄)
-    (hM : MachPlatT arI MR) (hKD : MRKeepD arI MR) (hR : MR a σ.machineState) :
+    (hM : MachPlat arI MR) (hKD : MRKeepD arI MR) (hR : MR a σ.machineState) :
     syscall.finish st arI s a ⦃ r => ∃ σ',
       ((), σ') ∈ ((Fl4Spec.fl4Awaken (Z := Unit) >>= fun _ => Fl4Spec.schedule >>= fun _ => Fl4Spec.activateThread) σ).1 ∧
       RJ (L := L) arI AR r.1 r.2 σ' ∧ MR r.2 σ'.machineState ∧ JStab (L := L) arI AR Z H Cs r.1 r.2 σ' ⦄ := by

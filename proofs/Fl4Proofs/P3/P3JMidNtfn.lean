@@ -94,7 +94,7 @@ variable {AR : A → Fl4Spec.Cr3 → Prop} {MR : A → Fl4Spec.MachineState → 
 set_option maxHeartbeats 4000000 in
 /-- (p3J gen 34) **The mid decode leaves of the Null, Zombie and Notification caps** (module docstring). -/
 theorem midDecEasy_of (hA : P0.ArchTotal arI) (hnd : Fl4Spec.numDomains = 1) (hT : TimeAgree arI)
-    (hMT : MachPlatT arI MR) (hKD : MRKeepD arI MR) [VxE Z] {s : S} {a : A} {σ : Fl4Spec.State Unit} {n : I64}
+    (hMT : MachPlat arI MR) (hKD : MRKeepD arI MR) [VxE Z] {s : S} {a : A} {σ : Fl4Spec.State Unit} {n : I64}
     {c : Fl4Spec.Syscall} (hX : SInvX σ) (hni : σ.curThread ≠ σ.idleThread) :
     MidDecStW (L := L) arI AR MR (fun cp => SInvCk.KW (absCap cp) ∧ IsEasyCap cp) Z H Cs s a σ n c := by
   intro σb hBA V' Ac' Lst' D' s' a' hKF J hMb hCb hRRb ct rg sr cr hct hn info mi buf buffer r2 er argsU
@@ -166,7 +166,7 @@ theorem midDecEasy_of (hA : P0.ArchTotal arI) (hnd : Fl4Spec.numDomains = 1) (hT
 
 /-- (p3J gen 34) **`midDecOther` from the leaves of the remaining caps** (module docstring). -/
 theorem midDecOther_of_rest (hA : P0.ArchTotal arI) (hnd : Fl4Spec.numDomains = 1) (hT : TimeAgree arI)
-    (hMT : MachPlatT arI MR) (hKD : MRKeepD arI MR) [VxE Z] {s : S} {a : A} {σ : Fl4Spec.State Unit} {n : I64}
+    (hMT : MachPlat arI MR) (hKD : MRKeepD arI MR) [VxE Z] {s : S} {a : A} {σ : Fl4Spec.State Unit} {n : I64}
     {c : Fl4Spec.Syscall} (hX : SInvX σ) (hni : σ.curThread ≠ σ.idleThread)
     (h : MidDecStW (L := L) arI AR MR (fun cp => SInvCk.KW (absCap cp) ∧ ¬ IsReplyCap cp ∧ ¬ IsEasyCap cp)
       Z H Cs s a σ n c) :

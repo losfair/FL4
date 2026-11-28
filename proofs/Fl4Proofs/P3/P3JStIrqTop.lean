@@ -6,7 +6,7 @@ gen 18's `IrqStab` [J] discharged; `IrqStab` narrowed to `IrqFoot` [J] (footprin
   at `s` (with `VxE Z`), under U45nv's globals (the subset the interrupt path reads), every
   `handle_interrupt_entry … w` with `IrqHw` ends at an `EvOut false .interrupt` outcome `σ'` that is
   `RunCK` **and** `JStab Z H Cs` (`JAtZ (Z.mv G' V') H Cs …`: H, Cs, the typed heap, TCB and SC sets unchanged).
-  Proof: P3JStIrqK's `Fl4ProofsKQ.P3.SInvR.G5.irq_entryStU41` (StPostIrqEv's stable-ghost run carried through the
+  Proof: P3JStIrqK's `Fl4ProofsK.P3.SInvR.G5.irq_entryStU41` (StPostIrqEv's stable-ghost run carried through the
   U33 / U42 transports) with `MachPlatF.toT` (as U33), `PPPlatA := ⟨hPAi, TimeAgree.mb⟩` (as U30) and the finish
   record from U43's `kFinEv42_of` and U42's `KFinEv42.toK` (as U43 / U42 discharge it); `JReachU40` at the outcome
   from `JReachU17` there and the spec facts `EvOut.irqCarry` / `EvOut.ioaRel` (as U36I / U40), `CKI` by
@@ -50,7 +50,7 @@ set_option maxHeartbeats 8000000 in
 theorem irq_stabU45 [Fl4Proofs.P1.PlainStore st] (hARI : ARIface arI AR) (hA : P0.ArchTotal arI)
     (hnd : Fl4Spec.numDomains = 1) (hM : MachPlatF arI MR) (hIp : IpiF arI MR)
     (hKD : MRKeepD arI MR)
-    (hPAi : ∀ a c, AR a c → arI.irq_pending a ⦃ r => AR r.2 c ⦄) (hIA : IrqPlatK arI AR)
+    (hPAi : ∀ a c, AR a c → arI.irq_pending a ⦃ r => AR r.2 c ⦄) (hIA : IrqPlatA arI AR)
     (hT : TimeAgree arI)
     (hmax : Fl4Spec.maxTicksToUs = core.num.U64.MAX.bv)
     (htu : ∀ a v, arI.ticks_to_us a v ⦃ r => r.bv = Fl4Spec.ticksToUs v.bv ⦄)
@@ -65,7 +65,7 @@ theorem irq_stabU45 [Fl4Proofs.P1.PlainStore st] (hARI : ARIface arI AR) (hA : P
   obtain ⟨⟨⟨hJ17, hC⟩, hIoa⟩, hCK⟩ := hR
   obtain ⟨_, _, _, _, _, _, -, hX, -⟩ := jreach_invU3 hnd hJ17.1
   have hm := hX.sb.1.1.vim
-  have hG := Fl4ProofsKQ.P3.SInvR.G5.irq_entryStU41 hARI hA hnd (MachPlatF.toT hM hIp) hKD ⟨hPAi, hT.mb⟩ hIA hT
+  have hG := Fl4ProofsK.P3.SInvR.G5.irq_entryStU41 hARI hA hnd (MachPlatF.toT hM hIp) hKD ⟨hPAi, hT.mb⟩ hIA hT
     hmax htu hRef hDR hFpu hJ17 J w a1 hI (KFinEv42.toK (kFinEv42_of hFpu hFW hA) hA)
   refine WP.spec_mono hG ?_
   rintro r ⟨σ', hO, hJ', hSt⟩
@@ -76,7 +76,7 @@ set_option maxHeartbeats 4000000 in
 theorem kernel_entry_runMcW_irqF [Fl4Proofs.P1.PlainStore st] (hARI : ARIface arI AR) (hA : P0.ArchTotal arI)
     (hnd : Fl4Spec.numDomains = 1) (hM : MachPlatF arI MR) (hIp : IpiF arI MR)
     (hKD : MRKeepD arI MR)
-    (hPAi : ∀ a c, AR a c → arI.irq_pending a ⦃ r => AR r.2 c ⦄) (hIA : IrqPlatK arI AR)
+    (hPAi : ∀ a c, AR a c → arI.irq_pending a ⦃ r => AR r.2 c ⦄) (hIA : IrqPlatA arI AR)
     (hT : TimeAgree arI)
     (hmax : Fl4Spec.maxTicksToUs = core.num.U64.MAX.bv)
     (htu : ∀ a v, arI.ticks_to_us a v ⦃ r => r.bv = Fl4Spec.ticksToUs v.bv ⦄)

@@ -26,9 +26,10 @@ and, found here, four more that `LocPlat`'s non-opaque-looking fields need:
    `x / 8 = MAX_PERIOD_US` in `U64`, which exists iff `MAX_PERIOD_US ≤ (2^64 - 1) / 8`; `TimeConsts`' axioms give
    only `5 * MAX_PERIOD_US * ticksPerTimerUnit < 2^64 - 1` (`getCurrentTime_buffer_bound`), i.e. `< 2^64 / 5`, which
    does not imply it. So `TimeAgree` is satisfiable by no arch at all unless this holds.
-6. `ipi : ∀ n, irqOracle n ∉ {126, 127}` (`irqOracle`, l.497): `IrqPlatA.noIpi` asks every arch state's
-   `take_pending_irq` to avoid FL4's IPI vectors, and `MachPlat.take` forces the taken line to be the oracle's
-   unmasked line; `MachPlat.mask` lets 126 / 127 be unmasked, so no `MR` can mask them away.
+6. `ipi : ∀ n, irqOracle n ∉ {126, 127}` (`irqOracle`, l.497): `MachPlat.noIpi` (`IpiF`) asks `take_pending_irq`
+   to avoid FL4's IPI vectors at every `modelMR`-related state, and `MachPlat.take` forces the taken line to be the
+   oracle's unmasked line; `modelMR` keeps no line masked. (Collapse A, Q: before it, the old `IrqPlatA.noIpi` asked
+   this at every arch state. A relation keeping 126 / 127 masked needs no oracle fact: JBootIpi's `ipiMR`.)
 7. `dl : setDeadlineImpl` is deterministic (l.664): `SetDlDetR` asks it of every `MR`-related state, and `MR` may
    not read `machineStateRest` (`MachPlat.frame`), so it is a property of the opaque operation itself.
 8. `pin0`: the spec's I/O-port read (`archPerformInvocation … invokeIOPort … ioPortIn*`, through the opaque
@@ -150,9 +151,6 @@ theorem archT_ari : ARIface archT ART where
   vcpu_release _ _ _ _ := by okc
   mask _ _ _ _ _ := trivial
 
-theorem archT_machPlat : MachPlat archT modelMR :=
-  ⟨modelArch_machPlat.now, modelArch_machPlat.irqPending, modelArch_machPlat.take, modelArch_machPlat.mask,
-    modelArch_machPlat.ack, modelArch_machPlat.frame⟩
 
 theorem archT_kd : MRKeepD archT modelMR where
   set_deadline _ _ _ h := by okc
@@ -221,25 +219,31 @@ theorem no_irq_val : syscall.NO_IRQ.val = 2 ^ 64 - 1 := by
   show syscall.NO_IRQ.bv.toNat = _
   rw [no_irq_bv, BitVec.toNat_allOnes]
 
+/-- **`MachPlat` for the model** (`MachPlatF` from `modelArch_machPlat`; `IpiF` at `modelMR`, which keeps no line
+masked, from the oracle fact `O.ipi`). -/
+theorem archT_machPlat (O : OpaqueH) : MachPlat archT modelMR := by
+  refine MachPlatF.toT ⟨modelArch_machPlat.now, modelArch_machPlat.irqPending, modelArch_machPlat.take,
+    modelArch_machPlat.mask1, modelArch_machPlat.mask0, modelArch_machPlat.ack, modelArch_machPlat.frame⟩ ?_
+  intro a _ _
+  show (ok (modelTake a, gaiState a) : Result (U64 × MachineState)) ⦃ _ ⦄
+  rw [WP.spec_ok]
+  dsimp only
+  cases e : gaiLine true a with
+  | none =>
+    rw [modelTake_none e, no_irq_val]
+    constructor <;> decide
+  | some i =>
+    rw [(modelTake_some e).2]
+    have hi : i = Fl4Spec.irqOracle (a.irqState + 1) := by
+      unfold gaiLine at e
+      split at e
+      · cases e
+      · exact (Option.some.inj e).symm
+    rw [hi]
+    exact O.ipi _
+
 theorem archT_ia (O : OpaqueH) : IrqPlatA archT ART where
   takeAR _ _ _ := by okc
-  noIpi a := by
-    show (ok (modelTake a, gaiState a) : Result (U64 × MachineState)) ⦃ _ ⦄
-    rw [WP.spec_ok]
-    dsimp only
-    cases e : gaiLine true a with
-    | none =>
-      rw [modelTake_none e, no_irq_val]
-      constructor <;> decide
-    | some i =>
-      rw [(modelTake_some e).2]
-      have hi : i = Fl4Spec.irqOracle (a.irqState + 1) := by
-        unfold gaiLine at e
-        split at e
-        · cases e
-        · exact (Option.some.inj e).symm
-      rw [hi]
-      exact O.ipi _
   ackAR _ _ _ _ := by okc
 
 theorem archT_pi (O : OpaqueH) : PortInValMR archT modelMR := by
@@ -260,7 +264,7 @@ theorem locPlat_archT {S : Type} {st : machine.Store S} [L : P1.LawfulStore st] 
   ari := archT_ari
   tot := archT_total
   nd := O.nd
-  mach := archT_machPlat
+  mach := archT_machPlat O
   kd := archT_kd
   io := archT_io
   pa := archT_pa O

@@ -42,6 +42,10 @@ No lock-map premise is false: fl4-store's 4,096-entry hash only coarsens the mod
 `kd` ×8, `cs` ×2, `lk` ×3; plus the convention `LkC`); no vacuity: `startU2_of_U`, `startInvU3_of_U2` (U2's start
 facts from U1's at a constant lock map, so every U1 satisfiability lemma applies). No new [W] / [J] / [P].
 New module; no existing statement changes.
+
+**Collapse A, Q:** the top `serializable_fl4_localU2` is removed (it had no user but jboot's `Fl4ProofsQ` copy of
+P2/WitExec's `wit_U2_io`; the B3-deferred non-vacuity witnesses went with it). The start facts above stay: U3 / U4
+use them.
 -/
 import Fl4Proofs.P2.E2EPU2
 open Aeneas Aeneas.Std Result
@@ -240,31 +244,6 @@ variable {S : Type} (st : machine.Store S) [L : LawfulStore st] [Fl4Proofs.P1.Pl
 variable {A : Type} (ar : machine.Arch A) (hA : P0.ArchTotal ar) (a0 : A)
 variable {A3 : Type} {arI : machine.Arch A3} {AR : A3 → Fl4Spec.Cr3 → Prop} {MR : A3 → Fl4Spec.MachineState → Prop}
 
-/-- **FL4 end to end with every slot, [P]s audited** (module docstring): `serializable_fl4_localU1` without
-`hm` / `hSt` (from `PlainStore` / `LawfulStore`), without every record's `kd` (vmF, vmR, io, st, irq, vx, vt, sl)
-and `lk` (Delete-with-PTE, CNodeDelete, Copy / Mint) — each replaced by the index convention `LkC` — and without
-vmR's / sl's `cs` (from the entry's bundle). -/
-theorem serializable_fl4_localU2 (P : LocPlat st arI AR MR) (hIoa : Fl4Proofs.P3.MRKeepIoapic arI MR)
-    {s0 s : Cfg U64 U64 U64 U64} {K0 K : KLayoutP} {Ch0 Ch : S → Prop} (h0 : Init s0) (hA0 : ArmInv s0)
-    (hB : SerExitW P K0.toKLayoutV Ch0) (hc0 : K0.vcpus = ∅ ∧ K0.ptes = ptesR K0 s0.mem)
-    (hM0 : MapsP K0 s0)
-    (h : ExecWPR (PathsP.sum (fl4LocW11JA st ar hA (masksWr_plain st) L.total a0)
-        (PathsP.sum (PathsP.sum (delPteSlot st ar hA (masksWr_plain st)) (invSlotU st ar hA (masksWr_plain st)))
-          (cmSlotU st ar hA (masksWr_plain st))))
-      (StartV2 st ar hA a0 arI AR MR) P s0 K0 Ch0 s K Ch)
-    (hq : NoLoc s) :
-    RunAll s.log s0.mem s.mem := by
-  obtain ⟨hK0, hU0⟩ := okP_R hB hc0
-  refine serializable_e2eP _ h0 hA0 hK0 hU0 hM0 (execP_of_WPRG ?_ P h0 hA0 hB hc0 hM0 h).1 hq
-  intro Ch K s hK hU c hs q i hC hE hsf
-  have nv : K.vcpus = ∅ := by
-    obtain ⟨_, ⟨nv, _⟩, _⟩ := hE
-    exact nv
-  rcases i with i | ((j | j) | j)
-  · exact startAt_U st ar hA (masksWr_plain st) L.total a0 P hIoa hC hE (startU_of_U2 st ar hA a0 hC nv hsf)
-  · exact delPteStart_at st ar hA (masksWr_plain st) hC hE (hsf.2 fun _ s b v _ _ _ => hsf.1.wr s b v)
-  · exact invStartU2_at st ar hA (masksWr_plain st) hC hE (hsf.2 fun _ s b v _ _ _ => hsf.1.wr s b v)
-  · exact cmStartU2_at st ar hA (masksWr_plain st) hC hE (hsf.2 fun _ s b v _ _ _ => hsf.1.wr s b v)
 
 end top
 

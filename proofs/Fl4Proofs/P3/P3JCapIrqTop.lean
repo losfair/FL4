@@ -49,7 +49,7 @@ variable {AR : A → Fl4Spec.Cr3 → Prop} {MR : A → Fl4Spec.MachineState → 
 set_option maxHeartbeats 4000000 in
 /-- (p3J gen 37) **The mid decode leaf of the IrqHandler cap** (module docstring). -/
 theorem midDecIrq_of [Fl4Proofs.P1.PlainStore st] (hA : P0.ArchTotal arI) (hnd : Fl4Spec.numDomains = 1)
-    (hARI : ARIface arI AR) (hMT : MachPlatT arI MR) (hKD : MRKeepD arI MR) {s : S} {a : A}
+    (hARI : ARIface arI AR) (hMT : MachPlat arI MR) (hKD : MRKeepD arI MR) {s : S} {a : A}
     {σ : Fl4Spec.State Unit} {n : I64} {c : Fl4Spec.Syscall} (hX : SInvX σ) (hni : σ.curThread ≠ σ.idleThread)
     (hIB : SpecIrqB σ) :
     MidDecStW (L := L) arI AR MR (fun cp => SInvCk.KW (absCap cp) ∧ ∃ i, cp = .IrqHandler i) Z H Cs s a σ n c := by
@@ -63,7 +63,7 @@ theorem midDecIrq_of [Fl4Proofs.P1.PlainStore st] (hA : P0.ArchTotal arI) (hnd :
 set_option maxHeartbeats 4000000 in
 /-- (p3J gen 37) **The invoking class's decode leaf of the IrqHandler cap** (module docstring). -/
 theorem invDecIrq_of [Fl4Proofs.P1.PlainStore st] (hA : P0.ArchTotal arI) (hnd : Fl4Spec.numDomains = 1)
-    (hARI : ARIface arI AR) (hMT : MachPlatT arI MR) (hKD : MRKeepD arI MR) {s : S} {a : A}
+    (hARI : ARIface arI AR) (hMT : MachPlat arI MR) (hKD : MRKeepD arI MR) {s : S} {a : A}
     {σ : Fl4Spec.State Unit} {n : I64} {call bl don : Bool} (hX : SInvX σ) (hni : σ.curThread ≠ σ.idleThread)
     (hIB : SpecIrqB σ) :
     InvDecStW (L := L) arI AR MR (fun cp => SInvCk.KW (absCap cp) ∧ ∃ i, cp = .IrqHandler i) Z H Cs s a σ n
@@ -77,7 +77,7 @@ theorem invDecIrq_of [Fl4Proofs.P1.PlainStore st] (hA : P0.ArchTotal arI) (hnd :
 
 /-- (p3J gen 37) **gen 36's `midDecRest` from the IrqHandler leaf and the three left** (module docstring). -/
 theorem midDecRest_of_irq [Fl4Proofs.P1.PlainStore st] (hA : P0.ArchTotal arI) (hnd : Fl4Spec.numDomains = 1)
-    (hARI : ARIface arI AR) (hMT : MachPlatT arI MR) (hKD : MRKeepD arI MR) {s : S} {a : A}
+    (hARI : ARIface arI AR) (hMT : MachPlat arI MR) (hKD : MRKeepD arI MR) {s : S} {a : A}
     {σ : Fl4Spec.State Unit} {n : I64} {c : Fl4Spec.Syscall} (hX : SInvX σ) (hni : σ.curThread ≠ σ.idleThread)
     (hIB : SpecIrqB σ)
     (h : MidDecStW (L := L) arI AR MR (fun cp => SInvCk.KW (absCap cp) ∧ IsRestCap3 cp) Z H Cs s a σ n c) :
@@ -92,7 +92,7 @@ theorem midDecRest_of_irq [Fl4Proofs.P1.PlainStore st] (hA : P0.ArchTotal arI) (
 
 /-- (p3J gen 37) **gen 36's `invDecRest` from the IrqHandler leaf and the three left** (module docstring). -/
 theorem invDecRest_of_irq [Fl4Proofs.P1.PlainStore st] (hA : P0.ArchTotal arI) (hnd : Fl4Spec.numDomains = 1)
-    (hARI : ARIface arI AR) (hMT : MachPlatT arI MR) (hKD : MRKeepD arI MR) {s : S} {a : A}
+    (hARI : ARIface arI AR) (hMT : MachPlat arI MR) (hKD : MRKeepD arI MR) {s : S} {a : A}
     {σ : Fl4Spec.State Unit} {n : I64} {call bl don : Bool} (hX : SInvX σ) (hni : σ.curThread ≠ σ.idleThread)
     (hIB : SpecIrqB σ)
     (h : InvDecStW (L := L) arI AR MR (fun cp => SInvCk.KW (absCap cp) ∧ IsRestCap3 cp) Z H Cs s a σ n

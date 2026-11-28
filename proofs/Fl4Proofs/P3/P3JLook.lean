@@ -1318,7 +1318,7 @@ theorem handle_invocation_entryJMUML [Fl4Proofs.P1.PlainStore st] (s : S) (ar : 
     (hP : JPathAtML (L := L) arI AR Z H Cs D s ar σ ct is_call blocking can_donate first_phase cptr)
     (hPD : JPreDecHypM (L := L) arI AR MR Z H Cs D s ar σ ct)
     (hDL : JDecMRL (L := L) arI AR MR Z H Cs D s ar σ ct) (hR : MR ar σ.machineState)
-    (hVT : ValidMachineTime σ) (hVI : ValidIrqMasks σ) (hNs : NativeScope σ) (hM : MachPlatT arI MR)
+    (hVT : ValidMachineTime σ) (hVI : ValidIrqMasks σ) (hNs : NativeScope σ) (hM : MachPlat arI MR)
     (hKD : MRKeepD arI MR) :
     syscall.handle_invocation st arI s ar is_call blocking can_donate first_phase cptr ⦃ res =>
       HIPostMXP (L := L) (JAtM (L := L) arI AR MR) (JAtPreMV (L := L) arI AR MR) true σ is_call blocking can_donate
@@ -1332,7 +1332,7 @@ theorem handle_invocation_entryJMUML [Fl4Proofs.P1.PlainStore st] (s : S) (ar : 
   have hF : ∀ {f : error.Fault} {f' : Fl4Spec.Fault}, CapFaultCorr f f' →
       faults.handle_fault st arI s ar ct f ⦃ r => ∃ z ∈ (Fl4Spec.handleFault (Z := Unit) ct.bv f' σ).1,
         RelTopM (L := L) r.1 z.2 ∧ JAtM (L := L) arI AR MR r.1 r.2 z.2 ⦄ := fun hcf =>
-    WP.spec_mono (Fl4ProofsQ.P3.spec_mrz hM (J.faultHypJZ hA hE.ni hct hE.ctnq hE.vfh hcf)
+    WP.spec_mono (Fl4Proofs.P3.spec_mrz hM (J.faultHypJZ hA hE.ni hct hE.ctnq hE.vfh hcf)
       (MKD.faults_handle_fault L.total hA hKD hR)
       (fun z hz => congrArg Prod.fst (MachT.mtk_handleFaultG _ _ σ z hz)))
       fun _ ⟨z, hz, ⟨h1, h2⟩, h3⟩ => ⟨z, hz, h1, h2, h3⟩
@@ -1345,12 +1345,12 @@ theorem handle_invocation_entryJMUML [Fl4Proofs.P1.PlainStore st] (s : S) (ar : 
     (fun _ lf lf' hl => hF (capFaultCorr_lookup cptr hl))
     (fun s1 a1 σ' _ ⟨⟨_, _, _, _, _, _, J', _⟩, hR'⟩ hc =>
       WP.spec_mono (WP.spec_and (J'.flTailJ hc is_call) (MKD.fl_tail L.total hA hKD hR'))
-        fun _ ⟨⟨h1, z, hz, h2, h3⟩, h4⟩ => ⟨h1, z, hz, h2, h3, Fl4ProofsQ.P3.msF_mr hM h4
+        fun _ ⟨⟨h1, z, hz, h2, h3⟩, h4⟩ => ⟨h1, z, hz, h2, h3, Fl4Proofs.P3.msF_mr hM h4
           (congrArg Prod.fst (MachT.mtk_specTailG _ _ _ σ' z hz))⟩)
     (fun a1 e e' ⟨⟨_, _, _, _, _, _, J'', _⟩, hR'⟩ he =>
       WP.spec_mono (WP.spec_and ((J.archJ J''.xtop.fin.1.1.2.2.2.2.2.2).replyFailJ hcur is_call e e' he)
         (MKD.reply_err_tail (e := e) (t := ct) (s := s) (is_call := is_call) L.total hA hKD hR'))
-        fun _ ⟨⟨h1, z, hz, h2, h3⟩, h4⟩ => ⟨h1, z, hz, h2, h3, Fl4ProofsQ.P3.msF_mr hM h4
+        fun _ ⟨⟨h1, z, hz, h2, h3⟩, h4⟩ => ⟨h1, z, hz, h2, h3, Fl4Proofs.P3.msF_mr hM h4
           (congrArg Prod.fst (MachT.mtk_when (MachT.mtk_fl4ReplyFromKernelErrorG _ _ _) σ z hz))⟩)
     (fun inv σ1 y hst hy => by
       rw [perfCurKeep _ _ _ inv σ1 y hy]
@@ -1377,7 +1377,7 @@ theorem handle_invocation_entryJMUML [Fl4Proofs.P1.PlainStore st] (s : S) (ar : 
     have h := lookup_extra_named Z.th s σ J.dstate.1.1 J.dstate.1.2.1 htcb buf info
     rw [hr2, WP.spec_ok] at h
     exact h e h1
-  exact Fl4ProofsQ.P3.decOK_JMM arI s ar σ J hG hE ct hct info.label (msgLen info buf) blocking is_call can_donate first_phase
+  exact Fl4Proofs.P3.decOK_JMM arI s ar σ J hG hE ct hct info.label (msgLen info buf) blocking is_call can_donate first_phase
     buf e mi.miLabel argsU hLen hArgs hbuf hl (Fl4Spec.toBl cptr.bv) sl hsl c hc exs buffer
     (hXO e exs h1 h2) hXN hLb hA5 (hP info mi buf buffer r2 er argsU hinfo hmi hbuf hbuffer hr2 her hmrs sl c e exs hsl hc hget h1 h2 hL)
     hPD hDL hR hVT hVI hNs hM hKD hA

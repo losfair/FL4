@@ -64,7 +64,7 @@ receiving ones and `Yield` by g4b's keeps (`JDispMR.of_keep`). -/
 theorem dispatch_all13PUNM4 [Fl4Proofs.P1.PlainStore st] (s : S) (a : A) (σ : Fl4Spec.State Unit)
     (J : JAtZ (L := L) arI AR Z H Cs Ac Lst D s a σ) [VxE Z] (hni : Entered σ) (n : I64) (c : Fl4Spec.Syscall)
     (hn : NativeSys n c) (hK : KDispHyps13PU (L := L) arI AR MR Z H Cs D s a σ n c)
-    (hDL : ∀ ct, sched.cur_thread st s = ok ct → JDecMRLK (L := L) arI VtxK AR MR Z H Cs D s a σ ct)
+    (hDL : ∀ ct, sched.cur_thread st s = ok ct → JDecMRLKQ (L := L) arI VtxK AR MR Z H Cs D s a σ ct)
     (hR : MR a σ.machineState) (hVI : ValidIrqMasks σ) (hN : NativeScope σ)
     (hARI : ARIface arI AR) (hA : P0.ArchTotal arI) (hnd : Fl4Spec.numDomains = 1) (hM : MachPlat arI MR)
     (hKD : MRKeepD arI MR) (hIo : MRKeepIo arI MR) (hIoa : MRKeepIoapic arI MR) (hPA : PPPlatA arI AR) (hIA : IrqPlatA arI AR)
@@ -78,7 +78,7 @@ theorem dispatch_all13PUNM4 [Fl4Proofs.P1.PlainStore st] (s : S) (a : A) (σ : F
   rcases hn with ⟨call, bl, don, hi, rfl⟩ | ⟨bl, cr, hr, rfl⟩ | ⟨rfl, rfl⟩ | hm
   · obtain ⟨hG, hE, hP, hPD⟩ := hK.inv _ call bl don hct hi
     exact dispatch_invokeJAllMUNM s a σ J _ hct n call bl don hi hG hE hP hPD
-      (jDecMRL_of arI s a σ J hG hE _ hct hPD hN hM hKD hIo hIoa (jDecMRL2_ofT arI s a σ J hG hE _ hct hM hKD (jDecMRLK_ofU arI s a σ J hG hE _ hct hM hKD (hDL _ hct) (jUtResetHyp_of arI s a σ J hG hE _ hct hM hKD)))) hR hK.vmt hVI hN hARI
+      (jDecMRL_of arI s a σ J hG hE _ hct hPD hN hM hKD hIo hIoa (jDecMRL2_ofTQ arI s a σ J hG hE _ hct hM hKD (jDecMRLK_ofUQ arI s a σ J hG hE _ hct hM hKD (hDL _ hct) (jUtResetHyp_of arI s a σ J hG hE _ hct hM hKD)))) hR hK.vmt hVI hN hARI
       hA hnd hM hKD hPA hIA hmrt
   · refine WP.spec_mono (WP.spec_and hD (JDispMR.of_keep (L := L) (AR := AR) hM
       (fun hR => dispatch_recv_mr hKD hA hr hR) ?_ hR)) fun _ ⟨h1, h2⟩ => h2 h1
@@ -101,7 +101,7 @@ theorem dispatch_all13PUNM4 [Fl4Proofs.P1.PlainStore st] (s : S) (a : A) (σ : F
         (jMidLeavesHyp_of5 hA hmax htu (jMidLeavesHyp_of6 hA hmax htu hS6)))))
     exact dispatch_midJMUNM s a σ J hni _ hct n c rg sr cr hm' hG hE hP hW.toP
       (jMidRecvHyp_of hA hG.maxTU hG.tu hs hq hW hV hS) hPD
-      (jDecMRL_of arI s a σ J hG hE _ hct hPD hN hM hKD hIo hIoa (jDecMRL2_ofT arI s a σ J hG hE _ hct hM hKD (jDecMRLK_ofU arI s a σ J hG hE _ hct hM hKD (hDL _ hct) (jUtResetHyp_of arI s a σ J hG hE _ hct hM hKD)))) hR hK.vmt hVI hN hARI hA hnd hM hKD hPA hIA
+      (jDecMRL_of arI s a σ J hG hE _ hct hPD hN hM hKD hIo hIoa (jDecMRL2_ofTQ arI s a σ J hG hE _ hct hM hKD (jDecMRLK_ofUQ arI s a σ J hG hE _ hct hM hKD (hDL _ hct) (jUtResetHyp_of arI s a σ J hG hE _ hct hM hKD)))) hR hK.vmt hVI hN hARI hA hnd hM hKD hPA hIA
       hmrt
 
 end

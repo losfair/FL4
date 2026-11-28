@@ -6,7 +6,7 @@ platform relation `MR` between FL4's arch state and the spec's machine state
 degenerate `IrqPlat.take`.
 
 * `PPPlatA` / `IrqPlatA` [P]: the arch-only parts of `PPPlat` / `IrqPlat`
-  (`irqAR`, `minBudget`; `takeAR`, `noIpi`, `ackAR`), each a statement about
+  (`irqAR`, `minBudget`; `takeAR`, `ackAR`), each a statement about
   the arch state alone (no spec state): `PPPlat.toA`, `IrqPlat.toA`, and the
   model satisfies them whenever `AR` is kept by its (identity-like) ops.
 * `update_timestamp_mr`: FL4's `update_timestamp` reads the clock once (the
@@ -56,10 +56,10 @@ theorem PPPlat.toA (h : PPPlat arI AR) : PPPlatA arI AR := ⟨h.irqAR, h.minBudg
 
 variable (arI) in
 /-- **The arch-only part of `IrqPlat`** [P] (`IrqPlat` without its ∀-spec-state
-`take`). -/
+`take` and without `noIpi`: collapse A, Q wrote irqfix's `IrqPlatK` back; the IPI vectors are excluded by
+`MachPlat.noIpi` at related states). -/
 structure IrqPlatA (AR : A → Fl4Spec.Cr3 → Prop) : Prop where
   takeAR : ∀ a c, AR a c → arI.take_pending_irq a ⦃ r => AR r.2 c ⦄
-  noIpi : ∀ a : A, arI.take_pending_irq a ⦃ r => r.1.val ≠ 126 ∧ r.1.val ≠ 127 ⦄
   ackAR : ∀ a i c, AR a c → arI.ack_irq a i ⦃ a' => AR a' c ⦄
 
 /-- **`update_timestamp` moves `MR` by one clock read.** -/

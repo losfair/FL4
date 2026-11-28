@@ -8,7 +8,8 @@ P3KXport's kernel-checked copy; stage 1 is P3KGen1, whose copies are reused).
 * Constants: G7eChain's `scnt_refines0FA` / `sw_refinesFA` ↦ ArchSwIdle's `…I`; the record conversions
   `KFinAtR8.to5`, `KFinAtR5.to31`, `KFinAtR31.to27`, `KFinAtR27.toR` ↦ P3KFin's; the old finish path
   `jat_scheduleWP0FZR` (now on the g7e chain), `jat_scheduleFR2ZR`, `jat_scheduleSR2ZRP`, `jat_finishJRP`,
-  `jat_finishJRN`, `Fl4ProofsQ.P3.jat_finishJRNM` ↦ P3KFin's.
+  `jat_finishJRN`, `jat_finishJRNM` ↦ P3KFin's (collapse A, Q: the base `jat_finishJRNM`, formerly its
+  `Fl4ProofsQ` copy).
 * Every other constant of U41's cone using these ↦ its copy under `Fl4ProofsK…`. The copy
   `Fl4ProofsK.P3.SInvR.G5.kernel_entry_reachU41` is U41 with `KFinAtR41` / `KFinEv41` ↦ their copies
   (`arch : ArchSwF'`); XTopJointKEntryU42 states it. No premise added; no sorry.
@@ -38,7 +39,7 @@ def specK : Spec where
      (`Fl4Proofs.P3.jat_scheduleSR2ZRP, `Fl4Proofs.P3.jat_scheduleSR2ZRPI),
      (`Fl4Proofs.P3.jat_finishJRP, `Fl4Proofs.P3.jat_finishJRPI),
      (`Fl4Proofs.P3.jat_finishJRN, `Fl4Proofs.P3.jat_finishJRNI),
-     (`Fl4ProofsQ.P3.jat_finishJRNM, `Fl4Proofs.P3.jat_finishJRNMQI)]
+     (`Fl4Proofs.P3.jat_finishJRNM, `Fl4Proofs.P3.jat_finishJRNMQI)]
 
 end Fl4Proofs.P3.P3KX
 

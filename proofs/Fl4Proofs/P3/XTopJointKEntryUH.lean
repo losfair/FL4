@@ -37,7 +37,7 @@ theorem kernel_entryJ42H [Fl4Proofs.P1.PlainStore st] {AR : A → Fl4Spec.Cr3 �
     (hDL : ∀ σb, BudgetAt σ σb true → ∀ (V' : XVs) (Ac' : Set U64) (Lst' : U64 → List U64) (D' : Set U64)
       (s' : S) (a' : A), KFrontB (L := L) arI s a s' a' →
         JAtZ (L := L) arI AR (Z.mv Z.G V') H Cs Ac' Lst' D' s' a' σb →
-        ∀ ct', sched.cur_thread st s' = ok ct' → JDecMRLK (L := L) arI VtxK AR MR (Z.mv Z.G V') H Cs D' s' a' σb ct')
+        ∀ ct', sched.cur_thread st s' = ok ct' → JDecMRLKQ (L := L) arI VtxK AR MR (Z.mv Z.G V') H Cs D' s' a' σb ct')
     (hFin : ∀ x ∈ (specFront c σ).1, ∀ (Z' : XSets) (H' : P1.Heap) (Cs' Ac' : Set U64) (Lst' : U64 → List U64)
       (D' : Set U64) (s' : S) (a' : A), KFrontF (L := L) arI n s a s' a' →
         JAtZR (L := L) arI AR Z' H' Cs' Ac' Lst' D' s' a' x.2 →

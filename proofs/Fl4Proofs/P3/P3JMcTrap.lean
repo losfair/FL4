@@ -1,7 +1,7 @@
 /-
 P3 (p3J gen 22): **the trap and native-syscall clauses of the multicore run** (`RunMcWK` to `RunMcWK`).
 
-* **`trap_stabU45`**: the `int $N` clause at given ghosts, stable, at U45nv's premises (P3JStTrapK's `Fl4ProofsKQ`
+* **`trap_stabU45`**: the `int $N` clause at given ghosts, stable, at U45nv's premises (P3JStTrapK's `Fl4ProofsK`
   copy of `trap_entryStU41`, the finish record from U43 / U42, `JReachU40` / `CKI` at the outcome as `sysU_stabU45`).
 * **`TrapFootW`** [J]: the trap entry writes only the projection footprint `ProjW H Cs s` (same shape as P3JMcUt's
   `UserFootW` / `SysUFootW`). **`kernel_entry_runMcWK_trapW`**: the trap clause on any core, `RunMcWK` to `RunMcWK`,
@@ -55,7 +55,7 @@ theorem trap_stabU45 [Fl4Proofs.P1.PlainStore st] (hARI : ARIface arI AR) (hA : 
   obtain ⟨⟨⟨hJ17, hC⟩, hIoa⟩, hCK⟩ := hR
   obtain ⟨_, _, _, _, _, _, -, hX, -⟩ := jreach_invU3 hnd hJ17.1
   have hm := hX.sb.1.1.vim
-  have hG := Fl4ProofsKQ.P3.SInvR.G5.trap_entryStU41 hARI hA hnd (MachPlatF.toT hM hIp) hKD ⟨hPAi, hT.mb⟩ hT
+  have hG := Fl4ProofsK.P3.SInvR.G5.trap_entryStU41 hARI hA hnd (MachPlatF.toT hM hIp) hKD ⟨hPAi, hT.mb⟩ hT
     hmax htu hRef hDR hFpu hJ17 J v hct hv (fun _ _ _ _ => (KFinEv42.toK (kFinEv42_of hFpu hFW hA) hA))
   refine WP.spec_mono hG ?_
   rintro r ⟨ev, σ', hK, hO, hJ', hSt⟩

@@ -8,7 +8,7 @@ premises**, and the three `RunMcW` clauses with a footprint premise (P3JStIrqTop
   `FootAt` give `RunMcW` there.
 * **`user_stabU45`**, **`vmf_stabU45`**, **`sysU_stabU45`**: from `RunCK` and any `JAtZ Z H Cs` (with `VxE Z`),
   under U45nv's globals (subset) and the clause's own case conditions (non-idle; `UserHw` / `VmfHw` [P];
-  `UnkSys` ∧ `NoDbgSys`), every outcome is `RunCK` **and** `JStab Z H Cs`. P3JStEvK's `Fl4ProofsKQ` copies of
+  `UnkSys` ∧ `NoDbgSys`), every outcome is `RunCK` **and** `JStab Z H Cs`. P3JStEvK's `Fl4ProofsK` copies of
   P3JStEv's stage-A lemmas, the finish record from U43 / U42, `JReachU40` / `CKI` at the outcome as in
   `irq_stabU45`. This discharges the ghost half of gen 18's `UserStab` [J] (and of the not yet stated VM-fault /
   unknown-syscall `…Stab`).
@@ -83,7 +83,7 @@ set_option maxHeartbeats 8000000 in
 theorem user_stabU45 [Fl4Proofs.P1.PlainStore st] (hARI : ARIface arI AR) (hA : P0.ArchTotal arI)
     (hnd : Fl4Spec.numDomains = 1) (hM : MachPlatF arI MR) (hIp : IpiF arI MR)
     (hKD : MRKeepD arI MR)
-    (hPAi : ∀ a c, AR a c → arI.irq_pending a ⦃ r => AR r.2 c ⦄) (hIA : IrqPlatK arI AR)
+    (hPAi : ∀ a c, AR a c → arI.irq_pending a ⦃ r => AR r.2 c ⦄) (hIA : IrqPlatA arI AR)
     (hT : TimeAgree arI)
     (hmax : Fl4Spec.maxTicksToUs = core.num.U64.MAX.bv)
     (htu : ∀ a v, arI.ticks_to_us a v ⦃ r => r.bv = Fl4Spec.ticksToUs v.bv ⦄)
@@ -98,7 +98,7 @@ theorem user_stabU45 [Fl4Proofs.P1.PlainStore st] (hARI : ARIface arI AR) (hA : 
   obtain ⟨⟨⟨hJ17, hC⟩, hIoa⟩, hCK⟩ := hR
   obtain ⟨_, _, _, _, _, _, -, hX, -⟩ := jreach_invU3 hnd hJ17.1
   have hm := hX.sb.1.1.vim
-  have hG := Fl4ProofsKQ.P3.SInvR.G5.user_entryStU41 hARI hA hnd (MachPlatF.toT hM hIp) hKD ⟨hPAi, hT.mb⟩ hT
+  have hG := Fl4ProofsK.P3.SInvR.G5.user_entryStU41 hARI hA hnd (MachPlatF.toT hM hIp) hKD ⟨hPAi, hT.mb⟩ hT
     hmax htu hRef hDR hFpu hJ17 J n c hct hU (KFinEv42.toK (kFinEv42_of hFpu hFW hA) hA)
   refine WP.spec_mono hG ?_
   rintro r ⟨σ', hO, hJ', hSt⟩
@@ -109,7 +109,7 @@ set_option maxHeartbeats 8000000 in
 theorem vmf_stabU45 [Fl4Proofs.P1.PlainStore st] (hARI : ARIface arI AR) (hA : P0.ArchTotal arI)
     (hnd : Fl4Spec.numDomains = 1) (hM : MachPlatF arI MR) (hIp : IpiF arI MR)
     (hKD : MRKeepD arI MR)
-    (hPAi : ∀ a c, AR a c → arI.irq_pending a ⦃ r => AR r.2 c ⦄) (hIA : IrqPlatK arI AR)
+    (hPAi : ∀ a c, AR a c → arI.irq_pending a ⦃ r => AR r.2 c ⦄) (hIA : IrqPlatA arI AR)
     (hT : TimeAgree arI)
     (hmax : Fl4Spec.maxTicksToUs = core.num.U64.MAX.bv)
     (htu : ∀ a v, arI.ticks_to_us a v ⦃ r => r.bv = Fl4Spec.ticksToUs v.bv ⦄)
@@ -124,7 +124,7 @@ theorem vmf_stabU45 [Fl4Proofs.P1.PlainStore st] (hARI : ARIface arI AR) (hA : P
   obtain ⟨⟨⟨hJ17, hC⟩, hIoa⟩, hCK⟩ := hR
   obtain ⟨_, _, _, _, _, _, -, hX, -⟩ := jreach_invU3 hnd hJ17.1
   have hm := hX.sb.1.1.vim
-  have hG := Fl4ProofsKQ.P3.SInvR.G5.vmf_entryStU41 hARI hA hnd (MachPlatF.toT hM hIp) hKD ⟨hPAi, hT.mb⟩ hT
+  have hG := Fl4ProofsK.P3.SInvR.G5.vmf_entryStU41 hARI hA hnd (MachPlatF.toT hM hIp) hKD ⟨hPAi, hT.mb⟩ hT
     hmax htu hRef hDR hFpu hJ17 J ad c ft hct hV (KFinEv42.toK (kFinEv42_of hFpu hFW hA) hA)
   refine WP.spec_mono hG ?_
   rintro r ⟨σ', hO, hJ', hSt⟩
@@ -135,7 +135,7 @@ set_option maxHeartbeats 8000000 in
 theorem sysU_stabU45 [Fl4Proofs.P1.PlainStore st] (hARI : ARIface arI AR) (hA : P0.ArchTotal arI)
     (hnd : Fl4Spec.numDomains = 1) (hM : MachPlatF arI MR) (hIp : IpiF arI MR)
     (hKD : MRKeepD arI MR)
-    (hPAi : ∀ a c, AR a c → arI.irq_pending a ⦃ r => AR r.2 c ⦄) (hIA : IrqPlatK arI AR)
+    (hPAi : ∀ a c, AR a c → arI.irq_pending a ⦃ r => AR r.2 c ⦄) (hIA : IrqPlatA arI AR)
     (hT : TimeAgree arI)
     (hmax : Fl4Spec.maxTicksToUs = core.num.U64.MAX.bv)
     (htu : ∀ a v, arI.ticks_to_us a v ⦃ r => r.bv = Fl4Spec.ticksToUs v.bv ⦄)
@@ -150,7 +150,7 @@ theorem sysU_stabU45 [Fl4Proofs.P1.PlainStore st] (hARI : ARIface arI AR) (hA : 
   obtain ⟨⟨⟨hJ17, hC⟩, hIoa⟩, hCK⟩ := hR
   obtain ⟨_, _, _, _, _, _, -, hX, -⟩ := jreach_invU3 hnd hJ17.1
   have hm := hX.sb.1.1.vim
-  have hG := Fl4ProofsKQ.P3.SInvR.G5.sysU_entryStU41 hARI hA hnd (MachPlatF.toT hM hIp) hKD ⟨hPAi, hT.mb⟩ hT
+  have hG := Fl4ProofsK.P3.SInvR.G5.sysU_entryStU41 hARI hA hnd (MachPlatF.toT hM hIp) hKD ⟨hPAi, hT.mb⟩ hT
     hmax htu hRef hSX hDR hFpu hJ17 J n hct hU hND (fun _ _ _ _ => (KFinEv42.toK (kFinEv42_of hFpu hFW hA) hA))
   refine WP.spec_mono hG ?_
   rintro r ⟨ev, σ', hK, hO, hJ', hSt⟩
@@ -161,7 +161,7 @@ set_option maxHeartbeats 4000000 in
 theorem kernel_entry_runMcW_userF [Fl4Proofs.P1.PlainStore st] (hARI : ARIface arI AR) (hA : P0.ArchTotal arI)
     (hnd : Fl4Spec.numDomains = 1) (hM : MachPlatF arI MR) (hIp : IpiF arI MR)
     (hKD : MRKeepD arI MR)
-    (hPAi : ∀ a c, AR a c → arI.irq_pending a ⦃ r => AR r.2 c ⦄) (hIA : IrqPlatK arI AR)
+    (hPAi : ∀ a c, AR a c → arI.irq_pending a ⦃ r => AR r.2 c ⦄) (hIA : IrqPlatA arI AR)
     (hT : TimeAgree arI)
     (hmax : Fl4Spec.maxTicksToUs = core.num.U64.MAX.bv)
     (htu : ∀ a v, arI.ticks_to_us a v ⦃ r => r.bv = Fl4Spec.ticksToUs v.bv ⦄)
@@ -184,7 +184,7 @@ set_option maxHeartbeats 4000000 in
 theorem kernel_entry_runMcW_vmfF [Fl4Proofs.P1.PlainStore st] (hARI : ARIface arI AR) (hA : P0.ArchTotal arI)
     (hnd : Fl4Spec.numDomains = 1) (hM : MachPlatF arI MR) (hIp : IpiF arI MR)
     (hKD : MRKeepD arI MR)
-    (hPAi : ∀ a c, AR a c → arI.irq_pending a ⦃ r => AR r.2 c ⦄) (hIA : IrqPlatK arI AR)
+    (hPAi : ∀ a c, AR a c → arI.irq_pending a ⦃ r => AR r.2 c ⦄) (hIA : IrqPlatA arI AR)
     (hT : TimeAgree arI)
     (hmax : Fl4Spec.maxTicksToUs = core.num.U64.MAX.bv)
     (htu : ∀ a v, arI.ticks_to_us a v ⦃ r => r.bv = Fl4Spec.ticksToUs v.bv ⦄)
@@ -208,7 +208,7 @@ set_option maxHeartbeats 4000000 in
 theorem kernel_entry_runMcW_sysUF [Fl4Proofs.P1.PlainStore st] (hARI : ARIface arI AR) (hA : P0.ArchTotal arI)
     (hnd : Fl4Spec.numDomains = 1) (hM : MachPlatF arI MR) (hIp : IpiF arI MR)
     (hKD : MRKeepD arI MR)
-    (hPAi : ∀ a c, AR a c → arI.irq_pending a ⦃ r => AR r.2 c ⦄) (hIA : IrqPlatK arI AR)
+    (hPAi : ∀ a c, AR a c → arI.irq_pending a ⦃ r => AR r.2 c ⦄) (hIA : IrqPlatA arI AR)
     (hT : TimeAgree arI)
     (hmax : Fl4Spec.maxTicksToUs = core.num.U64.MAX.bv)
     (htu : ∀ a v, arI.ticks_to_us a v ⦃ r => r.bv = Fl4Spec.ticksToUs v.bv ⦄)

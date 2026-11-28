@@ -41,12 +41,12 @@ section
 variable {S : Type} {st : machine.Store S} [L : P1.LawfulStore st] {A : Type} {arI : machine.Arch A}
 variable {MR : A → Fl4Spec.MachineState → Prop}
 
-theorem mF_mrT (hM : MachPlatT arI MR) {a : A} {ms ms' : Fl4Spec.MachineState} (hR : MR a ms)
+theorem mF_mrT (hM : MachPlat arI MR) {a : A} {ms ms' : Fl4Spec.MachineState} (hR : MR a ms)
     (h : MachF.mF ms' = MachF.mF ms) : MR a ms' := by
   simp only [MachF.mF, Prod.mk.injEq] at h
   exact hM.frame a _ _ hR h.1 h.2.1 h.2.2.1 h.2.2.2
 
-theorem TopPostDMXP.mrGT (hM : MachPlatT arI MR) {X XP : S → A → Fl4Spec.State Unit → Prop}
+theorem TopPostDMXP.mrGT (hM : MachPlat arI MR) {X XP : S → A → Fl4Spec.State Unit → Prop}
     {σ : Fl4Spec.State Unit}
     {blk call don : Bool} {m : Fl4Spec.SEMonad Unit Fl4Spec.Fl4Invocation} {s : S}
     {res : core.result.Result Unit error.Exc × S × A} {f : Fl4Spec.MachineState → Fl4Spec.MachineState}
@@ -72,7 +72,7 @@ theorem TopPostDMXP.mrGT (hM : MachPlatT arI MR) {X XP : S → A → Fl4Spec.Sta
       rw [if_pos hc'.1] at hR
       exact ⟨h4, mF_mrT hM hR (hq inv h1 σ1 h2 y hy ⟨_, hc'.2⟩)⟩
 
-theorem TopPostRMX.mrGT (hM : MachPlatT arI MR) {X : S → A → Fl4Spec.State Unit → Prop} {σ : Fl4Spec.State Unit}
+theorem TopPostRMX.mrGT (hM : MachPlat arI MR) {X : S → A → Fl4Spec.State Unit → Prop} {σ : Fl4Spec.State Unit}
     {blk call don : Bool} {m : Fl4Spec.SEMonad Unit Fl4Spec.Fl4Invocation} {ct : U64} {s : S}
     {res : core.result.Result Unit error.Exc × S × A} {f : Fl4Spec.MachineState → Fl4Spec.MachineState}
     (h : TopPostRMX (L := L) X σ blk call don m ct s res)
@@ -91,7 +91,7 @@ theorem TopPostRMX.mrGT (hM : MachPlatT arI MR) {X : S → A → Fl4Spec.State U
     simp only [MachF.mF, e1.1, e1.2.1, e1.2.2.1, e1.2.2.2.1]
 
 /-- (p3J gen 41) **`XCapP` with `MR`, from `MachPlatT`** (XTopJointKEntry39's `XCapP.mrG`; module docstring). -/
-theorem XCapP.mrGT (hM : MachPlatT arI MR) {X XP : S → A → Fl4Spec.State Unit → Prop} {s : S} {ar : A}
+theorem XCapP.mrGT (hM : MachPlat arI MR) {X XP : S → A → Fl4Spec.State Unit → Prop} {s : S} {ar : A}
     {σ : Fl4Spec.State Unit} {lbl length slot : U64} {c : capability.Cap} {blk call don fp : Bool} {buf : U64}
     {extra : Aeneas.Std.Array obj.Slot 3#usize} {slbl : Fl4Spec.Data} {args : List Fl4Spec.Data}
     {ci : Fl4Spec.CapRef} {sl : Fl4Spec.CslotPtr} {excaps : List (Fl4Spec.Cap × Fl4Spec.CslotPtr)}
@@ -210,7 +210,7 @@ variable {AR : A → Fl4Spec.Cr3 → Prop} {MR : A → Fl4Spec.MachineState → 
 
 set_option maxHeartbeats 4000000 in
 /-- (p3J gen 41) **The Thread cap's decode at a dispatch state at Suspend, any flags** (module docstring). -/
-theorem decThSusSt (hA : P0.ArchTotal arI) (hMT : MachPlatT arI MR) (hKD : MRKeepD arI MR)
+theorem decThSusSt (hA : P0.ArchTotal arI) (hMT : MachPlat arI MR) (hKD : MRKeepD arI MR)
     [VxE Z] {V' : XVs} {Ac' : Set U64} {Lst' : U64 → List U64}
     {D' : Set U64} {s' : S} {a' : A} {σb : Fl4Spec.State Unit}
     (J : JAtZ (L := L) arI AR (Z.mv Z.G V') H Cs Ac' Lst' D' s' a' σb) (hnib : Entered σb) (hsgb : SpecGlob σb)
@@ -268,7 +268,7 @@ theorem decThSusSt (hA : P0.ArchTotal arI) (hMT : MachPlatT arI MR) (hKD : MRKee
 
 set_option maxHeartbeats 4000000 in
 /-- (p3J gen 41) **`MidDecStWL` at `KW ∧ IsRestCap17` from the Suspend leaf** (module docstring). -/
-theorem midDecRest17_of_sus (hA : P0.ArchTotal arI) (hnd : Fl4Spec.numDomains = 1) (hMT : MachPlatT arI MR)
+theorem midDecRest17_of_sus (hA : P0.ArchTotal arI) (hnd : Fl4Spec.numDomains = 1) (hMT : MachPlat arI MR)
     (hKD : MRKeepD arI MR) [VxE Z] {s : S} {a : A}
     {σ : Fl4Spec.State Unit} {n : I64} {c : Fl4Spec.Syscall} (hX : SInvX σ) (hni : σ.curThread ≠ σ.idleThread)
     (h : MidDecStWL (L := L) arI AR MR (fun cp l => SInvCk.KW (absCap cp) ∧ IsRestCap18 cp l) Z H Cs s a σ n c) :
@@ -284,7 +284,7 @@ theorem midDecRest17_of_sus (hA : P0.ArchTotal arI) (hnd : Fl4Spec.numDomains = 
 
 set_option maxHeartbeats 4000000 in
 /-- (p3J gen 41) **`InvDecStWL` at `KW ∧ IsRestCap17` from the Suspend leaf** (module docstring). -/
-theorem invDecRest17_of_sus (hA : P0.ArchTotal arI) (hnd : Fl4Spec.numDomains = 1) (hMT : MachPlatT arI MR)
+theorem invDecRest17_of_sus (hA : P0.ArchTotal arI) (hnd : Fl4Spec.numDomains = 1) (hMT : MachPlat arI MR)
     (hKD : MRKeepD arI MR) [VxE Z] {s : S} {a : A}
     {σ : Fl4Spec.State Unit} {n : I64} {call bl don : Bool} (hX : SInvX σ) (hni : σ.curThread ≠ σ.idleThread)
     (h : InvDecStWL (L := L) arI AR MR (fun cp l => SInvCk.KW (absCap cp) ∧ IsRestCap18 cp l) Z H Cs s a σ n

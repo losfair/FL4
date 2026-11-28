@@ -1,22 +1,40 @@
 /-
 P3 (line p3J, gen 2): **the kernel-checked constant transport for the narrowed path premises**
-(IrqFixXport's staged transport, with a fresh target family and the irqfix copies walked too).
+(IrqFixXport's staged transport, with a fresh target family).
 
-Names: `Fl4Proofs.X` ↦ `Fl4ProofsJ.X`, `Fl4ProofsN.X` ↦ `Fl4ProofsJN.X`, `Fl4ProofsI.X` ↦ `Fl4ProofsJI.X`,
-`Fl4ProofsQ.X` ↦ `Fl4ProofsJQ.X`, `Fl4ProofsQN.X` ↦ `Fl4ProofsJQN.X`, `Fl4ProofsQI.X` ↦ `Fl4ProofsJQI.X`, a
-private name `p` ↦ `Fl4ProofsJ.priv ++ p`. Otherwise IrqFixXport verbatim: every copy goes through
+Names: `Fl4Proofs.X` ↦ `Fl4ProofsJ.X`, a private name `p` ↦ `Fl4ProofsJ.priv ++ p`. Every copy goes through
 `addDecl` (the kernel re-checks it): no axiom, no trusted step.
+
+Collapse A (N, I, Q): the `Fl4ProofsN` / `Fl4ProofsI` / `Fl4ProofsQ` layers are written back into the base
+records, so this transport walks the base constants only (its former `…N` / `…I` / `…Q` ↦ `…JN` / `…JI` / `…JQ`
+branches are gone). IrqFixXport is removed with Q; its `depsOf` (StallNarrowGen's, used here and by P3KXport)
+lives in this module under its old name.
 -/
-import Fl4Proofs.P3.IrqFixXport
+import Fl4Proofs.P3.XTopJointKEntryU30
 import Fl4Proofs.P3.P3JLook
 open Lean Meta Elab Command
+
+namespace Fl4Proofs.P3.StallNarrow
+
+/-- The constants a constant's type, value and (for an inductive) constructors use. -/
+def depsOf (env : Environment) (n : Name) : Array Name :=
+  match env.find? n with
+  | none => #[]
+  | some ci =>
+    let v := match ci.value? (allowOpaque := true) with | some v => v.getUsedConstants | none => #[]
+    let k := match ci with
+      | .inductInfo ii => ii.ctors.toArray.flatMap (fun c => match env.find? c with
+          | some cc => cc.type.getUsedConstants | none => #[])
+      | _ => #[]
+    ci.type.getUsedConstants ++ v ++ k
+
+end Fl4Proofs.P3.StallNarrow
 
 namespace Fl4Proofs.P3.P3JX
 
 /-- A constant of this development reachable by the transport. -/
 def ours (n : Name) : Bool :=
-  (`Fl4Proofs).isPrefixOf n || (`Fl4ProofsN).isPrefixOf n || (`Fl4ProofsI).isPrefixOf n ||
-    (`Fl4ProofsQ).isPrefixOf n || (`Fl4ProofsQN).isPrefixOf n || (`Fl4ProofsQI).isPrefixOf n ||
+  (`Fl4Proofs).isPrefixOf n ||
     (isPrivateName n && (n.toString.startsWith "_private.Fl4Proofs."))
 
 /-- A staged transport: records renamed by prefix, definitions renamed by exact name (both seed the
@@ -34,11 +52,6 @@ def mapName (σ : Spec) (n : Name) : Name := Id.run do
   for (a, b) in σ.recMap do
     if a.isPrefixOf n then return n.replacePrefix a b
   if (`Fl4Proofs).isPrefixOf n then return n.replacePrefix `Fl4Proofs `Fl4ProofsJ
-  if (`Fl4ProofsN).isPrefixOf n then return n.replacePrefix `Fl4ProofsN `Fl4ProofsJN
-  if (`Fl4ProofsI).isPrefixOf n then return n.replacePrefix `Fl4ProofsI `Fl4ProofsJI
-  if (`Fl4ProofsQ).isPrefixOf n then return n.replacePrefix `Fl4ProofsQ `Fl4ProofsJQ
-  if (`Fl4ProofsQN).isPrefixOf n then return n.replacePrefix `Fl4ProofsQN `Fl4ProofsJQN
-  if (`Fl4ProofsQI).isPrefixOf n then return n.replacePrefix `Fl4ProofsQI `Fl4ProofsJQI
   return `Fl4ProofsJ.priv ++ n
 
 /-- Whether `n` is renamed to a hand-written constant (not copied). -/

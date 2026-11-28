@@ -22,7 +22,8 @@ joint refinement reaches:
   other sets (`JAtZ`'s), and the entry is at a `JReachU17` state, not at any
   `EntryInv` state.
 
-No premise beyond U29's. No existing statement changed.
+No premise beyond U29's. (Collapse A, Q: U29's syscall clause takes `JDecMRLKQ` = `JDecMRLK ∧ IrqAckU` and its
+platform records are the narrowed `MachPlat` / `IrqPlatA`; this statement follows.)
 -/
 import Fl4Proofs.P3.XTopJointKEntryU29
 open Aeneas Aeneas.Std Result
@@ -135,7 +136,7 @@ theorem kernel_entry_entryInvU29 [Fl4Proofs.P1.PlainStore st] (hARI : ARIface ar
           (s' : S) (a' : A), KFrontB (L := L) arI s a s' a' →
             JAtZ (L := L) arI AR (Z.mv Z.G V') H Cs Ac' Lst' D' s' a' σb →
             ∀ ct', sched.cur_thread st s' = ok ct' →
-              JDecMRLK (L := L) arI VtxK AR MR (Z.mv Z.G V') H Cs D' s' a' σb ct') →
+              JDecMRLKQ (L := L) arI VtxK AR MR (Z.mv Z.G V') H Cs D' s' a' σb ct') →
         (∀ x ∈ (specFront c σ).1, ∀ (Z' : XSets) (H' : P1.Heap) (Cs' Ac' : Set U64) (Lst' : U64 → List U64)
           (D' : Set U64) (s' : S) (a' : A), KFrontF (L := L) arI n s a s' a' →
             JAtZR (L := L) arI AR Z' H' Cs' Ac' Lst' D' s' a' x.2 →

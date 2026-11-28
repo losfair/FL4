@@ -74,7 +74,7 @@ set_option maxHeartbeats 4000000 in
 theorem decThSspSt [Fl4Proofs.P1.PlainStore st] (hARI : ARIface arI AR) (hA : P0.ArchTotal arI)
     (hticks : Fl4Spec.maxTicksToUs = core.num.U64.MAX.bv ∧
       ∀ (a : A) (v : U64), arI.ticks_to_us a v ⦃ r => r.bv = Fl4Spec.ticksToUs v.bv ⦄)
-    (hnd : Fl4Spec.numDomains = 1) (hMT : MachPlatT arI MR) (hKD : MRKeepD arI MR) (hIP : IrqPlatK arI AR)
+    (hnd : Fl4Spec.numDomains = 1) (hMT : MachPlat arI MR) (hKD : MRKeepD arI MR) (hIP : IrqPlatA arI AR)
     (hTA : TimeAgree arI) (hPA : PPPlatA arI AR)
     [VxE Z] {V' : XVs} {Ac' : Set U64} {Lst' : U64 → List U64}
     {D' : Set U64} {s' : S} {a' : A} {σb : Fl4Spec.State Unit}
@@ -164,7 +164,7 @@ set_option maxHeartbeats 4000000 in
 theorem midDecRest25_of_ssp [Fl4Proofs.P1.PlainStore st] (hARI : ARIface arI AR) (hA : P0.ArchTotal arI)
     (hticks : Fl4Spec.maxTicksToUs = core.num.U64.MAX.bv ∧
       ∀ (a : A) (v : U64), arI.ticks_to_us a v ⦃ r => r.bv = Fl4Spec.ticksToUs v.bv ⦄)
-    (hnd : Fl4Spec.numDomains = 1) (hMT : MachPlatT arI MR) (hKD : MRKeepD arI MR) (hIP : IrqPlatK arI AR)
+    (hnd : Fl4Spec.numDomains = 1) (hMT : MachPlat arI MR) (hKD : MRKeepD arI MR) (hIP : IrqPlatA arI AR)
     (hTA : TimeAgree arI) (hPA : PPPlatA arI AR) [VxE Z] {s : S} {a : A}
     {σ : Fl4Spec.State Unit} {n : I64} {c : Fl4Spec.Syscall} (hX : SInvX σ) (hni : σ.curThread ≠ σ.idleThread)
     (h : MidDecStWL (L := L) arI AR MR (fun cp l => SInvCk.KW (absCap cp) ∧ IsRestCap26 cp l) Z H Cs s a σ n c) :
@@ -184,7 +184,7 @@ set_option maxHeartbeats 4000000 in
 theorem invDecRest25_of_ssp [Fl4Proofs.P1.PlainStore st] (hARI : ARIface arI AR) (hA : P0.ArchTotal arI)
     (hticks : Fl4Spec.maxTicksToUs = core.num.U64.MAX.bv ∧
       ∀ (a : A) (v : U64), arI.ticks_to_us a v ⦃ r => r.bv = Fl4Spec.ticksToUs v.bv ⦄)
-    (hnd : Fl4Spec.numDomains = 1) (hMT : MachPlatT arI MR) (hKD : MRKeepD arI MR) (hIP : IrqPlatK arI AR)
+    (hnd : Fl4Spec.numDomains = 1) (hMT : MachPlat arI MR) (hKD : MRKeepD arI MR) (hIP : IrqPlatA arI AR)
     (hTA : TimeAgree arI) (hPA : PPPlatA arI AR) [VxE Z] {s : S} {a : A}
     {σ : Fl4Spec.State Unit} {n : I64} {call bl don : Bool} (hX : SInvX σ) (hni : σ.curThread ≠ σ.idleThread)
     (h : InvDecStWL (L := L) arI AR MR (fun cp l => SInvCk.KW (absCap cp) ∧ IsRestCap26 cp l) Z H Cs s a σ n
@@ -273,7 +273,7 @@ variable {arI AR MR}
 docstring). -/
 theorem dispStabFootLzr_of_Lzs [Fl4Proofs.P1.PlainStore st] (hARI : ARIface arI AR) (hA : P0.ArchTotal arI)
     (hnd : Fl4Spec.numDomains = 1) (hM : MachPlatF arI MR) (hIp : IpiF arI MR) (hKD : MRKeepD arI MR)
-    (hPAi : ∀ a c, AR a c → arI.irq_pending a ⦃ r => AR r.2 c ⦄) (hIA : IrqPlatK arI AR) (hT : TimeAgree arI)
+    (hPAi : ∀ a c, AR a c → arI.irq_pending a ⦃ r => AR r.2 c ⦄) (hIA : IrqPlatA arI AR) (hT : TimeAgree arI)
     (hmax : Fl4Spec.maxTicksToUs = core.num.U64.MAX.bv)
     (htu : ∀ a v, arI.ticks_to_us a v ⦃ r => r.bv = Fl4Spec.ticksToUs v.bv ⦄)
     {s : S} {a : A} {σ : Fl4Spec.State Unit} (h : DispStabFootLzs (L := L) arI AR MR s a σ) :
@@ -309,7 +309,7 @@ set_option maxHeartbeats 4000000 in
 theorem kernel_entry_runMcWKR_sysLzs [Fl4Proofs.P1.PlainStore st] (hARI : ARIface arI AR) (hA : P0.ArchTotal arI)
     (hnd : Fl4Spec.numDomains = 1) (hM : MachPlatF arI MR) (hIp : IpiF arI MR)
     (hKD : MRKeepD arI MR)
-    (hPAi : ∀ a c, AR a c → arI.irq_pending a ⦃ r => AR r.2 c ⦄) (hIA : IrqPlatK arI AR)
+    (hPAi : ∀ a c, AR a c → arI.irq_pending a ⦃ r => AR r.2 c ⦄) (hIA : IrqPlatA arI AR)
     (hT : TimeAgree arI)
     (hmax : Fl4Spec.maxTicksToUs = core.num.U64.MAX.bv)
     (htu : ∀ a v, arI.ticks_to_us a v ⦃ r => r.bv = Fl4Spec.ticksToUs v.bv ⦄)

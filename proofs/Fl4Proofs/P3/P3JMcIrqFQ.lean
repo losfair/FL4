@@ -1,9 +1,8 @@
 /-
 P3 (p3J gen 24): **stage Q of the interrupt footprint and the derived interrupt top.**
 
-* P3JMcIrqF's `jEvRef_irqAFt` transported by IrqFixGen's `specD` (`MachPlat` ↦ `MachPlatT`, `IrqPlatA` ↦
-  `IrqPlatK`, …), as P3JStIrqQ transports `irq_entryStU41`; the copy `Fl4ProofsQ.P3.jEvRef_irqAFt` takes the
-  multicore tops' globals. Every copy goes through `addDecl` (kernel-checked).
+* P3JMcIrqF's `jEvRef_irqAFt` at the multicore tops' globals (collapse A, Q: on the narrowed `MachPlat` /
+  `IrqPlatA` themselves; the stage-Q transport copy `Fl4ProofsQ.P3.jEvRef_irqAFt` this module made is gone).
 * **`irqFootWC_of_J`**: gen 23's `IrqFootWC` [J] holds at every state, from `BudFootJ`, `IrqSigFootJ`,
   `FinFootJ` [J] (P3JMcIrqF) and globals of the interrupt top (`SInvX` and `CKI` from `RunMcWK`'s `RunCK`).
 * **`kernel_entry_runMcWK_irqJ`**: the interrupt clause `RunMcWK` → `RunMcWK` (gen 23's
@@ -13,16 +12,6 @@ Named premises: `BudFootJ`, `IrqSigFootJ`, `FinFootJ` [J] (P3JMcIrqF); U45nv's g
 `kernel_entry_runMcWK_irqWC`. No sorry. New module; no existing statement changed.
 -/
 import Fl4Proofs.P3.P3JMcIrqF
-open Lean Meta Elab Command
-
-set_option maxRecDepth 200000 in
-open Fl4Proofs.P3.IrqFix in
-run_cmd liftCoreM do
-  let (n, r) ← transport specD [``Fl4Proofs.P3.jEvRef_irqAFt]
-  logInfo m!"p3J g24 irq footprint Q transport: {n} copied, {r} reused"
-
-#check @Fl4ProofsQ.P3.jEvRef_irqAFt
-
 open Aeneas Aeneas.Std Result
 
 namespace Fl4Proofs.P3.Mc
@@ -37,7 +26,7 @@ set_option maxHeartbeats 4000000 in
 /-- **`IrqFootWC` from the three phase footprints** (module docstring). -/
 theorem irqFootWC_of_J (hARI : ARIface arI AR) (hA : P0.ArchTotal arI)
     (hnd : Fl4Spec.numDomains = 1) (hM : MachPlatF arI MR) (hIp : IpiF arI MR) (hKD : MRKeepD arI MR)
-    (hIA : IrqPlatK arI AR) (hT : TimeAgree arI) (hmax : Fl4Spec.maxTicksToUs = core.num.U64.MAX.bv)
+    (hIA : IrqPlatA arI AR) (hT : TimeAgree arI) (hmax : Fl4Spec.maxTicksToUs = core.num.U64.MAX.bv)
     (htu : ∀ a v, arI.ticks_to_us a v ⦃ r => r.bv = Fl4Spec.ticksToUs v.bv ⦄)
     (hBud : BudFootJ (st := st) (L := L) arI AR) (hSig : IrqSigFootJ (st := st) (L := L) arI AR)
     (hFn : FinFootJ (st := st) (L := L) arI AR) (s : S) (a : A) (σ : Fl4Spec.State Unit) :
@@ -46,7 +35,7 @@ theorem irqFootWC_of_J (hARI : ARIface arI AR) (hA : P0.ArchTotal arI)
   obtain ⟨⟨⟨⟨⟨hJ17, -⟩, -⟩, hCK⟩, -⟩, -⟩ := hR
   obtain ⟨_, _, _, _, _, _, -, hX, -⟩ := jreach_invU3 hnd hJ17.1
   haveI := hV
-  exact WP.spec_mono (Fl4ProofsQ.P3.jEvRef_irqAFt J hX hCK hw hBud (Or.inl hSig) hFn hARI hA hnd (MachPlatF.toT hM hIp)
+  exact WP.spec_mono (Fl4Proofs.P3.jEvRef_irqAFt J hX hCK hw hBud (Or.inl hSig) hFn hARI hA hnd (MachPlatF.toT hM hIp)
     hKD hIA (fun a => hT.mrt a) hT.mb hmax htu) fun r hr _ _ => hr
 
 set_option maxHeartbeats 4000000 in
@@ -55,7 +44,7 @@ docstring; `hBud`, `hSig`, `hFn` [J]). -/
 theorem kernel_entry_runMcWK_irqJ [Fl4Proofs.P1.PlainStore st] (hARI : ARIface arI AR) (hA : P0.ArchTotal arI)
     (hnd : Fl4Spec.numDomains = 1) (hM : MachPlatF arI MR) (hIp : IpiF arI MR)
     (hKD : MRKeepD arI MR)
-    (hPAi : ∀ a c, AR a c → arI.irq_pending a ⦃ r => AR r.2 c ⦄) (hIA : IrqPlatK arI AR)
+    (hPAi : ∀ a c, AR a c → arI.irq_pending a ⦃ r => AR r.2 c ⦄) (hIA : IrqPlatA arI AR)
     (hT : TimeAgree arI)
     (hmax : Fl4Spec.maxTicksToUs = core.num.U64.MAX.bv)
     (htu : ∀ a v, arI.ticks_to_us a v ⦃ r => r.bv = Fl4Spec.ticksToUs v.bv ⦄)
